@@ -27,7 +27,6 @@ axum-extra = { version = "0.12", features = ["cookie"] }
 utoipa = { workspace = true, features = ["chrono"] }
 utoipa-axum = "0.3"
 utoipa-swagger-ui = { version = "10", features = ["axum", "vendored"] }
-tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "request-id", "util", "limit", "timeout", "catch-panic", "sensitive-headers"] }
 
 chrono = { version = "0.4", features = ["serde"] }
@@ -42,7 +41,6 @@ sha2 = "0.10"
 base64 = "0.22"
 ed25519-dalek = { version = "2", features = ["pkcs8"] }
 jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto", "use_pem"] }
-subtle = "2"
 
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "hostname"] }
 redis = { version = "1", default-features = false, features = ["aio", "tokio-comp", "connection-manager"] }
