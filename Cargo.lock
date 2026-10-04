@@ -3513,13 +3513,13 @@ dependencies = [
 name = "validate"
 version = "0.1.0"
 dependencies = [
- "assessment",
  "catalog",
  "matching",
  "rand 0.9.5",
  "rand_chacha 0.9.0",
  "serde",
  "serde_json",
+ "thiserror",
 ]
 
 [[package]]

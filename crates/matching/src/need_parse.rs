@@ -93,8 +93,10 @@ fn strip_bullet(line: &str) -> &str {
     })
 }
 
-/// Skills go to "nice" when they follow a "Будет плюсом:" header or share a sentence with
-/// a nice-to-have marker ("опыт с ClickHouse будет плюсом"); everything else is required.
+/// Skills go to "nice" when they follow a "Будет плюсом:" header or share a clause with a
+/// nice-to-have marker ("опыт с ClickHouse будет плюсом"). Inside a sentence a marker also
+/// covers the following clauses until a must marker ("React, TypeScript, будет плюсом Next.js,
+/// Storybook" → nice: Next.js, Storybook); everything else is required.
 pub fn parse_need(text: &str) -> ParsedNeed {
     let lines: Vec<&str> = text
         .lines()
@@ -125,14 +127,18 @@ pub fn parse_need(text: &str) -> ParsedNeed {
             continue;
         }
         for sentence in sentences(content) {
-            let target = if mode == Mode::Nice || lexicon::NICE_MATCHER.contains(sentence) {
-                &mut nice
-            } else {
-                &mut must
-            };
-            for id in skills::extract_ids(sentence) {
-                if !target.contains(&id) {
-                    target.push(id);
+            let mut clause_nice = mode == Mode::Nice;
+            for clause in sentence.split([',', ';']) {
+                if lexicon::NICE_MATCHER.contains(clause) {
+                    clause_nice = true;
+                } else if lexicon::MUST_MATCHER.contains(clause) {
+                    clause_nice = mode == Mode::Nice;
+                }
+                let target = if clause_nice { &mut nice } else { &mut must };
+                for id in skills::extract_ids(clause) {
+                    if !target.contains(&id) {
+                        target.push(id);
+                    }
                 }
             }
         }
@@ -186,6 +192,16 @@ mod tests {
         );
         assert_eq!(p.must_skills, vec!["python", "django", "postgresql"]);
         assert_eq!(p.nice_skills, vec!["redis", "kafka"]);
+
+        let p = parse_need(
+            "Ищем синьор фронтендера на React + TypeScript, будет плюсом Next.js. Удалённо",
+        );
+        assert_eq!(p.must_skills, vec!["react", "typescript"]);
+        assert_eq!(p.nice_skills, vec!["nextjs"]);
+
+        let p = parse_need("Senior Go\nЗнание Kafka обязательно, ClickHouse желательно");
+        assert_eq!(p.must_skills, vec!["go", "kafka"]);
+        assert_eq!(p.nice_skills, vec!["clickhouse"]);
     }
 
     #[test]

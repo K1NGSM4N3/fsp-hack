@@ -105,17 +105,19 @@ pub struct Weights {
 }
 
 impl Default for Weights {
-    /// Architecture §6.3: verified signals (must skills, test) carry over half the score.
+    /// Tuned by `crates/validate` (docs/validation/matching.md): the category from the test is
+    /// already a hard filter and the grade feature, so θ inside the band only fine-tunes, while
+    /// real stack coverage separates relevant candidates best. Stable across seeds.
     fn default() -> Self {
         Weights {
-            must: 0.30,
-            test: 0.25,
-            grade: 0.10,
+            must: 0.41,
+            test: 0.10,
+            grade: 0.15,
             fsp: 0.10,
             nice: 0.08,
             salary: 0.07,
             fresh: 0.05,
-            text: 0.05,
+            text: 0.04,
             use_skill_graph: true,
         }
     }

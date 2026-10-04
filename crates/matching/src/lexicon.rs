@@ -263,6 +263,15 @@ pub(crate) static NICE_MATCHER: LazyLock<Matcher<()>> =
     LazyLock::new(|| Matcher::new(NICE_PATTERNS.iter().map(|p| (*p, ()))));
 
 #[rustfmt::skip]
+static MUST_PATTERNS: &[&str] = &[
+    "обязательно", "обязателен", "обязательна", "обязательны", "требуется", "требуются", "нужен", "нужна",
+    "нужно", "необходим", "необходимо", "must", "required",
+];
+
+pub(crate) static MUST_MATCHER: LazyLock<Matcher<()>> =
+    LazyLock::new(|| Matcher::new(MUST_PATTERNS.iter().map(|p| (*p, ()))));
+
+#[rustfmt::skip]
 static RELOCATION_PATTERNS: &[(&str, bool)] = &[
     ("не готов* к переезду", false), ("готов* к переезду", true), ("переезд не рассматрива*", false),
     ("open to relocation", true), ("ready to relocate", true), ("willing to relocate", true),
