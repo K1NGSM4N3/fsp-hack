@@ -1,3 +1,4 @@
+pub mod assessment;
 pub mod candidate_profile;
 pub mod candidates;
 pub mod catalog;

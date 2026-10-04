@@ -184,6 +184,107 @@ fn dominant_spec(achievements: &[Achievement]) -> Specialization {
     }
 }
 
+struct SimulatedSession {
+    state: assessment::SessionState,
+    decision: assessment::Decision,
+    responses: Vec<(assessment::ItemRef, bool, u32, f64, f64)>,
+}
+
+/// Runs the production CAT engine with responses drawn from the 3PL model at the candidate's
+/// true ability, so demo histories look exactly like real ones.
+fn simulate(
+    rng: &mut ChaCha8Rng,
+    spec: Specialization,
+    claimed: Grade,
+    theta: f64,
+) -> Option<SimulatedSession> {
+    let bank = assessment::bank();
+    let mut state = assessment::start(spec, claimed, rng.random(), Vec::new());
+    let mut responses = Vec::new();
+    loop {
+        if let Some(decision) = assessment::decision(&state) {
+            return Some(SimulatedSession {
+                state,
+                decision,
+                responses,
+            });
+        }
+        let item = assessment::next_item(&state)?;
+        let params = bank.params(&item)?;
+        let correct = rng.random::<f64>() < assessment::irt::p_correct(theta, &params);
+        let elapsed = rng.random_range(15_000..95_000);
+        assessment::record(&mut state, item.clone(), correct, elapsed).ok()?;
+        responses.push((
+            item,
+            correct,
+            elapsed,
+            state.summary.theta,
+            state.summary.se,
+        ));
+    }
+}
+
+async fn store_session(
+    tx: &tokio_postgres::Transaction<'_>,
+    candidate: Uuid,
+    kind: &str,
+    sim: &SimulatedSession,
+    started: DateTime<Utc>,
+) -> ApiResult<(Uuid, DateTime<Utc>)> {
+    let id = Uuid::now_v7();
+    let total_ms: i64 = sim.responses.iter().map(|r| i64::from(r.2)).sum();
+    let finished = started + Duration::milliseconds(total_ms);
+    let d = &sim.decision;
+    let status = if d.passed {
+        db::types::AssessmentStatus::Passed
+    } else {
+        db::types::AssessmentStatus::Failed
+    };
+    db::queries::seed::seed_session()
+        .bind(
+            tx,
+            &id,
+            &candidate,
+            &sim.state.specialization.slug(),
+            &sim.state.claimed_grade.slug(),
+            &kind,
+            &status,
+            &serde_json::to_value(&sim.state)?,
+            &d.theta,
+            &d.se,
+            &d.grade_measured.map(Grade::slug),
+            &d.confident_above_next,
+            &d.person_fit_lz,
+            &d.aberrant,
+            &(sim.responses.len() as i32),
+            &started,
+            &finished,
+        )
+        .await?;
+    let mut at = started;
+    for (seq, (item, correct, elapsed, theta, se)) in sim.responses.iter().enumerate() {
+        at += Duration::milliseconds(i64::from(*elapsed));
+        db::queries::assessment::insert_response()
+            .bind(
+                tx,
+                &id,
+                &(seq as i32),
+                &item.template_id,
+                &i16::from(item.level),
+                &(item.seed as i64),
+                &None::<serde_json::Value>,
+                correct,
+                &false,
+                &(*elapsed as i32),
+                theta,
+                se,
+                &at,
+            )
+            .await?;
+    }
+    Ok((id, finished))
+}
+
 pub async fn seed(
     pool: &deadpool_postgres::Pool,
     crypto: &Crypto,
@@ -293,13 +394,19 @@ pub async fn seed(
     let mut fsp_linked = 0usize;
     for spec in Specialization::ALL.iter().copied() {
         for k in 0..CANDIDATES_PER_SPEC {
-            let grade = match rng.random_range(0..10) {
+            let target = match rng.random_range(0..10) {
                 0..=3 => Grade::Junior,
                 4..=7 => Grade::Middle,
                 _ => Grade::Senior,
             };
-            let (lo, hi) = grade_band(grade);
-            let theta = rng.random_range(lo..hi);
+            let (lo, hi) = grade_band(target);
+            let true_theta = rng.random_range(lo - 0.25..hi);
+            let claimed = match rng.random_range(0..10) {
+                0..=1 => target.next().unwrap_or(target),
+                2 => target.prev().unwrap_or(target),
+                _ => target,
+            };
+            let grade = target;
             let female = rng.random_bool(0.35);
             let first = if female {
                 corpus::FEMALE_FIRST.choose(&mut rng)
@@ -452,25 +559,85 @@ pub async fn seed(
                     .bind(&tx, &acc.id, skill, source)
                     .await?;
             }
-            let assigned = created + Duration::days(rng.random_range(1..10));
-            db::queries::grades::insert_grade_assignment()
-                .bind(
-                    &tx,
-                    &Uuid::now_v7(),
-                    &acc.id,
-                    &spec.slug(),
-                    &grade.slug(),
-                    &theta,
-                    &0.3,
-                    &None::<Uuid>,
-                    &"placement",
-                    &assigned,
-                )
-                .await?;
-            db::queries::grades::set_candidate_category()
-                .bind(&tx, &spec.slug(), &grade.slug(), &theta, &assigned, &acc.id)
-                .await?;
-
+            let mut started = created + Duration::days(rng.random_range(1..10));
+            let mut kind = "placement";
+            let mut try_grade = claimed;
+            let mut assigned: Option<(Grade, f64, f64, Uuid, DateTime<Utc>)> = None;
+            let mut verified: Vec<&'static str> = Vec::new();
+            for _ in 0..3 {
+                let Some(sim) = simulate(&mut rng, spec, try_grade, true_theta) else {
+                    break;
+                };
+                let (session_id, finished) =
+                    store_session(&tx, acc.id, kind, &sim, started).await?;
+                started = finished + Duration::minutes(rng.random_range(5..120));
+                if sim.decision.passed {
+                    let bank = assessment::bank();
+                    for r in sim.responses.iter().filter(|r| r.1) {
+                        if let Some(t) = bank.template(&r.0.template_id) {
+                            verified.extend(
+                                t.skills
+                                    .iter()
+                                    .copied()
+                                    .filter(|s| matching::lookup(s).is_some()),
+                            );
+                        }
+                    }
+                    assigned = Some((
+                        try_grade,
+                        sim.decision.theta,
+                        sim.decision.se,
+                        session_id,
+                        finished,
+                    ));
+                    if sim.decision.confident_above_next
+                        && kind == "placement"
+                        && rng.random_bool(0.5)
+                    {
+                        if let Some(up) = try_grade.next() {
+                            try_grade = up;
+                            kind = "placement_upgrade";
+                            continue;
+                        }
+                    }
+                    break;
+                }
+                if assigned.is_some() || kind != "placement" {
+                    break;
+                }
+                match try_grade.prev() {
+                    Some(lower) => {
+                        try_grade = lower;
+                        kind = "placement_step_down";
+                    }
+                    None => break,
+                }
+            }
+            for skill in &verified {
+                db::queries::candidates::insert_candidate_skill()
+                    .bind(&tx, &acc.id, skill, &"test")
+                    .await?;
+            }
+            if let Some((g, theta, se, session_id, at)) = assigned {
+                let reason = if g > claimed { "upgrade" } else { "placement" };
+                db::queries::grades::insert_grade_assignment()
+                    .bind(
+                        &tx,
+                        &Uuid::now_v7(),
+                        &acc.id,
+                        &spec.slug(),
+                        &g.slug(),
+                        &theta,
+                        &se,
+                        &Some(session_id),
+                        &reason,
+                        &at,
+                    )
+                    .await?;
+                db::queries::grades::set_candidate_category()
+                    .bind(&tx, &spec.slug(), &g.slug(), &theta, &at, &acc.id)
+                    .await?;
+            }
             let fsp_pick = if n == 0 {
                 fsp_queue.first().map(|_| 0)
             } else if k % 3 == 0 {

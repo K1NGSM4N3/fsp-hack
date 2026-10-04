@@ -23,6 +23,7 @@ macro_rules! mirror_enum {
 }
 
 mirror_enum!(InvitationStatus => db::types::InvitationStatus { Sent, Viewed, Accepted, Declined, Expired, Withdrawn });
+mirror_enum!(AssessmentStatus => db::types::AssessmentStatus { InProgress, Passed, Failed, Expired });
 mirror_enum!(SearchStatus => db::types::SearchStatus { Active, Open, Closed });
 mirror_enum!(ApplicationStatus => db::types::ApplicationStatus { Sent, Viewed, Accepted, Rejected, Withdrawn });
 mirror_enum!(TaskStatus => db::types::TaskAssignmentStatus { Assigned, Submitted, Reviewed, Skipped, Expired });

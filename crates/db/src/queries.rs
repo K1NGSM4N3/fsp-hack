@@ -1,5 +1,6 @@
 // This file was generated with `clorinde`. Do not modify.
 
+pub mod assessment;
 pub mod candidates;
 pub mod companies;
 pub mod consents;

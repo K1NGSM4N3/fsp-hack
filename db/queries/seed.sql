@@ -20,3 +20,11 @@ VALUES (:id, :owner_user_id, :name, :description, :industry, :city, :size, :cont
 --! seed_fsp_link
 INSERT INTO fsp_links (candidate_id, fsp_id, linked_via, last_sync_at, achievements)
 VALUES (:candidate_id, :fsp_id, 'seed', now(), :achievements);
+
+--! seed_session (measured_grade?)
+INSERT INTO assessment_sessions (id, candidate_id, specialization, claimed_grade, attempt_kind, status, state,
+                                 theta, se, measured_grade, confident_above_next, person_fit_lz, aberrant,
+                                 items_count, started_at, finished_at)
+VALUES (:id, :candidate_id, :specialization, :claimed_grade, :attempt_kind, :status, :state,
+        :theta, :se, :measured_grade, :confident_above_next, :person_fit_lz, :aberrant,
+        :items_count, :started_at, :finished_at);

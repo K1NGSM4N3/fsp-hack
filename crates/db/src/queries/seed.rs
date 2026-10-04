@@ -71,6 +71,31 @@ pub struct SeedFspLinkParams<T1: crate::StringSql, T2: crate::JsonSql> {
     pub fsp_id: T1,
     pub achievements: T2,
 }
+#[derive(Debug)]
+pub struct SeedSessionParams<
+    T1: crate::StringSql,
+    T2: crate::StringSql,
+    T3: crate::StringSql,
+    T4: crate::JsonSql,
+    T5: crate::StringSql,
+> {
+    pub id: uuid::Uuid,
+    pub candidate_id: uuid::Uuid,
+    pub specialization: T1,
+    pub claimed_grade: T2,
+    pub attempt_kind: T3,
+    pub status: crate::types::AssessmentStatus,
+    pub state: T4,
+    pub theta: f64,
+    pub se: f64,
+    pub measured_grade: Option<T5>,
+    pub confident_above_next: bool,
+    pub person_fit_lz: f64,
+    pub aberrant: bool,
+    pub items_count: i32,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    pub finished_at: chrono::DateTime<chrono::Utc>,
+}
 use crate::client::async_::GenericClient;
 use futures::{self, StreamExt, TryStreamExt};
 pub struct I64Query<'c, 'a, 's, C: GenericClient, T, const N: usize> {
@@ -549,6 +574,124 @@ impl<'a, C: GenericClient + Send + Sync, T1: crate::StringSql, T2: crate::JsonSq
             &params.candidate_id,
             &params.fsp_id,
             &params.achievements,
+        ))
+    }
+}
+pub struct SeedSessionStmt(&'static str, Option<tokio_postgres::Statement>);
+pub fn seed_session() -> SeedSessionStmt {
+    SeedSessionStmt(
+        "INSERT INTO assessment_sessions (id, candidate_id, specialization, claimed_grade, attempt_kind, status, state, theta, se, measured_grade, confident_above_next, person_fit_lz, aberrant, items_count, started_at, finished_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)",
+        None,
+    )
+}
+impl SeedSessionStmt {
+    pub async fn prepare<'a, C: GenericClient>(
+        mut self,
+        client: &'a C,
+    ) -> Result<Self, tokio_postgres::Error> {
+        self.1 = Some(client.prepare(self.0).await?);
+        Ok(self)
+    }
+    pub async fn bind<
+        'c,
+        'a,
+        's,
+        C: GenericClient,
+        T1: crate::StringSql,
+        T2: crate::StringSql,
+        T3: crate::StringSql,
+        T4: crate::JsonSql,
+        T5: crate::StringSql,
+    >(
+        &'s self,
+        client: &'c C,
+        id: &'a uuid::Uuid,
+        candidate_id: &'a uuid::Uuid,
+        specialization: &'a T1,
+        claimed_grade: &'a T2,
+        attempt_kind: &'a T3,
+        status: &'a crate::types::AssessmentStatus,
+        state: &'a T4,
+        theta: &'a f64,
+        se: &'a f64,
+        measured_grade: &'a Option<T5>,
+        confident_above_next: &'a bool,
+        person_fit_lz: &'a f64,
+        aberrant: &'a bool,
+        items_count: &'a i32,
+        started_at: &'a chrono::DateTime<chrono::Utc>,
+        finished_at: &'a chrono::DateTime<chrono::Utc>,
+    ) -> Result<u64, tokio_postgres::Error> {
+        client
+            .execute(
+                self.0,
+                &[
+                    id,
+                    candidate_id,
+                    specialization,
+                    claimed_grade,
+                    attempt_kind,
+                    status,
+                    state,
+                    theta,
+                    se,
+                    measured_grade,
+                    confident_above_next,
+                    person_fit_lz,
+                    aberrant,
+                    items_count,
+                    started_at,
+                    finished_at,
+                ],
+            )
+            .await
+    }
+}
+impl<
+    'a,
+    C: GenericClient + Send + Sync,
+    T1: crate::StringSql,
+    T2: crate::StringSql,
+    T3: crate::StringSql,
+    T4: crate::JsonSql,
+    T5: crate::StringSql,
+>
+    crate::client::async_::Params<
+        'a,
+        'a,
+        'a,
+        SeedSessionParams<T1, T2, T3, T4, T5>,
+        std::pin::Pin<
+            Box<dyn futures::Future<Output = Result<u64, tokio_postgres::Error>> + Send + 'a>,
+        >,
+        C,
+    > for SeedSessionStmt
+{
+    fn params(
+        &'a self,
+        client: &'a C,
+        params: &'a SeedSessionParams<T1, T2, T3, T4, T5>,
+    ) -> std::pin::Pin<
+        Box<dyn futures::Future<Output = Result<u64, tokio_postgres::Error>> + Send + 'a>,
+    > {
+        Box::pin(self.bind(
+            client,
+            &params.id,
+            &params.candidate_id,
+            &params.specialization,
+            &params.claimed_grade,
+            &params.attempt_kind,
+            &params.status,
+            &params.state,
+            &params.theta,
+            &params.se,
+            &params.measured_grade,
+            &params.confident_above_next,
+            &params.person_fit_lz,
+            &params.aberrant,
+            &params.items_count,
+            &params.started_at,
+            &params.finished_at,
         ))
     }
 }
