@@ -1,0 +1,41 @@
+# syntax=docker/dockerfile:1
+# Builds both Rust services; pick one with --target api | fsp-mock.
+# Context: repo root (docker compose -f deploy/compose.yml build).
+
+# Builder and runtime must share a Debian release: a binary linked against a newer glibc
+# (rust:1 is trixie-based) does not start on bookworm-slim.
+FROM rust:1-bookworm AS chef
+RUN cargo install cargo-chef --locked
+WORKDIR /app
+
+FROM chef AS planner
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+FROM chef AS builder
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
+COPY . .
+RUN cargo build --release --bin api --bin fsp-mock
+
+FROM debian:bookworm-slim AS runtime
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system --gid 10001 app \
+    && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
+WORKDIR /app
+
+FROM runtime AS fsp-mock
+COPY --from=builder /app/target/release/fsp-mock /usr/local/bin/fsp-mock
+USER 10001:10001
+ENV FSP_MOCK_BIND=0.0.0.0:8090
+EXPOSE 8090
+ENTRYPOINT ["/usr/local/bin/fsp-mock"]
+
+FROM runtime AS api
+COPY --from=builder /app/target/release/api /usr/local/bin/api
+USER 10001:10001
+ENV API_BIND=0.0.0.0:8000
+EXPOSE 8000
+ENTRYPOINT ["/usr/local/bin/api"]

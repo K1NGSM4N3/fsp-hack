@@ -1,0 +1,60 @@
+// Ships logs of this compose project's containers to Loki, labelled by compose service.
+
+discovery.docker "compose" {
+	host = "unix:///var/run/docker.sock"
+
+	filter {
+		name   = "label"
+		values = ["com.docker.compose.project=fsp-hack"]
+	}
+}
+
+discovery.relabel "compose" {
+	targets = []
+
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		target_label  = "service"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_name"]
+		regex         = "/(.*)"
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__meta_docker_container_log_stream"]
+		target_label  = "stream"
+	}
+}
+
+loki.source.docker "compose" {
+	host          = "unix:///var/run/docker.sock"
+	targets       = discovery.docker.compose.targets
+	relabel_rules = discovery.relabel.compose.rules
+	forward_to    = [loki.process.levels.receiver]
+}
+
+// The Rust services log JSON (LOG_FORMAT=json); promote `level` to a label for filtering.
+loki.process "levels" {
+	stage.match {
+		selector = "{service=~\"api|fsp-mock\"}"
+
+		stage.json {
+			expressions = {level = "level"}
+		}
+
+		stage.labels {
+			values = {level = ""}
+		}
+	}
+
+	forward_to = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

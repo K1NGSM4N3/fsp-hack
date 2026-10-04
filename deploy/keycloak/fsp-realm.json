@@ -1,0 +1,297 @@
+{
+  "realm": "fsp",
+  "displayName": "ФСП ID",
+  "displayNameHtml": "<strong>ФСП ID</strong>",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "rememberMe": false,
+  "bruteForceProtected": true,
+  "internationalizationEnabled": true,
+  "supportedLocales": [
+    "ru",
+    "en"
+  ],
+  "defaultLocale": "ru",
+  "accessTokenLifespan": 300,
+  "clients": [
+    {
+      "clientId": "fsp-talent",
+      "name": "Платформа подбора ИТ-специалистов",
+      "description": "Привязка ФСП ID к профилю кандидата",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${FSP_OIDC_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "consentRequired": false,
+      "frontchannelLogout": true,
+      "rootUrl": "${PUBLIC_URL}",
+      "baseUrl": "${PUBLIC_URL}",
+      "redirectUris": [
+        "${FSP_OIDC_REDIRECT_URL}"
+      ],
+      "webOrigins": [
+        "${PUBLIC_URL}"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "${PUBLIC_URL}/*",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false"
+      },
+      "protocolMappers": [
+        {
+          "name": "fsp_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "fsp_id",
+            "claim.name": "fsp_id",
+            "jsonType.label": "String",
+            "multivalued": "false",
+            "aggregate.attrs": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "fsp-000001",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Алексей",
+      "lastName": "Смирнов",
+      "email": "fsp-000001@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000001"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000002",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Мария",
+      "lastName": "Кузнецова",
+      "email": "fsp-000002@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000002"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000003",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Дмитрий",
+      "lastName": "Иванов",
+      "email": "fsp-000003@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000003"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000004",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Анастасия",
+      "lastName": "Попова",
+      "email": "fsp-000004@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000004"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000005",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Артём",
+      "lastName": "Соколов",
+      "email": "fsp-000005@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000005"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000006",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Екатерина",
+      "lastName": "Лебедева",
+      "email": "fsp-000006@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000006"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000007",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Никита",
+      "lastName": "Козлов",
+      "email": "fsp-000007@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000007"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000008",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Полина",
+      "lastName": "Новикова",
+      "email": "fsp-000008@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000008"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000009",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Иван",
+      "lastName": "Морозов",
+      "email": "fsp-000009@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000009"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    },
+    {
+      "username": "fsp-000010",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Дарья",
+      "lastName": "Волкова",
+      "email": "fsp-000010@demo.fsp-id.example",
+      "attributes": {
+        "fsp_id": [
+          "FSP-000010"
+        ]
+      },
+      "credentials": [
+        {
+          "type": "password",
+          "value": "demo12345",
+          "temporary": false
+        }
+      ],
+      "requiredActions": []
+    }
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"Имя пользователя\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"Email\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"Имя\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"Фамилия\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"fsp_id\", \"displayName\": \"ФСП ID\", \"validations\": {\"pattern\": {\"pattern\": \"^FSP-[0-9]{6}$\", \"error-message\": \"Формат: FSP-000000\"}}, \"annotations\": {}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]}, \"multivalued\": false}], \"groups\": [{\"name\": \"user-metadata\", \"displayHeader\": \"User metadata\", \"displayDescription\": \"Attributes, which refer to user metadata\"}], \"unmanagedAttributePolicy\": \"ADMIN_EDIT\"}"
+          ]
+        }
+      }
+    ]
+  }
+}
