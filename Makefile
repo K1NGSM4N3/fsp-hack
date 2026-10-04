@@ -2,7 +2,7 @@ SHELL := /bin/bash
 DATABASE_URL ?= postgres://$(USER)@localhost:5432/fsp_hack
 PG_ADMIN_URL ?= postgres://postgres@localhost:5432
 MIGRATIONS := $(sort $(wildcard db/migrations/*.sql))
-COMPOSE := docker compose -f deploy/compose.yml
+COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo 'docker compose' || echo docker-compose) -f deploy/compose.yml
 
 .PHONY: db gen-db api fsp-mock gen-api web test lint validate up down logs
 
