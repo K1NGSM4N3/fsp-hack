@@ -38,6 +38,7 @@
 |---|---|---|---|---|
 | GET | `/api/v1/catalog` | 🅰 | Направления, специализации, грейды, отрасли, дисциплины ФСП | ✅ |
 | GET | `/api/v1/catalog/skills?q=` | 🅰 | Автодополнение навыков (с синонимами) | ✅ |
+| GET | `/api/v1/catalog/test-plan` | 🅰 | План теста под вакансию и примеры заданий для двух кандидатов (T-4) | ✅ |
 | GET | `/api/v1/consents/current` | 🅰 | Актуальные версии документов согласия | ✅ |
 
 ## Auth и аккаунт
@@ -66,12 +67,12 @@
 | GET | `/api/v1/me` → `candidate.onboarding_step` | 🅲 | Шаг пути: профиль → опрос → тест → категория (отдельного эндпоинта нет) | ✅ |
 | POST | `/api/v1/candidate/survey` | 🅲 | Опрос: направление, специализация, стек, отрасли, самооценка тем | ✅ |
 | GET | `/api/v1/candidate/survey/history` | 🅲 | История опросов | ✅ |
-| GET | `/api/v1/candidate/category` | 🅲 | Текущая категория, история присвоений, когда доступна смена грейда | ⬜ |
-| POST | `/api/v1/candidate/assessments` | 🅲 | `{specialization, grade}` → новая сессия (проверка политики, 409 `grade_change_cooldown`) | ⬜ |
-| GET | `/api/v1/candidate/assessments` | 🅲 | История сессий | ⬜ |
-| GET | `/api/v1/candidate/assessments/{id}` | 🅲 | Состояние или результат сессии | ⬜ |
-| GET | `/api/v1/candidate/assessments/{id}/current-item` | 🅲 | Текущее задание (без правильного ответа), дедлайн | ⬜ |
-| POST | `/api/v1/candidate/assessments/{id}/answer` | 🅲 | `{item_id, answer}` → прогресс; по завершении — результат | ⬜ |
+| GET | `/api/v1/candidate/category` | 🅲 | Текущая категория, история присвоений, когда доступна смена грейда | ✅ |
+| POST | `/api/v1/candidate/assessments` | 🅲 | `{specialization, grade}` → новая сессия (проверка политики, 409 `grade_change_cooldown`) | ✅ |
+| GET | `/api/v1/candidate/assessments` | 🅲 | История сессий | ✅ |
+| GET | `/api/v1/candidate/assessments/{id}` | 🅲 | Состояние или результат сессии | ✅ |
+| GET | `/api/v1/candidate/assessments/{id}/current-item` | 🅲 | Текущее задание (без правильного ответа), дедлайн | ✅ |
+| POST | `/api/v1/candidate/assessments/{id}/answer` | 🅲 | `{seq, answer}` → следующее задание или результат | ✅ |
 | GET | `/api/v1/candidate/invitations` | 🅲 | Входящие приглашения | ✅ |
 | GET | `/api/v1/candidate/invitations/{id}` | 🅲 | Приглашение; первое открытие → `viewed` | ✅ |
 | POST | `/api/v1/candidate/invitations/{id}/accept` | 🅲 | → `accepted`, контакты раскрываются компании | ✅ |
@@ -103,6 +104,7 @@
 | GET / PUT / DELETE | `/api/v1/employer/needs/{id}` | 🅴 | Потребность | ✅ |
 | POST | `/api/v1/employer/needs/parse` | 🅴 | Свободный текст → специализация, грейд, навыки (черновик) | ✅ |
 | GET | `/api/v1/employer/needs/{id}/categories` | 🅴 | Рекомендованные категории со статистикой | ✅ |
+| GET | `/api/v1/employer/needs/{id}/test-plan` | 🅴 | Каким будет тест под эту потребность (T-4) | ✅ |
 | POST | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Сформировать или уточнить подборку `{filters}`; закреплённые сохраняются | ✅ |
 | GET | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Подборка с объяснениями | ✅ |
 | PATCH | `/api/v1/employer/needs/{id}/shortlist/{candidate_id}` | 🅴 | `{pinned?, dismissed?}` | ✅ |
