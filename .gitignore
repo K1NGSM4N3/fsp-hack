@@ -1,0 +1,21 @@
+.DS_Store
+.env
+.env.local
+
+# Rust
+/target/
+
+# Node / Next.js
+node_modules/
+/web/.next/
+/web/out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Nix
+/result
+/.direnv/
+
+# Editors
+.idea/
+.vscode/
