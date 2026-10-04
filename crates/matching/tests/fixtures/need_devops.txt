@@ -1,0 +1,4 @@
+DevOps-инженер / SRE, middle+. Удалёнка по РФ.
+Стек: Kubernetes (k8s), Helm, Terraform, Ansible, GitLab CI, Prometheus + Grafana, Linux.
+Опыт работы от 3 лет. З/п до 300 000 ₽.
+Nice to have: опыт с Kafka, знание Go или Python.
