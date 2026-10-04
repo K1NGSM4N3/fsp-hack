@@ -189,7 +189,10 @@ pub struct Category {
 
 impl Category {
     pub const fn new(specialization: Specialization, grade: Grade) -> Self {
-        Self { specialization, grade }
+        Self {
+            specialization,
+            grade,
+        }
     }
 
     /// Stable key, e.g. `backend:middle`.
@@ -206,13 +209,17 @@ impl Category {
     }
 
     pub fn name_ru(self) -> String {
-        format!("{} · {}", self.specialization.name_ru(), self.grade.name_ru())
+        format!(
+            "{} · {}",
+            self.specialization.name_ru(),
+            self.grade.name_ru()
+        )
     }
 
     pub fn all() -> impl Iterator<Item = Category> {
-        Specialization::ALL.iter().flat_map(|&s| {
-            Grade::ALL.iter().map(move |&g| Category::new(s, g))
-        })
+        Specialization::ALL
+            .iter()
+            .flat_map(|&s| Grade::ALL.iter().map(move |&g| Category::new(s, g)))
     }
 }
 
@@ -249,7 +256,8 @@ mod tests {
 
     #[test]
     fn serde_uses_slugs() {
-        let json = serde_json::to_string(&Category::new(Specialization::Ml, Grade::Senior)).unwrap();
+        let json =
+            serde_json::to_string(&Category::new(Specialization::Ml, Grade::Senior)).unwrap();
         assert_eq!(json, r#"{"specialization":"ml","grade":"senior"}"#);
     }
 }
