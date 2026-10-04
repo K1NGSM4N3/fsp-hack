@@ -24,7 +24,9 @@ pub async fn extract_text(bytes: Vec<u8>) -> Result<String, ResumeError> {
         return Err(ResumeError::NotPdf);
     }
     let text = tokio::task::spawn_blocking(move || {
-        std::panic::catch_unwind(AssertUnwindSafe(|| pdf_extract::extract_text_from_mem(&bytes)))
+        std::panic::catch_unwind(AssertUnwindSafe(|| {
+            pdf_extract::extract_text_from_mem(&bytes)
+        }))
     })
     .await
     .map_err(|_| ResumeError::Unreadable)?
@@ -42,8 +44,14 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_non_pdf_and_garbage() {
-        assert!(matches!(extract_text(b"hello".to_vec()).await, Err(ResumeError::NotPdf)));
-        assert!(matches!(extract_text(b"%PDF-1.7 garbage".to_vec()).await, Err(ResumeError::Unreadable)));
+        assert!(matches!(
+            extract_text(b"hello".to_vec()).await,
+            Err(ResumeError::NotPdf)
+        ));
+        assert!(matches!(
+            extract_text(b"%PDF-1.7 garbage".to_vec()).await,
+            Err(ResumeError::Unreadable)
+        ));
     }
 
     #[tokio::test]

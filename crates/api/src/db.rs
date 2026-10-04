@@ -19,7 +19,13 @@ pub enum DbSetupError {
 
 pub fn pool(database_url: &str) -> Result<Pool, DbSetupError> {
     let pg: tokio_postgres::Config = database_url.parse()?;
-    let manager = Manager::from_config(pg, NoTls, ManagerConfig { recycling_method: RecyclingMethod::Fast });
+    let manager = Manager::from_config(
+        pg,
+        NoTls,
+        ManagerConfig {
+            recycling_method: RecyclingMethod::Fast,
+        },
+    );
     Ok(Pool::builder(manager).max_size(16).build()?)
 }
 

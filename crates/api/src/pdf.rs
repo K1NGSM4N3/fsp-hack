@@ -14,10 +14,22 @@ use krilla::{
     text::{Font, TextDirection},
 };
 
-static REGULAR: LazyLock<Option<Font>> =
-    LazyLock::new(|| Font::new(include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf").to_vec().into(), 0));
-static BOLD: LazyLock<Option<Font>> =
-    LazyLock::new(|| Font::new(include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf").to_vec().into(), 0));
+static REGULAR: LazyLock<Option<Font>> = LazyLock::new(|| {
+    Font::new(
+        include_bytes!("../assets/fonts/JetBrainsMono-Regular.ttf")
+            .to_vec()
+            .into(),
+        0,
+    )
+});
+static BOLD: LazyLock<Option<Font>> = LazyLock::new(|| {
+    Font::new(
+        include_bytes!("../assets/fonts/JetBrainsMono-Bold.ttf")
+            .to_vec()
+            .into(),
+        0,
+    )
+});
 
 const PAGE_W: f32 = 595.0;
 const PAGE_H: f32 = 842.0;
@@ -98,8 +110,21 @@ struct Writer<'a> {
 }
 
 enum Op {
-    Text { x: f32, y: f32, size: f32, bold: bool, color: (u8, u8, u8), text: String },
-    Rect { x: f32, y: f32, w: f32, h: f32, color: (u8, u8, u8) },
+    Text {
+        x: f32,
+        y: f32,
+        size: f32,
+        bold: bool,
+        color: (u8, u8, u8),
+        text: String,
+    },
+    Rect {
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        color: (u8, u8, u8),
+    },
 }
 
 impl Writer<'_> {
@@ -121,7 +146,14 @@ impl Writer<'_> {
             self.ensure(size * 1.45);
             self.y += size * 1.45;
             let y = self.y;
-            self.op(Op::Text { x, y, size, bold, color, text: line });
+            self.op(Op::Text {
+                x,
+                y,
+                size,
+                bold,
+                color,
+                text: line,
+            });
         }
     }
 
@@ -150,10 +182,28 @@ fn fill(color: (u8, u8, u8)) -> Option<Fill> {
 
 fn draw(surface: &mut Surface<'_>, regular: &Font, bold: &Font, op: Op) {
     match op {
-        Op::Text { x, y, size, bold: is_bold, color, text } => {
+        Op::Text {
+            x,
+            y,
+            size,
+            bold: is_bold,
+            color,
+            text,
+        } => {
             surface.set_fill(fill(color));
-            let font = if is_bold { bold.clone() } else { regular.clone() };
-            surface.draw_text(Point::from_xy(x, y), font, size, &text, false, TextDirection::Auto);
+            let font = if is_bold {
+                bold.clone()
+            } else {
+                regular.clone()
+            };
+            surface.draw_text(
+                Point::from_xy(x, y),
+                font,
+                size,
+                &text,
+                false,
+                TextDirection::Auto,
+            );
         }
         Op::Rect { x, y, w, h, color } => {
             if let Some(rect) = Rect::from_xywh(x, y, w, h) {
@@ -173,10 +223,29 @@ pub fn render(profile: &ProfileDoc) -> Result<Vec<u8>, PdfError> {
     let bold = BOLD.clone().ok_or(PdfError::Font)?;
     let mut doc = Document::new();
     let content_w = PAGE_W - 2.0 * MARGIN;
-    let mut w = Writer { doc: &mut doc, regular, bold, pages: vec![Vec::new()], y: MARGIN };
+    let mut w = Writer {
+        doc: &mut doc,
+        regular,
+        bold,
+        pages: vec![Vec::new()],
+        y: MARGIN,
+    };
 
-    w.op(Op::Rect { x: 0.0, y: 0.0, w: PAGE_W, h: 6.0, color: PRIMARY });
-    w.text(MARGIN, 9.0, true, PRIMARY, "ФСП · ПРОФИЛЬ КАНДИДАТА", content_w);
+    w.op(Op::Rect {
+        x: 0.0,
+        y: 0.0,
+        w: PAGE_W,
+        h: 6.0,
+        color: PRIMARY,
+    });
+    w.text(
+        MARGIN,
+        9.0,
+        true,
+        PRIMARY,
+        "ФСП · ПРОФИЛЬ КАНДИДАТА",
+        content_w,
+    );
     w.y += 6.0;
     w.text(MARGIN, 20.0, true, INK, &profile.title, content_w);
     w.text(MARGIN, 11.0, false, MUTED, &profile.subtitle, content_w);
@@ -190,13 +259,26 @@ pub fn render(profile: &ProfileDoc) -> Result<Vec<u8>, PdfError> {
         w.y += 16.0;
         w.text(MARGIN, 12.0, true, INK, &section.heading, content_w);
         let y = w.y + 4.0;
-        w.op(Op::Rect { x: MARGIN, y, w: content_w, h: 0.8, color: PRIMARY });
+        w.op(Op::Rect {
+            x: MARGIN,
+            y,
+            w: content_w,
+            h: 0.8,
+            color: PRIMARY,
+        });
         w.y += 6.0;
         for line in &section.lines {
             match line {
                 Line::Text(t) => w.text(MARGIN, 10.0, false, INK, t, content_w),
                 Line::Bullet(t) => {
-                    w.text(MARGIN + 12.0, 10.0, false, INK, &format!("· {t}"), content_w - 12.0);
+                    w.text(
+                        MARGIN + 12.0,
+                        10.0,
+                        false,
+                        INK,
+                        &format!("· {t}"),
+                        content_w - 12.0,
+                    );
                 }
                 Line::KeyValue(k, v) => {
                     let key_w = 150.0;
@@ -236,7 +318,9 @@ mod tests {
             badge: Some("Категория подтверждена тестом".into()),
             sections: vec![Section {
                 heading: "Опыт".into(),
-                lines: (0..120).map(|i| Line::KeyValue(format!("Пункт {i}"), "Значение ".repeat(12))).collect(),
+                lines: (0..120)
+                    .map(|i| Line::KeyValue(format!("Пункт {i}"), "Значение ".repeat(12)))
+                    .collect(),
             }],
             footer: "Сформировано платформой".into(),
         };

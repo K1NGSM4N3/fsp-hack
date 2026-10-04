@@ -8,6 +8,7 @@ publish.workspace = true
 
 [dependencies]
 catalog = { workspace = true, features = ["openapi"] }
+matching = { workspace = true, features = ["openapi"] }
 db = { workspace = true, features = ["deadpool"] }
 
 thiserror.workspace = true
@@ -19,6 +20,7 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 uuid.workspace = true
 rand.workspace = true
+rand_chacha.workspace = true
 axum.workspace = true
 axum-extra = { version = "0.12", features = ["cookie"] }
 utoipa = { workspace = true, features = ["chrono"] }

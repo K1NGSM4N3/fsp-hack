@@ -6,7 +6,9 @@ use std::sync::LazyLock;
 
 use argon2::{
     Algorithm, Argon2, Params, Version,
-    password_hash::{PasswordHash, PasswordHasher as _, PasswordVerifier, SaltString, rand_core::OsRng},
+    password_hash::{
+        PasswordHash, PasswordHasher as _, PasswordVerifier, SaltString, rand_core::OsRng,
+    },
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD as B64URL};
 use chacha20poly1305::{
@@ -60,7 +62,8 @@ impl PasswordHasher for Argon2id {
     }
 
     fn verify(&self, password: &str, phc: &str) -> bool {
-        PasswordHash::new(phc).is_ok_and(|parsed| self.0.verify_password(password.as_bytes(), &parsed).is_ok())
+        PasswordHash::new(phc)
+            .is_ok_and(|parsed| self.0.verify_password(password.as_bytes(), &parsed).is_ok())
     }
 }
 
@@ -103,7 +106,9 @@ impl FieldCipher for XChaChaV1 {
             return Err(CryptoError::Truncated);
         }
         let (nonce, ct) = rest.split_at(NONCE_LEN);
-        self.0.decrypt(XNonce::from_slice(nonce), ct).map_err(|_| CryptoError::Authentication)
+        self.0
+            .decrypt(XNonce::from_slice(nonce), ct)
+            .map_err(|_| CryptoError::Authentication)
     }
 }
 
@@ -124,7 +129,8 @@ impl Crypto {
 
     /// Keyed hash for equality lookups on encrypted columns (blind index).
     pub fn blind_index(&self, value: &str) -> Vec<u8> {
-        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.bidx_key).expect("HMAC accepts any key size");
+        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.bidx_key)
+            .expect("HMAC accepts any key size");
         mac.update(value.as_bytes());
         mac.finalize().into_bytes().to_vec()
     }
@@ -141,15 +147,21 @@ impl Crypto {
         Ok(self.fields.encrypt(&serde_json::to_vec(value)?))
     }
 
-    pub fn decrypt_json<T: serde::de::DeserializeOwned>(&self, data: &[u8]) -> Result<T, CryptoError> {
+    pub fn decrypt_json<T: serde::de::DeserializeOwned>(
+        &self,
+        data: &[u8],
+    ) -> Result<T, CryptoError> {
         Ok(serde_json::from_slice(&self.fields.decrypt(data)?)?)
     }
 }
 
 /// Verified when a login email is unknown, so both branches cost one Argon2 run.
 pub fn dummy_hash() -> &'static str {
-    static HASH: LazyLock<String> =
-        LazyLock::new(|| Argon2id::default().hash("dummy-password").expect("argon2 with constant input"));
+    static HASH: LazyLock<String> = LazyLock::new(|| {
+        Argon2id::default()
+            .hash("dummy-password")
+            .expect("argon2 with constant input")
+    });
     &HASH
 }
 
@@ -200,7 +212,10 @@ mod tests {
         let mut bad = ct.clone();
         *bad.last_mut().unwrap() ^= 1;
         assert!(matches!(c.decrypt(&bad), Err(CryptoError::Authentication)));
-        assert!(matches!(c.decrypt(b"v2xxx"), Err(CryptoError::UnknownVersion)));
+        assert!(matches!(
+            c.decrypt(b"v2xxx"),
+            Err(CryptoError::UnknownVersion)
+        ));
     }
 
     #[test]

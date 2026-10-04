@@ -84,7 +84,11 @@ impl ContactGrant {
                 &ctx.user_agent,
             )
             .await?;
-        Ok(Some(ContactGrant { candidate_id, basis, basis_id }))
+        Ok(Some(ContactGrant {
+            candidate_id,
+            basis,
+            basis_id,
+        }))
     }
 }
 
@@ -94,11 +98,23 @@ impl CandidateContacts {
         crypto: &Crypto,
         grant: ContactGrant,
     ) -> ApiResult<CandidateContacts> {
-        let row = db::queries::contacts::candidate_secrets().bind(client, &grant.candidate_id).one().await?;
+        let row = db::queries::contacts::candidate_secrets()
+            .bind(client, &grant.candidate_id)
+            .one()
+            .await?;
         Ok(CandidateContacts {
             candidate_id: grant.candidate_id,
-            full_name: row.full_name_enc.as_deref().map(|b| crypto.decrypt_str(b)).transpose()?,
-            contacts: row.contacts_enc.as_deref().map(|b| crypto.decrypt_json(b)).transpose()?.unwrap_or_default(),
+            full_name: row
+                .full_name_enc
+                .as_deref()
+                .map(|b| crypto.decrypt_str(b))
+                .transpose()?,
+            contacts: row
+                .contacts_enc
+                .as_deref()
+                .map(|b| crypto.decrypt_json(b))
+                .transpose()?
+                .unwrap_or_default(),
             basis: grant.basis,
             basis_id: grant.basis_id,
         })

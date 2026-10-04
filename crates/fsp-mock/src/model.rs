@@ -163,7 +163,8 @@ impl Participant {
     }
 
     pub fn card(&self) -> ParticipantCard<'_> {
-        let mut best: [Option<(Rank, &str, Discipline)>; Discipline::COUNT] = [None; Discipline::COUNT];
+        let mut best: [Option<(Rank, &str, Discipline)>; Discipline::COUNT] =
+            [None; Discipline::COUNT];
         for a in &self.achievements {
             let Some(rank) = a.rank.filter(|_| a.kind == AchievementKind::Rank) else {
                 continue;

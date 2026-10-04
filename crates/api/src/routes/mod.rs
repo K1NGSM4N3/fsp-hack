@@ -1,4 +1,5 @@
 pub mod candidate_profile;
+pub mod candidates;
 pub mod catalog;
 pub mod company;
 pub mod fsp;
@@ -6,6 +7,7 @@ pub mod health;
 pub mod invitations;
 pub mod market;
 pub mod me;
+pub mod needs;
 pub mod survey;
 pub mod tasks;
 pub mod vacancies;

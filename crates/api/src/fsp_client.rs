@@ -63,17 +63,27 @@ fn oidc(cfg: &FspConfig) -> Result<&OidcConfig, FspError> {
 }
 
 async fn discovery(http: &reqwest::Client, cfg: &OidcConfig) -> Result<Discovery, FspError> {
-    Ok(http.get(&cfg.discovery_url).send().await?.error_for_status()?.json().await?)
+    Ok(http
+        .get(&cfg.discovery_url)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?)
 }
 
-pub async fn authorization_request(http: &reqwest::Client, cfg: &FspConfig) -> Result<AuthorizationRequest, FspError> {
+pub async fn authorization_request(
+    http: &reqwest::Client,
+    cfg: &FspConfig,
+) -> Result<AuthorizationRequest, FspError> {
     let cfg = oidc(cfg)?;
     let d = discovery(http, cfg).await?;
     let state = random_urlsafe(24);
     let nonce = random_urlsafe(24);
     let pkce_verifier = random_urlsafe(32);
     let challenge = B64URL.encode(sha256(pkce_verifier.as_bytes()));
-    let mut url = reqwest::Url::parse(&d.authorization_endpoint).map_err(|_| FspError::OidcDisabled)?;
+    let mut url =
+        reqwest::Url::parse(&d.authorization_endpoint).map_err(|_| FspError::OidcDisabled)?;
     url.query_pairs_mut()
         .append_pair("response_type", "code")
         .append_pair("client_id", &cfg.client_id)
@@ -83,7 +93,12 @@ pub async fn authorization_request(http: &reqwest::Client, cfg: &FspConfig) -> R
         .append_pair("nonce", &nonce)
         .append_pair("code_challenge", &challenge)
         .append_pair("code_challenge_method", "S256");
-    Ok(AuthorizationRequest { url: url.into(), state, pkce_verifier, nonce })
+    Ok(AuthorizationRequest {
+        url: url.into(),
+        state,
+        pkce_verifier,
+        nonce,
+    })
 }
 
 /// Exchanges the code over the back-channel and returns the verified `fsp_id` claim.
@@ -113,7 +128,13 @@ pub async fn complete(
     let tokens: TokenResponse = response.json().await?;
 
     let header = jsonwebtoken::decode_header(&tokens.id_token)?;
-    let jwks: JwkSet = http.get(&d.jwks_uri).send().await?.error_for_status()?.json().await?;
+    let jwks: JwkSet = http
+        .get(&d.jwks_uri)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
     let jwk = match header.kid.as_deref() {
         Some(kid) => jwks.find(kid),
         None => jwks.keys.first(),
@@ -122,11 +143,19 @@ pub async fn complete(
     let mut validation = Validation::new(Algorithm::RS256);
     validation.set_issuer(&[cfg.issuer.as_str()]);
     validation.set_audience(&[cfg.client_id.as_str()]);
-    let claims = jsonwebtoken::decode::<IdClaims>(&tokens.id_token, &DecodingKey::from_jwk(jwk)?, &validation)?.claims;
+    let claims = jsonwebtoken::decode::<IdClaims>(
+        &tokens.id_token,
+        &DecodingKey::from_jwk(jwk)?,
+        &validation,
+    )?
+    .claims;
     if claims.nonce.as_deref() != Some(nonce) {
         return Err(FspError::Nonce);
     }
-    claims.fsp_id.filter(|id| !id.trim().is_empty()).ok_or(FspError::NoFspId)
+    claims
+        .fsp_id
+        .filter(|id| !id.trim().is_empty())
+        .ok_or(FspError::NoFspId)
 }
 
 #[derive(Deserialize)]
@@ -139,9 +168,15 @@ pub async fn fetch_achievements(
     cfg: &FspConfig,
     fsp_id: &str,
 ) -> Result<Vec<serde_json::Value>, FspError> {
-    let base = cfg.registry_url.as_deref().ok_or(FspError::RegistryDisabled)?;
+    let base = cfg
+        .registry_url
+        .as_deref()
+        .ok_or(FspError::RegistryDisabled)?;
     let response = http
-        .get(format!("{}/participants/{fsp_id}/achievements", base.trim_end_matches('/')))
+        .get(format!(
+            "{}/participants/{fsp_id}/achievements",
+            base.trim_end_matches('/')
+        ))
         .bearer_auth(&cfg.registry_token)
         .send()
         .await?;

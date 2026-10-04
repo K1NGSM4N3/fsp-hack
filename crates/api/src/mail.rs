@@ -1,4 +1,6 @@
-use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::header::ContentType};
+use lettre::{
+    AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor, message::header::ContentType,
+};
 
 use crate::config::MailConfig;
 
@@ -16,7 +18,10 @@ pub enum MailError {
 
 pub enum Mailer {
     Log,
-    Smtp { transport: AsyncSmtpTransport<Tokio1Executor>, from: String },
+    Smtp {
+        transport: AsyncSmtpTransport<Tokio1Executor>,
+        from: String,
+    },
 }
 
 impl Mailer {
@@ -24,11 +29,19 @@ impl Mailer {
         Ok(match config {
             MailConfig::Log => Mailer::Log,
             MailConfig::Smtp { url, from } => {
-                let rest = url.strip_prefix("smtp://").ok_or(MailError::InvalidUrl)?.trim_end_matches('/');
+                let rest = url
+                    .strip_prefix("smtp://")
+                    .ok_or(MailError::InvalidUrl)?
+                    .trim_end_matches('/');
                 let (host, port) = rest.split_once(':').unwrap_or((rest, "25"));
                 let port = port.parse().map_err(|_| MailError::InvalidUrl)?;
-                let transport = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host).port(port).build();
-                Mailer::Smtp { transport, from: from.clone() }
+                let transport = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
+                    .port(port)
+                    .build();
+                Mailer::Smtp {
+                    transport,
+                    from: from.clone(),
+                }
             }
         })
     }

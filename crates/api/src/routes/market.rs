@@ -32,10 +32,16 @@ pub struct CategoryCard {
 }
 
 pub async fn category_cards(client: &deadpool_postgres::Object) -> ApiResult<Vec<CategoryCard>> {
-    let rows = db::queries::market::category_overview().bind(client).all().await?;
+    let rows = db::queries::market::category_overview()
+        .bind(client)
+        .all()
+        .await?;
     let mut cards = Vec::with_capacity(rows.len());
     for r in rows {
-        let category = Category::new(r.specialization.parse::<Specialization>()?, r.grade.parse::<Grade>()?);
+        let category = Category::new(
+            r.specialization.parse::<Specialization>()?,
+            r.grade.parse::<Grade>()?,
+        );
         cards.push(CategoryCard {
             name: category.name_ru(),
             category,
@@ -53,7 +59,10 @@ pub async fn category_cards(client: &deadpool_postgres::Object) -> ApiResult<Vec
 #[utoipa::path(get, path = "/categories", tag = "matching",
     responses((status = 200, body = Vec<CategoryCard>)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn categories(State(state): State<AppState>, _user: EmployerUser) -> ApiResult<Json<Vec<CategoryCard>>> {
+async fn categories(
+    State(state): State<AppState>,
+    _user: EmployerUser,
+) -> ApiResult<Json<Vec<CategoryCard>>> {
     let client = state.pool.get().await?;
     Ok(Json(category_cards(&client).await?))
 }
@@ -73,13 +82,25 @@ pub struct MarketStats {
 #[utoipa::path(get, path = "/market", tag = "candidate",
     responses((status = 200, body = MarketStats), (status = 409, description = "`no_category`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn market(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Json<MarketStats>> {
+async fn market(
+    State(state): State<AppState>,
+    user: CandidateUser,
+) -> ApiResult<Json<MarketStats>> {
     let client = state.pool.get().await?;
-    let c = db::queries::candidates::candidate_invitable().bind(&client, &user.id).one().await?;
+    let c = db::queries::candidates::candidate_invitable()
+        .bind(&client, &user.id)
+        .one()
+        .await?;
     let (Some(spec), Some(grade)) = (c.specialization, c.grade) else {
-        return Err(ApiError::conflict("no_category", "Категория появится после теста"));
+        return Err(ApiError::conflict(
+            "no_category",
+            "Категория появится после теста",
+        ));
     };
-    let m = db::queries::market::candidate_market().bind(&client, &user.id, &spec, &grade).one().await?;
+    let m = db::queries::market::candidate_market()
+        .bind(&client, &user.id, &spec, &grade)
+        .one()
+        .await?;
     Ok(Json(MarketStats {
         category: Category::new(spec.parse()?, grade.parse()?),
         companies_viewed_you_30d: m.companies_viewed_you,

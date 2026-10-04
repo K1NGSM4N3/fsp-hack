@@ -1,24 +1,32 @@
-
 pub mod auth;
+pub mod cards;
 pub mod config;
 pub mod contacts;
 pub mod crypto;
 pub mod db;
 pub mod dto;
-pub mod fsp_client;
 pub mod error;
+pub mod fsp_client;
 pub mod kv;
 pub mod mail;
-pub mod pdf;
-pub mod resume;
 pub mod metrics;
+pub mod pdf;
+pub mod pool;
+pub mod resume;
 pub mod routes;
+pub mod seed;
 pub mod skills;
 pub mod state;
 
 use std::time::Duration;
 
-use axum::{Router, extract::DefaultBodyLimit, http::{HeaderName, StatusCode}, middleware, routing::get};
+use axum::{
+    Router,
+    extract::DefaultBodyLimit,
+    http::{HeaderName, StatusCode},
+    middleware,
+    routing::get,
+};
 use tower_http::{
     catch_panic::CatchPanicLayer,
     limit::RequestBodyLimitLayer,
@@ -66,7 +74,12 @@ impl Modify for SecuritySchemes {
         let components = openapi.components.get_or_insert_with(Default::default);
         components.add_security_scheme(
             "bearer",
-            SecurityScheme::Http(HttpBuilder::new().scheme(HttpAuthScheme::Bearer).bearer_format("JWT").build()),
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("JWT")
+                    .build(),
+            ),
         );
         components.add_security_scheme(
             "cookie",
@@ -74,7 +87,6 @@ impl Modify for SecuritySchemes {
         );
     }
 }
-
 
 pub fn api_v1() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
@@ -95,7 +107,9 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
                 .merge(routes::invitations::employer_router())
                 .merge(routes::vacancies::employer_router())
                 .merge(routes::tasks::employer_router())
-                .merge(routes::market::employer_router()),
+                .merge(routes::market::employer_router())
+                .merge(routes::needs::router())
+                .merge(routes::candidates::router()),
         )
         .nest("/fsp", routes::fsp::router())
         .merge(routes::vacancies::public_router())
@@ -121,11 +135,17 @@ pub fn app(state: AppState) -> Router {
         .route("/healthz", get(routes::health::healthz))
         .route("/readyz", get(routes::health::readyz))
         .route("/metrics", get(routes::health::metrics))
-        .layer(middleware::from_fn_with_state(state.clone(), auth::csrf_guard))
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::csrf_guard,
+        ))
         .layer(middleware::from_fn(metrics::track))
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
-        .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, Duration::from_secs(30)))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
         .layer(TraceLayer::new_for_http())
         .layer(SetSensitiveRequestHeadersLayer::new([
             axum::http::header::AUTHORIZATION,

@@ -35,7 +35,10 @@ pub fn employer_router() -> OpenApiRouter<AppState> {
 }
 
 pub fn candidate_router() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(my_tasks)).routes(routes!(submit)).routes(routes!(skip))
+    OpenApiRouter::new()
+        .routes(routes!(my_tasks))
+        .routes(routes!(submit))
+        .routes(routes!(skip))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -56,7 +59,11 @@ impl TaskKind {
     }
 
     fn parse(s: &str) -> TaskKind {
-        if s == "solution" { TaskKind::Solution } else { TaskKind::Approach }
+        if s == "solution" {
+            TaskKind::Solution
+        } else {
+            TaskKind::Approach
+        }
     }
 }
 
@@ -90,10 +97,16 @@ pub struct EmployerTask {
 #[utoipa::path(get, path = "/tasks", tag = "tasks",
     responses((status = 200, body = Vec<EmployerTask>)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn list_tasks(State(state): State<AppState>, user: EmployerUser) -> ApiResult<Json<Vec<EmployerTask>>> {
+async fn list_tasks(
+    State(state): State<AppState>,
+    user: EmployerUser,
+) -> ApiResult<Json<Vec<EmployerTask>>> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    let rows = db::queries::tasks::company_tasks().bind(&client, &company).all().await?;
+    let rows = db::queries::tasks::company_tasks()
+        .bind(&client, &company)
+        .all()
+        .await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(EmployerTask {
@@ -118,20 +131,53 @@ async fn list_tasks(State(state): State<AppState>, user: EmployerUser) -> ApiRes
     request_body = TaskInput,
     responses((status = 201, body = EmployerTask), (status = 422, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn create_task(State(state): State<AppState>, user: EmployerUser, Json(t): Json<TaskInput>) -> ApiResult<(StatusCode, Json<EmployerTask>)> {
-    let unknown: Vec<&str> = t.skills.iter().map(String::as_str).filter(|k| !skills::is_known(k)).collect();
+async fn create_task(
+    State(state): State<AppState>,
+    user: EmployerUser,
+    Json(t): Json<TaskInput>,
+) -> ApiResult<(StatusCode, Json<EmployerTask>)> {
+    let unknown: Vec<&str> = t
+        .skills
+        .iter()
+        .map(String::as_str)
+        .filter(|k| !skills::is_known(k))
+        .collect();
     let mut v = Validator::default();
-    v.check(!t.title.trim().is_empty() && t.title.len() <= 200, "title", "Название до 200 символов")
-        .check(!t.body.trim().is_empty() && t.body.len() <= 5000, "body", "Условие до 5000 символов")
-        .check(!t.grades.is_empty(), "grades", "Выберите хотя бы один грейд")
-        .check_with(unknown.is_empty(), "skills", || format!("Неизвестные навыки: {}", unknown.join(", ")));
+    v.check(
+        !t.title.trim().is_empty() && t.title.len() <= 200,
+        "title",
+        "Название до 200 символов",
+    )
+    .check(
+        !t.body.trim().is_empty() && t.body.len() <= 5000,
+        "body",
+        "Условие до 5000 символов",
+    )
+    .check(
+        !t.grades.is_empty(),
+        "grades",
+        "Выберите хотя бы один грейд",
+    )
+    .check_with(unknown.is_empty(), "skills", || {
+        format!("Неизвестные навыки: {}", unknown.join(", "))
+    });
     v.finish()?;
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
     let id = Uuid::now_v7();
     let grades: Vec<&str> = t.grades.iter().map(|g| g.slug()).collect();
     db::queries::tasks::insert_task()
-        .bind(&client, &id, &company, &t.specialization.slug(), &grades, &t.skills, &t.title.trim(), &t.body.trim(), &t.kind.slug())
+        .bind(
+            &client,
+            &id,
+            &company,
+            &t.specialization.slug(),
+            &grades,
+            &t.skills,
+            &t.title.trim(),
+            &t.body.trim(),
+            &t.kind.slug(),
+        )
         .await?;
     Ok((
         StatusCode::CREATED,
@@ -162,10 +208,19 @@ pub struct ActiveInput {
     request_body = ActiveInput,
     responses((status = 204), (status = 404, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn set_active(State(state): State<AppState>, user: EmployerUser, Path(id): Path<Uuid>, Json(input): Json<ActiveInput>) -> ApiResult<StatusCode> {
+async fn set_active(
+    State(state): State<AppState>,
+    user: EmployerUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<ActiveInput>,
+) -> ApiResult<StatusCode> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    if db::queries::tasks::set_task_active().bind(&client, &input.active, &id, &company).await? == 0 {
+    if db::queries::tasks::set_task_active()
+        .bind(&client, &input.active, &id, &company)
+        .await?
+        == 0
+    {
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
@@ -189,10 +244,17 @@ pub struct Submission {
     params(("id" = Uuid, Path)),
     responses((status = 200, body = Vec<Submission>)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn submissions(State(state): State<AppState>, user: EmployerUser, Path(id): Path<Uuid>) -> ApiResult<Json<Vec<Submission>>> {
+async fn submissions(
+    State(state): State<AppState>,
+    user: EmployerUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<Submission>>> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    let rows = db::queries::tasks::task_submissions().bind(&client, &id, &company).all().await?;
+    let rows = db::queries::tasks::task_submissions()
+        .bind(&client, &id, &company)
+        .all()
+        .await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(Submission {
@@ -237,8 +299,16 @@ async fn review(
     }
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    let comment = input.comment.as_deref().map(str::trim).filter(|c| !c.is_empty());
-    if db::queries::tasks::review_submission().bind(&client, &input.rating, &comment, &sid, &id, &company).await? == 0 {
+    let comment = input
+        .comment
+        .as_deref()
+        .map(str::trim)
+        .filter(|c| !c.is_empty());
+    if db::queries::tasks::review_submission()
+        .bind(&client, &input.rating, &comment, &sid, &id, &company)
+        .await?
+        == 0
+    {
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
@@ -263,23 +333,46 @@ pub struct MyTask {
 }
 
 async fn assign_if_due(client: &deadpool_postgres::Object, candidate: Uuid) -> ApiResult<()> {
-    db::queries::tasks::expire_assignments().bind(client, &candidate).await?;
-    if db::queries::tasks::has_open_assignment().bind(client, &candidate).one().await? > 0 {
+    db::queries::tasks::expire_assignments()
+        .bind(client, &candidate)
+        .await?;
+    if db::queries::tasks::has_open_assignment()
+        .bind(client, &candidate)
+        .one()
+        .await?
+        > 0
+    {
         return Ok(());
     }
-    let last = db::queries::tasks::last_assignment_at().bind(client, &candidate).one().await?;
+    let last = db::queries::tasks::last_assignment_at()
+        .bind(client, &candidate)
+        .one()
+        .await?;
     if last.is_some_and(|at| at > Utc::now() - Duration::days(ASSIGN_EVERY_DAYS)) {
         return Ok(());
     }
-    if let Some(task) = db::queries::tasks::pick_task_for().bind(client, &candidate).opt().await? {
+    if let Some(task) = db::queries::tasks::pick_task_for()
+        .bind(client, &candidate)
+        .opt()
+        .await?
+    {
         db::queries::tasks::insert_assignment()
-            .bind(client, &Uuid::now_v7(), &task, &candidate, &(Utc::now() + Duration::days(DUE_IN_DAYS)))
+            .bind(
+                client,
+                &Uuid::now_v7(),
+                &task,
+                &candidate,
+                &(Utc::now() + Duration::days(DUE_IN_DAYS)),
+            )
             .await?;
     }
     Ok(())
 }
 
-async fn load_my_tasks(client: &deadpool_postgres::Object, candidate: Uuid) -> ApiResult<Vec<MyTask>> {
+async fn load_my_tasks(
+    client: &deadpool_postgres::Object,
+    candidate: Uuid,
+) -> ApiResult<Vec<MyTask>> {
     Ok(db::queries::tasks::candidate_assignments()
         .bind(client, &candidate)
         .all()
@@ -308,7 +401,10 @@ async fn load_my_tasks(client: &deadpool_postgres::Object, candidate: Uuid) -> A
 #[utoipa::path(get, path = "/tasks", tag = "tasks",
     responses((status = 200, body = Vec<MyTask>)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn my_tasks(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Json<Vec<MyTask>>> {
+async fn my_tasks(
+    State(state): State<AppState>,
+    user: CandidateUser,
+) -> ApiResult<Json<Vec<MyTask>>> {
     let client = state.pool.get().await?;
     assign_if_due(&client, user.id).await?;
     Ok(Json(load_my_tasks(&client, user.id).await?))
@@ -325,16 +421,30 @@ pub struct SubmitInput {
     request_body = SubmitInput,
     responses((status = 200, body = Vec<MyTask>), (status = 409, description = "`task_closed`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn submit(State(state): State<AppState>, user: CandidateUser, Path(id): Path<Uuid>, Json(input): Json<SubmitInput>) -> ApiResult<Json<Vec<MyTask>>> {
+async fn submit(
+    State(state): State<AppState>,
+    user: CandidateUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<SubmitInput>,
+) -> ApiResult<Json<Vec<MyTask>>> {
     let answer = input.answer.trim();
     if answer.is_empty() || answer.len() > 20_000 {
         return Err(ApiError::field("answer", "Ответ от 1 до 20 000 символов"));
     }
     let client = state.pool.get().await?;
-    if db::queries::tasks::submit_assignment().bind(&client, &answer, &id, &user.id).await? == 0 {
-        return Err(ApiError::conflict("task_closed", "Задание уже закрыто или просрочено"));
+    if db::queries::tasks::submit_assignment()
+        .bind(&client, &answer, &id, &user.id)
+        .await?
+        == 0
+    {
+        return Err(ApiError::conflict(
+            "task_closed",
+            "Задание уже закрыто или просрочено",
+        ));
     }
-    db::queries::candidates::touch_candidate_activity().bind(&client, &user.id).await?;
+    db::queries::candidates::touch_candidate_activity()
+        .bind(&client, &user.id)
+        .await?;
     Ok(Json(load_my_tasks(&client, user.id).await?))
 }
 
@@ -343,9 +453,17 @@ async fn submit(State(state): State<AppState>, user: CandidateUser, Path(id): Pa
     params(("id" = Uuid, Path)),
     responses((status = 204), (status = 409, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn skip(State(state): State<AppState>, user: CandidateUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+async fn skip(
+    State(state): State<AppState>,
+    user: CandidateUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
     let client = state.pool.get().await?;
-    if db::queries::tasks::skip_assignment().bind(&client, &id, &user.id).await? == 0 {
+    if db::queries::tasks::skip_assignment()
+        .bind(&client, &id, &user.id)
+        .await?
+        == 0
+    {
         return Err(ApiError::conflict("task_closed", "Задание уже закрыто"));
     }
     Ok(StatusCode::NO_CONTENT)

@@ -42,14 +42,22 @@ pub async fn company_id(client: &deadpool_postgres::Object, owner: Uuid) -> ApiR
         .opt()
         .await?
         .map(|c| c.id)
-        .ok_or_else(|| ApiError::conflict("company_profile_required", "Сначала заполните профиль компании"))
+        .ok_or_else(|| {
+            ApiError::conflict(
+                "company_profile_required",
+                "Сначала заполните профиль компании",
+            )
+        })
 }
 
 /// Company profile
 #[utoipa::path(get, path = "/company", tag = "employer",
     responses((status = 200, body = CompanyResponse), (status = 403, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn get_company(State(state): State<AppState>, user: EmployerUser) -> ApiResult<Json<CompanyResponse>> {
+async fn get_company(
+    State(state): State<AppState>,
+    user: EmployerUser,
+) -> ApiResult<Json<CompanyResponse>> {
     let client = state.pool.get().await?;
     let c = db::queries::companies::company_of_owner()
         .bind(&client, &user.id)
@@ -90,7 +98,11 @@ async fn put_company(
     let mut v = Validator::default();
     v.check(!p.name.trim().is_empty(), "name", "Укажите название")
         .check(p.name.len() <= 200, "name", "Слишком длинное название")
-        .check(p.description.len() <= 5000, "description", "Слишком длинное описание");
+        .check(
+            p.description.len() <= 5000,
+            "description",
+            "Слишком длинное описание",
+        );
     v.finish()?;
     let client = state.pool.get().await?;
     db::queries::companies::update_company()

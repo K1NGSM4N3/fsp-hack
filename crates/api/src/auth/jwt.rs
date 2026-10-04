@@ -36,7 +36,9 @@ impl JwtKeys {
             s
         });
         let signing = SigningKey::from_bytes(&seed);
-        let der = signing.to_pkcs8_der().map_err(|e| CryptoError::KeyEncoding(e.to_string()))?;
+        let der = signing
+            .to_pkcs8_der()
+            .map_err(|e| CryptoError::KeyEncoding(e.to_string()))?;
         let mut validation = Validation::new(Algorithm::EdDSA);
         validation.set_issuer(&[ISSUER]);
         validation.leeway = 5;
@@ -47,7 +49,12 @@ impl JwtKeys {
         })
     }
 
-    pub fn issue(&self, user_id: Uuid, role: Role, now: i64) -> Result<String, jsonwebtoken::errors::Error> {
+    pub fn issue(
+        &self,
+        user_id: Uuid,
+        role: Role,
+        now: i64,
+    ) -> Result<String, jsonwebtoken::errors::Error> {
         let claims = Claims {
             sub: user_id,
             role,
@@ -60,7 +67,9 @@ impl JwtKeys {
     }
 
     pub fn verify(&self, token: &str) -> Option<Claims> {
-        jsonwebtoken::decode::<Claims>(token, &self.decoding, &self.validation).ok().map(|d| d.claims)
+        jsonwebtoken::decode::<Claims>(token, &self.decoding, &self.validation)
+            .ok()
+            .map(|d| d.claims)
     }
 }
 
@@ -77,7 +86,15 @@ mod tests {
         let claims = keys.verify(&token).unwrap();
         assert_eq!(claims.sub, id);
         assert_eq!(claims.role, Role::Candidate);
-        assert!(JwtKeys::new(Some([8; 32])).unwrap().verify(&token).is_none());
-        assert!(keys.verify(&keys.issue(id, Role::Candidate, now - 3600).unwrap()).is_none());
+        assert!(
+            JwtKeys::new(Some([8; 32]))
+                .unwrap()
+                .verify(&token)
+                .is_none()
+        );
+        assert!(
+            keys.verify(&keys.issue(id, Role::Candidate, now - 3600).unwrap())
+                .is_none()
+        );
     }
 }

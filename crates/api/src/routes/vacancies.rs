@@ -38,7 +38,9 @@ pub fn employer_router() -> OpenApiRouter<AppState> {
 }
 
 pub fn candidate_router() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(my_applications)).routes(routes!(withdraw_application))
+    OpenApiRouter::new()
+        .routes(routes!(my_applications))
+        .routes(routes!(withdraw_application))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -83,7 +85,10 @@ macro_rules! vacancy_from_row {
             specialization: r.specialization.parse()?,
             grade: r.grade.parse()?,
             skills: r.skills,
-            salary: SalaryRange { min: r.salary_min, max: r.salary_max },
+            salary: SalaryRange {
+                min: r.salary_min,
+                max: r.salary_max,
+            },
             work_format: r.work_format.parse()?,
             city: r.city,
             status: r.status.into(),
@@ -96,14 +101,29 @@ macro_rules! vacancy_from_row {
 }
 
 fn validate(v: &VacancyInput) -> ApiResult<()> {
-    let unknown: Vec<&str> = v.skills.iter().map(String::as_str).filter(|k| !skills::is_known(k)).collect();
+    let unknown: Vec<&str> = v
+        .skills
+        .iter()
+        .map(String::as_str)
+        .filter(|k| !skills::is_known(k))
+        .collect();
     let mut val = Validator::default();
     val.check(!v.title.trim().is_empty(), "title", "Укажите название")
         .check(v.title.len() <= 200, "title", "Не длиннее 200 символов")
-        .check(v.description.len() <= 10_000, "description", "Не длиннее 10 000 символов")
+        .check(
+            v.description.len() <= 10_000,
+            "description",
+            "Не длиннее 10 000 символов",
+        )
         .check(v.salary.min > 0, "salary.min", "Зарплата «от» обязательна")
-        .check(v.salary.max >= v.salary.min, "salary.max", "«До» не меньше «от»")
-        .check_with(unknown.is_empty(), "skills", || format!("Неизвестные навыки: {}", unknown.join(", ")));
+        .check(
+            v.salary.max >= v.salary.min,
+            "salary.max",
+            "«До» не меньше «от»",
+        )
+        .check_with(unknown.is_empty(), "skills", || {
+            format!("Неизвестные навыки: {}", unknown.join(", "))
+        });
     val.finish()
 }
 
@@ -111,10 +131,16 @@ fn validate(v: &VacancyInput) -> ApiResult<()> {
 #[utoipa::path(get, path = "/vacancies", tag = "vacancies",
     responses((status = 200, body = Vec<Vacancy>)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn list_own(State(state): State<AppState>, user: EmployerUser) -> ApiResult<Json<Vec<Vacancy>>> {
+async fn list_own(
+    State(state): State<AppState>,
+    user: EmployerUser,
+) -> ApiResult<Json<Vec<Vacancy>>> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    let rows = db::queries::vacancies::company_vacancies().bind(&client, &company).all().await?;
+    let rows = db::queries::vacancies::company_vacancies()
+        .bind(&client, &company)
+        .all()
+        .await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(vacancy_from_row!(r));
@@ -127,7 +153,11 @@ async fn list_own(State(state): State<AppState>, user: EmployerUser) -> ApiResul
     request_body = VacancyInput,
     responses((status = 201, body = Vacancy), (status = 422, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn create(State(state): State<AppState>, user: EmployerUser, Json(v): Json<VacancyInput>) -> ApiResult<(StatusCode, Json<Vacancy>)> {
+async fn create(
+    State(state): State<AppState>,
+    user: EmployerUser,
+    Json(v): Json<VacancyInput>,
+) -> ApiResult<(StatusCode, Json<Vacancy>)> {
     validate(&v)?;
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
@@ -152,7 +182,10 @@ async fn create(State(state): State<AppState>, user: EmployerUser, Json(v): Json
             &published_at,
         )
         .await?;
-    let row = db::queries::vacancies::company_vacancy().bind(&client, &company, &id).one().await?;
+    let row = db::queries::vacancies::company_vacancy()
+        .bind(&client, &company, &id)
+        .one()
+        .await?;
     Ok((StatusCode::CREATED, Json(vacancy_from_row!(row))))
 }
 
@@ -161,7 +194,11 @@ async fn create(State(state): State<AppState>, user: EmployerUser, Json(v): Json
     params(("id" = Uuid, Path)),
     responses((status = 200, body = Vacancy), (status = 404, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn get_own(State(state): State<AppState>, user: EmployerUser, Path(id): Path<Uuid>) -> ApiResult<Json<Vacancy>> {
+async fn get_own(
+    State(state): State<AppState>,
+    user: EmployerUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vacancy>> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
     let row = db::queries::vacancies::company_vacancy()
@@ -208,7 +245,10 @@ async fn update(
     if updated == 0 {
         return Err(ApiError::not_found());
     }
-    let row = db::queries::vacancies::company_vacancy().bind(&client, &company, &id).one().await?;
+    let row = db::queries::vacancies::company_vacancy()
+        .bind(&client, &company, &id)
+        .one()
+        .await?;
     Ok(Json(vacancy_from_row!(row)))
 }
 
@@ -236,7 +276,10 @@ async fn list_applications(
 ) -> ApiResult<Json<Vec<IncomingApplication>>> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    let rows = db::queries::vacancies::vacancy_applications().bind(&client, &id, &company).all().await?;
+    let rows = db::queries::vacancies::vacancy_applications()
+        .bind(&client, &id, &company)
+        .all()
+        .await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(IncomingApplication {
@@ -273,13 +316,23 @@ async fn set_application_status(
     Path(id): Path<Uuid>,
     Json(input): Json<ApplicationStatusInput>,
 ) -> ApiResult<StatusCode> {
-    if matches!(input.status, ApplicationStatus::Sent | ApplicationStatus::Withdrawn) {
-        return Err(ApiError::field("status", "Допустимо: viewed, accepted, rejected"));
+    if matches!(
+        input.status,
+        ApplicationStatus::Sent | ApplicationStatus::Withdrawn
+    ) {
+        return Err(ApiError::field(
+            "status",
+            "Допустимо: viewed, accepted, rejected",
+        ));
     }
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
     let status: db::types::ApplicationStatus = input.status.into();
-    if db::queries::vacancies::set_application_status().bind(&client, &status, &id, &company).await? == 0 {
+    if db::queries::vacancies::set_application_status()
+        .bind(&client, &status, &id, &company)
+        .await?
+        == 0
+    {
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
@@ -321,7 +374,10 @@ pub struct PublicVacancy {
 #[utoipa::path(get, path = "/vacancies", tag = "vacancies",
     params(VacancyQuery),
     responses((status = 200, body = Page<PublicVacancy>)))]
-async fn list_published(State(state): State<AppState>, Query(q): Query<VacancyQuery>) -> ApiResult<Json<Page<PublicVacancy>>> {
+async fn list_published(
+    State(state): State<AppState>,
+    Query(q): Query<VacancyQuery>,
+) -> ApiResult<Json<Page<PublicVacancy>>> {
     let client = state.pool.get().await?;
     let limit = q.limit.unwrap_or(20).clamp(1, 100);
     let offset = q.offset.unwrap_or(0).max(0);
@@ -353,7 +409,10 @@ async fn list_published(State(state): State<AppState>, Query(q): Query<VacancyQu
             specialization: r.specialization.parse()?,
             grade: r.grade.parse()?,
             skills: r.skills,
-            salary: SalaryRange { min: r.salary_min, max: r.salary_max },
+            salary: SalaryRange {
+                min: r.salary_min,
+                max: r.salary_max,
+            },
             work_format: r.work_format.parse()?,
             city: r.city,
             published_at: r.published_at,
@@ -366,9 +425,16 @@ async fn list_published(State(state): State<AppState>, Query(q): Query<VacancyQu
 #[utoipa::path(get, path = "/vacancies/{id}", tag = "vacancies",
     params(("id" = Uuid, Path)),
     responses((status = 200, body = PublicVacancy), (status = 404, body = Problem)))]
-async fn get_published(State(state): State<AppState>, Path(id): Path<Uuid>) -> ApiResult<Json<PublicVacancy>> {
+async fn get_published(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<PublicVacancy>> {
     let client = state.pool.get().await?;
-    let r = db::queries::vacancies::published_vacancy().bind(&client, &id).opt().await?.ok_or_else(ApiError::not_found)?;
+    let r = db::queries::vacancies::published_vacancy()
+        .bind(&client, &id)
+        .opt()
+        .await?
+        .ok_or_else(ApiError::not_found)?;
     Ok(Json(PublicVacancy {
         id: r.id,
         company_id: r.company_id,
@@ -380,7 +446,10 @@ async fn get_published(State(state): State<AppState>, Path(id): Path<Uuid>) -> A
         specialization: r.specialization.parse()?,
         grade: r.grade.parse()?,
         skills: r.skills,
-        salary: SalaryRange { min: r.salary_min, max: r.salary_max },
+        salary: SalaryRange {
+            min: r.salary_min,
+            max: r.salary_max,
+        },
         work_format: r.work_format.parse()?,
         city: r.city,
         published_at: r.published_at,
@@ -422,29 +491,50 @@ async fn apply(
         return Err(ApiError::field("cover_letter", "Не длиннее 4000 символов"));
     }
     let client = state.pool.get().await?;
-    db::queries::vacancies::published_vacancy().bind(&client, &vacancy_id).opt().await?.ok_or_else(ApiError::not_found)?;
+    db::queries::vacancies::published_vacancy()
+        .bind(&client, &vacancy_id)
+        .opt()
+        .await?
+        .ok_or_else(ApiError::not_found)?;
     let letter = input.cover_letter.trim();
-    let reopened = db::queries::vacancies::reopen_application().bind(&client, &letter, &vacancy_id, &user.id).opt().await?;
+    let reopened = db::queries::vacancies::reopen_application()
+        .bind(&client, &letter, &vacancy_id, &user.id)
+        .opt()
+        .await?;
     let id = match reopened {
         Some(id) => id,
         None => {
             let id = Uuid::now_v7();
-            let inserted = db::queries::vacancies::insert_application().bind(&client, &id, &vacancy_id, &user.id, &letter).await;
+            let inserted = db::queries::vacancies::insert_application()
+                .bind(&client, &id, &vacancy_id, &user.id, &letter)
+                .await;
             match inserted {
                 Ok(_) => id,
                 Err(e) if e.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) => {
-                    return Err(ApiError::conflict("already_applied", "Вы уже откликнулись на эту вакансию"));
+                    return Err(ApiError::conflict(
+                        "already_applied",
+                        "Вы уже откликнулись на эту вакансию",
+                    ));
                 }
                 Err(e) => return Err(e.into()),
             }
         }
     };
-    db::queries::candidates::touch_candidate_activity().bind(&client, &user.id).await?;
-    let app = my_apps(&client, user.id).await?.into_iter().find(|a| a.id == id).ok_or_else(ApiError::not_found)?;
+    db::queries::candidates::touch_candidate_activity()
+        .bind(&client, &user.id)
+        .await?;
+    let app = my_apps(&client, user.id)
+        .await?
+        .into_iter()
+        .find(|a| a.id == id)
+        .ok_or_else(ApiError::not_found)?;
     Ok((StatusCode::CREATED, Json(app)))
 }
 
-async fn my_apps(client: &deadpool_postgres::Object, candidate: Uuid) -> ApiResult<Vec<MyApplication>> {
+async fn my_apps(
+    client: &deadpool_postgres::Object,
+    candidate: Uuid,
+) -> ApiResult<Vec<MyApplication>> {
     Ok(db::queries::vacancies::candidate_applications()
         .bind(client, &candidate)
         .all()
@@ -455,7 +545,10 @@ async fn my_apps(client: &deadpool_postgres::Object, candidate: Uuid) -> ApiResu
             vacancy_id: r.vacancy_id,
             vacancy_title: r.vacancy_title,
             company_name: r.company_name,
-            salary: SalaryRange { min: r.salary_min, max: r.salary_max },
+            salary: SalaryRange {
+                min: r.salary_min,
+                max: r.salary_max,
+            },
             cover_letter: r.cover_letter,
             status: r.status.into(),
             created_at: r.created_at,
@@ -468,7 +561,10 @@ async fn my_apps(client: &deadpool_postgres::Object, candidate: Uuid) -> ApiResu
 #[utoipa::path(get, path = "/applications", tag = "vacancies",
     responses((status = 200, body = Vec<MyApplication>)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn my_applications(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Json<Vec<MyApplication>>> {
+async fn my_applications(
+    State(state): State<AppState>,
+    user: CandidateUser,
+) -> ApiResult<Json<Vec<MyApplication>>> {
     let client = state.pool.get().await?;
     Ok(Json(my_apps(&client, user.id).await?))
 }
@@ -478,10 +574,21 @@ async fn my_applications(State(state): State<AppState>, user: CandidateUser) -> 
     params(("id" = Uuid, Path)),
     responses((status = 204), (status = 409, description = "`application_closed`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn withdraw_application(State(state): State<AppState>, user: CandidateUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+async fn withdraw_application(
+    State(state): State<AppState>,
+    user: CandidateUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
     let client = state.pool.get().await?;
-    if db::queries::vacancies::withdraw_application().bind(&client, &id, &user.id).await? == 0 {
-        return Err(ApiError::conflict("application_closed", "Отклик уже рассмотрен или отозван"));
+    if db::queries::vacancies::withdraw_application()
+        .bind(&client, &id, &user.id)
+        .await?
+        == 0
+    {
+        return Err(ApiError::conflict(
+            "application_closed",
+            "Отклик уже рассмотрен или отозван",
+        ));
     }
     Ok(StatusCode::NO_CONTENT)
 }

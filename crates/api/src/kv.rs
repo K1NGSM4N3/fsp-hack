@@ -26,7 +26,9 @@ pub enum Kv {
 impl Kv {
     pub async fn connect(url: Option<&str>) -> Result<Self, KvError> {
         match url {
-            Some(url) => Ok(Kv::Valkey(ConnectionManager::new(redis::Client::open(url)?).await?)),
+            Some(url) => Ok(Kv::Valkey(
+                ConnectionManager::new(redis::Client::open(url)?).await?,
+            )),
             None => {
                 tracing::warn!("VALKEY_URL not set: rate limits and deny-list are in-process");
                 Ok(Kv::Memory(Arc::new(MemoryKv::new(1 << 16))))
@@ -80,7 +82,9 @@ impl Kv {
 }
 
 fn unix_now() -> u64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs())
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
 }
 
 /// Open-addressing tables of packed `AtomicU64` slots updated with CAS — no locks, fixed memory.
@@ -101,8 +105,18 @@ const PROBE: usize = 8;
 impl MemoryKv {
     pub fn new(slots: usize) -> Self {
         assert!(slots.is_power_of_two());
-        let table = || (0..slots).map(|_| AtomicU64::new(0)).collect::<Vec<_>>().into_boxed_slice();
-        Self { counters: table(), flags: table(), mask: slots - 1, hasher: std::hash::RandomState::new() }
+        let table = || {
+            (0..slots)
+                .map(|_| AtomicU64::new(0))
+                .collect::<Vec<_>>()
+                .into_boxed_slice()
+        };
+        Self {
+            counters: table(),
+            flags: table(),
+            mask: slots - 1,
+            hasher: std::hash::RandomState::new(),
+        }
     }
 
     fn hash(&self, key: &str) -> u64 {
@@ -117,7 +131,11 @@ impl MemoryKv {
         let mut current = slot.load(Ordering::Relaxed);
         loop {
             let same = current >> 40 == fp && (current >> 16) & 0xFF_FFFF == win;
-            let count = if same { ((current & 0xFFFF) + 1).min(0xFFFF) } else { 1 };
+            let count = if same {
+                ((current & 0xFFFF) + 1).min(0xFFFF)
+            } else {
+                1
+            };
             let next = (fp << 40) | (win << 16) | count;
             match slot.compare_exchange_weak(current, next, Ordering::AcqRel, Ordering::Relaxed) {
                 Ok(_) => return count,
@@ -147,7 +165,10 @@ impl MemoryKv {
                 }
             }
             let (idx, current) = victim.expect("PROBE > 0");
-            if self.flags[idx].compare_exchange(current, packed, Ordering::AcqRel, Ordering::Acquire).is_ok() {
+            if self.flags[idx]
+                .compare_exchange(current, packed, Ordering::AcqRel, Ordering::Acquire)
+                .is_ok()
+            {
                 return;
             }
         }

@@ -1,14 +1,21 @@
-use axum::{Json, extract::State};
+use axum::{
+    Json,
+    extract::{Query, State},
+};
 use catalog::{Direction, Grade, Industry, Specialization, WorkFormat};
-use serde::Serialize;
-use utoipa::ToSchema;
+use matching::{Discipline, SkillView};
+use serde::{Deserialize, Serialize};
+use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 use crate::{auth::Role, error::ApiResult, state::AppState};
 
 pub fn router() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(get_catalog)).routes(routes!(current_consents))
+    OpenApiRouter::new()
+        .routes(routes!(get_catalog))
+        .routes(routes!(skills))
+        .routes(routes!(current_consents))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -30,6 +37,7 @@ pub struct CatalogResponse {
     pub grades: Vec<Named<Grade>>,
     pub work_formats: Vec<Named<WorkFormat>>,
     pub industries: Vec<Named<Industry>>,
+    pub fsp_disciplines: Vec<Named<Discipline>>,
 }
 
 /// Directions, specializations, grades, formats and industries
@@ -41,13 +49,71 @@ async fn get_catalog() -> Json<CatalogResponse> {
             .map(|&d| DirectionInfo {
                 slug: d,
                 name: d.name_ru(),
-                specializations: d.specializations().map(|s| Named { slug: s, name: s.name_ru() }).collect(),
+                specializations: d
+                    .specializations()
+                    .map(|s| Named {
+                        slug: s,
+                        name: s.name_ru(),
+                    })
+                    .collect(),
             })
             .collect(),
-        grades: Grade::ALL.iter().map(|&g| Named { slug: g, name: g.name_ru() }).collect(),
-        work_formats: WorkFormat::ALL.iter().map(|&f| Named { slug: f, name: f.name_ru() }).collect(),
-        industries: Industry::ALL.iter().map(|&i| Named { slug: i, name: i.name_ru() }).collect(),
+        grades: Grade::ALL
+            .iter()
+            .map(|&g| Named {
+                slug: g,
+                name: g.name_ru(),
+            })
+            .collect(),
+        work_formats: WorkFormat::ALL
+            .iter()
+            .map(|&f| Named {
+                slug: f,
+                name: f.name_ru(),
+            })
+            .collect(),
+        industries: Industry::ALL
+            .iter()
+            .map(|&i| Named {
+                slug: i,
+                name: i.name_ru(),
+            })
+            .collect(),
+        fsp_disciplines: Discipline::ALL
+            .iter()
+            .map(|&d| Named {
+                slug: d,
+                name: d.name_ru(),
+            })
+            .collect(),
     })
+}
+
+#[derive(Deserialize, IntoParams)]
+pub struct SkillQuery {
+    /// Prefix or alias in Russian or English ("постг", "k8s").
+    pub q: Option<String>,
+    /// Without `q`: the typical stack of this specialization.
+    pub specialization: Option<Specialization>,
+}
+
+/// Skill autocomplete with aliases
+#[utoipa::path(get, path = "/catalog/skills", tag = "catalog",
+    params(SkillQuery),
+    responses((status = 200, body = Vec<SkillView>)))]
+async fn skills(Query(q): Query<SkillQuery>) -> Json<Vec<SkillView>> {
+    let q_text = q.q.as_deref().map(str::trim).unwrap_or("");
+    let defs: Vec<&matching::SkillDef> = if !q_text.is_empty() {
+        matching::search(q_text).into_iter().take(20).collect()
+    } else if let Some(spec) = q.specialization {
+        matching::typical_skills(spec)
+            .iter()
+            .filter_map(|s| matching::lookup(s))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    Json(defs.into_iter().map(SkillView::from).collect())
 }
 
 #[derive(Serialize, ToSchema)]
@@ -64,7 +130,10 @@ pub struct ConsentDocument {
 #[utoipa::path(get, path = "/consents/current", tag = "catalog", responses((status = 200, body = Vec<ConsentDocument>)))]
 async fn current_consents(State(state): State<AppState>) -> ApiResult<Json<Vec<ConsentDocument>>> {
     let client = state.pool.get().await?;
-    let docs = db::queries::consents::current_consent_documents().bind(&client).all().await?;
+    let docs = db::queries::consents::current_consent_documents()
+        .bind(&client)
+        .all()
+        .await?;
     Ok(Json(
         docs.into_iter()
             .map(|d| ConsentDocument {

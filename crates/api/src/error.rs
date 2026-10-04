@@ -8,7 +8,7 @@ use axum::{
 use serde::{Serialize, ser::SerializeMap};
 use utoipa::ToSchema;
 
-use crate::{crypto::CryptoError, kv::KvError, mail::MailError};
+use crate::{crypto::CryptoError, kv::KvError, mail::MailError, pdf::PdfError};
 
 /// RFC 9457 problem details. `code` is the stable identifier the UI switches on.
 #[derive(Debug, Serialize, ToSchema)]
@@ -47,7 +47,11 @@ impl Serialize for FieldErrors {
             if self.0[..i].iter().any(|(f, _)| f == field) {
                 continue;
             }
-            let messages: Vec<&str> = self.0[i..].iter().filter(|(f, _)| f == field).map(|(_, m)| m.as_ref()).collect();
+            let messages: Vec<&str> = self.0[i..]
+                .iter()
+                .filter(|(f, _)| f == field)
+                .map(|(_, m)| m.as_ref())
+                .collect();
             map.serialize_entry(field, &messages)?;
         }
         map.end()
@@ -74,6 +78,8 @@ pub enum InternalError {
     Mail(#[from] MailError),
     #[error("http: {0}")]
     Http(#[from] reqwest::Error),
+    #[error("pdf: {0}")]
+    Pdf(#[from] PdfError),
     #[error("corrupt stored value: {0}")]
     Corrupt(String),
 }
@@ -81,7 +87,12 @@ pub enum InternalError {
 #[derive(Debug, thiserror::Error)]
 pub enum ApiError {
     #[error("{title}")]
-    Status { status: StatusCode, code: &'static str, title: String, detail: Option<String> },
+    Status {
+        status: StatusCode,
+        code: &'static str,
+        title: String,
+        detail: Option<String>,
+    },
     #[error("validation failed")]
     Validation(FieldErrors),
     #[error(transparent)]
@@ -108,6 +119,7 @@ internal_from!(
     tokio::task::JoinError,
     MailError,
     reqwest::Error,
+    PdfError,
 );
 
 impl From<catalog::UnknownSlug> for ApiError {
@@ -120,12 +132,27 @@ pub type ApiResult<T> = Result<T, ApiError>;
 
 impl ApiError {
     pub fn new(status: StatusCode, code: &'static str, title: impl Into<String>) -> Self {
-        Self::Status { status, code, title: title.into(), detail: None }
+        Self::Status {
+            status,
+            code,
+            title: title.into(),
+            detail: None,
+        }
     }
 
     pub fn with_detail(self, detail: impl Into<String>) -> Self {
         match self {
-            Self::Status { status, code, title, .. } => Self::Status { status, code, title, detail: Some(detail.into()) },
+            Self::Status {
+                status,
+                code,
+                title,
+                ..
+            } => Self::Status {
+                status,
+                code,
+                title,
+                detail: Some(detail.into()),
+            },
             other => other,
         }
     }
@@ -152,7 +179,11 @@ impl ApiError {
     }
 
     pub fn too_many_requests() -> Self {
-        Self::new(StatusCode::TOO_MANY_REQUESTS, "rate_limited", "Слишком много запросов, попробуйте позже")
+        Self::new(
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            "Слишком много запросов, попробуйте позже",
+        )
     }
 
     pub fn field(field: &'static str, message: impl Into<Cow<'static, str>>) -> Self {
@@ -174,7 +205,12 @@ impl Validator {
     }
 
     /// For messages that need formatting: the closure runs only when the check fails.
-    pub fn check_with(&mut self, ok: bool, field: &'static str, message: impl FnOnce() -> String) -> &mut Self {
+    pub fn check_with(
+        &mut self,
+        ok: bool,
+        field: &'static str,
+        message: impl FnOnce() -> String,
+    ) -> &mut Self {
         if !ok {
             self.0.push(field, message());
         }
@@ -182,16 +218,30 @@ impl Validator {
     }
 
     pub fn finish(self) -> ApiResult<()> {
-        if self.0.is_empty() { Ok(()) } else { Err(ApiError::Validation(self.0)) }
+        if self.0.is_empty() {
+            Ok(())
+        } else {
+            Err(ApiError::Validation(self.0))
+        }
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let problem = match self {
-            ApiError::Status { status, code, title, detail } => {
-                Problem { kind: "about:blank", title, status: status.as_u16(), code, detail, errors: None }
-            }
+            ApiError::Status {
+                status,
+                code,
+                title,
+                detail,
+            } => Problem {
+                kind: "about:blank",
+                title,
+                status: status.as_u16(),
+                code,
+                detail,
+                errors: None,
+            },
             ApiError::Validation(errors) => Problem {
                 kind: "about:blank",
                 title: "Проверьте введённые данные".into(),
@@ -212,10 +262,14 @@ impl IntoResponse for ApiError {
                 }
             }
         };
-        let status = StatusCode::from_u16(problem.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let status =
+            StatusCode::from_u16(problem.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
         let mut response = (status, Json(problem)).into_response();
         let headers = response.headers_mut();
-        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/problem+json"));
+        headers.insert(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/problem+json"),
+        );
         if status == StatusCode::TOO_MANY_REQUESTS {
             headers.insert(header::RETRY_AFTER, HeaderValue::from_static("60"));
         }
@@ -230,8 +284,16 @@ mod tests {
     #[test]
     fn field_errors_group_by_field_in_insertion_order() {
         let mut v = Validator::default();
-        v.check(false, "title", "a").check(true, "x", "never").check(false, "salary", "b").check_with(false, "title", || "c".into());
-        let Err(ApiError::Validation(errors)) = v.finish() else { panic!("expected validation error") };
-        assert_eq!(serde_json::to_string(&errors).unwrap(), r#"{"title":["a","c"],"salary":["b"]}"#);
+        v.check(false, "title", "a")
+            .check(true, "x", "never")
+            .check(false, "salary", "b")
+            .check_with(false, "title", || "c".into());
+        let Err(ApiError::Validation(errors)) = v.finish() else {
+            panic!("expected validation error")
+        };
+        assert_eq!(
+            serde_json::to_string(&errors).unwrap(),
+            r#"{"title":["a","c"],"salary":["b"]}"#
+        );
     }
 }

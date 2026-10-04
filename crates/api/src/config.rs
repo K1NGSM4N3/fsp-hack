@@ -56,7 +56,9 @@ fn var(name: &str) -> Option<String> {
 }
 
 fn flag(name: &str, default: bool) -> bool {
-    var(name).map_or(default, |v| matches!(v.as_str(), "1" | "true" | "yes" | "on"))
+    var(name).map_or(default, |v| {
+        matches!(v.as_str(), "1" | "true" | "yes" | "on")
+    })
 }
 
 fn parsed<T: std::str::FromStr>(name: &'static str, default: T) -> Result<T, ConfigError>
@@ -64,20 +66,29 @@ where
     T::Err: std::fmt::Display,
 {
     match var(name) {
-        Some(v) => v.parse().map_err(|e: T::Err| ConfigError::Invalid { name, reason: e.to_string() }),
+        Some(v) => v.parse().map_err(|e: T::Err| ConfigError::Invalid {
+            name,
+            reason: e.to_string(),
+        }),
         None => Ok(default),
     }
 }
 
 fn key32(name: &'static str) -> Result<Option<[u8; 32]>, ConfigError> {
-    let Some(raw) = var(name) else { return Ok(None) };
-    let bytes = B64
-        .decode(raw.trim())
-        .map_err(|e| ConfigError::Invalid { name, reason: e.to_string() })?;
+    let Some(raw) = var(name) else {
+        return Ok(None);
+    };
+    let bytes = B64.decode(raw.trim()).map_err(|e| ConfigError::Invalid {
+        name,
+        reason: e.to_string(),
+    })?;
     bytes
         .try_into()
         .map(Some)
-        .map_err(|_| ConfigError::Invalid { name, reason: "must decode to exactly 32 bytes".into() })
+        .map_err(|_| ConfigError::Invalid {
+            name,
+            reason: "must decode to exactly 32 bytes".into(),
+        })
 }
 
 impl Config {
@@ -91,7 +102,10 @@ impl Config {
             (Some(f), Some(b)) => (f, b),
             (None, None) => {
                 tracing::warn!("FIELD_ENC_KEY/BIDX_KEY not set: using fixed development keys");
-                (*b"dev-field-key-do-not-use-in-prd!", *b"dev-bidx-key-do-not-use-in-prod!")
+                (
+                    *b"dev-field-key-do-not-use-in-prd!",
+                    *b"dev-bidx-key-do-not-use-in-prod!",
+                )
             }
             _ => {
                 return Err(ConfigError::Invalid {
@@ -104,7 +118,8 @@ impl Config {
         let mail = match var("MAIL_MODE").as_deref() {
             Some("smtp") => MailConfig::Smtp {
                 url: var("SMTP_URL").ok_or(ConfigError::Missing("SMTP_URL"))?,
-                from: var("MAIL_FROM").unwrap_or_else(|| "ФСП Таланты <noreply@fsp-talent.local>".into()),
+                from: var("MAIL_FROM")
+                    .unwrap_or_else(|| "ФСП Таланты <noreply@fsp-talent.local>".into()),
             },
             _ => MailConfig::Log,
         };
@@ -134,7 +149,8 @@ impl Config {
             fsp: FspConfig {
                 oidc,
                 registry_url: var("FSP_REGISTRY_URL"),
-                registry_token: var("FSP_REGISTRY_TOKEN").unwrap_or_else(|| "dev-registry-token".into()),
+                registry_token: var("FSP_REGISTRY_TOKEN")
+                    .unwrap_or_else(|| "dev-registry-token".into()),
                 dev_link: flag("FSP_DEV_LINK", false),
             },
             grade_change_cooldown_days: parsed("GRADE_CHANGE_COOLDOWN_DAYS", 90)?,

@@ -49,13 +49,31 @@ async fn main() -> Result<(), StartupError> {
     if command == "migrate" {
         return Ok(());
     }
+    if command == "seed" || config.seed_demo {
+        let crypto = Crypto::new(&config.field_key, &config.bidx_key);
+        match api::seed::seed(&pool, &crypto).await {
+            Ok(Some(r)) => tracing::info!(
+                companies = r.companies,
+                candidates = r.candidates,
+                fsp_linked = r.fsp_linked,
+                "demo data seeded"
+            ),
+            Ok(None) => tracing::info!("demo data already present"),
+            Err(e) => tracing::error!(error = %e, "demo seed failed"),
+        }
+        if command == "seed" {
+            return Ok(());
+        }
+    }
 
     let state = AppState {
         crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
         jwt: Arc::new(JwtKeys::new(config.jwt_seed)?),
         mailer: Arc::new(Mailer::new(&config.mail)?),
         kv: Kv::connect(config.valkey_url.as_deref()).await?,
-        http: reqwest::Client::builder().timeout(std::time::Duration::from_secs(10)).build()?,
+        http: reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .build()?,
         metrics: Some(api::metrics::install()?),
         pool,
         config: Arc::new(config),
@@ -63,12 +81,15 @@ async fn main() -> Result<(), StartupError> {
 
     let listener = tokio::net::TcpListener::bind(state.config.bind).await?;
     tracing::info!(addr = %state.config.bind, "listening");
-    axum::serve(listener, api::app(state)).with_graceful_shutdown(shutdown()).await?;
+    axum::serve(listener, api::app(state))
+        .with_graceful_shutdown(shutdown())
+        .await?;
     Ok(())
 }
 
 fn init_tracing(json: bool) {
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,api=debug"));
+    let filter =
+        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,api=debug"));
     let registry = tracing_subscriber::registry().with(filter);
     if json {
         registry.with(fmt::layer().json()).init();
@@ -83,7 +104,8 @@ async fn shutdown() {
     };
     #[cfg(unix)]
     let terminate = async {
-        if let Ok(mut s) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+        if let Ok(mut s) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
             s.recv().await;
         }
     };

@@ -100,11 +100,17 @@ macro_rules! sent_from_row {
             vacancy_id: r.vacancy_id,
             title: r.title,
             message: r.message,
-            salary: SalaryRange { min: r.salary_min, max: r.salary_max },
+            salary: SalaryRange {
+                min: r.salary_min,
+                max: r.salary_max,
+            },
             work_format: r.work_format.as_deref().and_then(WorkFormat::from_slug),
             contact: r.contact,
             status: r.status.into(),
-            decline_reason: r.decline_reason.as_deref().and_then(DeclineReason::from_slug),
+            decline_reason: r
+                .decline_reason
+                .as_deref()
+                .and_then(DeclineReason::from_slug),
             decline_comment: r.decline_comment,
             created_at: r.created_at,
             viewed_at: r.viewed_at,
@@ -117,14 +123,42 @@ macro_rules! sent_from_row {
 
 fn validate(req: &SendInvitation) -> ApiResult<()> {
     let mut v = Validator::default();
-    v.check(!req.title.trim().is_empty(), "title", "Укажите, что предлагаете")
-        .check(req.title.len() <= 200, "title", "Не длиннее 200 символов")
-        .check(!req.message.trim().is_empty(), "message", "Опишите предложение")
-        .check(req.message.len() <= 4000, "message", "Не длиннее 4000 символов")
-        .check(req.salary.min > 0, "salary.min", "Зарплата «от» обязательна")
-        .check(req.salary.max >= req.salary.min, "salary.max", "«До» не меньше «от»")
-        .check(req.salary.max <= 100_000_000, "salary.max", "Проверьте сумму")
-        .check(!req.contact.trim().is_empty(), "contact", "Укажите способ связи");
+    v.check(
+        !req.title.trim().is_empty(),
+        "title",
+        "Укажите, что предлагаете",
+    )
+    .check(req.title.len() <= 200, "title", "Не длиннее 200 символов")
+    .check(
+        !req.message.trim().is_empty(),
+        "message",
+        "Опишите предложение",
+    )
+    .check(
+        req.message.len() <= 4000,
+        "message",
+        "Не длиннее 4000 символов",
+    )
+    .check(
+        req.salary.min > 0,
+        "salary.min",
+        "Зарплата «от» обязательна",
+    )
+    .check(
+        req.salary.max >= req.salary.min,
+        "salary.max",
+        "«До» не меньше «от»",
+    )
+    .check(
+        req.salary.max <= 100_000_000,
+        "salary.max",
+        "Проверьте сумму",
+    )
+    .check(
+        !req.contact.trim().is_empty(),
+        "contact",
+        "Укажите способ связи",
+    );
     v.finish()
 }
 
@@ -160,7 +194,10 @@ async fn send(
             .opt()
             .await?
     {
-        let row = db::queries::invitations::employer_invitation().bind(&client, &company, &existing).one().await?;
+        let row = db::queries::invitations::employer_invitation()
+            .bind(&client, &company, &existing)
+            .one()
+            .await?;
         return Ok((StatusCode::OK, Json(sent_from_row!(row))));
     }
 
@@ -172,12 +209,20 @@ async fn send(
     if !candidate.visible {
         return Err(ApiError::not_found());
     }
-    if candidate.search_status == db::types::SearchStatus::Closed || candidate.specialization.is_none() {
-        return Err(ApiError::conflict("candidate_not_available", "Кандидат сейчас не принимает приглашения"));
+    if candidate.search_status == db::types::SearchStatus::Closed
+        || candidate.specialization.is_none()
+    {
+        return Err(ApiError::conflict(
+            "candidate_not_available",
+            "Кандидат сейчас не принимает приглашения",
+        ));
     }
 
     let since = Utc::now() - Duration::days(7);
-    let sent = db::queries::invitations::company_invitations_since().bind(&client, &company, &since).one().await?;
+    let sent = db::queries::invitations::company_invitations_since()
+        .bind(&client, &company, &since)
+        .one()
+        .await?;
     if sent >= QUOTA_PER_WEEK {
         return Err(ApiError::conflict(
             "invitation_quota_exceeded",
@@ -214,9 +259,18 @@ async fn send(
         return Err(e.into());
     }
     db::queries::invitations::insert_invitation_event()
-        .bind(&client, &Uuid::now_v7(), &id, &db::types::InvitationStatus::Sent, &Some(user.id))
+        .bind(
+            &client,
+            &Uuid::now_v7(),
+            &id,
+            &db::types::InvitationStatus::Sent,
+            &Some(user.id),
+        )
         .await?;
-    let row = db::queries::invitations::employer_invitation().bind(&client, &company, &id).one().await?;
+    let row = db::queries::invitations::employer_invitation()
+        .bind(&client, &company, &id)
+        .one()
+        .await?;
     Ok((StatusCode::CREATED, Json(sent_from_row!(row))))
 }
 
@@ -224,11 +278,19 @@ async fn send(
 #[utoipa::path(get, path = "/invitations", tag = "invitations",
     responses((status = 200, body = Vec<SentInvitation>)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn list_sent(State(state): State<AppState>, user: EmployerUser) -> ApiResult<Json<Vec<SentInvitation>>> {
+async fn list_sent(
+    State(state): State<AppState>,
+    user: EmployerUser,
+) -> ApiResult<Json<Vec<SentInvitation>>> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    db::queries::invitations::expire_stale_invitations().bind(&client).await?;
-    let rows = db::queries::invitations::employer_invitations().bind(&client, &company).all().await?;
+    db::queries::invitations::expire_stale_invitations()
+        .bind(&client)
+        .await?;
+    let rows = db::queries::invitations::employer_invitations()
+        .bind(&client, &company)
+        .all()
+        .await?;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
         out.push(sent_from_row!(row));
@@ -241,10 +303,16 @@ async fn list_sent(State(state): State<AppState>, user: EmployerUser) -> ApiResu
     params(("id" = Uuid, Path)),
     responses((status = 200, body = SentInvitation), (status = 404, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn get_sent(State(state): State<AppState>, user: EmployerUser, Path(id): Path<Uuid>) -> ApiResult<Json<SentInvitation>> {
+async fn get_sent(
+    State(state): State<AppState>,
+    user: EmployerUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<SentInvitation>> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    db::queries::invitations::expire_stale_invitations().bind(&client).await?;
+    db::queries::invitations::expire_stale_invitations()
+        .bind(&client)
+        .await?;
     let row = db::queries::invitations::employer_invitation()
         .bind(&client, &company, &id)
         .opt()
@@ -261,7 +329,10 @@ async fn events(client: &deadpool_postgres::Object, id: Uuid) -> ApiResult<Vec<S
         .all()
         .await?
         .into_iter()
-        .map(|e| StatusEvent { status: e.status.into(), at: e.at })
+        .map(|e| StatusEvent {
+            status: e.status.into(),
+            at: e.at,
+        })
         .collect())
 }
 
@@ -270,14 +341,31 @@ async fn events(client: &deadpool_postgres::Object, id: Uuid) -> ApiResult<Vec<S
     params(("id" = Uuid, Path)),
     responses((status = 204), (status = 409, description = "`invitation_closed`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn withdraw(State(state): State<AppState>, user: EmployerUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+async fn withdraw(
+    State(state): State<AppState>,
+    user: EmployerUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    if db::queries::invitations::withdraw_invitation().bind(&client, &id, &company).await? == 0 {
-        return Err(ApiError::conflict("invitation_closed", "Приглашение уже закрыто"));
+    if db::queries::invitations::withdraw_invitation()
+        .bind(&client, &id, &company)
+        .await?
+        == 0
+    {
+        return Err(ApiError::conflict(
+            "invitation_closed",
+            "Приглашение уже закрыто",
+        ));
     }
     db::queries::invitations::insert_invitation_event()
-        .bind(&client, &Uuid::now_v7(), &id, &db::types::InvitationStatus::Withdrawn, &Some(user.id))
+        .bind(
+            &client,
+            &Uuid::now_v7(),
+            &id,
+            &db::types::InvitationStatus::Withdrawn,
+            &Some(user.id),
+        )
         .await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -309,15 +397,23 @@ pub struct InvitationStats {
 #[utoipa::path(get, path = "/invitations/stats", tag = "invitations",
     responses((status = 200, body = InvitationStats)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn invitation_stats(State(state): State<AppState>, user: EmployerUser) -> ApiResult<Json<InvitationStats>> {
+async fn invitation_stats(
+    State(state): State<AppState>,
+    user: EmployerUser,
+) -> ApiResult<Json<InvitationStats>> {
     let client = state.pool.get().await?;
     let company = company_id(&client, user.id).await?;
-    db::queries::invitations::expire_stale_invitations().bind(&client).await?;
+    db::queries::invitations::expire_stale_invitations()
+        .bind(&client)
+        .await?;
     let used = db::queries::invitations::company_invitations_since()
         .bind(&client, &company, &(Utc::now() - Duration::days(7)))
         .one()
         .await?;
-    let rate = db::queries::invitations::company_response_rate().bind(&client, &company).one().await?;
+    let rate = db::queries::invitations::company_response_rate()
+        .bind(&client, &company)
+        .one()
+        .await?;
     Ok(Json(InvitationStats {
         quota_limit: QUOTA_PER_WEEK,
         quota_used: used,
@@ -327,15 +423,25 @@ async fn invitation_stats(State(state): State<AppState>, user: EmployerUser) -> 
             .all()
             .await?
             .into_iter()
-            .map(|r| StatusCount { status: r.status.into(), count: r.count })
+            .map(|r| StatusCount {
+                status: r.status.into(),
+                count: r.count,
+            })
             .collect(),
-        response_rate: if rate.total > 0 { rate.answered as f64 / rate.total as f64 } else { 0.0 },
+        response_rate: if rate.total > 0 {
+            rate.answered as f64 / rate.total as f64
+        } else {
+            0.0
+        },
         decline_reasons: db::queries::invitations::company_decline_reasons()
             .bind(&client, &company)
             .all()
             .await?
             .into_iter()
-            .map(|r| ReasonCount { reason: r.reason.as_deref().and_then(DeclineReason::from_slug), count: r.count })
+            .map(|r| ReasonCount {
+                reason: r.reason.as_deref().and_then(DeclineReason::from_slug),
+                count: r.count,
+            })
             .collect(),
     }))
 }
@@ -356,14 +462,23 @@ async fn candidate_contacts(
     let company = company_id(&client, user.id).await?;
     let ip = client_ip(&headers);
     let ua = user_agent(&headers);
-    let ctx = AccessContext { employer_user_id: user.id, company_id: company, ip: ip.as_deref(), user_agent: ua.as_deref() };
-    let grant = ContactGrant::obtain(&client, &ctx, candidate_id).await?.ok_or_else(|| {
-        ApiError::forbidden(
-            "contacts_not_granted",
-            "Контакты откроются, когда кандидат примет приглашение или откликнется сам",
-        )
-    })?;
-    Ok(Json(CandidateContacts::reveal(&client, &state.crypto, grant).await?))
+    let ctx = AccessContext {
+        employer_user_id: user.id,
+        company_id: company,
+        ip: ip.as_deref(),
+        user_agent: ua.as_deref(),
+    };
+    let grant = ContactGrant::obtain(&client, &ctx, candidate_id)
+        .await?
+        .ok_or_else(|| {
+            ApiError::forbidden(
+                "contacts_not_granted",
+                "Контакты откроются, когда кандидат примет приглашение или откликнется сам",
+            )
+        })?;
+    Ok(Json(
+        CandidateContacts::reveal(&client, &state.crypto, grant).await?,
+    ))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -403,11 +518,17 @@ macro_rules! received_from_row {
             vacancy_id: r.vacancy_id,
             title: r.title,
             message: r.message,
-            salary: SalaryRange { min: r.salary_min, max: r.salary_max },
+            salary: SalaryRange {
+                min: r.salary_min,
+                max: r.salary_max,
+            },
             work_format: r.work_format.as_deref().and_then(WorkFormat::from_slug),
             contact: r.contact,
             status: r.status.into(),
-            decline_reason: r.decline_reason.as_deref().and_then(DeclineReason::from_slug),
+            decline_reason: r
+                .decline_reason
+                .as_deref()
+                .and_then(DeclineReason::from_slug),
             created_at: r.created_at,
             viewed_at: r.viewed_at,
             responded_at: r.responded_at,
@@ -420,11 +541,21 @@ macro_rules! received_from_row {
 #[utoipa::path(get, path = "/invitations", tag = "invitations",
     responses((status = 200, body = Vec<ReceivedInvitation>)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn list_received(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Json<Vec<ReceivedInvitation>>> {
+async fn list_received(
+    State(state): State<AppState>,
+    user: CandidateUser,
+) -> ApiResult<Json<Vec<ReceivedInvitation>>> {
     let client = state.pool.get().await?;
-    db::queries::invitations::expire_stale_invitations().bind(&client).await?;
-    let rows = db::queries::invitations::candidate_invitations().bind(&client, &user.id).all().await?;
-    Ok(Json(rows.into_iter().map(|r| received_from_row!(r)).collect()))
+    db::queries::invitations::expire_stale_invitations()
+        .bind(&client)
+        .await?;
+    let rows = db::queries::invitations::candidate_invitations()
+        .bind(&client, &user.id)
+        .all()
+        .await?;
+    Ok(Json(
+        rows.into_iter().map(|r| received_from_row!(r)).collect(),
+    ))
 }
 
 /// One invitation; the first open marks it as viewed
@@ -438,10 +569,22 @@ async fn get_received(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<ReceivedInvitation>> {
     let client = state.pool.get().await?;
-    db::queries::invitations::expire_stale_invitations().bind(&client).await?;
-    if db::queries::invitations::mark_invitation_viewed().bind(&client, &id, &user.id).await? > 0 {
+    db::queries::invitations::expire_stale_invitations()
+        .bind(&client)
+        .await?;
+    if db::queries::invitations::mark_invitation_viewed()
+        .bind(&client, &id, &user.id)
+        .await?
+        > 0
+    {
         db::queries::invitations::insert_invitation_event()
-            .bind(&client, &Uuid::now_v7(), &id, &db::types::InvitationStatus::Viewed, &Some(user.id))
+            .bind(
+                &client,
+                &Uuid::now_v7(),
+                &id,
+                &db::types::InvitationStatus::Viewed,
+                &Some(user.id),
+            )
             .await?;
     }
     let row = db::queries::invitations::candidate_invitation()
@@ -462,19 +605,38 @@ async fn respond(
 ) -> ApiResult<Json<ReceivedInvitation>> {
     let client = state.pool.get().await?;
     let updated = db::queries::invitations::respond_invitation()
-        .bind(&client, &status, &reason.map(DeclineReason::slug), &comment.as_deref(), &id, &user.id)
+        .bind(
+            &client,
+            &status,
+            &reason.map(DeclineReason::slug),
+            &comment.as_deref(),
+            &id,
+            &user.id,
+        )
         .await?;
     if updated == 0 {
-        return match db::queries::invitations::candidate_invitation().bind(&client, &user.id, &id).opt().await? {
+        return match db::queries::invitations::candidate_invitation()
+            .bind(&client, &user.id, &id)
+            .opt()
+            .await?
+        {
             None => Err(ApiError::not_found()),
-            Some(_) => Err(ApiError::conflict("invitation_closed", "Приглашение уже закрыто или истекло")),
+            Some(_) => Err(ApiError::conflict(
+                "invitation_closed",
+                "Приглашение уже закрыто или истекло",
+            )),
         };
     }
     db::queries::invitations::insert_invitation_event()
         .bind(&client, &Uuid::now_v7(), &id, &status, &Some(user.id))
         .await?;
-    db::queries::candidates::touch_candidate_activity().bind(&client, &user.id).await?;
-    let row = db::queries::invitations::candidate_invitation().bind(&client, &user.id, &id).one().await?;
+    db::queries::candidates::touch_candidate_activity()
+        .bind(&client, &user.id)
+        .await?;
+    let row = db::queries::invitations::candidate_invitation()
+        .bind(&client, &user.id, &id)
+        .one()
+        .await?;
     Ok(Json(received_from_row!(row)))
 }
 
@@ -483,8 +645,20 @@ async fn respond(
     params(("id" = Uuid, Path)),
     responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn accept(State(state): State<AppState>, user: CandidateUser, Path(id): Path<Uuid>) -> ApiResult<Json<ReceivedInvitation>> {
-    respond(&state, user, id, db::types::InvitationStatus::Accepted, None, None).await
+async fn accept(
+    State(state): State<AppState>,
+    user: CandidateUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<ReceivedInvitation>> {
+    respond(
+        &state,
+        user,
+        id,
+        db::types::InvitationStatus::Accepted,
+        None,
+        None,
+    )
+    .await
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -505,6 +679,17 @@ async fn decline(
     Path(id): Path<Uuid>,
     Json(req): Json<DeclineRequest>,
 ) -> ApiResult<Json<ReceivedInvitation>> {
-    let comment = req.comment.map(|c| c.chars().take(1000).collect::<String>()).filter(|c| !c.trim().is_empty());
-    respond(&state, user, id, db::types::InvitationStatus::Declined, Some(req.reason), comment).await
+    let comment = req
+        .comment
+        .map(|c| c.chars().take(1000).collect::<String>())
+        .filter(|c| !c.trim().is_empty());
+    respond(
+        &state,
+        user,
+        id,
+        db::types::InvitationStatus::Declined,
+        Some(req.reason),
+        comment,
+    )
+    .await
 }

@@ -1,21 +1,38 @@
-use axum::{Json, extract::State};
+use axum::{
+    Json,
+    extract::{DefaultBodyLimit, Multipart, State},
+    http::header,
+    response::IntoResponse,
+};
 use catalog::{Category, Industry, WorkFormat};
 use chrono::{DateTime, Utc};
+use matching::ParsedResume;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
+use uuid::Uuid;
 
 use crate::{
     auth::CandidateUser,
     contacts::Contacts,
     dto::{SearchStatus, parse_slugs, slugs},
     error::{ApiError, ApiResult, Problem, Validator},
+    pdf, pool,
+    resume::{self, ResumeError},
     skills,
     state::AppState,
 };
 
 pub fn router() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new().routes(routes!(get_profile, put_profile)).routes(routes!(get_privacy, put_privacy))
+    OpenApiRouter::new()
+        .routes(routes!(get_profile, put_profile))
+        .routes(routes!(get_privacy, put_privacy))
+        .routes(routes!(profile_pdf))
+        .merge(
+            OpenApiRouter::new()
+                .routes(routes!(upload_resume))
+                .layer(DefaultBodyLimit::max(resume::MAX_PDF_BYTES + 64 * 1024)),
+        )
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
@@ -95,12 +112,20 @@ pub(crate) fn parse_source(s: &str) -> Option<SkillSource> {
 
 async fn load_profile(state: &AppState, user: &CandidateUser) -> ApiResult<ProfileResponse> {
     let client = state.pool.get().await?;
-    let c = db::queries::candidates::candidate_profile().bind(&client, &user.id).one().await?;
-    let skill_rows = db::queries::candidates::candidate_skills().bind(&client, &user.id).all().await?;
+    let c = db::queries::candidates::candidate_profile()
+        .bind(&client, &user.id)
+        .one()
+        .await?;
+    let skill_rows = db::queries::candidates::candidate_skills()
+        .bind(&client, &user.id)
+        .all()
+        .await?;
 
     let mut skill_details: Vec<ProfileSkill> = Vec::new();
     for row in skill_rows {
-        let Some(source) = parse_source(&row.source) else { continue };
+        let Some(source) = parse_source(&row.source) else {
+            continue;
+        };
         match skill_details.last_mut() {
             Some(last) if last.slug == row.skill => last.sources.push(source),
             _ => skill_details.push(ProfileSkill {
@@ -123,8 +148,18 @@ async fn load_profile(state: &AppState, user: &CandidateUser) -> ApiResult<Profi
     Ok(ProfileResponse {
         public_code: c.public_code,
         input: ProfileInput {
-            full_name: c.full_name_enc.as_deref().map(|b| state.crypto.decrypt_str(b)).transpose()?.unwrap_or_default(),
-            contacts: c.contacts_enc.as_deref().map(|b| state.crypto.decrypt_json(b)).transpose()?.unwrap_or_default(),
+            full_name: c
+                .full_name_enc
+                .as_deref()
+                .map(|b| state.crypto.decrypt_str(b))
+                .transpose()?
+                .unwrap_or_default(),
+            contacts: c
+                .contacts_enc
+                .as_deref()
+                .map(|b| state.crypto.decrypt_json(b))
+                .transpose()?
+                .unwrap_or_default(),
             city: c.city,
             relocation: c.relocation,
             work_formats: parse_slugs(&c.work_formats),
@@ -148,7 +183,10 @@ async fn load_profile(state: &AppState, user: &CandidateUser) -> ApiResult<Profi
 #[utoipa::path(get, path = "/profile", tag = "candidate",
     responses((status = 200, body = ProfileResponse), (status = 403, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn get_profile(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Json<ProfileResponse>> {
+async fn get_profile(
+    State(state): State<AppState>,
+    user: CandidateUser,
+) -> ApiResult<Json<ProfileResponse>> {
     Ok(Json(load_profile(&state, &user).await?))
 }
 
@@ -158,7 +196,10 @@ fn non_empty(v: Option<String>) -> Option<String> {
 
 fn valid_month(s: &str) -> bool {
     let b = s.as_bytes();
-    b.len() == 7 && b[4] == b'-' && s[..4].parse::<u16>().is_ok() && s[5..].parse::<u8>().is_ok_and(|m| (1..=12).contains(&m))
+    b.len() == 7
+        && b[4] == b'-'
+        && s[..4].parse::<u16>().is_ok()
+        && s[5..].parse::<u8>().is_ok_and(|m| (1..=12).contains(&m))
 }
 
 /// Save the profile (form or confirmed resume recognition result)
@@ -178,7 +219,12 @@ async fn put_profile(
         telegram: non_empty(p.contacts.telegram),
         email: non_empty(p.contacts.email),
     };
-    let unknown: Vec<&str> = p.skills.iter().map(String::as_str).filter(|s| !skills::is_known(s)).collect();
+    let declared = skills::canonicalize(&p.skills);
+    if let Err(unknown) = &declared {
+        v.check_with(false, "skills", || {
+            skills::unknown_message(unknown).into_owned()
+        });
+    }
     v.check(!full_name.is_empty(), "full_name", "Укажите ФИО")
         .check(full_name.len() <= 200, "full_name", "Слишком длинное ФИО")
         .check(
@@ -186,17 +232,31 @@ async fn put_profile(
             "contacts",
             "Нужен хотя бы один способ связи",
         )
-        .check(p.salary_expectation_min.is_none_or(|s| s > 0 && s <= 100_000_000), "salary_expectation_min", "Проверьте сумму")
-        .check(p.experience_years.is_none_or(|y| (0.0..=60.0).contains(&y)), "experience_years", "От 0 до 60 лет")
+        .check(
+            p.salary_expectation_min
+                .is_none_or(|s| s > 0 && s <= 100_000_000),
+            "salary_expectation_min",
+            "Проверьте сумму",
+        )
+        .check(
+            p.experience_years.is_none_or(|y| (0.0..=60.0).contains(&y)),
+            "experience_years",
+            "От 0 до 60 лет",
+        )
         .check(p.about.len() <= 5000, "about", "Не длиннее 5000 символов")
         .check(p.skills.len() <= 60, "skills", "Не больше 60 навыков")
-        .check_with(unknown.is_empty(), "skills", || format!("Неизвестные навыки: {}", unknown.join(", ")))
         .check(
-            p.experience.iter().all(|e| valid_month(&e.start) && e.end.as_deref().is_none_or(valid_month)),
+            p.experience
+                .iter()
+                .all(|e| valid_month(&e.start) && e.end.as_deref().is_none_or(valid_month)),
             "experience",
             "Даты в формате ГГГГ-ММ",
         )
-        .check(p.experience.len() <= 30, "experience", "Не больше 30 мест работы");
+        .check(
+            p.experience.len() <= 30,
+            "experience",
+            "Не больше 30 мест работы",
+        );
     v.finish()?;
 
     let mut client = state.pool.get().await?;
@@ -219,9 +279,13 @@ async fn put_profile(
             &user.id,
         )
         .await?;
-    db::queries::candidates::delete_candidate_skills_by_source().bind(&tx, &user.id, &"declared").await?;
-    for skill in &p.skills {
-        db::queries::candidates::insert_candidate_skill().bind(&tx, &user.id, skill, &"declared").await?;
+    db::queries::candidates::delete_candidate_skills_by_source()
+        .bind(&tx, &user.id, &"declared")
+        .await?;
+    for skill in declared.unwrap_or_default() {
+        db::queries::candidates::insert_candidate_skill()
+            .bind(&tx, &user.id, &skill, &"declared")
+            .await?;
     }
     tx.commit().await?;
     Ok(Json(load_profile(&state, &user).await?))
@@ -243,9 +307,16 @@ pub struct Privacy {
 #[utoipa::path(get, path = "/privacy", tag = "candidate",
     responses((status = 200, body = Privacy)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn get_privacy(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Json<Privacy>> {
+async fn get_privacy(
+    State(state): State<AppState>,
+    user: CandidateUser,
+) -> ApiResult<Json<Privacy>> {
     let client = state.pool.get().await?;
-    let c = db::queries::candidates::candidate_profile().bind(&client, &user.id).opt().await?.ok_or_else(ApiError::not_found)?;
+    let c = db::queries::candidates::candidate_profile()
+        .bind(&client, &user.id)
+        .opt()
+        .await?
+        .ok_or_else(ApiError::not_found)?;
     Ok(Json(Privacy {
         visible: c.visible,
         show_name: c.show_name,
@@ -260,11 +331,349 @@ async fn get_privacy(State(state): State<AppState>, user: CandidateUser) -> ApiR
     request_body = Privacy,
     responses((status = 200, body = Privacy)),
     security(("cookie" = []), ("bearer" = [])))]
-async fn put_privacy(State(state): State<AppState>, user: CandidateUser, Json(p): Json<Privacy>) -> ApiResult<Json<Privacy>> {
+async fn put_privacy(
+    State(state): State<AppState>,
+    user: CandidateUser,
+    Json(p): Json<Privacy>,
+) -> ApiResult<Json<Privacy>> {
     let client = state.pool.get().await?;
     let status: db::types::SearchStatus = p.search_status.into();
     db::queries::candidates::update_candidate_privacy()
-        .bind(&client, &p.visible, &p.show_name, &p.show_fsp, &p.show_experience, &status, &user.id)
+        .bind(
+            &client,
+            &p.visible,
+            &p.show_name,
+            &p.show_fsp,
+            &p.show_experience,
+            &status,
+            &user.id,
+        )
         .await?;
     Ok(Json(p))
+}
+
+#[derive(ToSchema)]
+#[allow(dead_code)]
+pub struct ResumeUpload {
+    /// PDF up to 10 MB with a text layer.
+    #[schema(format = Binary, value_type = String)]
+    file: Vec<u8>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ResumeDraft {
+    /// Recognized values to prefill the profile form; nothing is saved to the profile until
+    /// the candidate confirms it with `PUT /candidate/profile`.
+    pub parsed: ParsedResume,
+    pub recognized_fields: Vec<&'static str>,
+}
+
+fn recognized(p: &ParsedResume) -> Vec<&'static str> {
+    let checks: [(&'static str, bool); 12] = [
+        ("full_name", p.full_name.is_some()),
+        ("email", p.email.is_some()),
+        ("phone", p.phone.is_some()),
+        ("telegram", p.telegram.is_some()),
+        ("city", p.city.is_some()),
+        ("skills", !p.skills.is_empty()),
+        ("grade", p.grade_hint.is_some()),
+        ("specialization", p.specialization_hint.is_some()),
+        ("experience_years", p.experience_years.is_some()),
+        ("roles", !p.roles.is_empty()),
+        ("soft_skills", !p.soft_skills.is_empty()),
+        ("industries", !p.industries.is_empty()),
+    ];
+    checks
+        .into_iter()
+        .filter_map(|(name, ok)| ok.then_some(name))
+        .collect()
+}
+
+/// Upload a PDF resume: recognizes name, contacts, stack, grade, roles, experience, soft skills
+#[utoipa::path(post, path = "/resume", tag = "candidate",
+    request_body(content = ResumeUpload, content_type = "multipart/form-data"),
+    responses(
+        (status = 200, body = ResumeDraft),
+        (status = 422, description = "`not_pdf`, `pdf_unreadable`, `pdf_no_text`, `pdf_too_large`", body = Problem),
+    ),
+    security(("cookie" = []), ("bearer" = [])))]
+async fn upload_resume(
+    State(state): State<AppState>,
+    user: CandidateUser,
+    mut form: Multipart,
+) -> ApiResult<Json<ResumeDraft>> {
+    let mut file: Option<(String, Vec<u8>)> = None;
+    while let Some(field) = form
+        .next_field()
+        .await
+        .map_err(|_| ApiError::field("file", "Не удалось прочитать файл"))?
+    {
+        if field.name() == Some("file") {
+            let name = field
+                .file_name()
+                .unwrap_or("resume.pdf")
+                .chars()
+                .take(200)
+                .collect();
+            let bytes = field
+                .bytes()
+                .await
+                .map_err(|_| ApiError::field("file", "Файл слишком большой"))?;
+            file = Some((name, bytes.to_vec()));
+        }
+    }
+    let (filename, bytes) = file.ok_or_else(|| ApiError::field("file", "Приложите PDF"))?;
+    let size = bytes.len();
+    let text = resume::extract_text(bytes).await.map_err(|e| {
+        let (code, msg) = match e {
+            ResumeError::NotPdf => ("not_pdf", "Нужен файл PDF"),
+            ResumeError::TooLarge => ("pdf_too_large", "PDF больше 10 МБ"),
+            ResumeError::Unreadable => ("pdf_unreadable", "Не удалось прочитать PDF"),
+            ResumeError::NoText => (
+                "pdf_no_text",
+                "В PDF нет текстового слоя — заполните профиль вручную",
+            ),
+        };
+        ApiError::new(axum::http::StatusCode::UNPROCESSABLE_ENTITY, code, msg)
+    })?;
+    let parsed = matching::parse_resume(&text, Utc::now().timestamp());
+    let fields = recognized(&parsed);
+
+    let mut client = state.pool.get().await?;
+    let tx = client.transaction().await?;
+    let field_names: Vec<&str> = fields.clone();
+    db::queries::candidates::insert_resume_upload()
+        .bind(
+            &tx,
+            &Uuid::now_v7(),
+            &user.id,
+            &filename,
+            &(size as i32),
+            &field_names,
+        )
+        .await?;
+    db::queries::candidates::delete_candidate_skills_by_source()
+        .bind(&tx, &user.id, &"resume")
+        .await?;
+    for skill in &parsed.skills {
+        db::queries::candidates::insert_candidate_skill()
+            .bind(&tx, &user.id, skill, &"resume")
+            .await?;
+    }
+    tx.commit().await?;
+    Ok(Json(ResumeDraft {
+        parsed,
+        recognized_fields: fields,
+    }))
+}
+
+fn money(v: i64) -> String {
+    let digits = v.to_string();
+    let mut out = String::with_capacity(digits.len() + 4);
+    for (i, ch) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i) % 3 == 0 {
+            out.push('\u{a0}');
+        }
+        out.push(ch);
+    }
+    out + "\u{a0}₽"
+}
+
+/// Standardized PDF profile (C-2)
+#[utoipa::path(get, path = "/profile.pdf", tag = "candidate",
+    responses((status = 200, content_type = "application/pdf", body = Vec<u8>)),
+    security(("cookie" = []), ("bearer" = [])))]
+async fn profile_pdf(
+    State(state): State<AppState>,
+    user: CandidateUser,
+) -> ApiResult<impl IntoResponse> {
+    use pdf::{Line, Section};
+    let p = load_profile(&state, &user).await?;
+    let client = state.pool.get().await?;
+    let now = Utc::now();
+    let mut sections = Vec::new();
+
+    let c = &p.input.contacts;
+    let contacts: Vec<Line> = [
+        ("Телефон", &c.phone),
+        ("Telegram", &c.telegram),
+        ("Email", &c.email),
+    ]
+    .into_iter()
+    .filter_map(|(k, v)| v.as_ref().map(|v| Line::KeyValue(k.into(), v.clone())))
+    .collect();
+    if !contacts.is_empty() {
+        sections.push(Section {
+            heading: "Контакты".into(),
+            lines: contacts,
+        });
+    }
+
+    let mut key = Vec::new();
+    if let Some(city) = &p.input.city {
+        key.push(Line::KeyValue(
+            "Город".into(),
+            format!(
+                "{city}{}",
+                if p.input.relocation {
+                    ", готов к переезду"
+                } else {
+                    ""
+                }
+            ),
+        ));
+    }
+    if !p.input.work_formats.is_empty() {
+        key.push(Line::KeyValue(
+            "Формат".into(),
+            p.input
+                .work_formats
+                .iter()
+                .map(|f| f.name_ru())
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+    }
+    if let Some(s) = p.input.salary_expectation_min {
+        key.push(Line::KeyValue(
+            "Ожидания".into(),
+            format!("от {}", money(s)),
+        ));
+    }
+    if let Some(y) = p.input.experience_years {
+        key.push(Line::KeyValue("Опыт".into(), format!("{y:.1} лет")));
+    }
+    if !p.input.roles.is_empty() {
+        key.push(Line::KeyValue("Роли".into(), p.input.roles.join(", ")));
+    }
+    if !p.input.industries.is_empty() {
+        key.push(Line::KeyValue(
+            "Отрасли".into(),
+            p.input
+                .industries
+                .iter()
+                .map(|i| i.name_ru())
+                .collect::<Vec<_>>()
+                .join(", "),
+        ));
+    }
+    if !key.is_empty() {
+        sections.push(Section {
+            heading: "Основное".into(),
+            lines: key,
+        });
+    }
+
+    let verified: Vec<&str> = p
+        .skill_details
+        .iter()
+        .filter(|s| {
+            s.sources
+                .iter()
+                .any(|x| matches!(x, SkillSource::Test | SkillSource::Fsp))
+        })
+        .map(|s| s.name.as_str())
+        .collect();
+    let other: Vec<&str> = p
+        .skill_details
+        .iter()
+        .filter(|s| {
+            !s.sources
+                .iter()
+                .any(|x| matches!(x, SkillSource::Test | SkillSource::Fsp))
+        })
+        .map(|s| s.name.as_str())
+        .collect();
+    let mut skill_lines = Vec::new();
+    if !verified.is_empty() {
+        skill_lines.push(Line::KeyValue("Подтверждены".into(), verified.join(", ")));
+    }
+    if !other.is_empty() {
+        skill_lines.push(Line::KeyValue("Заявлены".into(), other.join(", ")));
+    }
+    if !skill_lines.is_empty() {
+        sections.push(Section {
+            heading: "Навыки".into(),
+            lines: skill_lines,
+        });
+    }
+
+    let fsp_lines = match db::queries::fsp::fsp_link()
+        .bind(&client, &user.id)
+        .opt()
+        .await?
+    {
+        Some(link) => {
+            let list = pool::achievements(Some(&link.achievements));
+            let mut lines = vec![Line::KeyValue("ФСП ID".into(), link.fsp_id)];
+            if list.is_empty() {
+                lines.push(Line::Text("Нет данных ФСП".into()));
+            }
+            lines.extend(list.iter().take(12).map(|a| Line::Bullet(a.describe_ru())));
+            lines
+        }
+        None => vec![Line::Text("Нет данных ФСП".into())],
+    };
+    sections.push(Section {
+        heading: "Достижения ФСП".into(),
+        lines: fsp_lines,
+    });
+
+    if !p.input.experience.is_empty() {
+        let mut lines = Vec::new();
+        for e in &p.input.experience {
+            let end = e.end.as_deref().unwrap_or("по н. в.");
+            lines.push(Line::KeyValue(
+                format!("{} — {end}", e.start),
+                format!("{}, {}", e.position, e.company),
+            ));
+            if !e.description.is_empty() {
+                lines.push(Line::Bullet(e.description.clone()));
+            }
+        }
+        sections.push(Section {
+            heading: "Опыт работы".into(),
+            lines,
+        });
+    }
+    if !p.input.about.is_empty() {
+        sections.push(Section {
+            heading: "О себе".into(),
+            lines: vec![Line::Text(p.input.about.clone())],
+        });
+    }
+
+    let doc = pdf::ProfileDoc {
+        title: if p.input.full_name.is_empty() {
+            p.public_code.clone()
+        } else {
+            p.input.full_name.clone()
+        },
+        subtitle: p.category.map_or_else(
+            || "Категория пока не подтверждена тестом".into(),
+            Category::name_ru,
+        ),
+        badge: p.category_assigned_at.map(|at| {
+            format!(
+                "Категория подтверждена адаптивным тестом {}",
+                at.format("%d.%m.%Y")
+            )
+        }),
+        sections,
+        footer: format!(
+            "Сформировано платформой «ФСП Таланты» {}. Категория определяется только по результатам тестирования, не по резюме.",
+            now.format("%d.%m.%Y")
+        ),
+    };
+    let bytes = tokio::task::spawn_blocking(move || pdf::render(&doc)).await??;
+    Ok((
+        [
+            (header::CONTENT_TYPE, "application/pdf".to_owned()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"profile-{}.pdf\"", p.public_code),
+            ),
+        ],
+        bytes,
+    ))
 }

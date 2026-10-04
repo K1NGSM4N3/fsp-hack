@@ -64,7 +64,10 @@ fn deny_key(jti: Uuid) -> String {
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         if let Some(user) = parts.extensions.get::<AuthUser>() {
             return Ok(*user);
         }
@@ -81,11 +84,19 @@ impl FromRequestParts<AppState> for AuthUser {
                 .map(|c| c.value().to_owned())
                 .ok_or_else(ApiError::unauthorized)?,
         };
-        let claims = state.jwt.verify(&token).ok_or_else(ApiError::unauthorized)?;
+        let claims = state
+            .jwt
+            .verify(&token)
+            .ok_or_else(ApiError::unauthorized)?;
         if state.kv.has_flag(&deny_key(claims.jti)).await? {
             return Err(ApiError::unauthorized());
         }
-        let user = AuthUser { id: claims.sub, role: claims.role, jti: claims.jti, exp: claims.exp };
+        let user = AuthUser {
+            id: claims.sub,
+            role: claims.role,
+            jti: claims.jti,
+            exp: claims.exp,
+        };
         parts.extensions.insert(user);
         Ok(user)
     }
@@ -94,7 +105,10 @@ impl FromRequestParts<AppState> for AuthUser {
 impl OptionalFromRequestParts<AppState> for AuthUser {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Option<Self>, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Option<Self>, Self::Rejection> {
         match <AuthUser as FromRequestParts<AppState>>::from_request_parts(parts, state).await {
             Ok(user) => Ok(Some(user)),
             Err(ApiError::Status { .. }) => Ok(None),
@@ -106,7 +120,10 @@ impl OptionalFromRequestParts<AppState> for AuthUser {
 impl AuthUser {
     pub async fn revoke(&self, state: &AppState) -> Result<(), KvError> {
         let ttl = (self.exp - chrono::Utc::now().timestamp()).max(1) as u64;
-        state.kv.set_flag(&deny_key(self.jti), std::time::Duration::from_secs(ttl)).await
+        state
+            .kv
+            .set_flag(&deny_key(self.jti), std::time::Duration::from_secs(ttl))
+            .await
     }
 }
 
@@ -118,8 +135,13 @@ macro_rules! role_extractor {
         impl FromRequestParts<AppState> for $name {
             type Rejection = ApiError;
 
-            async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
-                let user = <AuthUser as FromRequestParts<AppState>>::from_request_parts(parts, state).await?;
+            async fn from_request_parts(
+                parts: &mut Parts,
+                state: &AppState,
+            ) -> Result<Self, Self::Rejection> {
+                let user =
+                    <AuthUser as FromRequestParts<AppState>>::from_request_parts(parts, state)
+                        .await?;
                 if user.role == $role {
                     Ok($name(user))
                 } else {
@@ -138,11 +160,19 @@ macro_rules! role_extractor {
 }
 
 role_extractor!(CandidateUser, Role::Candidate, "Доступно только кандидатам");
-role_extractor!(EmployerUser, Role::Employer, "Доступно только работодателям");
+role_extractor!(
+    EmployerUser,
+    Role::Employer,
+    "Доступно только работодателям"
+);
 
 /// Cookies are sent cross-site on top-level navigations (SameSite=Lax), so state-changing
 /// cookie-authenticated requests must also prove they come from our origin.
-pub async fn csrf_guard(state: axum::extract::State<AppState>, req: Request, next: Next) -> Response {
+pub async fn csrf_guard(
+    state: axum::extract::State<AppState>,
+    req: Request,
+    next: Next,
+) -> Response {
     let unsafe_method = !matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
     let has_bearer = req.headers().contains_key(header::AUTHORIZATION);
     let has_cookie = req.headers().contains_key(header::COOKIE);
@@ -154,7 +184,8 @@ pub async fn csrf_guard(state: axum::extract::State<AppState>, req: Request, nex
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
         if !origin_matches(origin, &state.config.public_url) {
-            return ApiError::forbidden("csrf", "Запрос отклонён: неверный источник").into_response();
+            return ApiError::forbidden("csrf", "Запрос отклонён: неверный источник")
+                .into_response();
         }
     }
     next.run(req).await
@@ -164,12 +195,7 @@ fn origin_matches(origin: &str, public_url: &str) -> bool {
     origin == public_url || origin.starts_with(&format!("{public_url}/"))
 }
 
-pub fn session_cookies(
-    jar: CookieJar,
-    access: String,
-    refresh: String,
-    secure: bool,
-) -> CookieJar {
+pub fn session_cookies(jar: CookieJar, access: String, refresh: String, secure: bool) -> CookieJar {
     let access = Cookie::build((ACCESS_COOKIE, access))
         .http_only(true)
         .secure(secure)
@@ -222,9 +248,18 @@ mod tests {
     #[test]
     fn origin_check() {
         use super::origin_matches;
-        assert!(origin_matches("http://localhost:8080", "http://localhost:8080"));
-        assert!(origin_matches("http://localhost:8080/candidate", "http://localhost:8080"));
-        assert!(!origin_matches("http://localhost:8080.evil.com", "http://localhost:8080"));
+        assert!(origin_matches(
+            "http://localhost:8080",
+            "http://localhost:8080"
+        ));
+        assert!(origin_matches(
+            "http://localhost:8080/candidate",
+            "http://localhost:8080"
+        ));
+        assert!(!origin_matches(
+            "http://localhost:8080.evil.com",
+            "http://localhost:8080"
+        ));
         assert!(!origin_matches("", "http://localhost:8080"));
     }
 }
