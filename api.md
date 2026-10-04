@@ -37,7 +37,7 @@
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
 | GET | `/api/v1/catalog` | 🅰 | Направления, специализации, грейды, отрасли, дисциплины ФСП | ✅ |
-| GET | `/api/v1/catalog/skills?q=` | 🅰 | Автодополнение навыков (с синонимами) | ⬜ |
+| GET | `/api/v1/catalog/skills?q=` | 🅰 | Автодополнение навыков (с синонимами) | ✅ |
 | GET | `/api/v1/consents/current` | 🅰 | Актуальные версии документов согласия | ✅ |
 
 ## Auth и аккаунт
@@ -60,8 +60,8 @@
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
 | GET / PUT | `/api/v1/candidate/profile` | 🅲 | Профиль: имя, контакты, город, формат, ожидания, о себе, стаж, навыки, отрасли | ✅ |
-| POST | `/api/v1/candidate/resume` | 🅲 | multipart PDF → распознанные поля (черновик, не сохраняется в профиль сам) | ⬜ |
-| GET | `/api/v1/candidate/profile.pdf` | 🅲 | Стандартизированный PDF-профиль | ⬜ |
+| POST | `/api/v1/candidate/resume` | 🅲 | multipart PDF → распознанные поля (черновик, не сохраняется в профиль сам) | ✅ |
+| GET | `/api/v1/candidate/profile.pdf` | 🅲 | Стандартизированный PDF-профиль | ✅ |
 | GET / PUT | `/api/v1/candidate/privacy` | 🅲 | Что видно работодателю, статус поиска | ✅ |
 | GET | `/api/v1/me` → `candidate.onboarding_step` | 🅲 | Шаг пути: профиль → опрос → тест → категория (отдельного эндпоинта нет) | ✅ |
 | POST | `/api/v1/candidate/survey` | 🅲 | Опрос: направление, специализация, стек, отрасли, самооценка тем | ✅ |
@@ -76,11 +76,12 @@
 | GET | `/api/v1/candidate/invitations/{id}` | 🅲 | Приглашение; первое открытие → `viewed` | ✅ |
 | POST | `/api/v1/candidate/invitations/{id}/accept` | 🅲 | → `accepted`, контакты раскрываются компании | ✅ |
 | POST | `/api/v1/candidate/invitations/{id}/decline` | 🅲 | `{reason, comment?}` → `declined` | ✅ |
-| GET | `/api/v1/candidate/market` | 🅲 | Анонимный спрос в своей категории | ⬜ |
+| GET | `/api/v1/candidate/market` | 🅲 | Анонимный спрос в своей категории | ✅ |
 | GET | `/api/v1/candidate/applications` | 🅲 | Свои отклики | ✅ |
 | POST | `/api/v1/candidate/applications/{id}/withdraw` | 🅲 | Отозвать отклик | ✅ |
-| GET | `/api/v1/candidate/tasks` | 🅲 | Регулярные задания | ⬜ |
-| POST | `/api/v1/candidate/tasks/{id}/submit` | 🅲 | Решение или подход | ⬜ |
+| GET | `/api/v1/candidate/tasks` | 🅲 | Регулярные задания | ✅ |
+| POST | `/api/v1/candidate/tasks/{id}/submit` | 🅲 | Решение или подход | ✅ |
+| POST | `/api/v1/candidate/tasks/{id}/skip` | 🅲 | Пропустить задание | ✅ |
 
 ## ФСП
 
@@ -98,16 +99,16 @@
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
 | GET / PUT | `/api/v1/employer/company` | 🅴 | Профиль компании | ✅ |
-| GET / POST | `/api/v1/employer/needs` | 🅴 | Потребности: список / создать | ⬜ |
-| GET / PUT / DELETE | `/api/v1/employer/needs/{id}` | 🅴 | Потребность | ⬜ |
-| POST | `/api/v1/employer/needs/parse` | 🅴 | Свободный текст → специализация, грейд, навыки (черновик) | ⬜ |
-| GET | `/api/v1/employer/needs/{id}/categories` | 🅴 | Рекомендованные категории со статистикой | ⬜ |
-| POST | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Сформировать или уточнить подборку `{filters}`; закреплённые сохраняются | ⬜ |
-| GET | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Подборка с объяснениями | ⬜ |
-| PATCH | `/api/v1/employer/needs/{id}/shortlist/{candidate_id}` | 🅴 | `{pinned?, dismissed?}` | ⬜ |
-| GET | `/api/v1/employer/categories` | 🅴 | Все категории: число кандидатов, с ФСП, медианные ожидания | ⬜ |
-| GET | `/api/v1/employer/candidates` | 🅴 | Поиск по банку: `specialization, grade, skills, fsp_only, work_format, city, salary_max, q, sort` | ⬜ |
-| GET | `/api/v1/employer/candidates/{id}` | 🅴 | Анонимный профиль; `?need_id=` → объяснение под потребность | ⬜ |
+| GET / POST | `/api/v1/employer/needs` | 🅴 | Потребности: список / создать | ✅ |
+| GET / PUT / DELETE | `/api/v1/employer/needs/{id}` | 🅴 | Потребность | ✅ |
+| POST | `/api/v1/employer/needs/parse` | 🅴 | Свободный текст → специализация, грейд, навыки (черновик) | ✅ |
+| GET | `/api/v1/employer/needs/{id}/categories` | 🅴 | Рекомендованные категории со статистикой | ✅ |
+| POST | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Сформировать или уточнить подборку `{filters}`; закреплённые сохраняются | ✅ |
+| GET | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Подборка с объяснениями | ✅ |
+| PATCH | `/api/v1/employer/needs/{id}/shortlist/{candidate_id}` | 🅴 | `{pinned?, dismissed?}` | ✅ |
+| GET | `/api/v1/employer/categories` | 🅴 | Все категории: число кандидатов, с ФСП, медианные ожидания | ✅ |
+| GET | `/api/v1/employer/candidates` | 🅴 | Поиск по банку: `specialization, grade, skills, fsp_only, work_format, city, salary_max, q, sort` | ✅ |
+| GET | `/api/v1/employer/candidates/{id}` | 🅴 | Анонимный профиль; `?need_id=` → объяснение под потребность | ✅ |
 | GET | `/api/v1/employer/candidates/{id}/contacts` | 🅴 | Контакты — только при принятом приглашении или отклике (иначе 403 `contacts_not_granted`); пишет журнал | ✅ |
 | GET / POST | `/api/v1/employer/invitations` | 🅴 | Список / отправить `{candidate_id, need_id?, vacancy_id?, title, message, salary: {min, max}, work_format?, contact}`; 409 `invitation_quota_exceeded`, `invitation_already_active` | ✅ |
 | GET | `/api/v1/employer/invitations/{id}` | 🅴 | Приглашение со статусом и историей событий | ✅ |
@@ -117,9 +118,10 @@
 | GET / PUT | `/api/v1/employer/vacancies/{id}` | 🅴 | Вакансия; статус `draft` / `published` / `closed` | ✅ |
 | GET | `/api/v1/employer/vacancies/{id}/applications` | 🅴 | Отклики (с контактами — кандидат откликнулся сам) | ✅ |
 | POST | `/api/v1/employer/applications/{id}/status` | 🅴 | `viewed` / `accepted` / `rejected` | ✅ |
-| GET / POST | `/api/v1/employer/tasks` | 🅴 | Регулярные задания | ⬜ |
-| GET | `/api/v1/employer/tasks/{id}/submissions` | 🅴 | Решения | ⬜ |
-| POST | `/api/v1/employer/tasks/{id}/submissions/{sid}/review` | 🅴 | Оценка решения | ⬜ |
+| GET / POST | `/api/v1/employer/tasks` | 🅴 | Регулярные задания | ✅ |
+| POST | `/api/v1/employer/tasks/{id}/active` | 🅴 | Приостановить или возобновить раздачу | ✅ |
+| GET | `/api/v1/employer/tasks/{id}/submissions` | 🅴 | Решения | ✅ |
+| POST | `/api/v1/employer/tasks/{id}/submissions/{sid}/review` | 🅴 | Оценка решения | ✅ |
 
 ## Публичное
 
