@@ -11,6 +11,7 @@ pub mod market;
 pub mod me;
 pub mod needs;
 pub mod pool;
+pub mod reports;
 pub mod seed;
 pub mod survey;
 pub mod tasks;

@@ -113,6 +113,7 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
         )
         .nest("/fsp", routes::fsp::router())
         .merge(routes::vacancies::public_router())
+        .merge(routes::reports::router())
         .merge(routes::catalog::router())
 }
 

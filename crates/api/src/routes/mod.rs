@@ -8,6 +8,7 @@ pub mod invitations;
 pub mod market;
 pub mod me;
 pub mod needs;
+pub mod reports;
 pub mod survey;
 pub mod tasks;
 pub mod vacancies;

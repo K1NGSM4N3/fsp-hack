@@ -1,0 +1,105 @@
+//! Complaints about vacancies, invitations and companies (X-1). In the MVP they are only
+//! collected; moderation and reputation scoring are described in architecture.md §11.
+
+use axum::{Json, extract::State, http::StatusCode};
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use utoipa_axum::{router::OpenApiRouter, routes};
+use uuid::Uuid;
+
+use crate::{
+    auth::AuthUser,
+    error::{ApiError, ApiResult, Problem},
+    state::AppState,
+};
+
+const DAILY_LIMIT: i64 = 20;
+
+pub fn router() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(create_report))
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportTarget {
+    Vacancy,
+    Invitation,
+    Company,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ReportReason {
+    FakeVacancy,
+    SalaryMismatch,
+    Spam,
+    Abuse,
+    Other,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ReportInput {
+    pub target_kind: ReportTarget,
+    pub target_id: Uuid,
+    pub reason: ReportReason,
+    pub comment: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct ReportCreated {
+    pub id: Uuid,
+}
+
+/// Report a fake vacancy, a misleading invitation or an abusive company
+#[utoipa::path(post, path = "/reports", tag = "account",
+    request_body = ReportInput,
+    responses((status = 201, body = ReportCreated), (status = 429, body = Problem)),
+    security(("cookie" = []), ("bearer" = [])))]
+async fn create_report(
+    State(state): State<AppState>,
+    user: AuthUser,
+    Json(r): Json<ReportInput>,
+) -> ApiResult<(StatusCode, Json<ReportCreated>)> {
+    let comment = r
+        .comment
+        .as_deref()
+        .map(str::trim)
+        .filter(|c| !c.is_empty());
+    if comment.is_some_and(|c| c.len() > 2000) {
+        return Err(ApiError::field("comment", "Не длиннее 2000 символов"));
+    }
+    let client = state.pool.get().await?;
+    if db::queries::reports::recent_reports_by()
+        .bind(&client, &user.id)
+        .one()
+        .await?
+        >= DAILY_LIMIT
+    {
+        return Err(ApiError::too_many_requests());
+    }
+    let kind = match r.target_kind {
+        ReportTarget::Vacancy => "vacancy",
+        ReportTarget::Invitation => "invitation",
+        ReportTarget::Company => "company",
+    };
+    let reason = match r.reason {
+        ReportReason::FakeVacancy => "fake_vacancy",
+        ReportReason::SalaryMismatch => "salary_mismatch",
+        ReportReason::Spam => "spam",
+        ReportReason::Abuse => "abuse",
+        ReportReason::Other => "other",
+    };
+    let id = Uuid::now_v7();
+    db::queries::reports::insert_report()
+        .bind(
+            &client,
+            &id,
+            &user.id,
+            &kind,
+            &r.target_id,
+            &reason,
+            &comment,
+        )
+        .await?;
+    Ok((StatusCode::CREATED, Json(ReportCreated { id })))
+}
