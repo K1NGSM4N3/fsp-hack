@@ -140,9 +140,12 @@ async fn finish_link(state: &AppState, q: CallbackQuery) -> Result<(), &'static 
         &pending.nonce,
     )
     .await
-    .map_err(|e| match e {
-        FspError::NoFspId => "no_fsp_id",
-        _ => "verification_failed",
+    .map_err(|e| {
+        tracing::warn!(error = %e, "fsp id_token exchange failed");
+        match e {
+            FspError::NoFspId => "no_fsp_id",
+            _ => "verification_failed",
+        }
     })?;
     link(state, &client, pending.user_id, &fsp_id, "oidc")
         .await

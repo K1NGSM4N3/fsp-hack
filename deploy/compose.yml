@@ -152,7 +152,7 @@ services:
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       # Default heap is 70% of the container limit; leave room for metaspace within 768m.
-      JAVA_OPTS_KC_HEAP: "-XX:MaxRAMPercentage=55 -XX:InitialRAMPercentage=20 -XX:MaxHeapFreeRatio=30"
+      JAVA_OPTS_KC_HEAP: "-XX:MaxRAMPercentage=55 -XX:InitialRAMPercentage=20 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30"
     volumes:
       - ./keycloak/fsp-realm.json:/opt/keycloak/data/import/fsp-realm.json:ro
     ports:
