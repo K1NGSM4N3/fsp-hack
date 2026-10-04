@@ -1,0 +1,21 @@
+# clorinde: db/queries/*.sql → crates/db (generated, do not edit). Run `make gen-db`.
+queries = "db/queries"
+destination = "crates/db"
+async = true
+sync = false
+
+[types]
+derive-traits = ["serde::Serialize"]
+
+[manifest.package]
+name = "db"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[style]
+enum-variant-camel-case = true
+
+[types.mapping]
+"pg_catalog.timestamptz" = "chrono::DateTime<chrono::Utc>"

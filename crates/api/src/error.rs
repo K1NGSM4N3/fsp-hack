@@ -1,0 +1,237 @@
+use std::borrow::Cow;
+
+use axum::{
+    Json,
+    http::{HeaderValue, StatusCode, header},
+    response::{IntoResponse, Response},
+};
+use serde::{Serialize, ser::SerializeMap};
+use utoipa::ToSchema;
+
+use crate::{crypto::CryptoError, kv::KvError, mail::MailError};
+
+/// RFC 9457 problem details. `code` is the stable identifier the UI switches on.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct Problem {
+    #[serde(rename = "type")]
+    pub kind: &'static str,
+    pub title: String,
+    pub status: u16,
+    pub code: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(value_type = Option<Object>, example = json!({"salary.min": ["Зарплата «от» обязательна"]}))]
+    pub errors: Option<FieldErrors>,
+}
+
+/// A handful of field errors on a cold path: a flat vec beats any map and keeps form order.
+/// Serialized as `{"field": ["message", ...]}`.
+#[derive(Debug, Default)]
+pub struct FieldErrors(Vec<(&'static str, Cow<'static, str>)>);
+
+impl FieldErrors {
+    pub fn push(&mut self, field: &'static str, message: impl Into<Cow<'static, str>>) {
+        self.0.push((field, message.into()));
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+impl Serialize for FieldErrors {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut map = serializer.serialize_map(None)?;
+        for (i, (field, _)) in self.0.iter().enumerate() {
+            if self.0[..i].iter().any(|(f, _)| f == field) {
+                continue;
+            }
+            let messages: Vec<&str> = self.0[i..].iter().filter(|(f, _)| f == field).map(|(_, m)| m.as_ref()).collect();
+            map.serialize_entry(field, &messages)?;
+        }
+        map.end()
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum InternalError {
+    #[error("database: {0}")]
+    Db(#[from] tokio_postgres::Error),
+    #[error("pool: {0}")]
+    Pool(#[from] deadpool_postgres::PoolError),
+    #[error("kv: {0}")]
+    Kv(#[from] KvError),
+    #[error("crypto: {0}")]
+    Crypto(#[from] CryptoError),
+    #[error("jwt: {0}")]
+    Jwt(#[from] jsonwebtoken::errors::Error),
+    #[error("json: {0}")]
+    Json(#[from] serde_json::Error),
+    #[error("background task: {0}")]
+    Join(#[from] tokio::task::JoinError),
+    #[error("mail: {0}")]
+    Mail(#[from] MailError),
+    #[error("http: {0}")]
+    Http(#[from] reqwest::Error),
+    #[error("corrupt stored value: {0}")]
+    Corrupt(String),
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ApiError {
+    #[error("{title}")]
+    Status { status: StatusCode, code: &'static str, title: String, detail: Option<String> },
+    #[error("validation failed")]
+    Validation(FieldErrors),
+    #[error(transparent)]
+    Internal(#[from] InternalError),
+}
+
+macro_rules! internal_from {
+    ($($ty:ty),+ $(,)?) => {$(
+        impl From<$ty> for ApiError {
+            fn from(e: $ty) -> Self {
+                ApiError::Internal(e.into())
+            }
+        }
+    )+};
+}
+
+internal_from!(
+    tokio_postgres::Error,
+    deadpool_postgres::PoolError,
+    KvError,
+    CryptoError,
+    jsonwebtoken::errors::Error,
+    serde_json::Error,
+    tokio::task::JoinError,
+    MailError,
+    reqwest::Error,
+);
+
+impl From<catalog::UnknownSlug> for ApiError {
+    fn from(e: catalog::UnknownSlug) -> Self {
+        ApiError::Internal(InternalError::Corrupt(e.to_string()))
+    }
+}
+
+pub type ApiResult<T> = Result<T, ApiError>;
+
+impl ApiError {
+    pub fn new(status: StatusCode, code: &'static str, title: impl Into<String>) -> Self {
+        Self::Status { status, code, title: title.into(), detail: None }
+    }
+
+    pub fn with_detail(self, detail: impl Into<String>) -> Self {
+        match self {
+            Self::Status { status, code, title, .. } => Self::Status { status, code, title, detail: Some(detail.into()) },
+            other => other,
+        }
+    }
+
+    pub fn bad_request(code: &'static str, title: impl Into<String>) -> Self {
+        Self::new(StatusCode::BAD_REQUEST, code, title)
+    }
+
+    pub fn unauthorized() -> Self {
+        Self::new(StatusCode::UNAUTHORIZED, "unauthorized", "Требуется вход")
+    }
+
+    pub fn forbidden(code: &'static str, title: impl Into<String>) -> Self {
+        Self::new(StatusCode::FORBIDDEN, code, title)
+    }
+
+    /// Also returned for other users' resources so their existence is not revealed.
+    pub fn not_found() -> Self {
+        Self::new(StatusCode::NOT_FOUND, "not_found", "Не найдено")
+    }
+
+    pub fn conflict(code: &'static str, title: impl Into<String>) -> Self {
+        Self::new(StatusCode::CONFLICT, code, title)
+    }
+
+    pub fn too_many_requests() -> Self {
+        Self::new(StatusCode::TOO_MANY_REQUESTS, "rate_limited", "Слишком много запросов, попробуйте позже")
+    }
+
+    pub fn field(field: &'static str, message: impl Into<Cow<'static, str>>) -> Self {
+        let mut errors = FieldErrors::default();
+        errors.push(field, message);
+        Self::Validation(errors)
+    }
+}
+
+#[derive(Default)]
+pub struct Validator(FieldErrors);
+
+impl Validator {
+    pub fn check(&mut self, ok: bool, field: &'static str, message: &'static str) -> &mut Self {
+        if !ok {
+            self.0.push(field, message);
+        }
+        self
+    }
+
+    /// For messages that need formatting: the closure runs only when the check fails.
+    pub fn check_with(&mut self, ok: bool, field: &'static str, message: impl FnOnce() -> String) -> &mut Self {
+        if !ok {
+            self.0.push(field, message());
+        }
+        self
+    }
+
+    pub fn finish(self) -> ApiResult<()> {
+        if self.0.is_empty() { Ok(()) } else { Err(ApiError::Validation(self.0)) }
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let problem = match self {
+            ApiError::Status { status, code, title, detail } => {
+                Problem { kind: "about:blank", title, status: status.as_u16(), code, detail, errors: None }
+            }
+            ApiError::Validation(errors) => Problem {
+                kind: "about:blank",
+                title: "Проверьте введённые данные".into(),
+                status: 422,
+                code: "validation_failed",
+                detail: None,
+                errors: Some(errors),
+            },
+            ApiError::Internal(err) => {
+                tracing::error!(error = %err, "internal error");
+                Problem {
+                    kind: "about:blank",
+                    title: "Внутренняя ошибка сервера".into(),
+                    status: 500,
+                    code: "internal",
+                    detail: None,
+                    errors: None,
+                }
+            }
+        };
+        let status = StatusCode::from_u16(problem.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+        let mut response = (status, Json(problem)).into_response();
+        let headers = response.headers_mut();
+        headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/problem+json"));
+        if status == StatusCode::TOO_MANY_REQUESTS {
+            headers.insert(header::RETRY_AFTER, HeaderValue::from_static("60"));
+        }
+        response
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn field_errors_group_by_field_in_insertion_order() {
+        let mut v = Validator::default();
+        v.check(false, "title", "a").check(true, "x", "never").check(false, "salary", "b").check_with(false, "title", || "c".into());
+        let Err(ApiError::Validation(errors)) = v.finish() else { panic!("expected validation error") };
+        assert_eq!(serde_json::to_string(&errors).unwrap(), r#"{"title":["a","c"],"salary":["b"]}"#);
+    }
+}
