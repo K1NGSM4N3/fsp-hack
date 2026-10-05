@@ -41,7 +41,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
         if (e.target === ref.current) onClose();
       }}
       className={cn(
-        "m-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] overflow-hidden rounded-card border border-line bg-white p-0 text-ink shadow-pop open:animate-slide-up",
+        "m-auto max-h-[calc(100dvh-2rem)] w-[calc(100vw-2rem)] overflow-hidden rounded-[20px] border border-line bg-white p-0 text-ink shadow-pop open:animate-slide-up",
         size === "sm" ? "max-w-md" : size === "md" ? "max-w-xl" : "max-w-3xl",
       )}
     >
@@ -49,7 +49,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
         <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
           <header className="flex items-start justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
             <div className="min-w-0">
-              <h2 id={titleId} className="font-mono text-lg font-semibold tracking-tight">
+              <h2 id={titleId} className="text-lg font-semibold tracking-[-0.015em]">
                 {title}
               </h2>
               {description && (

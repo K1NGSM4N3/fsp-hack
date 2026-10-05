@@ -1,37 +1,48 @@
-import type { ReactNode } from "react";
 import { BadgeCheck, Banknote, ShieldCheck, Trophy } from "lucide-react";
-import { Logo, NodeLines } from "@/components/brand/Logo";
+import Link from "next/link";
+import type { ReactNode } from "react";
+import { Logo } from "@/components/brand/Logo";
+import { HeroGraph } from "@/components/site/HeroGraph";
+
+const POINTS = [
+  { icon: BadgeCheck, text: "Адаптивный тест подтверждает специализацию и грейд — не резюме" },
+  { icon: Banknote, text: "Работодатель пишет первым и сразу указывает вилку «от–до»" },
+  { icon: Trophy, text: "Достижения ФСП поднимают внутри категории, их отсутствие не штрафуется" },
+  { icon: ShieldCheck, text: "Контакты открываются только после вашего согласия" },
+];
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="grid min-h-dvh flex-1 lg:grid-cols-[1fr_minmax(0,32rem)]">
-      <div className="flex flex-col bg-white">
-        <header className="flex h-16 items-center px-4 sm:px-8">
+    <div className="grid min-h-dvh flex-1 lg:grid-cols-[1fr_minmax(0,34rem)]">
+      <div className="relative flex flex-col bg-white">
+        <div aria-hidden className="bg-grid mask-radial pointer-events-none absolute inset-0 opacity-50" />
+        <header className="relative flex h-16 items-center justify-between px-4 sm:px-8">
           <Logo />
+          <Link href="/" className="text-sm text-ink-muted transition-colors hover:text-primary">
+            На сайт
+          </Link>
         </header>
-        <main id="main" className="flex flex-1 items-start justify-center px-4 pt-6 pb-12 sm:px-8 sm:pt-12">
-          <div className="w-full max-w-md">{children}</div>
+        <main id="main" className="relative flex flex-1 items-start justify-center px-4 pt-6 pb-12 sm:px-8 sm:pt-12">
+          <div className="w-full max-w-md animate-rise">{children}</div>
         </main>
       </div>
-      <aside className="relative hidden overflow-hidden bg-primary text-white lg:flex lg:flex-col lg:justify-center lg:px-12">
-        <NodeLines className="pointer-events-none absolute -top-10 -right-20 h-96 w-[34rem] text-white/25" />
-        <NodeLines className="pointer-events-none absolute -bottom-24 -left-24 h-96 w-[34rem] rotate-180 text-white/15" />
+      <aside className="relative isolate hidden overflow-hidden bg-night text-white lg:flex lg:flex-col lg:justify-center lg:px-12">
+        <div aria-hidden className="pointer-events-none absolute -top-40 -right-40 -z-10 size-[34rem] rounded-full bg-[radial-gradient(circle,rgb(64_47_255/0.6),transparent_65%)]" />
+        <div aria-hidden className="absolute inset-0 -z-10 opacity-45">
+          <HeroGraph />
+        </div>
         <div className="relative">
-          <p className="font-mono text-xs tracking-[0.12em] text-primary-100 uppercase">ФСП Карьера</p>
-          <p className="mt-4 font-mono text-3xl leading-tight font-semibold tracking-tight">Категория по тесту. Вилка — в первом сообщении.</p>
-          <ul className="mt-8 space-y-4 text-primary-100">
-            <li className="flex gap-3">
-              <BadgeCheck className="size-5 shrink-0 text-white" aria-hidden /> Адаптивный тест подтверждает специализацию и грейд
-            </li>
-            <li className="flex gap-3">
-              <Banknote className="size-5 shrink-0 text-white" aria-hidden /> Работодатель указывает зарплату до начала общения
-            </li>
-            <li className="flex gap-3">
-              <Trophy className="size-5 shrink-0 text-white" aria-hidden /> Достижения ФСП поднимают внутри категории
-            </li>
-            <li className="flex gap-3">
-              <ShieldCheck className="size-5 shrink-0 text-white" aria-hidden /> Контакты — только после вашего согласия
-            </li>
+          <p className="font-mono text-xs tracking-[0.14em] text-primary-300 uppercase">ФСП Таланты</p>
+          <p className="mt-5 text-[2.4rem] leading-[1.05] font-semibold tracking-[-0.04em]">Категория по тесту. Вилка — в первом сообщении.</p>
+          <ul className="mt-10 space-y-5">
+            {POINTS.map(({ icon: Icon, text }) => (
+              <li key={text} className="flex gap-4 text-night-muted">
+                <span className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-white/10 bg-white/5 text-primary-300">
+                  <Icon className="size-4.5" aria-hidden />
+                </span>
+                <span className="pt-1.5">{text}</span>
+              </li>
+            ))}
           </ul>
         </div>
       </aside>

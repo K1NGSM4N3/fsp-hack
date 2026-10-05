@@ -132,7 +132,7 @@ function SearchView() {
         }}
       />
       <div className="grid gap-6 lg:grid-cols-[17rem_1fr]">
-        <aside aria-label="Фильтры" className="h-fit space-y-4 rounded-card border border-line bg-white p-5 lg:sticky lg:top-6">
+        <aside aria-label="Фильтры" className="h-fit space-y-4 rounded-card border border-line bg-white p-5 lg:sticky lg:top-20">
           <Field label="Поиск по навыкам и описанию">
             <Input type="search" leading={<Search className="size-4" aria-hidden />} value={q} onChange={(e) => setQ(e.target.value)} placeholder="kafka, платежи…" />
           </Field>

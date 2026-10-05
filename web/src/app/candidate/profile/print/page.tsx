@@ -117,7 +117,7 @@ export default function ProfilePrintPage() {
           </Section>
         )}
 
-        <footer className="border-t border-line pt-4 text-xs text-ink-subtle">Профиль {p.public_code} · сформирован {formatDate(new Date().toISOString())} · ФСП Карьера</footer>
+        <footer className="border-t border-line pt-4 text-xs text-ink-subtle">Профиль {p.public_code} · сформирован {formatDate(new Date().toISOString())} · ФСП Таланты</footer>
       </article>
     </div>
   );

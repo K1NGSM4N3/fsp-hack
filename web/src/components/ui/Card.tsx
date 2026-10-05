@@ -14,7 +14,7 @@ export function Card({ padding = "md", interactive = false, className, ...props 
       className={cn(
         "min-w-0 rounded-card border border-line bg-white shadow-card",
         PADDING[padding],
-        interactive && "transition-colors hover:border-primary-300",
+        interactive && "transition-[border-color,box-shadow] hover:border-primary-200 hover:shadow-pop",
         className,
       )}
       {...props}
@@ -36,7 +36,7 @@ export function CardHeader({ title, description, action, eyebrow, className, as:
     <div className={cn("mb-4 flex flex-wrap items-start justify-between gap-3", className)}>
       <div className="min-w-0">
         {eyebrow && <div className="mb-1">{eyebrow}</div>}
-        <Heading className="font-mono text-base font-semibold tracking-tight text-ink">{title}</Heading>
+        <Heading className="text-[17px] leading-snug font-semibold tracking-[-0.015em] text-ink">{title}</Heading>
         {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
       </div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}

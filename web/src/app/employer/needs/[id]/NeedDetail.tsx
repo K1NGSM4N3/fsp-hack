@@ -185,7 +185,7 @@ function TestPlanCard({ need }: { need: HiringNeed }) {
         <span className="flex items-start gap-3">
           <FlaskConical className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
           <span>
-            <span className="block font-mono text-base font-semibold text-ink">Как проверяется категория под эту потребность</span>
+            <span className="block text-base font-semibold text-ink">Как проверяется категория под эту потребность</span>
             <span className="mt-1 block text-sm text-ink-muted">Темы адаптивного теста и примеры заданий: двум кандидатам выпадают разные экземпляры сопоставимой сложности</span>
           </span>
         </span>
@@ -215,7 +215,7 @@ function TestPlanCard({ need }: { need: HiringNeed }) {
               <div className="grid gap-4 lg:grid-cols-2">
                 {q.data.samples.map((s) => (
                   <div key={s.label} className="min-w-0 rounded-control border border-line p-4">
-                    <p className="mb-3 font-mono text-sm font-semibold text-ink">{s.label}</p>
+                    <p className="mb-3 text-sm font-semibold text-ink">{s.label}</p>
                     <ol className="space-y-4">
                       {s.items.map((item, i) => (
                         <li key={`${item.template_id}-${i}`} className="text-sm">

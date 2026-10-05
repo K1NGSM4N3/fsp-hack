@@ -3,8 +3,9 @@
 import { ArrowRight, CalendarClock, Eye, ListChecks, Mail, TrendingUp, Trophy } from "lucide-react";
 import Link from "next/link";
 import { isApiError } from "@/api/client";
-import { Badge, ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, PageHeader, ProgressBar, SkeletonCard, Stat } from "@/components/ui";
-import { CategoryBadge, SalaryRange } from "@/components/domain/Category";
+import { ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Stat } from "@/components/ui";
+import { SalaryRange } from "@/components/domain/Category";
+import { ScoreRing } from "@/components/domain/Explanation";
 import { FspAchievementList, FspEmpty } from "@/components/domain/Fsp";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
 import { useMe } from "@/features/auth/hooks";
@@ -12,7 +13,7 @@ import { useCategory, useFspStatus, useMarket, useMyTasks, useReceivedInvitation
 import { LinkFspButton } from "@/features/candidate/components/FspCard";
 import { OnboardingCard } from "@/features/candidate/components/Onboarding";
 import { formatDate, formatRelative, pluralize } from "@/lib/format";
-import { categoryLabel } from "@/lib/labels";
+import { GRADE_LABEL, SPEC_LONG_LABEL, categoryLabel } from "@/lib/labels";
 
 function CategoryCard() {
   const category = useCategory();
@@ -32,37 +33,44 @@ function CategoryCard() {
   }
   const strength = c.test_strength !== null && c.test_strength !== undefined ? Math.round(c.test_strength * 100) : null;
   return (
-    <Card>
-      <CardHeader title="Ваша категория" description="Видна работодателям — по ней вас находят" action={<Badge tone="success" dot>Подтверждена тестом</Badge>} />
-      <CategoryBadge category={c.category} long className="h-9 text-sm" />
-      <div className="mt-5 grid gap-5 sm:grid-cols-2">
-        <div>
-          <p className="text-xs text-ink-subtle">Сила результата в категории</p>
-          <p className="tabular mt-1 font-mono text-2xl font-semibold text-ink">{strength !== null ? `${strength}/100` : "—"}</p>
-          {strength !== null && <ProgressBar value={strength} className="mt-2" label="Сила результата" />}
-          <p className="mt-1.5 text-xs text-ink-subtle">Где вы внутри грейда: 0 — у нижней границы, 100 — у верхней</p>
-        </div>
-        <div className="space-y-3 text-sm">
-          <p className="flex items-start gap-2 text-ink-muted">
-            <CalendarClock className="mt-0.5 size-4 shrink-0 text-ink-subtle" aria-hidden />
-            <span>
-              Тест пройден {formatDate(c.assigned_at)}.{" "}
-              {c.next_change_at ? (
-                <>
-                  Сменить грейд можно с <span className="font-medium text-ink">{formatDate(c.next_change_at)}</span>.
-                </>
-              ) : (
-                <span className="text-ink">Смена грейда доступна.</span>
-              )}
+    <section className="relative isolate overflow-hidden rounded-card bg-night p-6 text-white shadow-pop sm:p-7">
+      <div aria-hidden className="pointer-events-none absolute -top-24 -right-16 -z-10 size-72 rounded-full bg-primary/40 blur-[90px]" />
+      <div aria-hidden className="bg-grid-night pointer-events-none absolute inset-0 -z-10 opacity-60 [mask-image:linear-gradient(to_left,black,transparent_70%)]" />
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-3">
+            <h2 className="font-mono text-[11px] tracking-[0.14em] text-primary-300 uppercase">Ваша категория</h2>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-success-300/15 px-2.5 py-0.5 text-xs font-medium text-success-300">
+              <span className="size-1.5 rounded-full bg-success-300" aria-hidden />
+              Подтверждена тестом
             </span>
-          </p>
-          <Link href="/candidate/assessment" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
-            {c.available.length ? "Пройти тест на другой грейд" : "История тестов"}
-            <ArrowRight className="size-4" aria-hidden />
-          </Link>
+          </div>
+          <p className="mt-4 text-[28px] leading-tight font-semibold tracking-[-0.03em] sm:text-[32px]">{SPEC_LONG_LABEL[c.category.specialization]}</p>
+          <p className="mt-1 font-mono text-lg text-primary-300">{GRADE_LABEL[c.category.grade]}</p>
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-night-muted">Видна работодателям — по ней вас находят. Где вы внутри грейда: 0 — у нижней границы, 100 — у верхней.</p>
         </div>
+        {strength !== null && <ScoreRing score={strength} size={128} tone="night" label="Сила результата в категории" caption="сила" />}
       </div>
-    </Card>
+      <div className="mt-6 grid gap-4 border-t border-night-line pt-5 text-sm sm:grid-cols-[1fr_auto] sm:items-center">
+        <p className="flex items-start gap-2 text-night-muted">
+          <CalendarClock className="mt-0.5 size-4 shrink-0 text-night-faint" aria-hidden />
+          <span>
+            Тест пройден {formatDate(c.assigned_at)}.{" "}
+            {c.next_change_at ? (
+              <>
+                Сменить грейд можно с <span className="font-medium text-white">{formatDate(c.next_change_at)}</span>.
+              </>
+            ) : (
+              <span className="text-white">Смена грейда доступна.</span>
+            )}
+          </span>
+        </p>
+        <Link href="/candidate/assessment" className="inline-flex items-center gap-1.5 font-medium text-white underline decoration-white/30 underline-offset-4 hover:decoration-white">
+          {c.available.length ? "Пройти тест на другой грейд" : "История тестов"}
+          <ArrowRight className="size-4" aria-hidden />
+        </Link>
+      </div>
+    </section>
   );
 }
 
@@ -210,6 +218,7 @@ export default function CandidateDashboard() {
   return (
     <div>
       <PageHeader
+        eyebrow={<span className="eyebrow text-primary">Обзор</span>}
         title="Главная"
         description="Ваша категория, приглашения и спрос — в одном месте."
         actions={

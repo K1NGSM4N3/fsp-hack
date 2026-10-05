@@ -1,7 +1,8 @@
-# web — фронтенд «ФСП Карьера»
+# web — фронтенд «ФСП Таланты»
 
-Next.js 16 (App Router) + TypeScript strict, Tailwind CSS 4, TanStack Query, react-hook-form + zod.
-Публичные страницы, кабинет кандидата (`/candidate/*`) и кабинет работодателя (`/employer/*`).
+Next.js 16 (App Router) + TypeScript strict, Tailwind CSS 4, TanStack Query, react-hook-form + zod, GSAP + Lenis.
+Публичный сайт (`/`, `/candidates`, `/employers`, `/how-it-works`, `/fsp`, `/security`, `/vacancies`),
+кабинет кандидата (`/candidate/*`) и кабинет работодателя (`/employer/*`).
 
 ## Скрипты
 
@@ -57,7 +58,29 @@ src/proxy.ts            только редирект на /login без cookie 
 ```
 
 Цвета и шрифты ФСП — токены в `src/app/globals.css` (стандартная палитра Tailwind отключена).
-Логотипы — `public/brand/`.
+Шрифты: Onest (текст и заголовки) и фирменный JetBrains Mono (подписи, цифры, код). Логотипы — `public/brand/`.
+
+## Анимации
+
+```
+src/components/motion/gsap.ts          регистрация плагинов GSAP (ScrollTrigger, SplitText, DrawSVG, ScrambleText)
+src/components/motion/MotionRoot.tsx   декларативные анимации по data-атрибутам для серверных страниц
+src/components/motion/SmoothScroll.tsx Lenis, синхронизированный с ScrollTrigger через gsap.ticker
+src/components/site/*                  шапка, подвал и интерактивные блоки публичного сайта
+```
+
+Серверная страница размечает элементы атрибутами — `data-split` (построчное появление заголовка), `data-reveal`,
+`data-stagger`, `data-counter`, `data-draw` (прорисовка линий), `data-grow` (полосы), `data-parallax`,
+`data-magnetic`, `data-tilt` — и оборачивается в `<MotionRoot>`. Разметка без JS полностью читаема: анимации
+стартуют только на клиенте внутри `gsap.matchMedia("(prefers-reduced-motion: no-preference)")`.
+
+При `prefers-reduced-motion: reduce` не запускаются ни GSAP-анимации, ни Lenis, канвас-граф рисует один статичный
+кадр, горизонтальный «пин» превращается в обычную прокрутку карточек, а CSS-анимации кабинета обнуляются глобальным
+правилом в `globals.css`. Первый экран не мигает: инлайн-скрипт до отрисовки ставит класс `motion` на `<html>`,
+и только тогда героические блоки скрыты до появления (с CSS-страховкой на случай сбоя скрипта).
+
+Лицензии: `lenis` — MIT; `gsap` и `@gsap/react` — GSAP Standard «No Charge» License (бесплатно, включая все
+плагины, но это не OSI-лицензия — исключение из правила MIT/Apache/BSD согласовано отдельно).
 
 ## Типы API
 

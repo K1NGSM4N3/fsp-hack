@@ -96,7 +96,7 @@ function History({ items }: { items: SurveyResponse[] }) {
   return (
     <Card className="mt-8">
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 text-left">
-        <span className="font-mono text-base font-semibold text-ink">История опросов</span>
+        <span className="text-base font-semibold text-ink">История опросов</span>
         <ChevronDown className={cn("size-5 text-ink-subtle transition-transform", open && "rotate-180")} aria-hidden />
       </button>
       {open && (

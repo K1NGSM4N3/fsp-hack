@@ -53,7 +53,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             key={t.id}
             role={t.tone === "error" ? "alert" : "status"}
             className={cn(
-              "pointer-events-auto flex w-full max-w-sm animate-slide-up items-start gap-3 rounded-card border bg-white p-4 shadow-pop",
+              "pointer-events-auto flex w-full max-w-sm animate-toast-in items-start gap-3 rounded-[14px] border bg-white p-4 shadow-pop",
               t.tone === "error" ? "border-accent-100" : "border-line",
             )}
           >

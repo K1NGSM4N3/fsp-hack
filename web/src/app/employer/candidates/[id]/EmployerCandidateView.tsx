@@ -142,7 +142,7 @@ export function EmployerCandidateView({ id, needId }: { id: string; needId: stri
               <div className="flex items-start gap-4">
                 <ScoreRing score={breakdown.total} size={64} />
                 <div className="min-w-0 flex-1">
-                  <h2 className="font-mono text-base font-semibold text-ink">Почему в подборке</h2>
+                  <h2 className="text-base font-semibold text-ink">Почему в подборке</h2>
                   <p className="mt-0.5 text-sm text-ink-muted">{need.data ? `Под потребность «${need.data.title}»` : "Под вашу потребность"}</p>
                   <ExplanationPanel breakdown={breakdown} defaultOpen className="mt-4" />
                 </div>

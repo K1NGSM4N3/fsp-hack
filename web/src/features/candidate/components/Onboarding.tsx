@@ -66,7 +66,7 @@ export function OnboardingCard() {
     <Card padding="lg" className="mb-6 border-primary-200">
       <div className="mb-6 flex flex-col gap-1">
         <span className="font-mono text-xs tracking-wider text-primary uppercase">Путь к категории · осталось шагов: {left}</span>
-        <h2 className="font-mono text-xl font-semibold tracking-tight text-ink">{next.title}</h2>
+        <h2 className="text-xl font-semibold tracking-tight text-ink">{next.title}</h2>
         <p className="max-w-2xl text-sm text-ink-muted">{next.text}</p>
       </div>
       <Stepper steps={onboardingSteps(step)} ariaLabel="Путь к категории" />

@@ -45,7 +45,7 @@ export function VerifyEmail() {
     return (
       <div>
         <XCircle className="size-10 text-accent-strong" aria-hidden />
-        <h1 className="mt-4 font-mono text-2xl font-semibold tracking-tight">В ссылке нет токена</h1>
+        <h1 className="mt-4 text-[28px] leading-tight font-semibold tracking-[-0.03em]">В ссылке нет токена</h1>
         <p className="mt-2 text-ink-muted">Откройте ссылку из письма целиком или запросите новую.</p>
         <Resend />
       </div>
@@ -56,7 +56,7 @@ export function VerifyEmail() {
     return (
       <div>
         <CheckCircle2 className="size-10 text-success" aria-hidden />
-        <h1 className="mt-4 font-mono text-2xl font-semibold tracking-tight">Email подтверждён</h1>
+        <h1 className="mt-4 text-[28px] leading-tight font-semibold tracking-[-0.03em]">Email подтверждён</h1>
         <p className="mt-2 text-ink-muted">Теперь можно войти. Кандидатов после входа ждёт короткий путь: профиль → опрос → тест → категория.</p>
         <ButtonLink href="/login" size="lg" className="mt-6">
           Войти
@@ -70,7 +70,7 @@ export function VerifyEmail() {
     return (
       <div>
         <XCircle className="size-10 text-accent-strong" aria-hidden />
-        <h1 className="mt-4 font-mono text-2xl font-semibold tracking-tight">{title}</h1>
+        <h1 className="mt-4 text-[28px] leading-tight font-semibold tracking-[-0.03em]">{title}</h1>
         {detail && <p className="mt-2 text-ink-muted">{detail}</p>}
         <Resend />
       </div>

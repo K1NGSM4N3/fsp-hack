@@ -1,4 +1,5 @@
 import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
+import { AnimatedNumber } from "./AnimatedNumber";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
@@ -35,7 +36,7 @@ export function ProgressBar({ value, max = 100, label, caption, tone = "primary"
         aria-valuenow={Math.round(value)}
         className={cn("w-full overflow-hidden rounded-full bg-surface", BAR_SIZES[size])}
       >
-        <div className={cn("h-full rounded-full transition-[width] duration-500", BAR_TONES[tone])} style={{ width: `${pct}%` }} />
+        <div className={cn("h-full origin-left animate-grow-x rounded-full transition-[width] duration-500", BAR_TONES[tone])} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -52,9 +53,9 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action, className, compact = false }: EmptyStateProps) {
   return (
-    <div className={cn("flex flex-col items-center rounded-card border border-dashed border-line-strong bg-white text-center", compact ? "px-4 py-6" : "px-6 py-12", className)}>
-      {icon && <div className="mb-3 flex size-11 items-center justify-center rounded-full bg-primary-50 text-primary">{icon}</div>}
-      <p className="font-mono text-base font-semibold text-ink">{title}</p>
+    <div className={cn("relative flex flex-col items-center overflow-hidden rounded-card border border-dashed border-line-strong bg-white text-center", compact ? "px-4 py-6" : "px-6 py-14", className)}>
+      {icon && <div className="mb-4 flex size-12 items-center justify-center rounded-2xl bg-primary-50 text-primary ring-8 ring-primary-50/50">{icon}</div>}
+      <p className="text-base font-semibold tracking-[-0.01em] text-ink">{title}</p>
       {description && <p className="mt-1.5 max-w-md text-sm text-ink-muted">{description}</p>}
       {action && <div className="mt-4 flex flex-wrap justify-center gap-2">{action}</div>}
     </div>
@@ -62,7 +63,7 @@ export function EmptyState({ icon, title, description, action, className, compac
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div aria-hidden className={cn("animate-pulse rounded-md bg-surface", className)} />;
+  return <div aria-hidden className={cn("skeleton rounded-md", className)} />;
 }
 
 export function SkeletonCard({ lines = 3, className }: { lines?: number; className?: string }) {
@@ -133,9 +134,11 @@ interface StatProps {
 
 export function Stat({ label, value, hint, className, tone = "default" }: StatProps) {
   return (
-    <div className={cn("min-w-0", className)}>
+    <div className={cn("flex min-w-0 flex-col", className)}>
       <div className="text-xs text-ink-subtle">{label}</div>
-      <div className={cn("tabular mt-1 font-mono text-2xl font-semibold tracking-tight", tone === "primary" ? "text-primary" : "text-ink")}>{value}</div>
+      <div className={cn("tabular mt-auto pt-1 font-display text-[26px] leading-tight font-semibold tracking-[-0.03em]", tone === "primary" ? "text-primary" : "text-ink")}>
+        {typeof value === "number" ? <AnimatedNumber value={value} /> : value}
+      </div>
       {hint && <div className="mt-0.5 text-xs text-ink-muted">{hint}</div>}
     </div>
   );

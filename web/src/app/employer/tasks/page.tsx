@@ -93,7 +93,7 @@ function TaskRow({ task }: { task: EmployerTask }) {
           {task.skills.length > 0 && <p className="text-sm text-ink-muted">Навыки: {task.skills.map(skillName).join(", ")}</p>}
           <Switch checked={task.active} onChange={(active) => setActive.mutate({ id: task.id, active })} disabled={setActive.isPending} label="Выдавать кандидатам" description="Задание получат кандидаты выбранных категорий, у которых нет открытого задания" />
           <div>
-            <p className="mb-3 font-mono text-sm font-semibold text-ink">Ответы</p>
+            <p className="mb-3 text-sm font-semibold text-ink">Ответы</p>
             <Submissions task={task} />
           </div>
         </div>

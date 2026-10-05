@@ -19,12 +19,16 @@
   --color-primary-100: #eceaff;
   --color-primary-200: #d6d1ff;
   --color-primary-300: #a9a3ff;
+  --color-primary-400: #7b6fff;
+  --color-primary-800: #1d1491;
+  --color-primary-900: #120b5c;
 
   --color-accent: #ec1d35;
   --color-accent-strong: #d0142c;
   --color-accent-hover: #b3122a;
   --color-accent-50: #fdecee;
   --color-accent-100: #fbd5da;
+  --color-accent-300: #ff6f80;
 
   --color-ink: #1b1c21;
   --color-ink-muted: #5a5c66;
@@ -32,27 +36,44 @@
   --color-ink-faint: #9a9ca5;
   --color-surface: #ededed;
   --color-canvas: #f6f6f7;
-  --color-line: #dedee2;
+  --color-line: #e4e4e8;
   --color-line-strong: #c8c9ce;
+
+  --color-night: #0b0b12;
+  --color-night-raised: #14141d;
+  --color-night-soft: #1c1c28;
+  --color-night-line: #2a2a3a;
+  --color-night-muted: #a5a6b8;
+  --color-night-faint: #6f7086;
 
   --color-success: #0e7a4b;
   --color-success-50: #e7f6ee;
   --color-success-200: #b9e3cc;
+  --color-success-300: #5fd39b;
   --color-warning: #9a5b00;
   --color-warning-50: #fff4e0;
   --color-warning-200: #f5d9a8;
 
-  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-sans: var(--font-onest), "Onest", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-onest), "Onest", system-ui, sans-serif;
   --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  --radius-card: 14px;
+  --radius-card: 16px;
   --radius-control: 10px;
+  --radius-panel: 28px;
 
-  --shadow-card: 0 1px 2px rgb(27 28 33 / 0.04);
-  --shadow-pop: 0 12px 32px -8px rgb(27 28 33 / 0.18), 0 2px 6px rgb(27 28 33 / 0.06);
+  --shadow-card: 0 1px 2px rgb(27 28 33 / 0.04), 0 0 0 1px rgb(27 28 33 / 0.01);
+  --shadow-pop: 0 18px 40px -12px rgb(27 28 33 / 0.22), 0 2px 6px rgb(27 28 33 / 0.06);
+  --shadow-lift: 0 30px 60px -30px rgb(64 47 255 / 0.45), 0 12px 24px -16px rgb(27 28 33 / 0.18);
+  --shadow-glow: 0 0 0 1px rgb(64 47 255 / 0.12), 0 20px 50px -20px rgb(64 47 255 / 0.55);
 
-  --animate-fade-in: fade-in 160ms ease-out;
-  --animate-slide-up: slide-up 200ms ease-out;
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-fade-in: fade-in 180ms ease-out;
+  --animate-slide-up: slide-up 260ms var(--ease-out-expo);
+  --animate-rise: rise 520ms var(--ease-out-expo) both;
+  --animate-toast-in: toast-in 420ms var(--ease-out-expo) both;
+  --animate-grow-x: grow-x 1100ms var(--ease-out-expo) both;
 
   @keyframes fade-in {
     from {
@@ -65,11 +86,47 @@
   @keyframes slide-up {
     from {
       opacity: 0;
-      transform: translateY(8px);
+      transform: translateY(12px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
     }
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+  @keyframes grow-x {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+  @keyframes shimmer {
+    from {
+      background-position: 150% 0;
+    }
+    to {
+      background-position: -50% 0;
+    }
+  }
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateX(24px) scale(0.97);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0) scale(1);
     }
   }
 }
@@ -87,8 +144,8 @@ body {
   background: var(--color-white);
   color: var(--color-ink);
   font-family: var(--font-sans);
-  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 :focus-visible {
@@ -102,19 +159,184 @@ body {
 }
 
 dialog::backdrop {
-  background: rgb(27 28 33 / 0.45);
-  backdrop-filter: blur(2px);
+  background: rgb(11 11 18 / 0.5);
+  backdrop-filter: blur(4px);
+  animation: fade-in 200ms ease-out;
 }
 body:has(dialog[open]) {
   overflow: hidden;
 }
 
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-stopped {
+  overflow: clip;
+}
+.lenis [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+
+/*
+ * Hero copy is hidden only when the inline head script found motion allowed; GSAP reveals it.
+ * The delayed keyframe is a safety net so a failed script never leaves the hero blank.
+ */
+html.motion [data-hero] {
+  visibility: hidden;
+  animation: hero-failsafe 0s linear 3.5s forwards;
+}
+@keyframes hero-failsafe {
+  to {
+    visibility: visible;
+  }
+}
+
 @layer utilities {
+  .skeleton {
+    background-color: var(--color-surface);
+    background-image: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.7) 50%, transparent 100%);
+    background-size: 50% 100%;
+    background-repeat: no-repeat;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
   .tabular {
     font-variant-numeric: tabular-nums;
   }
   .scrollbar-thin {
     scrollbar-width: thin;
+  }
+  .scrollbar-none {
+    scrollbar-width: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .display-1 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(2.5rem, 1.3rem + 4.9vw, 5.6rem);
+    line-height: 0.98;
+    letter-spacing: -0.045em;
+  }
+  .display-hero {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(2.35rem, 1.2rem + 3.7vw, 4.5rem);
+    line-height: 1;
+    letter-spacing: -0.042em;
+  }
+  .display-2 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(2.05rem, 1.2rem + 3.4vw, 4.25rem);
+    line-height: 1.02;
+    letter-spacing: -0.04em;
+  }
+  .display-2c {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(2rem, 1.25rem + 2.5vw, 3.4rem);
+    line-height: 1.04;
+    letter-spacing: -0.038em;
+  }
+  .display-3 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: clamp(1.55rem, 1.1rem + 1.5vw, 2.5rem);
+    line-height: 1.08;
+    letter-spacing: -0.03em;
+  }
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+  .text-gradient {
+    background-image: linear-gradient(100deg, var(--color-primary) 0%, var(--color-primary-400) 45%, var(--color-primary) 100%);
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  .text-gradient-night {
+    background-image: linear-gradient(100deg, #ffffff 0%, var(--color-primary-300) 50%, #ffffff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  .strike-draw {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-repeat: no-repeat;
+    background-position: 0 58%;
+    background-size: 100% 1px;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  .split-line-mask {
+    padding-bottom: 0.1em;
+    margin-bottom: -0.1em;
+  }
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, rgb(27 28 33 / 0.055) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(27 28 33 / 0.055) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+  .bg-grid-night {
+    background-image:
+      linear-gradient(to right, rgb(255 255 255 / 0.05) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(255 255 255 / 0.05) 1px, transparent 1px);
+    background-size: 64px 64px;
+  }
+  .mask-fade-y {
+    mask-image: linear-gradient(to bottom, transparent, black 18%, black 82%, transparent);
+  }
+  .mask-fade-x {
+    mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  }
+  .mask-radial {
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+  .glass {
+    background: rgb(255 255 255 / 0.72);
+    backdrop-filter: saturate(1.6) blur(16px);
+    -webkit-backdrop-filter: saturate(1.6) blur(16px);
+  }
+  .glass-night {
+    background: rgb(20 20 29 / 0.6);
+    backdrop-filter: saturate(1.4) blur(18px);
+    -webkit-backdrop-filter: saturate(1.4) blur(18px);
+  }
+  .stagger-rise > * {
+    animation: var(--animate-rise);
+  }
+  .stagger-rise > :nth-child(2) {
+    animation-delay: 50ms;
+  }
+  .stagger-rise > :nth-child(3) {
+    animation-delay: 100ms;
+  }
+  .stagger-rise > :nth-child(4) {
+    animation-delay: 150ms;
+  }
+  .stagger-rise > :nth-child(5) {
+    animation-delay: 200ms;
+  }
+  .stagger-rise > :nth-child(n + 6) {
+    animation-delay: 240ms;
   }
 }
 
@@ -123,6 +345,14 @@ body:has(dialog[open]) {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
     transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media print {
+  html.motion [data-hero] {
+    visibility: visible;
   }
 }

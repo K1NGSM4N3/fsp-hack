@@ -38,7 +38,7 @@ function OpenTask({ task }: { task: MyTask }) {
           до {formatDate(task.due_at)} ({formatRelative(task.due_at)})
         </span>
       </div>
-      <h2 className="font-mono text-xl font-semibold tracking-tight text-ink">{task.title}</h2>
+      <h2 className="text-xl font-semibold tracking-tight text-ink">{task.title}</h2>
       {task.company_name && (
         <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-ink-muted">
           <Building2 className="size-4" aria-hidden />

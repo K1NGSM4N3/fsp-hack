@@ -38,7 +38,7 @@ function Sent({ email }: { email: string }) {
       <div className="flex size-12 items-center justify-center rounded-full bg-primary-50 text-primary">
         <MailCheck className="size-6" aria-hidden />
       </div>
-      <h1 className="mt-5 font-mono text-2xl font-semibold tracking-tight text-ink">Подтвердите email</h1>
+      <h1 className="mt-5 text-[28px] leading-tight font-semibold tracking-[-0.03em] text-ink">Подтвердите email</h1>
       <p className="mt-2 text-ink-muted">
         Мы отправили ссылку на <span className="font-medium text-ink">{email}</span>. Перейдите по ней, чтобы активировать аккаунт. Ссылка действует 24 часа.
       </p>
@@ -127,7 +127,7 @@ export function RegisterForm() {
 
   return (
     <>
-      <h1 className="font-mono text-2xl font-semibold tracking-tight text-ink">Регистрация</h1>
+      <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.03em] text-ink">Регистрация</h1>
       <p className="mt-2 text-sm text-ink-muted">
         Уже есть аккаунт?{" "}
         <Link href="/login" className="font-medium text-primary hover:underline">

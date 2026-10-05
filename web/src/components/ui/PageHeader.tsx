@@ -14,7 +14,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, description, actions, back, eyebrow, className }: PageHeaderProps) {
   return (
-    <header className={cn("mb-6 sm:mb-8", className)}>
+    <header className={cn("mb-7 sm:mb-9", className)}>
       {back && (
         <Link href={back.href} className="mb-3 inline-flex items-center gap-1.5 rounded text-sm text-ink-muted hover:text-primary">
           <ArrowLeft className="size-4" aria-hidden />
@@ -24,8 +24,8 @@ export function PageHeader({ title, description, actions, back, eyebrow, classNa
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
           {eyebrow && <div className="mb-2">{eyebrow}</div>}
-          <h1 className="font-mono text-2xl font-semibold tracking-tight text-ink sm:text-[28px] sm:leading-tight">{title}</h1>
-          {description && <p className="mt-2 max-w-2xl text-sm text-ink-muted sm:text-base">{description}</p>}
+          <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.03em] text-ink sm:text-[32px]">{title}</h1>
+          {description && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted sm:text-[15px]">{description}</p>}
         </div>
         {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>

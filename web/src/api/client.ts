@@ -126,7 +126,7 @@ function refreshSession(): Promise<boolean> {
 }
 
 function isCabinetPath(pathname: string): boolean {
-  return pathname.startsWith("/candidate") || pathname.startsWith("/employer");
+  return /^\/(candidate|employer)(\/|$)/.test(pathname);
 }
 
 function redirectToLogin() {

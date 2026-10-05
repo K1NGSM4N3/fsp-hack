@@ -13,7 +13,7 @@ export function VacancyCard({ vacancy: v, href, footer }: { vacancy: PublicVacan
     <article className="rounded-card border border-line bg-white p-5 shadow-card transition-colors hover:border-primary-200">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="font-mono text-base font-semibold tracking-tight">
+          <h3 className="text-base font-semibold tracking-tight">
             <Link href={href} className="rounded text-ink hover:text-primary hover:underline">
               {v.title}
             </Link>

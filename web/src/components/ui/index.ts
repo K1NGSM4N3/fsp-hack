@@ -1,3 +1,4 @@
+export { AnimatedNumber } from "./AnimatedNumber";
 export { Badge, type BadgeTone } from "./Badge";
 export { Button, ButtonLink, IconButton, buttonClasses, type ButtonVariant } from "./Button";
 export { Card, CardHeader, Divider, Eyebrow } from "./Card";

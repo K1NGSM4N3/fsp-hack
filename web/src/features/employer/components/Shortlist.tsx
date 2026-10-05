@@ -107,9 +107,9 @@ export function RefinePanel({ need, pending, onApply }: RefinePanelProps) {
   const [open, setOpen] = useState(false);
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }));
   return (
-    <Card padding="none" className="h-fit lg:sticky lg:top-6">
+    <Card padding="none" className="h-fit lg:sticky lg:top-20">
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left lg:pointer-events-none lg:cursor-default">
-        <span className="flex items-center gap-2 font-mono text-base font-semibold text-ink">
+        <span className="flex items-center gap-2 text-base font-semibold tracking-[-0.01em] text-ink">
           <SlidersHorizontal className="size-4 text-primary" aria-hidden />
           Уточнить подборку
         </span>

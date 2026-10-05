@@ -1,10 +1,11 @@
 "use client";
 
-import { ArrowRight, Lightbulb, Plus, Search, Target } from "lucide-react";
+import { ArrowRight, CheckCheck, Lightbulb, MessageSquareReply, Plus, Search, Send, Target } from "lucide-react";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import type { InvitationStats, InvitationStatus } from "@/api/types";
 import { SalaryRange } from "@/components/domain/Category";
-import { ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, PageHeader, ProgressBar, SkeletonCard, Stat } from "@/components/ui";
+import { AnimatedNumber, ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, PageHeader, ProgressBar, SkeletonCard, Stat } from "@/components/ui";
 import { useMe } from "@/features/auth/hooks";
 import { useInvitationStats, useNeeds } from "@/features/employer/hooks";
 import { cn } from "@/lib/cn";
@@ -19,6 +20,38 @@ const FUNNEL: { status: InvitationStatus; tone: string }[] = [
   { status: "expired", tone: "bg-ink-faint" },
   { status: "withdrawn", tone: "bg-line-strong" },
 ];
+
+function Kpi({ icon, label, value, suffix, hint, accent = false }: { icon: ReactNode; label: string; value: number; suffix?: string; hint: string; accent?: boolean }) {
+  return (
+    <div className={cn("relative overflow-hidden rounded-card border p-5", accent ? "border-transparent bg-night text-white" : "border-line bg-white shadow-card")}>
+      {accent && <div aria-hidden className="pointer-events-none absolute -top-16 -right-10 size-40 rounded-full bg-primary/50 blur-[60px]" />}
+      <div className="relative flex items-center justify-between gap-3">
+        <p className={cn("text-sm", accent ? "text-night-muted" : "text-ink-muted")}>{label}</p>
+        <span className={cn("flex size-8 items-center justify-center rounded-[10px]", accent ? "bg-white/10 text-primary-300" : "bg-primary-50 text-primary")} aria-hidden>
+          {icon}
+        </span>
+      </div>
+      <p className="tabular relative mt-4 font-display text-[34px] leading-none font-semibold tracking-[-0.035em]">
+        <AnimatedNumber value={value} />
+        {suffix && <span className={cn("ml-1 text-lg font-medium", accent ? "text-night-muted" : "text-ink-subtle")}>{suffix}</span>}
+      </p>
+      <p className={cn("relative mt-2 text-xs", accent ? "text-night-faint" : "text-ink-subtle")}>{hint}</p>
+    </div>
+  );
+}
+
+function KpiRow({ s, needs }: { s: InvitationStats; needs: number | undefined }) {
+  const accepted = s.by_status.find((x) => x.status === "accepted")?.count ?? 0;
+  const total = s.by_status.reduce((a, x) => a + x.count, 0);
+  return (
+    <div className="stagger-rise mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <Kpi accent icon={<Target className="size-4" />} label="Активные потребности" value={needs ?? 0} hint="подборки обновляются при уточнении" />
+      <Kpi icon={<Send className="size-4" />} label="Приглашения за 7 дней" value={s.quota_used} suffix={`/ ${s.quota_limit}`} hint={`квота обновится через ${s.quota_resets_in_days} ${plural(s.quota_resets_in_days, ["день", "дня", "дней"])}`} />
+      <Kpi icon={<MessageSquareReply className="size-4" />} label="Отвечают" value={Math.round(s.response_rate * 100)} suffix="%" hint="приняли или отклонили" />
+      <Kpi icon={<CheckCheck className="size-4" />} label="Приняли" value={accepted} suffix={total ? `из ${total}` : undefined} hint="контакты открыты" />
+    </div>
+  );
+}
 
 function QuotaCard({ s }: { s: InvitationStats }) {
   const left = s.quota_limit - s.quota_used;
@@ -63,7 +96,7 @@ function FunnelCard({ s }: { s: InvitationStats }) {
             <li key={f.status} className="grid grid-cols-[7rem_1fr_2.5rem] items-center gap-3 text-sm">
               <span className="text-ink-muted">{INVITATION_STATUS_LABEL[f.status]}</span>
               <span className="h-2.5 overflow-hidden rounded-full bg-surface" aria-hidden>
-                <span className={cn("block h-full rounded-full", f.tone)} style={{ width: `${(n / max) * 100}%` }} />
+                <span className={cn("block h-full origin-left animate-grow-x rounded-full", f.tone)} style={{ width: `${(n / max) * 100}%` }} />
               </span>
               <span className="tabular text-right font-mono text-ink">{n}</span>
             </li>
@@ -157,9 +190,11 @@ function NeedsCard() {
 export default function EmployerDashboard() {
   const me = useMe();
   const stats = useInvitationStats();
+  const needs = useNeeds();
   return (
     <div>
       <PageHeader
+        eyebrow={<span className="eyebrow text-primary">Обзор найма</span>}
         title={me.data?.company?.name ?? "Главная"}
         description="Подборки, приглашения и обратная связь от кандидатов."
         actions={
@@ -173,6 +208,7 @@ export default function EmployerDashboard() {
           </>
         }
       />
+      {stats.data && <KpiRow s={stats.data} needs={needs.data?.length} />}
       <div className="grid gap-6 lg:grid-cols-[1.3fr_1fr]">
         <div className="min-w-0 space-y-6">
           <NeedsCard />

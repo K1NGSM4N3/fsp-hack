@@ -202,7 +202,7 @@ function Runner({ session, refreshing }: { session: AssessmentSession; refreshin
             <CategoryBadge category={{ specialization: session.specialization, grade: session.claimed_grade }} size="sm" />
             {ATTEMPT_KIND_LABEL[session.attempt_kind].toLowerCase()} на грейд {GRADE_LABEL[session.claimed_grade]}
           </p>
-          <h1 className="mt-2 font-mono text-2xl font-semibold tracking-tight text-ink">Задание {session.answered + 1}</h1>
+          <h1 className="mt-2 text-[28px] leading-tight font-semibold tracking-[-0.03em] text-ink">Задание {session.answered + 1}</h1>
         </div>
         <Link href="/candidate/assessment" className="inline-flex items-center gap-1.5 rounded text-sm text-ink-muted hover:text-ink">
           <LogOut className="size-4" aria-hidden />
@@ -298,7 +298,7 @@ function Result({ session }: { session: AssessmentSession }) {
         <div className="flex items-start gap-4">
           {d.passed ? <CheckCircle2 className="size-10 shrink-0 text-success" aria-hidden /> : <CircleSlash className="size-10 shrink-0 text-ink-faint" aria-hidden />}
           <div className="min-w-0">
-            <h2 className="font-mono text-xl font-semibold tracking-tight text-ink">{d.passed ? "Грейд подтверждён" : `Грейд ${GRADE_LABEL[session.claimed_grade]} пока не подтверждён`}</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-ink">{d.passed ? "Грейд подтверждён" : `Грейд ${GRADE_LABEL[session.claimed_grade]} пока не подтверждён`}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <CategoryBadge category={category} long />
               {strength !== null && <span className="tabular font-mono text-sm text-ink">сила результата {strength}/100</span>}

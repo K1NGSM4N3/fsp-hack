@@ -24,7 +24,7 @@ function NeedRow({ need, onDelete }: { need: HiringNeed; onDelete: () => void })
               {NEED_STATUS_LABEL[need.status]}
             </Badge>
           </div>
-          <Link href={`/employer/needs/${need.id}`} className="mt-2 block font-mono text-base font-semibold tracking-tight text-ink hover:text-primary hover:underline">
+          <Link href={`/employer/needs/${need.id}`} className="mt-2 block text-base font-semibold tracking-tight text-ink hover:text-primary hover:underline">
             {need.title}
           </Link>
           <p className="mt-1 text-sm text-ink-muted">
