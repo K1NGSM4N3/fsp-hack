@@ -54,7 +54,9 @@ export function SiteFooter() {
           <div className="mt-10 flex flex-col gap-4 border-t border-night-line pt-6 text-sm text-night-faint md:flex-row md:items-center md:justify-between">
             <p>© 2026 ФСП Таланты · Хакатон «Лидеры цифровой трансформации 2026», спецтрек ФСП</p>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <span>Персональные данные храним и обрабатываем по 152-ФЗ</span>
+              <Link href="/privacy" className="transition-colors hover:text-white">
+                Политика обработки данных
+              </Link>
               <a href="https://fsp-russia.com" target="_blank" rel="noreferrer" className="transition-colors hover:text-white">
                 fsp-russia.com
               </a>

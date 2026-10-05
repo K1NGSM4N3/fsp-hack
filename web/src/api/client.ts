@@ -20,6 +20,9 @@ export interface ProblemDetails {
   code?: string;
   detail?: string;
   errors?: FieldErrors;
+  /** `consent_required`: the current consent document to grant first. */
+  document_id?: string;
+  document_kind?: string;
 }
 
 export class ApiError extends Error {
@@ -28,8 +31,18 @@ export class ApiError extends Error {
   readonly title: string;
   readonly detail: string | null;
   readonly errors: FieldErrors | null;
+  readonly documentId: string | null;
+  readonly documentKind: string | null;
 
-  constructor(init: { status: number; code: string; title: string; detail?: string | null; errors?: FieldErrors | null }) {
+  constructor(init: {
+    status: number;
+    code: string;
+    title: string;
+    detail?: string | null;
+    errors?: FieldErrors | null;
+    documentId?: string | null;
+    documentKind?: string | null;
+  }) {
     super(init.detail ? `${init.title}: ${init.detail}` : init.title);
     this.name = "ApiError";
     this.status = init.status;
@@ -37,6 +50,8 @@ export class ApiError extends Error {
     this.title = init.title;
     this.detail = init.detail ?? null;
     this.errors = init.errors ?? null;
+    this.documentId = init.documentId ?? null;
+    this.documentKind = init.documentKind ?? null;
   }
 
   fieldError(field: string): string | undefined {
@@ -87,6 +102,8 @@ async function toApiError(res: Response): Promise<ApiError> {
     title: body.title ?? fallbackTitle(res.status),
     detail: body.detail ?? null,
     errors: body.errors ?? null,
+    documentId: body.document_id ?? null,
+    documentKind: body.document_kind ?? null,
   });
 }
 

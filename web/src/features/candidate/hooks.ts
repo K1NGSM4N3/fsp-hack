@@ -28,6 +28,10 @@ export function usePrivacy() {
   return useQuery({ queryKey: qk.privacy, queryFn: api.getPrivacy });
 }
 
+export function useContactAccess() {
+  return useQuery({ queryKey: qk.contactAccess, queryFn: api.getContactAccess });
+}
+
 export function useUpdatePrivacy() {
   const qc = useQueryClient();
   return useMutation({

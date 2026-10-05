@@ -57,24 +57,30 @@ async fn get_company(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<CompanyResponse>> {
-    let c = db::companies::company_of_owner(&state.pool, user.id)
+    company_view(&state.pool, user.id)
         .await?
-        .ok_or_else(ApiError::not_found)?;
-    Ok(Json(CompanyResponse {
-        id: c.id,
-        profile: CompanyProfile {
-            name: c.name,
-            description: c.description,
-            industry: c.industry,
-            website: c.website,
-            city: c.city,
-            size: c.size,
-            contact_email: c.contact_email,
-            contact_phone: c.contact_phone,
-            contact_telegram: c.contact_telegram,
-        },
-        updated_at: c.updated_at,
-    }))
+        .map(Json)
+        .ok_or_else(ApiError::not_found)
+}
+
+pub(crate) async fn company_view(pool: &PgPool, owner: Uuid) -> ApiResult<Option<CompanyResponse>> {
+    Ok(db::companies::company_of_owner(pool, owner)
+        .await?
+        .map(|c| CompanyResponse {
+            id: c.id,
+            profile: CompanyProfile {
+                name: c.name,
+                description: c.description,
+                industry: c.industry,
+                website: c.website,
+                city: c.city,
+                size: c.size,
+                contact_email: c.contact_email,
+                contact_phone: c.contact_phone,
+                contact_telegram: c.contact_telegram,
+            },
+            updated_at: c.updated_at,
+        }))
 }
 
 fn blank_to_none(v: Option<String>) -> Option<String> {

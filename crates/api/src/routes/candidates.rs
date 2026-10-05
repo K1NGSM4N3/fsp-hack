@@ -197,11 +197,11 @@ async fn profile(
         .pop()
         .ok_or_else(ApiError::not_found)?;
     let related = candidate.relation.applied || candidate.relation.invitation_status.is_some();
-    let visible = db::candidates::candidate_invitable(&state.pool, id)
+    let published = db::candidates::candidate_invitable(&state.pool, id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?
-        .visible;
-    if !visible && !related {
+        .published;
+    if !published && !related {
         return Err(ApiError::not_found());
     }
     db::market::record_profile_view(&state.pool, company, id).await?;

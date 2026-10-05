@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::CandidateUser,
-    contacts::Contacts,
+    contacts::{ContactAccessEntry, ContactBasis, Contacts},
     dto::{SearchStatus, parse_slugs, slugs},
     error::{ApiError, ApiResult, Problem, Validator},
     pdf, pool,
@@ -27,6 +27,7 @@ pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(get_profile, put_profile))
         .routes(routes!(get_privacy, put_privacy))
+        .routes(routes!(contact_access))
         .routes(routes!(profile_pdf))
         .merge(
             OpenApiRouter::new()
@@ -110,7 +111,10 @@ pub(crate) fn parse_source(s: &str) -> Option<SkillSource> {
     })
 }
 
-async fn load_profile(state: &AppState, user: &CandidateUser) -> ApiResult<ProfileResponse> {
+pub(crate) async fn load_profile(
+    state: &AppState,
+    user: &CandidateUser,
+) -> ApiResult<ProfileResponse> {
     let c = db::candidates::candidate_profile(&state.pool, user.id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
@@ -314,16 +318,37 @@ async fn get_privacy(
     }))
 }
 
-/// Update privacy settings
+/// Update privacy settings. Showing the profile in search needs active consents to processing
+/// and to publication: without them the answer is 409 `consent_required` with the document to grant
 #[utoipa::path(put, path = "/privacy", tag = "candidate",
     request_body = Privacy,
-    responses((status = 200, body = Privacy)),
+    responses(
+        (status = 200, body = Privacy),
+        (status = 409, description = "`consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`", body = Problem),
+    ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn put_privacy(
     State(state): State<AppState>,
     user: CandidateUser,
     Json(p): Json<Privacy>,
 ) -> ApiResult<Json<Privacy>> {
+    if p.visible {
+        let required = [
+            db::consents::PROCESSING.to_owned(),
+            db::consents::PUBLICATION.to_owned(),
+        ];
+        if let Some(doc) = db::consents::missing_consents(&state.pool, user.id, &required)
+            .await?
+            .into_iter()
+            .next()
+        {
+            return Err(ApiError::ConsentRequired {
+                document_id: doc.id,
+                kind: doc.kind,
+                title: doc.title,
+            });
+        }
+    }
     let status: db::types::SearchStatus = p.search_status.into();
     db::candidates::update_candidate_privacy(
         &state.pool,
@@ -336,6 +361,41 @@ async fn put_privacy(
     )
     .await?;
     Ok(Json(p))
+}
+
+/// A journal is short for one person; the cap only bounds a pathological case.
+const ACCESS_LOG_LIMIT: i64 = 500;
+
+pub(crate) async fn access_log(
+    pool: &sqlx::PgPool,
+    candidate: Uuid,
+) -> ApiResult<Vec<ContactAccessEntry>> {
+    Ok(
+        db::contacts::candidate_access_log(pool, candidate, ACCESS_LOG_LIMIT)
+            .await?
+            .into_iter()
+            .filter_map(|r| {
+                Some(ContactAccessEntry {
+                    company_id: r.company_id,
+                    company_name: r.company_name,
+                    basis: ContactBasis::from_slug(&r.basis)?,
+                    accessed_at: r.accessed_at,
+                })
+            })
+            .collect(),
+    )
+}
+
+/// Who opened your contacts: company, time and basis — an accepted invitation or your own
+/// application (ст. 14 152-ФЗ). Newest first
+#[utoipa::path(get, path = "/contact-access", tag = "candidate",
+    responses((status = 200, body = Vec<ContactAccessEntry>), (status = 401, body = Problem), (status = 403, body = Problem)),
+    security(("cookie" = []), ("bearer" = [])))]
+async fn contact_access(
+    State(state): State<AppState>,
+    user: CandidateUser,
+) -> ApiResult<Json<Vec<ContactAccessEntry>>> {
+    Ok(Json(access_log(&state.pool, user.id).await?))
 }
 
 #[derive(ToSchema)]

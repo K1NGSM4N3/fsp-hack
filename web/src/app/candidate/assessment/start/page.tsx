@@ -1,6 +1,7 @@
 "use client";
 
 import { Camera, Clock, Eye, PlayCircle, ShieldCheck, Video, VideoOff } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { isApiError } from "@/api/client";
@@ -185,9 +186,15 @@ function Step() {
               onChange={(e) => setConsent(e.target.checked)}
               label="Согласен(на) на видеозапись во время теста"
               description={
-                <button type="button" className="rounded text-primary hover:underline" onClick={() => setDocOpen(true)}>
-                  Текст согласия
-                </button>
+                <>
+                  <button type="button" className="rounded text-primary hover:underline" onClick={() => setDocOpen(true)}>
+                    Текст согласия
+                  </button>
+                  {" · "}
+                  <Link href="/privacy#proctoring_video" target="_blank" className="text-primary hover:underline">
+                    как мы храним запись
+                  </Link>
+                </>
               }
             />
             <Checkbox checked={fullscreen} onChange={(e) => setFullscreen(e.target.checked)} label="Открыть тест на весь экран — меньше отвлекает" />

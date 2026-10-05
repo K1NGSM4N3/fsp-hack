@@ -7,6 +7,7 @@ use axum::{
 };
 use serde::{Serialize, ser::SerializeMap};
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use crate::{crypto::CryptoError, kv::KvError, mail::MailError, pdf::PdfError};
 
@@ -23,6 +24,13 @@ pub struct Problem {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[schema(value_type = Option<Object>, example = json!({"salary.min": ["Зарплата «от» обязательна"]}))]
     pub errors: Option<FieldErrors>,
+    /// `consent_required`: the current version of the consent document to grant first
+    /// (`POST /api/v1/me/consents`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_id: Option<Uuid>,
+    /// `consent_required`: kind of that document, e.g. `pd_publication`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub document_kind: Option<String>,
 }
 
 /// A handful of field errors on a cold path: a flat vec beats any map and keeps form order.
@@ -95,6 +103,13 @@ pub enum ApiError {
     },
     #[error("validation failed")]
     Validation(FieldErrors),
+    /// 409 `consent_required` naming the document to grant: the UI offers it right away.
+    #[error("consent required: {kind}")]
+    ConsentRequired {
+        document_id: Uuid,
+        kind: String,
+        title: String,
+    },
     #[error(transparent)]
     Internal(#[from] InternalError),
 }
@@ -241,6 +256,8 @@ impl IntoResponse for ApiError {
                 code,
                 detail,
                 errors: None,
+                document_id: None,
+                document_kind: None,
             },
             ApiError::Validation(errors) => Problem {
                 kind: "about:blank",
@@ -249,6 +266,24 @@ impl IntoResponse for ApiError {
                 code: "validation_failed",
                 detail: None,
                 errors: Some(errors),
+                document_id: None,
+                document_kind: None,
+            },
+            ApiError::ConsentRequired {
+                document_id,
+                kind,
+                title,
+            } => Problem {
+                kind: "about:blank",
+                title: "Нужно согласие".into(),
+                status: 409,
+                code: "consent_required",
+                detail: Some(format!(
+                    "«{title}»: без него профиль не показывается работодателям"
+                )),
+                errors: None,
+                document_id: Some(document_id),
+                document_kind: Some(kind),
             },
             ApiError::Internal(err) => {
                 tracing::error!(error = %err, "internal error");
@@ -259,6 +294,8 @@ impl IntoResponse for ApiError {
                     code: "internal",
                     detail: None,
                     errors: None,
+                    document_id: None,
+                    document_kind: None,
                 }
             }
         };
@@ -295,5 +332,39 @@ mod tests {
             serde_json::to_string(&errors).unwrap(),
             r#"{"title":["a","c"],"salary":["b"]}"#
         );
+    }
+
+    #[tokio::test]
+    async fn consent_required_names_the_document() {
+        let id = Uuid::now_v7();
+        let response = ApiError::ConsentRequired {
+            document_id: id,
+            kind: "pd_publication".into(),
+            title: "Согласие на публикацию".into(),
+        }
+        .into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["code"], "consent_required");
+        assert_eq!(body["status"], 409);
+        assert_eq!(body["document_id"], id.to_string());
+        assert_eq!(body["document_kind"], "pd_publication");
+        assert!(body.get("errors").is_none());
+    }
+
+    #[tokio::test]
+    async fn other_problems_carry_no_document() {
+        let bytes = axum::body::to_bytes(ApiError::not_found().into_response().into_body(), 4096)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(body.get("document_id").is_none() && body.get("document_kind").is_none());
     }
 }

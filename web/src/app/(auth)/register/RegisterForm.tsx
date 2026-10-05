@@ -198,9 +198,23 @@ export function RegisterForm() {
                       </button>
                     </>
                   }
-                  description={`Версия ${d.version}`}
+                  description={
+                    <>
+                      Редакция {d.version} ·{" "}
+                      <Link href={`/privacy#${d.kind}`} target="_blank" className="text-primary hover:underline">
+                        на отдельной странице
+                      </Link>
+                    </>
+                  }
                 />
               ))}
+              <p className="text-xs text-ink-subtle">
+                Что мы храним, кому показываем и как всё удалить —{" "}
+                <Link href="/privacy" target="_blank" className="font-medium text-primary hover:underline">
+                  в политике обработки персональных данных
+                </Link>
+                .
+              </p>
             </div>
           )}
         </FieldSet>

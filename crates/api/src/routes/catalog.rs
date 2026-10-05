@@ -119,27 +119,34 @@ async fn skills(Query(q): Query<SkillQuery>) -> Json<Vec<SkillView>> {
 #[derive(Serialize, ToSchema)]
 pub struct ConsentDocument {
     pub id: Uuid,
+    /// `pd_processing`, `pd_publication`, `terms`, `proctoring_video`.
     pub kind: String,
     pub version: i32,
     pub title: String,
     pub body: String,
+    /// Registration of these roles requires the document.
     pub required_for: Vec<Role>,
+    /// Roles that may grant the document at all (`POST /me/consents`).
+    pub applies_to: Vec<Role>,
 }
 
-/// Current versions of consent documents shown at registration
+impl From<db::consents::ConsentDocument> for ConsentDocument {
+    fn from(d: db::consents::ConsentDocument) -> Self {
+        Self {
+            id: d.id,
+            kind: d.kind,
+            version: d.version,
+            title: d.title,
+            body: d.body,
+            required_for: d.required_for.into_iter().map(Role::from).collect(),
+            applies_to: d.applies_to.into_iter().map(Role::from).collect(),
+        }
+    }
+}
+
+/// Current versions of consent documents: registration, the privacy policy page, re-granting
 #[utoipa::path(get, path = "/consents/current", tag = "catalog", responses((status = 200, body = Vec<ConsentDocument>)))]
 async fn current_consents(State(state): State<AppState>) -> ApiResult<Json<Vec<ConsentDocument>>> {
     let docs = db::consents::current_consent_documents(&state.pool).await?;
-    Ok(Json(
-        docs.into_iter()
-            .map(|d| ConsentDocument {
-                id: d.id,
-                kind: d.kind,
-                version: d.version,
-                title: d.title,
-                body: d.body,
-                required_for: d.required_for.into_iter().map(Role::from).collect(),
-            })
-            .collect(),
-    ))
+    Ok(Json(docs.into_iter().map(ConsentDocument::from).collect()))
 }

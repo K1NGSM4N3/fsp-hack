@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.user_id FROM candidates c\n         WHERE c.user_id = ANY ($1)\n           AND c.visible\n           AND c.search_status <> 'closed'\n           AND EXISTS (SELECT 1 FROM user_consents uc\n                        JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'\n                        WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "f36e5f5a209c779ece2269b3ad9d93298d3d630d97e8cb3606a897d51d60f476"
+}

@@ -26,17 +26,40 @@ function fixDuration(e: SyntheticEvent<HTMLVideoElement>) {
   v.currentTime = 1e101;
 }
 
+type Availability = "checking" | "available" | "missing" | "failed";
+
+/**
+ * Asks for the headers first: the summary counts chunks from metadata, but the files can be gone
+ * (demo data, a lost volume), and a bare <video> would only show a broken player.
+ */
 function Player({ sessionId }: { sessionId: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return <p className="mt-3 text-sm text-ink-muted">Не удалось открыть запись. Обновите страницу и попробуйте ещё раз.</p>;
+  const url = proctoringRecordingUrl(sessionId);
+  const [state, setState] = useState<Availability>("checking");
+  useEffect(() => {
+    let live = true;
+    fetch(url, { method: "HEAD", credentials: "include" })
+      .then((r) => live && setState(r.status === 404 ? "missing" : "available"))
+      .catch(() => live && setState("available"));
+    return () => {
+      live = false;
+    };
+  }, [url]);
+  if (state === "checking") return <p className="mt-4 text-sm text-ink-subtle">Открываем запись…</p>;
+  if (state === "missing")
+    return (
+      <p className="mt-4 rounded-control bg-canvas p-3 text-sm text-ink-muted">
+        Видеофайл недоступен: на сервере его нет — запись не сохранилась или уже удалена. Отметка у результата и журнал событий от этого не меняются.
+      </p>
+    );
+  if (state === "failed") return <p className="mt-4 text-sm text-ink-muted">Не удалось открыть запись. Обновите страницу и попробуйте ещё раз.</p>;
   return (
     <video
       controls
       playsInline
       preload="metadata"
-      src={proctoringRecordingUrl(sessionId)}
+      src={url}
       onLoadedMetadata={fixDuration}
-      onError={() => setFailed(true)}
+      onError={() => setState("failed")}
       className="mt-4 aspect-[4/3] w-full max-w-md rounded-control border border-line bg-night"
     >
       Браузер не умеет показывать это видео.

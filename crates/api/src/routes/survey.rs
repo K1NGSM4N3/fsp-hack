@@ -142,7 +142,14 @@ async fn survey_history(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<SurveyResponse>>> {
-    let rows = db::survey::survey_history(&state.pool, user.id).await?;
+    Ok(Json(survey_views(&state.pool, user.id).await?))
+}
+
+pub(crate) async fn survey_views(
+    pool: &sqlx::PgPool,
+    candidate: Uuid,
+) -> ApiResult<Vec<SurveyResponse>> {
+    let rows = db::survey::survey_history(pool, candidate).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(SurveyResponse {
@@ -157,5 +164,5 @@ async fn survey_history(
             created_at: r.created_at,
         });
     }
-    Ok(Json(out))
+    Ok(out)
 }

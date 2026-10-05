@@ -314,6 +314,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/candidate/contact-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Who opened your contacts: company, time and basis — an accepted invitation or your own
+         *     application (ст. 14 152-ФЗ). Newest first
+         */
+        get: operations["contact_access"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/candidate/invitations": {
         parameters: {
             query?: never;
@@ -408,7 +428,10 @@ export interface paths {
         };
         /** Privacy settings: what employers see */
         get: operations["get_privacy"];
-        /** Update privacy settings */
+        /**
+         * Update privacy settings. Showing the profile in search needs active consents to processing
+         *     and to publication: without them the answer is 409 `consent_required` with the document to grant
+         */
         put: operations["put_privacy"];
         post?: never;
         delete?: never;
@@ -629,7 +652,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Current versions of consent documents shown at registration */
+        /** Current versions of consent documents: registration, the privacy policy page, re-granting */
         get: operations["current_consents"];
         put?: never;
         post?: never;
@@ -1189,7 +1212,11 @@ export interface paths {
         /** Consents the user has given */
         get: operations["my_consents"];
         put?: never;
-        post?: never;
+        /**
+         * Give a consent: the current version of a document that applies to your role. Recorded with
+         *     time, IP and User-Agent like at registration; a document already in force is not granted twice
+         */
+        post: operations["grant_consent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1210,6 +1237,27 @@ export interface paths {
          *     revoking the video consent deletes the candidate's recordings right away.
          */
         post: operations["revoke_consent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,
+         *     consents, profile, tests with summaries, category history, invitations, applications, who
+         *     opened your contacts, proctoring summaries; for an employer — the account and the company's data
+         */
+        get: operations["export"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1288,6 +1336,18 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        AccountRecord: {
+            /** Format: uuid */
+            id: string;
+            role: components["schemas"]["Role"];
+            email: string;
+            /** Format: date-time */
+            email_verified_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_login_at?: string | null;
+        };
         /** @description One record of the FSP registry snapshot (architecture §7.2). */
         Achievement: {
             kind: components["schemas"]["AchievementKind"];
@@ -1358,6 +1418,35 @@ export interface components {
         };
         ApplyInput: {
             cover_letter?: string;
+        };
+        /** @description One test session: the outcome without the tasks shown or the answers given. */
+        AssessmentRecord: {
+            /** Format: uuid */
+            id: string;
+            specialization: components["schemas"]["Specialization"];
+            claimed_grade: components["schemas"]["Grade"];
+            attempt_kind: components["schemas"]["AttemptKind"];
+            status: components["schemas"]["AssessmentStatus"];
+            /** Format: double */
+            theta?: number | null;
+            /** Format: double */
+            se?: number | null;
+            measured_grade?: components["schemas"]["Grade"] | null;
+            /** Format: int32 */
+            items_count: number;
+            /** @description This test assigned the category. */
+            assigned: boolean;
+            /**
+             * Format: double
+             * @description Person-fit statistic `l_z` and whether it flagged an aberrant pattern.
+             */
+            person_fit_lz?: number | null;
+            aberrant?: boolean | null;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            finished_at?: string | null;
+            proctoring?: components["schemas"]["ProctoringSummary"] | null;
         };
         AssessmentResult: {
             decision: components["schemas"]["Decision"];
@@ -1466,6 +1555,20 @@ export interface components {
             basis: components["schemas"]["ContactBasis"];
             /** Format: uuid */
             basis_id: string;
+        };
+        CandidateData: {
+            profile: components["schemas"]["ProfileResponse"];
+            privacy: components["schemas"]["Privacy"];
+            surveys: components["schemas"]["SurveyResponse"][];
+            assessments: components["schemas"]["AssessmentRecord"][];
+            category_history: components["schemas"]["GradeHistoryEntry"][];
+            invitations: components["schemas"]["ReceivedInvitation"][];
+            applications: components["schemas"]["MyApplication"][];
+            /** @description Which companies received your contacts and on what basis. */
+            contact_access: components["schemas"]["ContactAccessEntry"][];
+            fsp: components["schemas"]["FspStatus"];
+            tasks: components["schemas"]["MyTask"][];
+            resume_uploads: components["schemas"]["ResumeUploadRecord"][];
         };
         CandidateProfileView: {
             candidate: components["schemas"]["CandidateCard"];
@@ -1590,12 +1693,45 @@ export interface components {
         ConsentDocument: {
             /** Format: uuid */
             id: string;
+            /** @description `pd_processing`, `pd_publication`, `terms`, `proctoring_video`. */
             kind: string;
             /** Format: int32 */
             version: number;
             title: string;
             body: string;
+            /** @description Registration of these roles requires the document. */
             required_for: components["schemas"]["Role"][];
+            /** @description Roles that may grant the document at all (`POST /me/consents`). */
+            applies_to: components["schemas"]["Role"][];
+        };
+        ConsentRecord: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            document_id: string;
+            kind: string;
+            /** Format: int32 */
+            version: number;
+            title: string;
+            /** Format: date-time */
+            granted_at: string;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            ip?: string | null;
+            user_agent?: string | null;
+        };
+        /**
+         * @description One line of the candidate's «Кто открывал ваши контакты»: the company and the legal basis.
+         *     The employee, IP and browser stay in the audit log and are not part of this view.
+         */
+        ContactAccessEntry: {
+            /** Format: uuid */
+            company_id: string;
+            /** @description `None` when the company has since deleted its account. */
+            company_name?: string | null;
+            basis: components["schemas"]["ContactBasis"];
+            /** Format: date-time */
+            accessed_at: string;
         };
         /** @enum {string} */
         ContactBasis: "invitation" | "application";
@@ -1623,6 +1759,17 @@ export interface components {
             item: components["schemas"]["ItemView"];
             /** Format: date-time */
             deadline: string;
+        };
+        DataExport: {
+            /** @description File format; a new number means an incompatible change. */
+            format: string;
+            /** Format: date-time */
+            generated_at: string;
+            account: components["schemas"]["AccountRecord"];
+            /** @description Every grant and revocation: document version, time, IP and User-Agent. */
+            consents: components["schemas"]["ConsentRecord"][];
+            candidate?: components["schemas"]["CandidateData"] | null;
+            employer?: components["schemas"]["EmployerData"] | null;
         };
         /** @description Final classification once the session stops. */
         Decision: {
@@ -1662,6 +1809,13 @@ export interface components {
         };
         /** @enum {string} */
         Discipline: "algorithmic" | "product" | "security" | "ai" | "robotics" | "uav";
+        EmployerData: {
+            company?: components["schemas"]["CompanyResponse"] | null;
+            needs: components["schemas"]["HiringNeed"][];
+            vacancies: components["schemas"]["Vacancy"][];
+            invitations: components["schemas"]["SentInvitation"][];
+            tasks: components["schemas"]["EmployerTask"][];
+        };
         EmployerTask: {
             /** Format: uuid */
             id: string;
@@ -1794,6 +1948,13 @@ export interface components {
             session_id?: string | null;
             /** Format: date-time */
             assigned_at: string;
+        };
+        GrantConsent: {
+            /**
+             * Format: uuid
+             * @description Id of the current version from `GET /api/v1/consents/current`.
+             */
+            document_id: string;
         };
         HiringNeed: {
             /** Format: uuid */
@@ -2117,6 +2278,14 @@ export interface components {
             code: string;
             detail?: string | null;
             errors?: Record<string, never> | null;
+            /**
+             * Format: uuid
+             * @description `consent_required`: the current version of the consent document to grant first
+             *     (`POST /api/v1/me/consents`).
+             */
+            document_id?: string | null;
+            /** @description `consent_required`: kind of that document, e.g. `pd_publication`. */
+            document_kind?: string | null;
         };
         /**
          * @description Employer-facing proctoring mark of the test behind the current category. No session id and
@@ -2322,6 +2491,14 @@ export interface components {
              * @description PDF up to 10 MB with a text layer.
              */
             file: string;
+        };
+        ResumeUploadRecord: {
+            filename: string;
+            /** Format: int32 */
+            size_bytes: number;
+            recognized_fields: string[];
+            /** Format: date-time */
+            uploaded_at: string;
         };
         ReviewInput: {
             /**
@@ -3321,6 +3498,41 @@ export interface operations {
             };
         };
     };
+    contact_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContactAccessEntry"][];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_received: {
         parameters: {
             query?: never;
@@ -3499,6 +3711,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Privacy"];
+                };
+            };
+            /** @description `consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5081,6 +5302,56 @@ export interface operations {
             };
         };
     };
+    grant_consent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GrantConsent"];
+            };
+        };
+        responses: {
+            /** @description Already in force: the existing grant */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserConsent"];
+                };
+            };
+            /** @description Granted */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserConsent"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: unknown document, not its current version, or not for this role */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     revoke_consent: {
         parameters: {
             query?: never;
@@ -5100,6 +5371,36 @@ export interface operations {
                 content?: never;
             };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description JSON attachment `fsp-talents-<date>.json` */
+            200: {
+                headers: {
+                    /** @description attachment; filename="fsp-talents-<date>.json" */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataExport"];
+                };
+            };
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };

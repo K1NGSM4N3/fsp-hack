@@ -60,7 +60,7 @@ fn kind_slug(k: AttemptKind) -> &'static str {
     }
 }
 
-fn parse_kind(s: &str) -> AttemptKind {
+pub(crate) fn parse_kind(s: &str) -> AttemptKind {
     match s {
         "placement_step_down" => AttemptKind::PlacementStepDown,
         "placement_upgrade" => AttemptKind::PlacementUpgrade,
@@ -806,6 +806,25 @@ pub struct GradeHistoryEntry {
     pub assigned_at: DateTime<Utc>,
 }
 
+pub(crate) async fn grade_history_views(
+    pool: &PgPool,
+    candidate: Uuid,
+) -> ApiResult<Vec<GradeHistoryEntry>> {
+    let grades = db::grades::grade_history(pool, candidate).await?;
+    let mut out = Vec::with_capacity(grades.len());
+    for g in grades {
+        out.push(GradeHistoryEntry {
+            specialization: g.specialization.parse()?,
+            grade: g.grade.parse()?,
+            reason: g.reason,
+            theta: g.theta,
+            session_id: g.session_id,
+            assigned_at: g.assigned_at,
+        });
+    }
+    Ok(out)
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct CategoryStatus {
     pub category: Option<Category>,
@@ -870,18 +889,7 @@ async fn category(
         }
         None => (Vec::new(), None),
     };
-    let grades = db::grades::grade_history(&state.pool, user.id).await?;
-    let mut history_out = Vec::with_capacity(grades.len());
-    for g in grades {
-        history_out.push(GradeHistoryEntry {
-            specialization: g.specialization.parse()?,
-            grade: g.grade.parse()?,
-            reason: g.reason,
-            theta: g.theta,
-            session_id: g.session_id,
-            assigned_at: g.assigned_at,
-        });
-    }
+    let history_out = grade_history_views(&state.pool, user.id).await?;
     Ok(Json(CategoryStatus {
         category_name: category.map(Category::name_ru),
         test_strength: match (category, c.theta) {

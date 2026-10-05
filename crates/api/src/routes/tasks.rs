@@ -103,7 +103,14 @@ async fn list_tasks(
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<EmployerTask>>> {
     let company = company_id(&state.pool, user.id).await?;
-    let rows = db::tasks::company_tasks(&state.pool, company).await?;
+    Ok(Json(company_task_views(&state.pool, company).await?))
+}
+
+pub(crate) async fn company_task_views(
+    pool: &PgPool,
+    company: Uuid,
+) -> ApiResult<Vec<EmployerTask>> {
+    let rows = db::tasks::company_tasks(pool, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(EmployerTask {
@@ -120,7 +127,7 @@ async fn list_tasks(
             created_at: r.created_at,
         });
     }
-    Ok(Json(out))
+    Ok(out)
 }
 
 /// Publish a short task for a category; candidates receive it in turn
@@ -339,7 +346,7 @@ async fn assign_if_due(pool: &PgPool, candidate: Uuid) -> ApiResult<()> {
     Ok(())
 }
 
-async fn load_my_tasks(pool: &PgPool, candidate: Uuid) -> ApiResult<Vec<MyTask>> {
+pub(crate) async fn load_my_tasks(pool: &PgPool, candidate: Uuid) -> ApiResult<Vec<MyTask>> {
     Ok(db::tasks::candidate_assignments(pool, candidate)
         .await?
         .into_iter()

@@ -29,6 +29,8 @@ export type DirectionInfo = S["DirectionInfo"];
 export type SkillView = S["SkillView"];
 export type ConsentDocument = S["ConsentDocument"];
 export type UserConsent = S["UserConsent"];
+export type GrantConsent = S["GrantConsent"];
+export type ContactAccessEntry = S["ContactAccessEntry"];
 
 export type SessionUser = S["SessionUser"];
 export type Me = S["MeResponse"];

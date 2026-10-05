@@ -19,7 +19,7 @@ use uuid::Uuid;
 
 use super::catalog::ConsentDocument;
 use crate::{
-    auth::{AdminUser, CandidateUser, Role},
+    auth::{AdminUser, CandidateUser},
     error::{ApiError, ApiResult, Problem},
     proctoring::{
         self, CONSENT_KIND, LIMITS, MAX_BATCH, MAX_EVENTS, ProctoringMode, ProctoringSummary,
@@ -83,14 +83,7 @@ async fn options(
     };
     Ok(Json(ProctoringOptions {
         mode: cfg.mode,
-        consent: doc.map(|d| ConsentDocument {
-            id: d.id,
-            kind: d.kind,
-            version: d.version,
-            title: d.title,
-            body: d.body,
-            required_for: d.required_for.into_iter().map(Role::from).collect(),
-        }),
+        consent: doc.map(ConsentDocument::from),
         consent_granted,
         retention_days: cfg.retention_days,
         max_chunk_bytes: LIMITS.max_chunk_bytes,
@@ -293,7 +286,12 @@ async fn recording(state: &AppState, s: &db::proctoring::Summary) -> ApiResult<R
     } else {
         db::proctoring::chunks(&state.pool, s.session_id).await?
     };
-    if chunks.is_empty() {
+    if chunks.is_empty()
+        || !state
+            .recordings
+            .has_chunks(s.candidate_id, s.session_id, &chunks)
+            .await?
+    {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
             "recording_unavailable",

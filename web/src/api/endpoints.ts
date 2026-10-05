@@ -67,6 +67,24 @@ export async function revokeConsent(documentId: T.Uuid): Promise<void> {
   return http("POST", `/me/consents/${documentId}/revoke`);
 }
 
+/** Grants the current version; an already active grant comes back unchanged. */
+export async function grantConsent(documentId: T.Uuid): Promise<T.UserConsent> {
+  if (USE_MOCKS) return (await mocks()).grantConsent(documentId);
+  const body: T.GrantConsent = { document_id: documentId };
+  return http("POST", "/me/consents", { body });
+}
+
+/** Everything stored about the account as a JSON file (152-ФЗ, ст. 14). */
+export async function exportMyData(): Promise<Blob> {
+  if (USE_MOCKS) return (await mocks()).exportMyData();
+  return http("GET", "/me/export", { blob: true });
+}
+
+export async function getContactAccess(): Promise<T.ContactAccessEntry[]> {
+  if (USE_MOCKS) return (await mocks()).getContactAccess();
+  return http("GET", "/candidate/contact-access");
+}
+
 export async function getProfile(): Promise<T.Profile> {
   if (USE_MOCKS) return (await mocks()).getProfile();
   return http("GET", "/candidate/profile");

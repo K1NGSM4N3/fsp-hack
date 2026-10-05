@@ -201,7 +201,7 @@ async fn send(
     let candidate = db::candidates::candidate_invitable(&state.pool, req.candidate_id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    if !candidate.visible {
+    if !candidate.published {
         return Err(ApiError::not_found());
     }
     if candidate.search_status == db::types::SearchStatus::Closed
@@ -275,12 +275,16 @@ async fn list_sent(
 ) -> ApiResult<Json<Vec<SentInvitation>>> {
     let company = company_id(&state.pool, user.id).await?;
     db::invitations::expire_stale_invitations(&state.pool).await?;
-    let rows = db::invitations::employer_invitations(&state.pool, company).await?;
+    Ok(Json(sent_views(&state.pool, company).await?))
+}
+
+pub(crate) async fn sent_views(pool: &PgPool, company: Uuid) -> ApiResult<Vec<SentInvitation>> {
+    let rows = db::invitations::employer_invitations(pool, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
         out.push(sent_from_row!(row));
     }
-    Ok(Json(out))
+    Ok(out)
 }
 
 /// One sent invitation with its status history
@@ -509,10 +513,15 @@ async fn list_received(
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<ReceivedInvitation>>> {
     db::invitations::expire_stale_invitations(&state.pool).await?;
-    let rows = db::invitations::candidate_invitations(&state.pool, user.id).await?;
-    Ok(Json(
-        rows.into_iter().map(|r| received_from_row!(r)).collect(),
-    ))
+    Ok(Json(received_views(&state.pool, user.id).await?))
+}
+
+pub(crate) async fn received_views(
+    pool: &PgPool,
+    candidate: Uuid,
+) -> ApiResult<Vec<ReceivedInvitation>> {
+    let rows = db::invitations::candidate_invitations(pool, candidate).await?;
+    Ok(rows.into_iter().map(|r| received_from_row!(r)).collect())
 }
 
 /// One invitation; the first open marks it as viewed

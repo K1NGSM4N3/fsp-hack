@@ -345,13 +345,54 @@ export async function getMyConsents(): Promise<T.UserConsent[]> {
   return clone(sessionUser().consents);
 }
 
+export async function grantConsent(documentId: T.Uuid): Promise<T.UserConsent> {
+  await delay();
+  const user = sessionUser();
+  const doc = CONSENT_DOCS.find((d) => d.id === documentId);
+  if (!doc || !doc.applies_to.includes(user.role)) validation({ document_id: ["Этот документ не относится к вашему аккаунту"] });
+  const active = user.consents.find((c) => c.document_id === documentId && !c.revoked_at);
+  if (active) return clone(active);
+  const consent: T.UserConsent = { id: newId(), document_id: doc.id, kind: doc.kind, version: doc.version, title: doc.title, granted_at: nowIso(), revoked_at: null };
+  user.consents.unshift(consent);
+  persist();
+  return clone(consent);
+}
+
+export async function getContactAccess(): Promise<T.ContactAccessEntry[]> {
+  await delay();
+  const { cand } = requireCandidate();
+  const db = getDb();
+  return db.invitations
+    .filter((i) => i.candidate_id === cand.id && i.status === "accepted")
+    .map((i) => ({
+      company_id: i.company_id,
+      company_name: db.companies.find((c) => c.id === i.company_id)?.name ?? null,
+      basis: "invitation" as const,
+      accessed_at: i.responded_at ?? i.created_at,
+    }));
+}
+
+export async function exportMyData(): Promise<Blob> {
+  await delay();
+  const user = sessionUser();
+  const db = getDb();
+  const data = {
+    format: "fsp-talents-export/1",
+    generated_at: nowIso(),
+    account: { id: user.id, role: user.role, email: user.email },
+    consents: user.consents,
+    candidate: db.candidates.find((c) => c.id === user.candidate_id) ?? null,
+  };
+  return new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+}
+
 export async function revokeConsent(documentId: T.Uuid): Promise<void> {
   await delay();
   const user = sessionUser();
   const consent = user.consents.find((c) => c.document_id === documentId && !c.revoked_at);
   if (!consent) fail(404, "not_found", "Согласие не найдено");
   consent.revoked_at = nowIso();
-  if (consent.kind === "publication" && user.candidate_id) {
+  if ((consent.kind === "pd_publication" || consent.kind === "pd_processing") && user.candidate_id) {
     const c = getDb().candidates.find((x) => x.id === user.candidate_id);
     if (c) c.privacy.visible = false;
   }
@@ -458,8 +499,18 @@ export async function getPrivacy(): Promise<T.Privacy> {
 export async function updatePrivacy(body: T.Privacy): Promise<T.Privacy> {
   await delay();
   const { user, cand } = requireCandidate();
-  const publication = user.consents.find((c) => c.kind === "publication");
-  if (body.visible && publication?.revoked_at) fail(409, "publication_consent_revoked", "Нет согласия на публикацию", "Дайте согласие заново, чтобы появиться в поиске");
+  if (body.visible) {
+    const missing = CONSENT_DOCS.filter((d) => d.required_for.includes("candidate") && !user.consents.some((c) => c.kind === d.kind && !c.revoked_at)).sort((a, b) => a.kind.localeCompare(b.kind))[0];
+    if (missing)
+      throw new ApiError({
+        status: 409,
+        code: "consent_required",
+        title: "Нужно согласие",
+        detail: `«${missing.title}»: без него профиль не показывается работодателям`,
+        documentId: missing.id,
+        documentKind: missing.kind,
+      });
+  }
   cand.privacy = clone(body);
   persist();
   return clone(cand.privacy);

@@ -1,17 +1,17 @@
 use axum::{
     Json,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
 };
 use axum_extra::extract::cookie::CookieJar;
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 use crate::{
-    auth::{AuthUser, Role, clear_session_cookies},
+    auth::{AuthUser, Role, clear_session_cookies, client_ip, user_agent},
     crypto::sha256,
     error::{ApiError, ApiResult, Problem},
     proctoring,
@@ -21,7 +21,7 @@ use crate::{
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(me, delete_me))
-        .routes(routes!(my_consents))
+        .routes(routes!(my_consents, grant_consent))
         .routes(routes!(revoke_consent))
 }
 
@@ -176,6 +176,72 @@ async fn my_consents(
                 revoked_at: r.revoked_at,
             })
             .collect(),
+    ))
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct GrantConsent {
+    /// Id of the current version from `GET /api/v1/consents/current`.
+    pub document_id: Uuid,
+}
+
+/// Give a consent: the current version of a document that applies to your role. Recorded with
+/// time, IP and User-Agent like at registration; a document already in force is not granted twice
+#[utoipa::path(post, path = "/consents", tag = "account",
+    request_body = GrantConsent,
+    responses(
+        (status = 201, description = "Granted", body = UserConsent),
+        (status = 200, description = "Already in force: the existing grant", body = UserConsent),
+        (status = 401, body = Problem),
+        (status = 422, description = "`validation_failed`: unknown document, not its current version, or not for this role", body = Problem),
+    ),
+    security(("cookie" = []), ("bearer" = [])))]
+async fn grant_consent(
+    State(state): State<AppState>,
+    user: AuthUser,
+    headers: HeaderMap,
+    Json(req): Json<GrantConsent>,
+) -> ApiResult<(StatusCode, Json<UserConsent>)> {
+    let doc = db::consents::document_version(&state.pool, req.document_id)
+        .await?
+        .ok_or_else(|| ApiError::field("document_id", "Такого документа нет"))?;
+    if !doc.current {
+        return Err(ApiError::field(
+            "document_id",
+            "Это не действующая редакция документа — обновите страницу",
+        ));
+    }
+    if !doc.applies_to.contains(&user.role.into()) {
+        return Err(ApiError::field(
+            "document_id",
+            "Этот документ не относится к вашему аккаунту",
+        ));
+    }
+    let grant = db::consents::grant(
+        &state.pool,
+        Uuid::now_v7(),
+        user.id,
+        doc.id,
+        client_ip(&headers).as_deref(),
+        user_agent(&headers).as_deref(),
+    )
+    .await?;
+    let status = if grant.created {
+        StatusCode::CREATED
+    } else {
+        StatusCode::OK
+    };
+    Ok((
+        status,
+        Json(UserConsent {
+            id: grant.id,
+            document_id: doc.id,
+            kind: doc.kind,
+            version: doc.version,
+            title: doc.title,
+            granted_at: grant.granted_at,
+            revoked_at: None,
+        }),
     ))
 }
 

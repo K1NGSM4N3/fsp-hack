@@ -278,12 +278,16 @@ async fn list_needs(
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<HiringNeed>>> {
     let company = company_id(&state.pool, user.id).await?;
-    let rows = db::needs::company_needs(&state.pool, company).await?;
+    Ok(Json(company_need_views(&state.pool, company).await?))
+}
+
+pub(crate) async fn company_need_views(pool: &PgPool, company: Uuid) -> ApiResult<Vec<HiringNeed>> {
+    let rows = db::needs::company_needs(pool, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(need_from_row!(r));
     }
-    Ok(Json(out))
+    Ok(out)
 }
 
 /// Describe a need: specialization, grades, stack, salary range
@@ -445,6 +449,13 @@ async fn shortlist_view(state: &AppState, company: Uuid, need: HiringNeed) -> Ap
         Utc::now().timestamp(),
     )
     .await?;
+    let mut searchable = db::pool::searchable_among(&state.pool, &ids).await?;
+    searchable.sort_unstable();
+    cards.retain(|c| {
+        searchable.binary_search(&c.id).is_ok()
+            || c.relation.applied
+            || c.relation.invitation_status.is_some()
+    });
     let generated = need.shortlist_generated_at;
     let had_previous = generated.is_some_and(|g| visible.iter().any(|r| r.first_seen_at < g));
     let mut items = Vec::with_capacity(visible.len());

@@ -234,7 +234,7 @@ async fn link_dev(
     load_status(&state.pool, user.id).await.map(Json)
 }
 
-async fn load_status(pool: &PgPool, candidate: uuid::Uuid) -> ApiResult<FspStatus> {
+pub(crate) async fn load_status(pool: &PgPool, candidate: uuid::Uuid) -> ApiResult<FspStatus> {
     let Some(l) = db::fsp::fsp_link(pool, candidate).await? else {
         return Ok(FspStatus::unlinked());
     };

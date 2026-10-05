@@ -36,6 +36,9 @@ pub async fn category_overview(
            LEFT JOIN fsp_links f ON f.candidate_id = c.user_id
            WHERE c.visible AND c.search_status <> 'closed'
              AND c.specialization IS NOT NULL AND c.grade IS NOT NULL
+             AND EXISTS (SELECT 1 FROM user_consents uc
+                          JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
+                          WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
            GROUP BY c.specialization, c.grade"#,
     )
     .fetch_all(db)
@@ -60,7 +63,10 @@ pub async fn candidate_market(
                  WHERE n.status = 'active' AND n.specialization = $2 AND $3 = ANY (n.grades)) AS "open_needs!",
                (SELECT count(*) FROM candidates oc
                  WHERE oc.specialization = $2 AND oc.grade = $3 AND oc.visible
-                   AND oc.search_status <> 'closed') AS "peers!",
+                   AND oc.search_status <> 'closed'
+                   AND EXISTS (SELECT 1 FROM user_consents uc
+                                JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
+                                WHERE uc.user_id = oc.user_id AND uc.revoked_at IS NULL)) AS "peers!",
                (SELECT (percentile_cont(0.5) WITHIN GROUP (ORDER BY i.salary_min))::bigint
                   FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id
                  WHERE ic.specialization = $2 AND ic.grade = $3

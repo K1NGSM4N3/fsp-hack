@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_consents (id, user_id, document_id, granted_at, user_agent)\n         VALUES ($1, $2, $3, $4, 'seed')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e550c2e4ff823f37449cf116b24bed6fad7d4cb6d9a68286d104426c81e2dee9"
+}

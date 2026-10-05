@@ -137,12 +137,16 @@ async fn list_own(
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<Vacancy>>> {
     let company = company_id(&state.pool, user.id).await?;
-    let rows = db::vacancies::company_vacancies(&state.pool, company).await?;
+    Ok(Json(company_vacancy_views(&state.pool, company).await?))
+}
+
+pub(crate) async fn company_vacancy_views(pool: &PgPool, company: Uuid) -> ApiResult<Vec<Vacancy>> {
+    let rows = db::vacancies::company_vacancies(pool, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(vacancy_from_row!(r));
     }
-    Ok(Json(out))
+    Ok(out)
 }
 
 fn fields(v: &VacancyInput) -> db::vacancies::VacancyFields<'_> {
@@ -484,7 +488,7 @@ async fn apply(
     Ok((StatusCode::CREATED, Json(app)))
 }
 
-async fn my_apps(pool: &PgPool, candidate: Uuid) -> ApiResult<Vec<MyApplication>> {
+pub(crate) async fn my_apps(pool: &PgPool, candidate: Uuid) -> ApiResult<Vec<MyApplication>> {
     Ok(db::vacancies::candidate_applications(pool, candidate)
         .await?
         .into_iter()

@@ -192,3 +192,75 @@ pub async fn seed_session(
     .await
     .map(|r| r.rows_affected())
 }
+
+pub async fn seed_consent(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+    user_id: Uuid,
+    document_id: Uuid,
+    granted_at: DateTime<Utc>,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO user_consents (id, user_id, document_id, granted_at, user_agent)
+         VALUES ($1, $2, $3, $4, 'seed')",
+        id,
+        user_id,
+        document_id,
+        granted_at,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+pub struct SeedProctoring {
+    pub session_id: Uuid,
+    pub candidate_id: Uuid,
+    pub camera: bool,
+    pub consent_id: Option<Uuid>,
+    pub started_at: DateTime<Utc>,
+    pub purged_at: Option<DateTime<Utc>>,
+}
+
+pub async fn seed_proctoring(
+    db: impl PgExecutor<'_>,
+    p: &SeedProctoring,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO proctoring_sessions (session_id, candidate_id, camera, consent_id, mime,
+                                          started_at, purged_at)
+         VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN 'video/webm;codecs=vp8' END, $5, $6)",
+        p.session_id,
+        p.candidate_id,
+        p.camera,
+        p.consent_id,
+        p.started_at,
+        p.purged_at,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+/// Chunk metadata of a recording whose files never existed (demo data): `count` chunks of
+/// `size` bytes, one every 10 seconds from `from`.
+pub async fn seed_chunks(
+    db: impl PgExecutor<'_>,
+    session_id: Uuid,
+    count: i32,
+    size: i32,
+    from: DateTime<Utc>,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO proctoring_chunks (session_id, seq, size, received_at)
+         SELECT $1, g, $3, $4::timestamptz + make_interval(secs => (g + 1) * 10)
+         FROM generate_series(0, $2 - 1) g",
+        session_id,
+        count,
+        size,
+        from,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}

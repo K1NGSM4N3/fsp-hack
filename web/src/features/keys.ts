@@ -19,6 +19,7 @@ export const qk = {
   myApplications: ["candidate", "applications"] as const,
   myTasks: ["candidate", "tasks"] as const,
   fsp: ["candidate", "fsp"] as const,
+  contactAccess: ["candidate", "contact-access"] as const,
 
   company: ["employer", "company"] as const,
   needs: ["employer", "needs"] as const,

@@ -54,11 +54,14 @@ async fn main() -> Result<(), StartupError> {
     }
     if command == "seed" || config.seed_demo {
         let crypto = Crypto::new(&config.field_key, &config.bidx_key);
-        match api::seed::seed(&pool, &crypto).await {
+        match api::seed::seed(&pool, &crypto, config.proctoring.retention_days).await {
             Ok(Some(r)) => tracing::info!(
                 companies = r.companies,
                 candidates = r.candidates,
                 fsp_linked = r.fsp_linked,
+                with_video = r.with_video,
+                without_video = r.without_video,
+                with_remarks = r.with_remarks,
                 "demo data seeded"
             ),
             Ok(None) => tracing::info!("demo data already present"),

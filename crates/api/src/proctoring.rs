@@ -265,6 +265,23 @@ impl RecordingStore {
         tokio::fs::read(self.chunk_path(candidate, session, seq)).await
     }
 
+    /// Every listed chunk is on disk. Checked before streaming: once the response headers are
+    /// out, a missing file can only cut the video off mid-way.
+    pub async fn has_chunks(
+        &self,
+        candidate: Uuid,
+        session: Uuid,
+        chunks: &[db::proctoring::Chunk],
+    ) -> io::Result<bool> {
+        for c in chunks {
+            let seq = u32::try_from(c.seq).map_err(io::Error::other)?;
+            if !tokio::fs::try_exists(self.chunk_path(candidate, session, seq)).await? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
+
     pub async fn remove_session(&self, candidate: Uuid, session: Uuid) -> io::Result<()> {
         ignore_missing(tokio::fs::remove_dir_all(self.session_dir(candidate, session)).await)
     }
@@ -403,6 +420,16 @@ mod tests {
         store.write_chunk(cand, sess, 0, b"abc").await.unwrap();
         store.write_chunk(cand, sess, 1, b"def").await.unwrap();
         assert_eq!(store.read_chunk(cand, sess, 1).await.unwrap(), b"def");
+        let listed = |n: i32| -> Vec<db::proctoring::Chunk> {
+            (0..n)
+                .map(|seq| db::proctoring::Chunk { seq, size: 3 })
+                .collect()
+        };
+        assert!(store.has_chunks(cand, sess, &listed(2)).await.unwrap());
+        assert!(
+            !store.has_chunks(cand, sess, &listed(3)).await.unwrap(),
+            "metadata without a file is not playable"
+        );
         assert_eq!(store.candidate_dirs().await.unwrap(), [cand]);
         store.remove_session(cand, sess).await.unwrap();
         store.remove_session(cand, sess).await.unwrap();

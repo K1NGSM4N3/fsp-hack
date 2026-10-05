@@ -14,6 +14,17 @@ pub struct User {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
+/// What the account row holds about its owner, for the data export.
+#[derive(Debug, Clone)]
+pub struct AccountRecord {
+    pub id: Uuid,
+    pub role: UserRole,
+    pub email_enc: Vec<u8>,
+    pub email_verified_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub last_login_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct RefreshToken {
     pub id: Uuid,
@@ -67,6 +78,21 @@ pub async fn user_by_id(db: impl PgExecutor<'_>, id: Uuid) -> Result<Option<User
         r#"SELECT id, role AS "role: UserRole", email_enc, password_hash, email_verified_at, deleted_at
            FROM users
            WHERE id = $1"#,
+        id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn account_record(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+) -> Result<Option<AccountRecord>, sqlx::Error> {
+    sqlx::query_as!(
+        AccountRecord,
+        r#"SELECT id, role AS "role: UserRole", email_enc, email_verified_at, created_at, last_login_at
+           FROM users
+           WHERE id = $1 AND deleted_at IS NULL"#,
         id,
     )
     .fetch_optional(db)

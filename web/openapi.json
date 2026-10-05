@@ -942,6 +942,55 @@
         ]
       }
     },
+    "/api/v1/candidate/contact-access": {
+      "get": {
+        "tags": [
+          "candidate"
+        ],
+        "summary": "Who opened your contacts: company, time and basis — an accepted invitation or your own\napplication (ст. 14 152-ФЗ). Newest first",
+        "operationId": "contact_access",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ContactAccessEntry"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/candidate/invitations": {
       "get": {
         "tags": [
@@ -1198,7 +1247,7 @@
         "tags": [
           "candidate"
         ],
-        "summary": "Update privacy settings",
+        "summary": "Update privacy settings. Showing the profile in search needs active consents to processing\nand to publication: without them the answer is 409 `consent_required` with the document to grant",
         "operationId": "put_privacy",
         "requestBody": {
           "content": {
@@ -1216,6 +1265,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Privacy"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1788,7 +1847,7 @@
         "tags": [
           "catalog"
         ],
-        "summary": "Current versions of consent documents shown at registration",
+        "summary": "Current versions of consent documents: registration, the privacy policy page, re-granting",
         "operationId": "current_consents",
         "responses": {
           "200": {
@@ -3806,6 +3865,72 @@
             "bearer": []
           }
         ]
+      },
+      "post": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Give a consent: the current version of a document that applies to your role. Recorded with\ntime, IP and User-Agent like at registration; a document already in force is not granted twice",
+        "operationId": "grant_consent",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GrantConsent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Already in force: the existing grant",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserConsent"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Granted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserConsent"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: unknown document, not its current version, or not for this role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
       }
     },
     "/api/v1/me/consents/{id}/revoke": {
@@ -3830,6 +3955,52 @@
         "responses": {
           "204": {},
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/export": {
+      "get": {
+        "tags": [
+          "account"
+        ],
+        "summary": "Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,\nconsents, profile, tests with summaries, category history, invitations, applications, who\nopened your contacts, proctoring summaries; for an employer — the account and the company's data",
+        "operationId": "export",
+        "responses": {
+          "200": {
+            "description": "JSON attachment `fsp-talents-<date>.json`",
+            "headers": {
+              "Content-Disposition": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "attachment; filename=\"fsp-talents-<date>.json\""
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DataExport"
+                }
+              }
+            }
+          },
+          "401": {
             "content": {
               "application/json": {
                 "schema": {
@@ -4123,6 +4294,45 @@
   },
   "components": {
     "schemas": {
+      "AccountRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "email",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "role": {
+            "$ref": "#/components/schemas/Role"
+          },
+          "email": {
+            "type": "string"
+          },
+          "email_verified_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_login_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "Achievement": {
         "type": "object",
         "description": "One record of the FSP registry snapshot (architecture §7.2).",
@@ -4409,6 +4619,106 @@
         "properties": {
           "cover_letter": {
             "type": "string"
+          }
+        }
+      },
+      "AssessmentRecord": {
+        "type": "object",
+        "description": "One test session: the outcome without the tasks shown or the answers given.",
+        "required": [
+          "id",
+          "specialization",
+          "claimed_grade",
+          "attempt_kind",
+          "status",
+          "items_count",
+          "assigned",
+          "started_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "specialization": {
+            "$ref": "#/components/schemas/Specialization"
+          },
+          "claimed_grade": {
+            "$ref": "#/components/schemas/Grade"
+          },
+          "attempt_kind": {
+            "$ref": "#/components/schemas/AttemptKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssessmentStatus"
+          },
+          "theta": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "se": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "measured_grade": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Grade"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "items_count": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "assigned": {
+            "type": "boolean",
+            "description": "This test assigned the category."
+          },
+          "person_fit_lz": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "description": "Person-fit statistic `l_z` and whether it flagged an aberrant pattern."
+          },
+          "aberrant": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "proctoring": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProctoringSummary",
+                "description": "Video recording summary and integrity events; the video is not part of the export."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -4816,6 +5126,82 @@
             }
           }
         ]
+      },
+      "CandidateData": {
+        "type": "object",
+        "required": [
+          "profile",
+          "privacy",
+          "surveys",
+          "assessments",
+          "category_history",
+          "invitations",
+          "applications",
+          "contact_access",
+          "fsp",
+          "tasks",
+          "resume_uploads"
+        ],
+        "properties": {
+          "profile": {
+            "$ref": "#/components/schemas/ProfileResponse"
+          },
+          "privacy": {
+            "$ref": "#/components/schemas/Privacy"
+          },
+          "surveys": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SurveyResponse"
+            }
+          },
+          "assessments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AssessmentRecord"
+            }
+          },
+          "category_history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GradeHistoryEntry"
+            }
+          },
+          "invitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceivedInvitation"
+            }
+          },
+          "applications": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyApplication"
+            }
+          },
+          "contact_access": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContactAccessEntry"
+            },
+            "description": "Which companies received your contacts and on what basis."
+          },
+          "fsp": {
+            "$ref": "#/components/schemas/FspStatus"
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MyTask"
+            }
+          },
+          "resume_uploads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ResumeUploadRecord"
+            }
+          }
+        }
       },
       "CandidateProfileView": {
         "type": "object",
@@ -5311,7 +5697,8 @@
           "version",
           "title",
           "body",
-          "required_for"
+          "required_for",
+          "applies_to"
         ],
         "properties": {
           "id": {
@@ -5319,7 +5706,8 @@
             "format": "uuid"
           },
           "kind": {
-            "type": "string"
+            "type": "string",
+            "description": "`pd_processing`, `pd_publication`, `terms`, `proctoring_video`."
           },
           "version": {
             "type": "integer",
@@ -5335,7 +5723,98 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Role"
-            }
+            },
+            "description": "Registration of these roles requires the document."
+          },
+          "applies_to": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Role"
+            },
+            "description": "Roles that may grant the document at all (`POST /me/consents`)."
+          }
+        }
+      },
+      "ConsentRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "document_id",
+          "kind",
+          "version",
+          "title",
+          "granted_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "document_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "version": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "title": {
+            "type": "string"
+          },
+          "granted_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "ip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "user_agent": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ContactAccessEntry": {
+        "type": "object",
+        "description": "One line of the candidate's «Кто открывал ваши контакты»: the company and the legal basis.\nThe employee, IP and browser stay in the audit log and are not part of this view.",
+        "required": [
+          "company_id",
+          "basis",
+          "accessed_at"
+        ],
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`None` when the company has since deleted its account."
+          },
+          "basis": {
+            "$ref": "#/components/schemas/ContactBasis"
+          },
+          "accessed_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -5412,6 +5891,55 @@
           "deadline": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DataExport": {
+        "type": "object",
+        "required": [
+          "format",
+          "generated_at",
+          "account",
+          "consents"
+        ],
+        "properties": {
+          "format": {
+            "type": "string",
+            "description": "File format; a new number means an incompatible change."
+          },
+          "generated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "account": {
+            "$ref": "#/components/schemas/AccountRecord"
+          },
+          "consents": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConsentRecord"
+            },
+            "description": "Every grant and revocation: document version, time, IP and User-Agent."
+          },
+          "candidate": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CandidateData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "employer": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/EmployerData"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -5551,6 +6079,51 @@
           "robotics",
           "uav"
         ]
+      },
+      "EmployerData": {
+        "type": "object",
+        "required": [
+          "needs",
+          "vacancies",
+          "invitations",
+          "tasks"
+        ],
+        "properties": {
+          "company": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompanyResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "needs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HiringNeed"
+            }
+          },
+          "vacancies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Vacancy"
+            }
+          },
+          "invitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SentInvitation"
+            }
+          },
+          "tasks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmployerTask"
+            }
+          }
+        }
       },
       "EmployerTask": {
         "type": "object",
@@ -5946,6 +6519,19 @@
           "assigned_at": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "GrantConsent": {
+        "type": "object",
+        "required": [
+          "document_id"
+        ],
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Id of the current version from `GET /api/v1/consents/current`."
           }
         }
       },
@@ -7184,6 +7770,21 @@
               "object",
               "null"
             ]
+          },
+          "document_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "`consent_required`: the current version of the consent document to grant first\n(`POST /api/v1/me/consents`)."
+          },
+          "document_kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`consent_required`: kind of that document, e.g. `pd_publication`."
           }
         }
       },
@@ -7904,6 +8505,34 @@
             "type": "string",
             "format": "binary",
             "description": "PDF up to 10 MB with a text layer."
+          }
+        }
+      },
+      "ResumeUploadRecord": {
+        "type": "object",
+        "required": [
+          "filename",
+          "size_bytes",
+          "recognized_fields",
+          "uploaded_at"
+        ],
+        "properties": {
+          "filename": {
+            "type": "string"
+          },
+          "size_bytes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "recognized_fields": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "uploaded_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },

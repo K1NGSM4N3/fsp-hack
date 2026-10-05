@@ -40,7 +40,7 @@ export const DEMO_EMPLOYER_EMAIL = "employer@demo.fsp";
 export const CONSENT_DOCS: ConsentDocument[] = [
   {
     id: "0192a000-0000-7000-8000-000000000001",
-    kind: "personal_data",
+    kind: "pd_processing",
     version: 2,
     title: "Согласие на обработку персональных данных",
     body: [
@@ -51,10 +51,11 @@ export const CONSENT_DOCS: ConsentDocument[] = [
       "Согласие действует до его отзыва. Отозвать согласие можно в настройках аккаунта.",
     ].join("\n\n"),
     required_for: ["candidate", "employer"],
+    applies_to: ["candidate", "employer"],
   },
   {
     id: "0192a000-0000-7000-8000-000000000002",
-    kind: "publication",
+    kind: "pd_publication",
     version: 1,
     title: "Согласие на публикацию анонимного профиля",
     body: [
@@ -63,6 +64,7 @@ export const CONSENT_DOCS: ConsentDocument[] = [
       "Что именно видно работодателям, можно изменить в настройках приватности. Отзыв этого согласия скрывает профиль из поиска.",
     ].join("\n\n"),
     required_for: ["candidate"],
+    applies_to: ["candidate"],
   },
 ];
 

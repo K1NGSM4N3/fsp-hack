@@ -94,7 +94,7 @@ impl Modify for SecuritySchemes {
 pub fn api_v1() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .nest("/auth", auth::routes::router())
-        .nest("/me", routes::me::router())
+        .nest("/me", routes::me::router().merge(routes::export::router()))
         .nest(
             "/candidate",
             routes::candidate_profile::router()

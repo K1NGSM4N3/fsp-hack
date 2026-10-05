@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT DISTINCT ON (kind) id, kind, version, title, body,\n                  required_for AS \"required_for: Vec<UserRole>\", published_at\n           FROM consent_documents\n           ORDER BY kind, version DESC",
+  "query": "SELECT id, kind, version, title, body,\n                  required_for AS \"required_for: Vec<UserRole>\",\n                  applies_to AS \"applies_to: Vec<UserRole>\", published_at\n           FROM consent_documents\n           WHERE kind = $1\n           ORDER BY version DESC\n           LIMIT 1",
   "describe": {
     "columns": [
       {
@@ -53,14 +53,40 @@
       },
       {
         "ordinal": 6,
+        "name": "applies_to: Vec<UserRole>",
+        "type_info": {
+          "Custom": {
+            "name": "user_role[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "user_role",
+                  "kind": {
+                    "Enum": [
+                      "candidate",
+                      "employer",
+                      "admin"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
         "name": "published_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
-      "Left": []
+      "Left": [
+        "Text"
+      ]
     },
     "nullable": [
+      false,
       false,
       false,
       false,
@@ -70,5 +96,5 @@
       false
     ]
   },
-  "hash": "7c36e925776fe473f749bc0118e946ca1ba440e3a55d78de71aeec84e809e494"
+  "hash": "87ed80f242a090e3669ed57194912119e55a85d09477b582ad9b5bccb18b014d"
 }

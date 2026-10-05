@@ -1,5 +1,6 @@
 //! Deterministic demo data: companies with needs and vacancies, a few hundred categorized
-//! candidates (some linked to FSP), demo logins. Runs once on an empty database.
+//! candidates (some linked to FSP, most with a proctored test), demo logins. Runs once on an
+//! empty database.
 
 mod corpus;
 
@@ -27,6 +28,10 @@ const CANDIDATES_PER_SPEC: usize = 40;
 const CONSENT_PROCESSING: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000001);
 const CONSENT_PUBLICATION: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000002);
 const CONSENT_TERMS: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000003);
+const CONSENT_VIDEO: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000004);
+/// Separate stream for proctoring: adding it left every earlier draw, and so the rest of the demo
+/// data, unchanged.
+const PROCTORING_SEED: u64 = 4242;
 
 #[derive(Deserialize)]
 struct Participant {
@@ -38,6 +43,11 @@ pub struct SeedReport {
     pub companies: usize,
     pub candidates: usize,
     pub fsp_linked: usize,
+    /// Candidates whose tests were taken with the camera / without it.
+    pub with_video: usize,
+    pub without_video: usize,
+    /// Candidates whose tests carry behavioral remarks (tab leaves, pastes).
+    pub with_remarks: usize,
 }
 
 struct Account {
@@ -70,8 +80,7 @@ async fn account(
         _ => &[CONSENT_PROCESSING, CONSENT_TERMS],
     };
     for doc in docs {
-        db::consents::insert_user_consent(&mut *tx, Uuid::now_v7(), id, *doc, None, Some("seed"))
-            .await?;
+        db::seed::seed_consent(&mut *tx, Uuid::now_v7(), id, *doc, at).await?;
     }
     Ok(Account { id, email })
 }
@@ -286,12 +295,135 @@ async fn store_session(
     Ok((id, finished))
 }
 
-pub async fn seed(pool: &PgPool, crypto: &Crypto) -> ApiResult<Option<SeedReport>> {
+struct StoredSession {
+    id: Uuid,
+    started: DateTime<Utc>,
+    finished: DateTime<Utc>,
+    items: i32,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Camera {
+    Recorded,
+    Declined,
+    /// The camera dropped mid-test: fewer chunks and a `camera_lost` event.
+    Interrupted,
+}
+
+struct ProctoringOutcome {
+    camera: Camera,
+    remarks: bool,
+}
+
+fn at_offset(rng: &mut ChaCha8Rng, s: &StoredSession) -> DateTime<Utc> {
+    let span = (s.finished - s.started).num_milliseconds().max(1);
+    s.started + Duration::milliseconds(rng.random_range(0..span))
+}
+
+/// Demo proctoring for one candidate: the choice of camera, chunk metadata, integrity events.
+/// No video files exist. Recordings past retention are marked purged, as the sweeper would have
+/// done; recent ones keep `purged_at` empty and the playback endpoint answers
+/// `recording_unavailable` because the files are missing.
+async fn seed_proctoring(
+    tx: &mut PgConnection,
+    rng: &mut ChaCha8Rng,
+    candidate: Uuid,
+    sessions: &[StoredSession],
+    now: DateTime<Utc>,
+    retention_days: i64,
+) -> ApiResult<Option<ProctoringOutcome>> {
+    let Some(first) = sessions.first() else {
+        return Ok(None);
+    };
+    let camera = match rng.random_range(0..100) {
+        0..75 => Camera::Recorded,
+        75..95 => Camera::Declined,
+        _ => Camera::Interrupted,
+    };
+    let remarks = rng.random_bool(0.1);
+    let consent_id = if camera == Camera::Declined {
+        None
+    } else {
+        let grant = Uuid::now_v7();
+        db::seed::seed_consent(&mut *tx, grant, candidate, CONSENT_VIDEO, first.started).await?;
+        Some(grant)
+    };
+    let retention = Duration::days(retention_days);
+    for s in sessions {
+        let video = camera != Camera::Declined;
+        db::seed::seed_proctoring(
+            &mut *tx,
+            &db::seed::SeedProctoring {
+                session_id: s.id,
+                candidate_id: candidate,
+                camera: video,
+                consent_id,
+                started_at: s.started,
+                purged_at: (video && s.started + retention <= now).then(|| s.started + retention),
+            },
+        )
+        .await?;
+        if video {
+            let full = ((s.finished - s.started).num_seconds() / 10 + 1) as i32;
+            let chunks = if camera == Camera::Interrupted {
+                (full / 2).max(1)
+            } else {
+                full
+            };
+            db::seed::seed_chunks(
+                &mut *tx,
+                s.id,
+                chunks,
+                rng.random_range(90_000..140_000),
+                s.started,
+            )
+            .await?;
+            if camera == Camera::Interrupted {
+                let event = db::proctoring::Event {
+                    kind: db::types::IntegrityEvent::CameraLost,
+                    occurred_at: s.started + Duration::seconds(i64::from(chunks) * 10),
+                    item_seq: Some((s.items / 2) as i16),
+                    duration_ms: None,
+                };
+                db::proctoring::insert_event(&mut *tx, s.id, &event).await?;
+            }
+        }
+        if remarks {
+            let leaves = rng.random_range(1..=3);
+            let pastes = u8::from(rng.random_bool(0.3));
+            for i in 0..leaves + pastes {
+                let kind = if i >= leaves {
+                    db::types::IntegrityEvent::Paste
+                } else if rng.random_bool(0.7) {
+                    db::types::IntegrityEvent::TabHidden
+                } else {
+                    db::types::IntegrityEvent::WindowBlur
+                };
+                let event = db::proctoring::Event {
+                    kind,
+                    occurred_at: at_offset(rng, s),
+                    item_seq: Some(rng.random_range(0..s.items.max(1)) as i16),
+                    duration_ms: (kind != db::types::IntegrityEvent::Paste)
+                        .then(|| rng.random_range(2_000..45_000)),
+                };
+                db::proctoring::insert_event(&mut *tx, s.id, &event).await?;
+            }
+        }
+    }
+    Ok(Some(ProctoringOutcome { camera, remarks }))
+}
+
+pub async fn seed(
+    pool: &PgPool,
+    crypto: &Crypto,
+    retention_days: i64,
+) -> ApiResult<Option<SeedReport>> {
     if db::seed::demo_seeded(pool).await? > 0 {
         return Ok(None);
     }
     let hash = crypto.passwords.hash(DEMO_PASSWORD)?;
     let mut rng = ChaCha8Rng::seed_from_u64(42);
+    let mut proctoring_rng = ChaCha8Rng::seed_from_u64(PROCTORING_SEED);
     let now = Utc::now();
     let mut tx = pool.begin().await?;
 
@@ -392,6 +524,7 @@ pub async fn seed(pool: &PgPool, crypto: &Crypto) -> ApiResult<Option<SeedReport
 
     let mut n = 0usize;
     let mut fsp_linked = 0usize;
+    let (mut with_video, mut without_video, mut with_remarks) = (0usize, 0usize, 0usize);
     for spec in Specialization::ALL.iter().copied() {
         for k in 0..CANDIDATES_PER_SPEC {
             let target = match rng.random_range(0..10) {
@@ -563,12 +696,19 @@ pub async fn seed(pool: &PgPool, crypto: &Crypto) -> ApiResult<Option<SeedReport
             let mut try_grade = claimed;
             let mut assigned: Option<(Grade, f64, f64, Uuid, DateTime<Utc>)> = None;
             let mut verified: Vec<&'static str> = Vec::new();
+            let mut stored: Vec<StoredSession> = Vec::new();
             for _ in 0..3 {
                 let Some(sim) = simulate(&mut rng, spec, try_grade, true_theta) else {
                     break;
                 };
                 let (session_id, finished) =
                     store_session(&mut tx, acc.id, kind, &sim, started).await?;
+                stored.push(StoredSession {
+                    id: session_id,
+                    started,
+                    finished,
+                    items: sim.responses.len() as i32,
+                });
                 started = finished + Duration::minutes(rng.random_range(5..120));
                 if sim.decision.passed {
                     let bank = assessment::bank();
@@ -614,6 +754,23 @@ pub async fn seed(pool: &PgPool, crypto: &Crypto) -> ApiResult<Option<SeedReport
             }
             for skill in &verified {
                 db::candidates::insert_candidate_skill(&mut *tx, acc.id, skill, "test").await?;
+            }
+            if let Some(p) = seed_proctoring(
+                &mut tx,
+                &mut proctoring_rng,
+                acc.id,
+                &stored,
+                now,
+                retention_days,
+            )
+            .await?
+            {
+                if p.camera == Camera::Declined {
+                    without_video += 1;
+                } else {
+                    with_video += 1;
+                }
+                with_remarks += usize::from(p.remarks);
             }
             if let Some((g, theta, se, session_id, at)) = assigned {
                 let reason = if g > claimed { "upgrade" } else { "placement" };
@@ -666,5 +823,8 @@ pub async fn seed(pool: &PgPool, crypto: &Crypto) -> ApiResult<Option<SeedReport
         companies: companies.len(),
         candidates: n,
         fsp_linked,
+        with_video,
+        without_video,
+        with_remarks,
     }))
 }

@@ -1,11 +1,11 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT visible, search_status AS \"search_status: SearchStatus\", specialization, grade\n           FROM candidates\n           WHERE user_id = $1",
+  "query": "SELECT c.visible AND EXISTS (\n                      SELECT 1 FROM user_consents uc\n                      JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'\n                      WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL) AS \"published!\",\n                  c.search_status AS \"search_status: SearchStatus\", c.specialization, c.grade\n           FROM candidates c\n           WHERE c.user_id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
-        "name": "visible",
+        "name": "published!",
         "type_info": "Bool"
       },
       {
@@ -41,11 +41,11 @@
       ]
     },
     "nullable": [
-      false,
+      null,
       false,
       true,
       true
     ]
   },
-  "hash": "608c568b14bda6b2e214fc8cb4a08f4eefef418087bc25c93aca42a7505dfaad"
+  "hash": "6dd0e6a9c39f9d03de21137bfe49d39055ddce794cf52595bd417867cdfc2b61"
 }

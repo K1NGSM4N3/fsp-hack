@@ -67,6 +67,10 @@ pub struct CompanyRelation {
 /// Searchable candidates of one specialization with everything the matching engine needs.
 /// `skills`/`skill_sources` are parallel arrays; `text_rank` scores the "about" text against an
 /// OR-query built from the need description.
+///
+/// Searchable means visible, not closed, and holding an unrevoked `pd_publication` grant. The
+/// grant check repeats what `PUT /candidate/privacy` enforces, so a stale `visible` flag can never
+/// publish a profile; it is a semi-join over the partial `user_consents_active_idx`.
 pub async fn candidate_pool(
     db: impl PgExecutor<'_>,
     text_query: Option<&str>,
@@ -90,6 +94,9 @@ pub async fn candidate_pool(
            LEFT JOIN candidate_skills s ON s.candidate_id = c.user_id
            WHERE c.visible
              AND c.search_status <> 'closed'
+             AND EXISTS (SELECT 1 FROM user_consents uc
+                          JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
+                          WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
              AND c.specialization = $2
              AND c.grade IS NOT NULL
              AND ($3::text IS NULL OR c.grade = $3)
@@ -126,6 +133,26 @@ pub async fn candidate_cards(
            LEFT JOIN candidate_skills s ON s.candidate_id = c.user_id
            WHERE c.user_id = ANY ($1)
            GROUP BY c.user_id, f.achievements"#,
+        ids,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// Of `ids`, those an employer may currently find: the same rule as [`candidate_pool`].
+/// Stored shortlists are re-checked with it, so hiding a profile takes effect before the next rebuild.
+pub async fn searchable_among(
+    db: impl PgExecutor<'_>,
+    ids: &[Uuid],
+) -> Result<Vec<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT c.user_id FROM candidates c
+         WHERE c.user_id = ANY ($1)
+           AND c.visible
+           AND c.search_status <> 'closed'
+           AND EXISTS (SELECT 1 FROM user_consents uc
+                        JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
+                        WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)",
         ids,
     )
     .fetch_all(db)

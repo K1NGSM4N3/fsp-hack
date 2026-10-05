@@ -3,6 +3,7 @@
 //! (accepted invitation or the candidate's own application) and writes the audit log.
 //! Employer-facing DTOs simply have no contact fields.
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::ToSchema;
@@ -15,6 +16,34 @@ use crate::{crypto::Crypto, error::ApiResult};
 pub enum ContactBasis {
     Invitation,
     Application,
+}
+
+impl ContactBasis {
+    pub const fn slug(self) -> &'static str {
+        match self {
+            ContactBasis::Invitation => "invitation",
+            ContactBasis::Application => "application",
+        }
+    }
+
+    pub fn from_slug(s: &str) -> Option<Self> {
+        match s {
+            "invitation" => Some(ContactBasis::Invitation),
+            "application" => Some(ContactBasis::Application),
+            _ => None,
+        }
+    }
+}
+
+/// One line of the candidate's «Кто открывал ваши контакты»: the company and the legal basis.
+/// The employee, IP and browser stay in the audit log and are not part of this view.
+#[derive(Serialize, ToSchema)]
+pub struct ContactAccessEntry {
+    pub company_id: Uuid,
+    /// `None` when the company has since deleted its account.
+    pub company_name: Option<String>,
+    pub basis: ContactBasis,
+    pub accessed_at: DateTime<Utc>,
 }
 
 pub struct ContactGrant {
@@ -64,10 +93,6 @@ impl ContactGrant {
                 }
             }
         };
-        let basis_slug = match basis {
-            ContactBasis::Invitation => "invitation",
-            ContactBasis::Application => "application",
-        };
         db::contacts::insert_contact_access(
             pool,
             &db::contacts::ContactAccess {
@@ -75,7 +100,7 @@ impl ContactGrant {
                 employer_user_id: ctx.employer_user_id,
                 company_id: ctx.company_id,
                 candidate_id,
-                basis: basis_slug,
+                basis: basis.slug(),
                 basis_id,
                 ip: ctx.ip,
                 user_agent: ctx.user_agent,
@@ -113,5 +138,18 @@ impl CandidateContacts {
             basis: grant.basis,
             basis_id: grant.basis_id,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basis_slug_round_trips() {
+        for b in [ContactBasis::Invitation, ContactBasis::Application] {
+            assert_eq!(ContactBasis::from_slug(b.slug()), Some(b));
+        }
+        assert_eq!(ContactBasis::from_slug("profile_view"), None);
     }
 }

@@ -3,6 +3,7 @@ pub mod candidate_profile;
 pub mod candidates;
 pub mod catalog;
 pub mod company;
+pub mod export;
 pub mod fsp;
 pub mod health;
 pub mod invitations;

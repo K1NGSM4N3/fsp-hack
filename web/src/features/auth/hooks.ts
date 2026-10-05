@@ -59,6 +59,31 @@ export function useRevokeConsent() {
   });
 }
 
+export function useGrantConsent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: string) => api.grantConsent(documentId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.myConsents }),
+  });
+}
+
+function saveFile(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Downloads `fsp-talents-<date>.json` with everything the platform stores about the account. */
+export function useExportMyData() {
+  return useMutation({
+    mutationFn: api.exportMyData,
+    onSuccess: (blob) => saveFile(blob, `fsp-talents-${new Date().toISOString().slice(0, 10)}.json`),
+  });
+}
+
 export function useDeleteAccount() {
   const qc = useQueryClient();
   return useMutation({ mutationFn: api.deleteMe, onSuccess: () => qc.clear() });

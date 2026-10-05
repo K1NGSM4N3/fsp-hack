@@ -315,6 +315,13 @@ async fn pool_rows_without_fsp_link(pool: PgPool) {
     db::grades::set_candidate_category(&pool, "backend", "middle", 0.3, Utc::now(), id)
         .await
         .unwrap();
+    let publication = db::consents::current_document(&pool, db::consents::PUBLICATION)
+        .await
+        .unwrap()
+        .unwrap();
+    db::consents::insert_user_consent(&pool, Uuid::now_v7(), id, publication.id, None, None)
+        .await
+        .unwrap();
     db::candidates::insert_candidate_skill(&pool, id, "rust", "declared")
         .await
         .unwrap();

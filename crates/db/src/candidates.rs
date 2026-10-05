@@ -56,8 +56,17 @@ pub struct CandidateSkill {
 }
 
 #[derive(Debug, Clone)]
+pub struct ResumeUpload {
+    pub filename: String,
+    pub size_bytes: i32,
+    pub recognized_fields: Vec<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone)]
 pub struct CandidateInvitable {
-    pub visible: bool,
+    /// Visible and holding an unrevoked `pd_publication` grant: employers may find and invite.
+    pub published: bool,
     pub search_status: SearchStatus,
     pub specialization: Option<String>,
     pub grade: Option<String>,
@@ -222,6 +231,22 @@ pub async fn insert_resume_upload(
     .map(|r| r.rows_affected())
 }
 
+pub async fn resume_uploads(
+    db: impl PgExecutor<'_>,
+    candidate_id: Uuid,
+) -> Result<Vec<ResumeUpload>, sqlx::Error> {
+    sqlx::query_as!(
+        ResumeUpload,
+        "SELECT filename, size_bytes, recognized_fields, created_at
+         FROM resume_uploads
+         WHERE candidate_id = $1
+         ORDER BY created_at DESC",
+        candidate_id,
+    )
+    .fetch_all(db)
+    .await
+}
+
 pub async fn touch_candidate_activity(
     db: impl PgExecutor<'_>,
     user_id: Uuid,
@@ -241,9 +266,13 @@ pub async fn candidate_invitable(
 ) -> Result<Option<CandidateInvitable>, sqlx::Error> {
     sqlx::query_as!(
         CandidateInvitable,
-        r#"SELECT visible, search_status AS "search_status: SearchStatus", specialization, grade
-           FROM candidates
-           WHERE user_id = $1"#,
+        r#"SELECT c.visible AND EXISTS (
+                      SELECT 1 FROM user_consents uc
+                      JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
+                      WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL) AS "published!",
+                  c.search_status AS "search_status: SearchStatus", c.specialization, c.grade
+           FROM candidates c
+           WHERE c.user_id = $1"#,
         user_id,
     )
     .fetch_optional(db)
