@@ -1,0 +1,195 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.user_id, c.public_code, c.full_name_enc, c.show_name, c.show_fsp, c.show_experience,\n                  c.city, c.relocation, c.work_formats, c.salary_expectation_min, c.about,\n                  c.experience_years, c.roles, c.soft_skills, c.industries, c.experience,\n                  c.search_status AS \"search_status: SearchStatus\", c.specialization, c.grade, c.theta,\n                  c.category_assigned_at, c.last_activity_at, c.visible, f.achievements AS \"achievements?\",\n                  coalesce(array_agg(s.skill ORDER BY s.skill, s.source)\n                           FILTER (WHERE s.skill IS NOT NULL), '{}') AS \"skills!\",\n                  coalesce(array_agg(s.source ORDER BY s.skill, s.source)\n                           FILTER (WHERE s.skill IS NOT NULL), '{}') AS \"skill_sources!\",\n                  (SELECT avg(a.rating)::real FROM task_assignments a\n                    WHERE a.candidate_id = c.user_id AND a.status = 'reviewed') AS task_rating,\n                  (SELECT count(*) FROM task_assignments a\n                    WHERE a.candidate_id = c.user_id AND a.status IN ('submitted', 'reviewed')) AS \"tasks_done!\"\n           FROM candidates c\n           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id\n           LEFT JOIN candidate_skills s ON s.candidate_id = c.user_id\n           WHERE c.user_id = ANY ($1)\n           GROUP BY c.user_id, f.achievements",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "full_name_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "show_name",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "show_fsp",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "show_experience",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "relocation",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "work_formats",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 9,
+        "name": "salary_expectation_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "about",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "experience_years",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 12,
+        "name": "roles",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 13,
+        "name": "soft_skills",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 14,
+        "name": "industries",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 15,
+        "name": "experience",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 16,
+        "name": "search_status: SearchStatus",
+        "type_info": {
+          "Custom": {
+            "name": "search_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "open",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 18,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 19,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 20,
+        "name": "category_assigned_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 21,
+        "name": "last_activity_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 22,
+        "name": "visible",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 23,
+        "name": "achievements?",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 24,
+        "name": "skills!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 25,
+        "name": "skill_sources!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 26,
+        "name": "task_rating",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 27,
+        "name": "tasks_done!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "926787c6b54323b2a5eba84fcef7ef82668356073f32cd9122dd6e1ea2f97f9e"
+}

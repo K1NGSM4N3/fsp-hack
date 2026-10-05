@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE applications SET status = 'sent', cover_letter = $1, updated_at = now()\n         WHERE vacancy_id = $2 AND candidate_id = $3 AND status = 'withdrawn'\n         RETURNING id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "e48f1a4574b673aea8a3e72efc37c6844555240d5ee0c3622f3c30acc4572160"
+}

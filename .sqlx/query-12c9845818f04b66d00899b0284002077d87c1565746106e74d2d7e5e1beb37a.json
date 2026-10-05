@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, direction, specialization, claimed_grade, skills, industries, experience_years,\n                self_assessment, created_at\n         FROM survey_responses\n         WHERE candidate_id = $1\n         ORDER BY created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "direction",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "claimed_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "skills",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "industries",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 6,
+        "name": "experience_years",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 7,
+        "name": "self_assessment",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "12c9845818f04b66d00899b0284002077d87c1565746106e74d2d7e5e1beb37a"
+}

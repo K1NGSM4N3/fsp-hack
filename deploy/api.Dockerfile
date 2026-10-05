@@ -7,6 +7,8 @@
 FROM rust:1-bookworm AS chef
 RUN cargo install cargo-chef --locked
 WORKDIR /app
+# sqlx macros check queries against the committed .sqlx/ metadata: no database at build time.
+ENV SQLX_OFFLINE=true
 
 FROM chef AS planner
 COPY . .

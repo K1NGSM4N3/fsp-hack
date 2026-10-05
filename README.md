@@ -39,9 +39,14 @@ docker compose -f deploy/compose.yml --profile full up -d --build
 
 ```sh
 make db      # создать базу fsp_hack
-make api     # API на :8000
+make api     # API на :8000 (миграции применяются при старте)
 make web     # фронтенд на :3000 (без бэкенда: NEXT_PUBLIC_USE_MOCKS=1 в web/.env.local)
+make test    # тесты; тесты БД создают временные базы на сервере из TEST_DATABASE_URL
 ```
+
+Доступ к базе — sqlx: запросы проверяются по схеме при компиляции, а сборка идёт по метаданным из
+`.sqlx/` и базы не требует. Изменили SQL или миграцию — `make db-prepare` (нужна база из `DATABASE_URL`)
+и закоммитьте `.sqlx/` вместе с кодом.
 
 Подробнее о командах и правилах — в `AGENTS.md`.
 

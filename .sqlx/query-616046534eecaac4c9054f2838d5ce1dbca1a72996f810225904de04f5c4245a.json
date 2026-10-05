@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT skill, source FROM candidate_skills WHERE candidate_id = $1 ORDER BY skill, source",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "skill",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "source",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "616046534eecaac4c9054f2838d5ce1dbca1a72996f810225904de04f5c4245a"
+}

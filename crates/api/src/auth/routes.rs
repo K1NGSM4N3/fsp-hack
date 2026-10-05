@@ -113,11 +113,7 @@ async fn register(
         );
     v.finish()?;
 
-    let mut client = state.pool.get().await?;
-    let docs = db::queries::consents::current_consent_documents()
-        .bind(&client)
-        .all()
-        .await?;
+    let docs = db::consents::current_consent_documents(&state.pool).await?;
     let role_db: db::types::UserRole = req.role.into();
     let missing: Vec<_> = docs
         .iter()
@@ -132,9 +128,7 @@ async fn register(
     }
 
     let bidx = state.crypto.blind_index(&email);
-    if db::queries::users::user_by_email_bidx()
-        .bind(&client, &bidx)
-        .opt()
+    if db::users::user_by_email_bidx(&state.pool, &bidx)
         .await?
         .is_some()
     {
@@ -152,50 +146,43 @@ async fn register(
     let user_id = Uuid::now_v7();
     let (token, token_hash) = new_token();
     let ua = user_agent(&headers);
-    let tx = client.transaction().await?;
-    db::queries::users::insert_user()
-        .bind(
-            &tx,
-            &user_id,
-            &role_db,
-            &state.crypto.encrypt_str(&email),
-            &bidx,
-            &password_hash,
+    let mut tx = state.pool.begin().await?;
+    db::users::insert_user(
+        &mut *tx,
+        user_id,
+        role_db,
+        &state.crypto.encrypt_str(&email),
+        &bidx,
+        &password_hash,
+    )
+    .await?;
+    for doc in docs.iter().filter(|d| req.consents.contains(&d.id)) {
+        db::consents::insert_user_consent(
+            &mut *tx,
+            Uuid::now_v7(),
+            user_id,
+            doc.id,
+            ip.as_deref(),
+            ua.as_deref(),
         )
         .await?;
-    for doc in docs.iter().filter(|d| req.consents.contains(&d.id)) {
-        db::queries::consents::insert_user_consent()
-            .bind(
-                &tx,
-                &Uuid::now_v7(),
-                &user_id,
-                &doc.id,
-                &ip.as_deref(),
-                &ua.as_deref(),
-            )
-            .await?;
     }
     match req.role {
         Role::Candidate => {
-            db::queries::candidates::insert_candidate()
-                .bind(&tx, &user_id, &public_code(user_id))
-                .await?;
+            db::candidates::insert_candidate(&mut *tx, user_id, &public_code(user_id)).await?;
         }
         Role::Employer => {
-            db::queries::companies::insert_company()
-                .bind(&tx, &Uuid::now_v7(), &user_id, &company_name)
-                .await?;
+            db::companies::insert_company(&mut *tx, Uuid::now_v7(), user_id, company_name).await?;
         }
         Role::Admin => unreachable!("validated above"),
     }
-    db::queries::users::insert_email_verification()
-        .bind(
-            &tx,
-            &token_hash,
-            &user_id,
-            &(Utc::now() + chrono::Duration::hours(24)),
-        )
-        .await?;
+    db::users::insert_email_verification(
+        &mut *tx,
+        &token_hash,
+        user_id,
+        Utc::now() + chrono::Duration::hours(24),
+    )
+    .await?;
     tx.commit().await?;
 
     send_verification(&state, &email, &token).await;
@@ -238,17 +225,13 @@ async fn verify_email(
     State(state): State<AppState>,
     Json(req): Json<VerifyEmailRequest>,
 ) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    let user_id = db::queries::users::consume_email_verification()
-        .bind(&client, &sha256(req.token.trim().as_bytes()))
-        .opt()
-        .await?
-        .ok_or_else(|| {
-            ApiError::bad_request("invalid_token", "Ссылка недействительна или устарела")
-        })?;
-    db::queries::users::mark_email_verified()
-        .bind(&client, &user_id)
-        .await?;
+    let user_id =
+        db::users::consume_email_verification(&state.pool, &sha256(req.token.trim().as_bytes()))
+            .await?
+            .ok_or_else(|| {
+                ApiError::bad_request("invalid_token", "Ссылка недействительна или устарела")
+            })?;
+    db::users::mark_email_verified(&state.pool, user_id).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -272,24 +255,19 @@ async fn resend_verification(
         Duration::from_secs(3600),
     )
     .await?;
-    let client = state.pool.get().await?;
     let bidx = state.crypto.blind_index(&email);
-    if let Some(user) = db::queries::users::user_by_email_bidx()
-        .bind(&client, &bidx)
-        .opt()
-        .await?
+    if let Some(user) = db::users::user_by_email_bidx(&state.pool, &bidx).await?
         && user.email_verified_at.is_none()
         && user.deleted_at.is_none()
     {
         let (token, token_hash) = new_token();
-        db::queries::users::insert_email_verification()
-            .bind(
-                &client,
-                &token_hash,
-                &user.id,
-                &(Utc::now() + chrono::Duration::hours(24)),
-            )
-            .await?;
+        db::users::insert_email_verification(
+            &state.pool,
+            &token_hash,
+            user.id,
+            Utc::now() + chrono::Duration::hours(24),
+        )
+        .await?;
         send_verification(&state, &email, &token).await;
     }
     Ok(StatusCode::NO_CONTENT)
@@ -342,10 +320,7 @@ async fn login(
     )
     .await?;
 
-    let client = state.pool.get().await?;
-    let user = db::queries::users::user_by_email_bidx()
-        .bind(&client, &state.crypto.blind_index(&email))
-        .opt()
+    let user = db::users::user_by_email_bidx(&state.pool, &state.crypto.blind_index(&email))
         .await?
         .filter(|u| u.deleted_at.is_none());
 
@@ -373,9 +348,7 @@ async fn login(
             "Подтвердите email — мы отправили письмо со ссылкой",
         ));
     }
-    db::queries::users::touch_last_login()
-        .bind(&client, &user.id)
-        .await?;
+    db::users::touch_last_login(&state.pool, user.id).await?;
 
     let role = Role::from(user.role);
     let (jar, access_token) = start_session(&state, jar, user.id, role, Uuid::now_v7()).await?;
@@ -404,17 +377,15 @@ async fn start_session(
     let now = Utc::now();
     let access = state.jwt.issue(user_id, role, now.timestamp())?;
     let (refresh, refresh_hash) = new_token();
-    let client = state.pool.get().await?;
-    db::queries::users::insert_refresh_token()
-        .bind(
-            &client,
-            &Uuid::now_v7(),
-            &user_id,
-            &family_id,
-            &refresh_hash,
-            &(now + chrono::Duration::days(REFRESH_TTL_DAYS)),
-        )
-        .await?;
+    db::users::insert_refresh_token(
+        &state.pool,
+        Uuid::now_v7(),
+        user_id,
+        family_id,
+        &refresh_hash,
+        now + chrono::Duration::days(REFRESH_TTL_DAYS),
+    )
+    .await?;
     let jar = session_cookies(jar, access.clone(), refresh, state.config.cookie_secure);
     Ok((jar, access))
 }
@@ -436,10 +407,7 @@ async fn refresh(
         .get(REFRESH_COOKIE)
         .map(|c| c.value().to_owned())
         .ok_or_else(ApiError::unauthorized)?;
-    let client = state.pool.get().await?;
-    let row = db::queries::users::refresh_token_by_hash()
-        .bind(&client, &sha256(token.as_bytes()))
-        .opt()
+    let row = db::users::refresh_token_by_hash(&state.pool, &sha256(token.as_bytes()))
         .await?
         .ok_or_else(ApiError::unauthorized)?;
 
@@ -447,20 +415,15 @@ async fn refresh(
         return Err(ApiError::unauthorized());
     }
     // A rotated token presented again means it was copied: revoke the whole family.
-    let rotated = db::queries::users::rotate_refresh_token()
-        .bind(&client, &row.id)
-        .await?;
+    let rotated = db::users::rotate_refresh_token(&state.pool, row.id).await?;
     if row.rotated_at.is_some() || rotated == 0 {
-        db::queries::users::revoke_refresh_family()
-            .bind(&client, &row.family_id)
-            .await?;
+        db::users::revoke_refresh_family(&state.pool, row.family_id).await?;
         tracing::warn!(user_id = %row.user_id, "refresh token reuse detected, family revoked");
         return Err(ApiError::unauthorized());
     }
-    let user = db::queries::users::user_by_id()
-        .bind(&client, &row.user_id)
-        .one()
-        .await?;
+    let user = db::users::user_by_id(&state.pool, row.user_id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
     if user.deleted_at.is_some() {
         return Err(ApiError::unauthorized());
     }
@@ -483,15 +446,10 @@ async fn logout(
     jar: CookieJar,
 ) -> ApiResult<(CookieJar, StatusCode)> {
     if let Some(token) = jar.get(REFRESH_COOKIE) {
-        let client = state.pool.get().await?;
-        if let Some(row) = db::queries::users::refresh_token_by_hash()
-            .bind(&client, &sha256(token.value().as_bytes()))
-            .opt()
-            .await?
+        if let Some(row) =
+            db::users::refresh_token_by_hash(&state.pool, &sha256(token.value().as_bytes())).await?
         {
-            db::queries::users::revoke_refresh_family()
-                .bind(&client, &row.family_id)
-                .await?;
+            db::users::revoke_refresh_family(&state.pool, row.family_id).await?;
         }
     }
     if let Some(user) = user {

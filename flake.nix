@@ -50,6 +50,7 @@
                 pkgs.nodejs_22
                 (pkgs.postgresql_17.withPackages (p: [ p.pgvector ]))
                 pkgs.valkey
+                pkgs.sqlx-cli
                 pkgs.docker-compose
                 pkgs.pkg-config
                 pkgs.openssl
@@ -68,16 +69,16 @@
             shellHook = ''
               cat <<'EOF'
               fsp-hack dev shell
-                make db        create the local fsp_hack database
-                make gen-db    db/migrations + db/queries -> crates/db (clorinde)
-                make api       API on :8000
-                make gen-api   OpenAPI -> web/openapi.json + TS types
-                make web       Next.js dev server on :3000
-                make test      cargo test + web type check
-                make lint      fmt, clippy, eslint
-                make validate  validation report -> docs/validation/
-                make docs      docs/solution.md -> PDF and DOCX
-                make up        docker compose (profile full); on macOS run `colima start` first
+                make db          create the local fsp_hack database
+                make db-prepare  apply migrations, refresh .sqlx query metadata
+                make api         API on :8000
+                make gen-api     OpenAPI -> web/openapi.json + TS types
+                make web         Next.js dev server on :3000
+                make test        cargo test incl. DB tests (Postgres) + web type check
+                make lint        fmt, clippy, eslint
+                make validate    validation report -> docs/validation/
+                make docs        docs/solution.md -> PDF and DOCX
+                make up          docker compose (profile full); on macOS run `colima start` first
               EOF
             '';
           };

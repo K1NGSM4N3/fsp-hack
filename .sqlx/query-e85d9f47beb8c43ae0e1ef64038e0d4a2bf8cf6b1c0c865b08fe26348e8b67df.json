@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE applications SET status = 'withdrawn', updated_at = now()\n         WHERE id = $1 AND candidate_id = $2 AND status IN ('sent', 'viewed')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e85d9f47beb8c43ae0e1ef64038e0d4a2bf8cf6b1c0c865b08fe26348e8b67df"
+}

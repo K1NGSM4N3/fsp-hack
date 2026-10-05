@@ -1,0 +1,114 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.user_id, c.public_code, c.specialization AS \"specialization!\", c.grade AS \"grade!\",\n                  c.theta, c.salary_expectation_min, c.work_formats, c.city, c.relocation,\n                  c.last_activity_at, c.industries, c.show_fsp, f.achievements AS \"achievements?\",\n                  coalesce(array_agg(s.skill ORDER BY s.skill, s.source)\n                           FILTER (WHERE s.skill IS NOT NULL), '{}') AS \"skills!\",\n                  coalesce(array_agg(s.source ORDER BY s.skill, s.source)\n                           FILTER (WHERE s.skill IS NOT NULL), '{}') AS \"skill_sources!\",\n                  CASE WHEN $1::text IS NULL THEN 0::real\n                       ELSE ts_rank_cd(c.about_tsv, to_tsquery('russian', $1))::real END AS \"text_rank!\"\n           FROM candidates c\n           JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL\n           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id\n           LEFT JOIN candidate_skills s ON s.candidate_id = c.user_id\n           WHERE c.visible\n             AND c.search_status <> 'closed'\n             AND c.specialization = $2\n             AND c.grade IS NOT NULL\n             AND ($3::text IS NULL OR c.grade = $3)\n           GROUP BY c.user_id, f.achievements",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "specialization!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "grade!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "salary_expectation_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "work_formats",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 7,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "relocation",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "last_activity_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "industries",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 11,
+        "name": "show_fsp",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "achievements?",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 13,
+        "name": "skills!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 14,
+        "name": "skill_sources!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 15,
+        "name": "text_rank!",
+        "type_info": "Float4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "86c4951eb5751e1e8d525ac4389c6b54ac360c1101572abcbfa26a66190a84f7"
+}

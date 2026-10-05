@@ -9,6 +9,7 @@ use axum::{
 use catalog::{Category, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
@@ -181,29 +182,23 @@ async fn send(
     Json(req): Json<SendInvitation>,
 ) -> ApiResult<(StatusCode, Json<SentInvitation>)> {
     validate(&req)?;
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let idempotency_key = headers
         .get("idempotency-key")
         .and_then(|v| v.to_str().ok())
         .map(|v| v.chars().take(100).collect::<String>());
 
     if let Some(key) = idempotency_key.as_deref()
-        && let Some(existing) = db::queries::invitations::invitation_by_idempotency_key()
-            .bind(&client, &company, &key)
-            .opt()
-            .await?
+        && let Some(existing) =
+            db::invitations::invitation_by_idempotency_key(&state.pool, company, key).await?
     {
-        let row = db::queries::invitations::employer_invitation()
-            .bind(&client, &company, &existing)
-            .one()
-            .await?;
+        let row = db::invitations::employer_invitation(&state.pool, company, existing)
+            .await?
+            .ok_or(sqlx::Error::RowNotFound)?;
         return Ok((StatusCode::OK, Json(sent_from_row!(row))));
     }
 
-    let candidate = db::queries::candidates::candidate_invitable()
-        .bind(&client, &req.candidate_id)
-        .opt()
+    let candidate = db::candidates::candidate_invitable(&state.pool, req.candidate_id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     if !candidate.visible {
@@ -219,10 +214,7 @@ async fn send(
     }
 
     let since = Utc::now() - Duration::days(7);
-    let sent = db::queries::invitations::company_invitations_since()
-        .bind(&client, &company, &since)
-        .one()
-        .await?;
+    let sent = db::invitations::company_invitations_since(&state.pool, company, since).await?;
     if sent >= QUOTA_PER_WEEK {
         return Err(ApiError::conflict(
             "invitation_quota_exceeded",
@@ -231,26 +223,27 @@ async fn send(
     }
 
     let id = Uuid::now_v7();
-    let inserted = db::queries::invitations::insert_invitation()
-        .bind(
-            &client,
-            &id,
-            &company,
-            &req.candidate_id,
-            &req.need_id,
-            &req.vacancy_id,
-            &req.title.trim(),
-            &req.message.trim(),
-            &req.salary.min,
-            &req.salary.max,
-            &req.work_format.map(|f| f.slug()),
-            &req.contact.trim(),
-            &idempotency_key.as_deref(),
-            &(Utc::now() + Duration::days(TTL_DAYS)),
-        )
-        .await;
+    let inserted = db::invitations::insert_invitation(
+        &state.pool,
+        &db::invitations::NewInvitation {
+            id,
+            company_id: company,
+            candidate_id: req.candidate_id,
+            need_id: req.need_id,
+            vacancy_id: req.vacancy_id,
+            title: req.title.trim(),
+            message: req.message.trim(),
+            salary_min: req.salary.min,
+            salary_max: req.salary.max,
+            work_format: req.work_format.map(|f| f.slug()),
+            contact: req.contact.trim(),
+            idempotency_key: idempotency_key.as_deref(),
+            expires_at: Utc::now() + Duration::days(TTL_DAYS),
+        },
+    )
+    .await;
     if let Err(e) = inserted {
-        if e.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) {
+        if db::is_unique_violation(&e) {
             return Err(ApiError::conflict(
                 "invitation_already_active",
                 "Этому кандидату уже отправлено действующее приглашение",
@@ -258,19 +251,17 @@ async fn send(
         }
         return Err(e.into());
     }
-    db::queries::invitations::insert_invitation_event()
-        .bind(
-            &client,
-            &Uuid::now_v7(),
-            &id,
-            &db::types::InvitationStatus::Sent,
-            &Some(user.id),
-        )
-        .await?;
-    let row = db::queries::invitations::employer_invitation()
-        .bind(&client, &company, &id)
-        .one()
-        .await?;
+    db::invitations::insert_invitation_event(
+        &state.pool,
+        Uuid::now_v7(),
+        id,
+        db::types::InvitationStatus::Sent,
+        Some(user.id),
+    )
+    .await?;
+    let row = db::invitations::employer_invitation(&state.pool, company, id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
     Ok((StatusCode::CREATED, Json(sent_from_row!(row))))
 }
 
@@ -282,15 +273,9 @@ async fn list_sent(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<SentInvitation>>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    db::queries::invitations::expire_stale_invitations()
-        .bind(&client)
-        .await?;
-    let rows = db::queries::invitations::employer_invitations()
-        .bind(&client, &company)
-        .all()
-        .await?;
+    let company = company_id(&state.pool, user.id).await?;
+    db::invitations::expire_stale_invitations(&state.pool).await?;
+    let rows = db::invitations::employer_invitations(&state.pool, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
         out.push(sent_from_row!(row));
@@ -308,25 +293,18 @@ async fn get_sent(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<SentInvitation>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    db::queries::invitations::expire_stale_invitations()
-        .bind(&client)
-        .await?;
-    let row = db::queries::invitations::employer_invitation()
-        .bind(&client, &company, &id)
-        .opt()
+    let company = company_id(&state.pool, user.id).await?;
+    db::invitations::expire_stale_invitations(&state.pool).await?;
+    let row = db::invitations::employer_invitation(&state.pool, company, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     let mut inv = sent_from_row!(row);
-    inv.events = Some(events(&client, id).await?);
+    inv.events = Some(events(&state.pool, id).await?);
     Ok(Json(inv))
 }
 
-async fn events(client: &deadpool_postgres::Object, id: Uuid) -> ApiResult<Vec<StatusEvent>> {
-    Ok(db::queries::invitations::invitation_events()
-        .bind(client, &id)
-        .all()
+async fn events(pool: &PgPool, id: Uuid) -> ApiResult<Vec<StatusEvent>> {
+    Ok(db::invitations::invitation_events(pool, id)
         .await?
         .into_iter()
         .map(|e| StatusEvent {
@@ -346,27 +324,21 @@ async fn withdraw(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    if db::queries::invitations::withdraw_invitation()
-        .bind(&client, &id, &company)
-        .await?
-        == 0
-    {
+    let company = company_id(&state.pool, user.id).await?;
+    if db::invitations::withdraw_invitation(&state.pool, id, company).await? == 0 {
         return Err(ApiError::conflict(
             "invitation_closed",
             "Приглашение уже закрыто",
         ));
     }
-    db::queries::invitations::insert_invitation_event()
-        .bind(
-            &client,
-            &Uuid::now_v7(),
-            &id,
-            &db::types::InvitationStatus::Withdrawn,
-            &Some(user.id),
-        )
-        .await?;
+    db::invitations::insert_invitation_event(
+        &state.pool,
+        Uuid::now_v7(),
+        id,
+        db::types::InvitationStatus::Withdrawn,
+        Some(user.id),
+    )
+    .await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -401,26 +373,20 @@ async fn invitation_stats(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<InvitationStats>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    db::queries::invitations::expire_stale_invitations()
-        .bind(&client)
-        .await?;
-    let used = db::queries::invitations::company_invitations_since()
-        .bind(&client, &company, &(Utc::now() - Duration::days(7)))
-        .one()
-        .await?;
-    let rate = db::queries::invitations::company_response_rate()
-        .bind(&client, &company)
-        .one()
-        .await?;
+    let company = company_id(&state.pool, user.id).await?;
+    db::invitations::expire_stale_invitations(&state.pool).await?;
+    let used = db::invitations::company_invitations_since(
+        &state.pool,
+        company,
+        Utc::now() - Duration::days(7),
+    )
+    .await?;
+    let rate = db::invitations::company_response_rate(&state.pool, company).await?;
     Ok(Json(InvitationStats {
         quota_limit: QUOTA_PER_WEEK,
         quota_used: used,
         quota_resets_in_days: 7,
-        by_status: db::queries::invitations::company_invitation_status_counts()
-            .bind(&client, &company)
-            .all()
+        by_status: db::invitations::company_invitation_status_counts(&state.pool, company)
             .await?
             .into_iter()
             .map(|r| StatusCount {
@@ -433,9 +399,7 @@ async fn invitation_stats(
         } else {
             0.0
         },
-        decline_reasons: db::queries::invitations::company_decline_reasons()
-            .bind(&client, &company)
-            .all()
+        decline_reasons: db::invitations::company_decline_reasons(&state.pool, company)
             .await?
             .into_iter()
             .map(|r| ReasonCount {
@@ -458,8 +422,7 @@ async fn candidate_contacts(
     headers: HeaderMap,
     Path(candidate_id): Path<Uuid>,
 ) -> ApiResult<Json<CandidateContacts>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let ip = client_ip(&headers);
     let ua = user_agent(&headers);
     let ctx = AccessContext {
@@ -468,7 +431,7 @@ async fn candidate_contacts(
         ip: ip.as_deref(),
         user_agent: ua.as_deref(),
     };
-    let grant = ContactGrant::obtain(&client, &ctx, candidate_id)
+    let grant = ContactGrant::obtain(&state.pool, &ctx, candidate_id)
         .await?
         .ok_or_else(|| {
             ApiError::forbidden(
@@ -477,7 +440,7 @@ async fn candidate_contacts(
             )
         })?;
     Ok(Json(
-        CandidateContacts::reveal(&client, &state.crypto, grant).await?,
+        CandidateContacts::reveal(&state.pool, &state.crypto, grant).await?,
     ))
 }
 
@@ -545,14 +508,8 @@ async fn list_received(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<ReceivedInvitation>>> {
-    let client = state.pool.get().await?;
-    db::queries::invitations::expire_stale_invitations()
-        .bind(&client)
-        .await?;
-    let rows = db::queries::invitations::candidate_invitations()
-        .bind(&client, &user.id)
-        .all()
-        .await?;
+    db::invitations::expire_stale_invitations(&state.pool).await?;
+    let rows = db::invitations::candidate_invitations(&state.pool, user.id).await?;
     Ok(Json(
         rows.into_iter().map(|r| received_from_row!(r)).collect(),
     ))
@@ -568,28 +525,18 @@ async fn get_received(
     user: CandidateUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<ReceivedInvitation>> {
-    let client = state.pool.get().await?;
-    db::queries::invitations::expire_stale_invitations()
-        .bind(&client)
+    db::invitations::expire_stale_invitations(&state.pool).await?;
+    if db::invitations::mark_invitation_viewed(&state.pool, id, user.id).await? > 0 {
+        db::invitations::insert_invitation_event(
+            &state.pool,
+            Uuid::now_v7(),
+            id,
+            db::types::InvitationStatus::Viewed,
+            Some(user.id),
+        )
         .await?;
-    if db::queries::invitations::mark_invitation_viewed()
-        .bind(&client, &id, &user.id)
-        .await?
-        > 0
-    {
-        db::queries::invitations::insert_invitation_event()
-            .bind(
-                &client,
-                &Uuid::now_v7(),
-                &id,
-                &db::types::InvitationStatus::Viewed,
-                &Some(user.id),
-            )
-            .await?;
     }
-    let row = db::queries::invitations::candidate_invitation()
-        .bind(&client, &user.id, &id)
-        .opt()
+    let row = db::invitations::candidate_invitation(&state.pool, user.id, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     Ok(Json(received_from_row!(row)))
@@ -603,23 +550,17 @@ async fn respond(
     reason: Option<DeclineReason>,
     comment: Option<String>,
 ) -> ApiResult<Json<ReceivedInvitation>> {
-    let client = state.pool.get().await?;
-    let updated = db::queries::invitations::respond_invitation()
-        .bind(
-            &client,
-            &status,
-            &reason.map(DeclineReason::slug),
-            &comment.as_deref(),
-            &id,
-            &user.id,
-        )
-        .await?;
+    let updated = db::invitations::respond_invitation(
+        &state.pool,
+        status,
+        reason.map(DeclineReason::slug),
+        comment.as_deref(),
+        id,
+        user.id,
+    )
+    .await?;
     if updated == 0 {
-        return match db::queries::invitations::candidate_invitation()
-            .bind(&client, &user.id, &id)
-            .opt()
-            .await?
-        {
+        return match db::invitations::candidate_invitation(&state.pool, user.id, id).await? {
             None => Err(ApiError::not_found()),
             Some(_) => Err(ApiError::conflict(
                 "invitation_closed",
@@ -627,16 +568,18 @@ async fn respond(
             )),
         };
     }
-    db::queries::invitations::insert_invitation_event()
-        .bind(&client, &Uuid::now_v7(), &id, &status, &Some(user.id))
-        .await?;
-    db::queries::candidates::touch_candidate_activity()
-        .bind(&client, &user.id)
-        .await?;
-    let row = db::queries::invitations::candidate_invitation()
-        .bind(&client, &user.id, &id)
-        .one()
-        .await?;
+    db::invitations::insert_invitation_event(
+        &state.pool,
+        Uuid::now_v7(),
+        id,
+        status,
+        Some(user.id),
+    )
+    .await?;
+    db::candidates::touch_candidate_activity(&state.pool, user.id).await?;
+    let row = db::invitations::candidate_invitation(&state.pool, user.id, id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
     Ok(Json(received_from_row!(row)))
 }
 
@@ -693,9 +636,7 @@ async fn decline(
     )
     .await?;
     if req.reason == DeclineReason::NotLooking {
-        let client = state.pool.get().await?;
-        db::queries::candidates::set_search_status()
-            .bind(&client, &db::types::SearchStatus::Closed, &user.id)
+        db::candidates::set_search_status(&state.pool, db::types::SearchStatus::Closed, user.id)
             .await?;
     }
     Ok(declined)

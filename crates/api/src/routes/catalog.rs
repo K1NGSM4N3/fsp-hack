@@ -129,11 +129,7 @@ pub struct ConsentDocument {
 /// Current versions of consent documents shown at registration
 #[utoipa::path(get, path = "/consents/current", tag = "catalog", responses((status = 200, body = Vec<ConsentDocument>)))]
 async fn current_consents(State(state): State<AppState>) -> ApiResult<Json<Vec<ConsentDocument>>> {
-    let client = state.pool.get().await?;
-    let docs = db::queries::consents::current_consent_documents()
-        .bind(&client)
-        .all()
-        .await?;
+    let docs = db::consents::current_consent_documents(&state.pool).await?;
     Ok(Json(
         docs.into_iter()
             .map(|d| ConsentDocument {

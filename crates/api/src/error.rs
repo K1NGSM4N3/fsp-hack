@@ -61,9 +61,7 @@ impl Serialize for FieldErrors {
 #[derive(Debug, thiserror::Error)]
 pub enum InternalError {
     #[error("database: {0}")]
-    Db(#[from] tokio_postgres::Error),
-    #[error("pool: {0}")]
-    Pool(#[from] deadpool_postgres::PoolError),
+    Db(#[from] sqlx::Error),
     #[error("kv: {0}")]
     Kv(#[from] KvError),
     #[error("crypto: {0}")]
@@ -110,8 +108,7 @@ macro_rules! internal_from {
 }
 
 internal_from!(
-    tokio_postgres::Error,
-    deadpool_postgres::PoolError,
+    sqlx::Error,
     KvError,
     CryptoError,
     jsonwebtoken::errors::Error,

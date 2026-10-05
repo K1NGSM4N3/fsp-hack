@@ -18,12 +18,12 @@
 crates/catalog     справочники: специализации, грейды, категории, отрасли
 crates/assessment  чистая логика тестирования: IRT, CAT, шаблоны заданий, политика грейда
 crates/matching    чистая логика подбора: навыки, ФСП-скор, скоринг, разбор резюме
-crates/db          СГЕНЕРИРОВАН clorinde — не править руками
+crates/db          доступ к PostgreSQL на sqlx: запросы с проверкой при компиляции, миграции, тесты на живой БД
 crates/api         axum-сервер: HTTP, auth, OpenAPI, сервисы
 crates/fsp-mock    заглушка реестра ФСП
 crates/validate    симуляция и отчёт валидации
-db/migrations      refinery: VNNN__name.sql
-db/queries         SQL для clorinde
+db/migrations      миграции sqlx: NNNN_name.sql
+.sqlx/             метаданные запросов для офлайн-сборки (make db-prepare)
 web/               Next.js
 deploy/            compose, Dockerfile'ы, Caddy, Keycloak, Grafana
 ```
@@ -32,11 +32,11 @@ deploy/            compose, Dockerfile'ы, Caddy, Keycloak, Grafana
 
 ```sh
 make db          # создать локальную БД fsp_hack (нужен запущенный Postgres)
-make gen-db      # db/migrations + db/queries → crates/db (clorinde fresh)
+make db-prepare  # применить миграции к DATABASE_URL и обновить .sqlx/
 make api         # запустить API на :8000 (миграции применяются при старте)
 make gen-api     # выгрузить OpenAPI в web/openapi.json и сгенерировать TS-типы
 make web         # Next.js dev-сервер на :3000
-make test        # cargo test + проверка типов web
+make test        # cargo test (тесты crates/db — на Postgres из TEST_DATABASE_URL) + проверка типов web
 make lint        # cargo fmt --check, clippy -D warnings, eslint
 make validate    # прогнать валидацию → docs/validation/
 make up          # docker compose --profile full up -d --build
@@ -45,7 +45,7 @@ make up          # docker compose --profile full up -d --build
 ## Правила
 
 ### Общие
-- Стек зафиксирован в `architecture.md` §2. **Не добавлять**: Vite, sqlx, SurrealDB, OLAP, Redis (только Valkey). Новая зависимость — только если без неё никак; лицензия MIT/Apache-2.0/BSD/ISC/MPL. Согласованное исключение — GSAP (бесплатная Standard License) для анимаций публичного сайта.
+- Стек зафиксирован в `architecture.md` §2. **Не добавлять**: Vite, SurrealDB, OLAP, Redis (только Valkey). Новая зависимость — только если без неё никак; лицензия MIT/Apache-2.0/BSD/ISC/MPL. Согласованное исключение — GSAP (бесплатная Standard License) для анимаций публичного сайта.
 - Код, идентификаторы и комментарии в коде — на английском. UI, документация, сообщения об ошибках для пользователя — на русском.
 - Закрыл требование — поменяй статус в `specs.md`. Добавил или изменил эндпоинт — обнови `api.md`. Изменил решение — обнови `architecture.md`.
 - Секреты только через env (`.env` не коммитим, шаблон — `.env.example`).
@@ -59,11 +59,12 @@ make up          # docker compose --profile full up -d --build
 
 ### Rust
 - `catalog`, `assessment`, `matching` не знают про HTTP, БД и время: всё, что зависит от «сейчас» или случайности, принимает `now` / `seed` / `Rng` параметром — так код детерминирован и тестируем.
-- SQL пишем только в `db/queries/*.sql`, после изменения — `make gen-db`. Схема — только миграциями, существующие миграции не редактируем.
+- SQL пишем только в `crates/db` и только макросами `sqlx::query!` / `query_as!` / `query_scalar!`: запрос проверяется по схеме при компиляции. Строковый `sqlx::query()` — нельзя; по-настоящему динамический SQL — через `QueryBuilder`, с комментарием почему. Функции принимают `impl PgExecutor<'_>`, чтобы работать и с пулом, и с транзакцией.
+- Сборка идёт офлайн (`SQLX_OFFLINE=true` в `.cargo/config.toml`): изменил запрос или схему — `make db-prepare` и коммить `.sqlx/` вместе с кодом. Схема — только миграциями, существующие миграции не редактируем.
 - Единый `ApiError` → problem+json в `api`. Никаких `unwrap()`/`expect()` в путях обработки запросов.
 - Каждый хендлер описан в utoipa (`#[utoipa::path]`) с кодами ошибок — иначе его нет в Swagger.
 - Правила видимости — в типах: DTO работодателя не содержит контактов; `CandidateContacts` строится только из `ContactGrant`.
-- Перед коммитом: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `cargo test`.
+- Перед коммитом: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `make test`.
 
 ### Frontend
 - Next.js App Router, TypeScript strict. Кабинеты — клиентские компоненты с TanStack Query; серверный рендеринг — только для публичных страниц.
@@ -74,4 +75,4 @@ make up          # docker compose --profile full up -d --build
 
 ### Git
 - Ветки `feat/…`, `fix/…`, `docs/…`; коммиты в стиле Conventional Commits (`feat(api): ...`).
-- Сгенерированный код (`crates/db`, `web/openapi.json`, `web/src/api/schema.d.ts`) коммитим вместе с источником.
+- Сгенерированное (`.sqlx/`, `web/openapi.json`, `web/src/api/schema.d.ts`) коммитим вместе с источником.

@@ -9,6 +9,7 @@ use axum::{
 use catalog::{Category, Grade, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
@@ -135,17 +136,27 @@ async fn list_own(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<Vacancy>>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let rows = db::queries::vacancies::company_vacancies()
-        .bind(&client, &company)
-        .all()
-        .await?;
+    let company = company_id(&state.pool, user.id).await?;
+    let rows = db::vacancies::company_vacancies(&state.pool, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(vacancy_from_row!(r));
     }
     Ok(Json(out))
+}
+
+fn fields(v: &VacancyInput) -> db::vacancies::VacancyFields<'_> {
+    db::vacancies::VacancyFields {
+        title: v.title.trim(),
+        description: v.description.trim(),
+        specialization: v.specialization.slug(),
+        grade: v.grade.slug(),
+        skills: &v.skills,
+        salary_min: v.salary.min,
+        salary_max: v.salary.max,
+        work_format: v.work_format.slug(),
+        city: v.city.as_deref().map(str::trim).filter(|c| !c.is_empty()),
+    }
 }
 
 /// Create a vacancy (salary range is mandatory)
@@ -159,33 +170,15 @@ async fn create(
     Json(v): Json<VacancyInput>,
 ) -> ApiResult<(StatusCode, Json<Vacancy>)> {
     validate(&v)?;
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let id = Uuid::now_v7();
     let status: db::types::VacancyStatus = v.status.into();
     let published_at = (v.status == VacancyStatus::Published).then(Utc::now);
-    db::queries::vacancies::insert_vacancy()
-        .bind(
-            &client,
-            &id,
-            &company,
-            &v.title.trim(),
-            &v.description.trim(),
-            &v.specialization.slug(),
-            &v.grade.slug(),
-            &v.skills,
-            &v.salary.min,
-            &v.salary.max,
-            &v.work_format.slug(),
-            &v.city.as_deref().map(str::trim).filter(|c| !c.is_empty()),
-            &status,
-            &published_at,
-        )
+    db::vacancies::insert_vacancy(&state.pool, id, company, status, published_at, &fields(&v))
         .await?;
-    let row = db::queries::vacancies::company_vacancy()
-        .bind(&client, &company, &id)
-        .one()
-        .await?;
+    let row = db::vacancies::company_vacancy(&state.pool, company, id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
     Ok((StatusCode::CREATED, Json(vacancy_from_row!(row))))
 }
 
@@ -199,11 +192,8 @@ async fn get_own(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vacancy>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let row = db::queries::vacancies::company_vacancy()
-        .bind(&client, &company, &id)
-        .opt()
+    let company = company_id(&state.pool, user.id).await?;
+    let row = db::vacancies::company_vacancy(&state.pool, company, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     Ok(Json(vacancy_from_row!(row)))
@@ -222,33 +212,16 @@ async fn update(
     Json(v): Json<VacancyInput>,
 ) -> ApiResult<Json<Vacancy>> {
     validate(&v)?;
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let status: db::types::VacancyStatus = v.status.into();
-    let updated = db::queries::vacancies::update_vacancy()
-        .bind(
-            &client,
-            &v.title.trim(),
-            &v.description.trim(),
-            &v.specialization.slug(),
-            &v.grade.slug(),
-            &v.skills,
-            &v.salary.min,
-            &v.salary.max,
-            &v.work_format.slug(),
-            &v.city.as_deref().map(str::trim).filter(|c| !c.is_empty()),
-            &status,
-            &id,
-            &company,
-        )
-        .await?;
+    let updated =
+        db::vacancies::update_vacancy(&state.pool, id, company, status, &fields(&v)).await?;
     if updated == 0 {
         return Err(ApiError::not_found());
     }
-    let row = db::queries::vacancies::company_vacancy()
-        .bind(&client, &company, &id)
-        .one()
-        .await?;
+    let row = db::vacancies::company_vacancy(&state.pool, company, id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
     Ok(Json(vacancy_from_row!(row)))
 }
 
@@ -274,12 +247,8 @@ async fn list_applications(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<IncomingApplication>>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let rows = db::queries::vacancies::vacancy_applications()
-        .bind(&client, &id, &company)
-        .all()
-        .await?;
+    let company = company_id(&state.pool, user.id).await?;
+    let rows = db::vacancies::vacancy_applications(&state.pool, id, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(IncomingApplication {
@@ -325,14 +294,9 @@ async fn set_application_status(
             "Допустимо: viewed, accepted, rejected",
         ));
     }
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let status: db::types::ApplicationStatus = input.status.into();
-    if db::queries::vacancies::set_application_status()
-        .bind(&client, &status, &id, &company)
-        .await?
-        == 0
-    {
+    if db::vacancies::set_application_status(&state.pool, status, id, company).await? == 0 {
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
@@ -378,23 +342,22 @@ async fn list_published(
     State(state): State<AppState>,
     Query(q): Query<VacancyQuery>,
 ) -> ApiResult<Json<Page<PublicVacancy>>> {
-    let client = state.pool.get().await?;
     let limit = q.limit.unwrap_or(20).clamp(1, 100);
     let offset = q.offset.unwrap_or(0).max(0);
     let text = q.q.as_deref().map(str::trim).filter(|s| !s.is_empty());
-    let rows = db::queries::vacancies::published_vacancies()
-        .bind(
-            &client,
-            &q.specialization.map(Specialization::slug),
-            &q.grade.map(Grade::slug),
-            &q.work_format.map(WorkFormat::slug),
-            &q.salary_from,
-            &text,
-            &limit,
-            &offset,
-        )
-        .all()
-        .await?;
+    let rows = db::vacancies::published_vacancies(
+        &state.pool,
+        &db::vacancies::VacancyFilter {
+            specialization: q.specialization.map(Specialization::slug),
+            grade: q.grade.map(Grade::slug),
+            work_format: q.work_format.map(WorkFormat::slug),
+            salary_from: q.salary_from,
+            q: text,
+            limit,
+            offset,
+        },
+    )
+    .await?;
     let total = rows.first().map_or(0, |r| r.total);
     let mut items = Vec::with_capacity(rows.len());
     for r in rows {
@@ -429,10 +392,7 @@ async fn get_published(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<PublicVacancy>> {
-    let client = state.pool.get().await?;
-    let r = db::queries::vacancies::published_vacancy()
-        .bind(&client, &id)
-        .opt()
+    let r = db::vacancies::published_vacancy(&state.pool, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     Ok(Json(PublicVacancy {
@@ -490,27 +450,22 @@ async fn apply(
     if input.cover_letter.len() > 4000 {
         return Err(ApiError::field("cover_letter", "Не длиннее 4000 символов"));
     }
-    let client = state.pool.get().await?;
-    db::queries::vacancies::published_vacancy()
-        .bind(&client, &vacancy_id)
-        .opt()
+    db::vacancies::published_vacancy(&state.pool, vacancy_id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     let letter = input.cover_letter.trim();
-    let reopened = db::queries::vacancies::reopen_application()
-        .bind(&client, &letter, &vacancy_id, &user.id)
-        .opt()
-        .await?;
+    let reopened =
+        db::vacancies::reopen_application(&state.pool, letter, vacancy_id, user.id).await?;
     let id = match reopened {
         Some(id) => id,
         None => {
             let id = Uuid::now_v7();
-            let inserted = db::queries::vacancies::insert_application()
-                .bind(&client, &id, &vacancy_id, &user.id, &letter)
-                .await;
+            let inserted =
+                db::vacancies::insert_application(&state.pool, id, vacancy_id, user.id, letter)
+                    .await;
             match inserted {
                 Ok(_) => id,
-                Err(e) if e.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) => {
+                Err(e) if db::is_unique_violation(&e) => {
                     return Err(ApiError::conflict(
                         "already_applied",
                         "Вы уже откликнулись на эту вакансию",
@@ -520,10 +475,8 @@ async fn apply(
             }
         }
     };
-    db::queries::candidates::touch_candidate_activity()
-        .bind(&client, &user.id)
-        .await?;
-    let app = my_apps(&client, user.id)
+    db::candidates::touch_candidate_activity(&state.pool, user.id).await?;
+    let app = my_apps(&state.pool, user.id)
         .await?
         .into_iter()
         .find(|a| a.id == id)
@@ -531,13 +484,8 @@ async fn apply(
     Ok((StatusCode::CREATED, Json(app)))
 }
 
-async fn my_apps(
-    client: &deadpool_postgres::Object,
-    candidate: Uuid,
-) -> ApiResult<Vec<MyApplication>> {
-    Ok(db::queries::vacancies::candidate_applications()
-        .bind(client, &candidate)
-        .all()
+async fn my_apps(pool: &PgPool, candidate: Uuid) -> ApiResult<Vec<MyApplication>> {
+    Ok(db::vacancies::candidate_applications(pool, candidate)
         .await?
         .into_iter()
         .map(|r| MyApplication {
@@ -565,8 +513,7 @@ async fn my_applications(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<MyApplication>>> {
-    let client = state.pool.get().await?;
-    Ok(Json(my_apps(&client, user.id).await?))
+    Ok(Json(my_apps(&state.pool, user.id).await?))
 }
 
 /// Withdraw an application before the company decides
@@ -579,12 +526,7 @@ async fn withdraw_application(
     user: CandidateUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    if db::queries::vacancies::withdraw_application()
-        .bind(&client, &id, &user.id)
-        .await?
-        == 0
-    {
+    if db::vacancies::withdraw_application(&state.pool, id, user.id).await? == 0 {
         return Err(ApiError::conflict(
             "application_closed",
             "Отклик уже рассмотрен или отозван",

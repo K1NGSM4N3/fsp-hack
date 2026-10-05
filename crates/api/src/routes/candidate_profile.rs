@@ -111,15 +111,10 @@ pub(crate) fn parse_source(s: &str) -> Option<SkillSource> {
 }
 
 async fn load_profile(state: &AppState, user: &CandidateUser) -> ApiResult<ProfileResponse> {
-    let client = state.pool.get().await?;
-    let c = db::queries::candidates::candidate_profile()
-        .bind(&client, &user.id)
-        .one()
-        .await?;
-    let skill_rows = db::queries::candidates::candidate_skills()
-        .bind(&client, &user.id)
-        .all()
-        .await?;
+    let c = db::candidates::candidate_profile(&state.pool, user.id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    let skill_rows = db::candidates::candidate_skills(&state.pool, user.id).await?;
 
     let mut skill_details: Vec<ProfileSkill> = Vec::new();
     for row in skill_rows {
@@ -259,33 +254,29 @@ async fn put_profile(
         );
     v.finish()?;
 
-    let mut client = state.pool.get().await?;
-    let tx = client.transaction().await?;
-    db::queries::candidates::update_candidate_profile()
-        .bind(
-            &tx,
-            &Some(state.crypto.encrypt_str(full_name)),
-            &Some(state.crypto.encrypt_json(&contacts)?),
-            &non_empty(p.city).as_deref(),
-            &p.relocation,
-            &slugs(&p.work_formats),
-            &p.salary_expectation_min,
-            &p.about.trim(),
-            &p.experience_years,
-            &p.roles,
-            &p.soft_skills,
-            &slugs(&p.industries),
-            &serde_json::to_value(&p.experience)?,
-            &user.id,
-        )
-        .await?;
-    db::queries::candidates::delete_candidate_skills_by_source()
-        .bind(&tx, &user.id, &"declared")
-        .await?;
+    let mut tx = state.pool.begin().await?;
+    db::candidates::update_candidate_profile(
+        &mut *tx,
+        user.id,
+        &db::candidates::ProfileUpdate {
+            full_name_enc: Some(&state.crypto.encrypt_str(full_name)),
+            contacts_enc: Some(&state.crypto.encrypt_json(&contacts)?),
+            city: non_empty(p.city).as_deref(),
+            relocation: p.relocation,
+            work_formats: &slugs(&p.work_formats),
+            salary_expectation_min: p.salary_expectation_min,
+            about: p.about.trim(),
+            experience_years: p.experience_years,
+            roles: &p.roles,
+            soft_skills: &p.soft_skills,
+            industries: &slugs(&p.industries),
+            experience: &serde_json::to_value(&p.experience)?,
+        },
+    )
+    .await?;
+    db::candidates::delete_candidate_skills_by_source(&mut *tx, user.id, "declared").await?;
     for skill in declared.unwrap_or_default() {
-        db::queries::candidates::insert_candidate_skill()
-            .bind(&tx, &user.id, &skill, &"declared")
-            .await?;
+        db::candidates::insert_candidate_skill(&mut *tx, user.id, &skill, "declared").await?;
     }
     tx.commit().await?;
     Ok(Json(load_profile(&state, &user).await?))
@@ -311,10 +302,7 @@ async fn get_privacy(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Privacy>> {
-    let client = state.pool.get().await?;
-    let c = db::queries::candidates::candidate_profile()
-        .bind(&client, &user.id)
-        .opt()
+    let c = db::candidates::candidate_profile(&state.pool, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     Ok(Json(Privacy {
@@ -336,19 +324,17 @@ async fn put_privacy(
     user: CandidateUser,
     Json(p): Json<Privacy>,
 ) -> ApiResult<Json<Privacy>> {
-    let client = state.pool.get().await?;
     let status: db::types::SearchStatus = p.search_status.into();
-    db::queries::candidates::update_candidate_privacy()
-        .bind(
-            &client,
-            &p.visible,
-            &p.show_name,
-            &p.show_fsp,
-            &p.show_experience,
-            &status,
-            &user.id,
-        )
-        .await?;
+    db::candidates::update_candidate_privacy(
+        &state.pool,
+        p.visible,
+        p.show_name,
+        p.show_fsp,
+        p.show_experience,
+        status,
+        user.id,
+    )
+    .await?;
     Ok(Json(p))
 }
 
@@ -439,26 +425,20 @@ async fn upload_resume(
     let parsed = matching::parse_resume(&text, Utc::now().timestamp());
     let fields = recognized(&parsed);
 
-    let mut client = state.pool.get().await?;
-    let tx = client.transaction().await?;
-    let field_names: Vec<&str> = fields.clone();
-    db::queries::candidates::insert_resume_upload()
-        .bind(
-            &tx,
-            &Uuid::now_v7(),
-            &user.id,
-            &filename,
-            &(size as i32),
-            &field_names,
-        )
-        .await?;
-    db::queries::candidates::delete_candidate_skills_by_source()
-        .bind(&tx, &user.id, &"resume")
-        .await?;
+    let field_names: Vec<String> = fields.iter().map(|f| (*f).to_owned()).collect();
+    let mut tx = state.pool.begin().await?;
+    db::candidates::insert_resume_upload(
+        &mut *tx,
+        Uuid::now_v7(),
+        user.id,
+        &filename,
+        size as i32,
+        &field_names,
+    )
+    .await?;
+    db::candidates::delete_candidate_skills_by_source(&mut *tx, user.id, "resume").await?;
     for skill in &parsed.skills {
-        db::queries::candidates::insert_candidate_skill()
-            .bind(&tx, &user.id, skill, &"resume")
-            .await?;
+        db::candidates::insert_candidate_skill(&mut *tx, user.id, skill, "resume").await?;
     }
     tx.commit().await?;
     Ok(Json(ResumeDraft {
@@ -489,7 +469,6 @@ async fn profile_pdf(
 ) -> ApiResult<impl IntoResponse> {
     use pdf::{Line, Section};
     let p = load_profile(&state, &user).await?;
-    let client = state.pool.get().await?;
     let now = Utc::now();
     let mut sections = Vec::new();
 
@@ -598,11 +577,7 @@ async fn profile_pdf(
         });
     }
 
-    let fsp_lines = match db::queries::fsp::fsp_link()
-        .bind(&client, &user.id)
-        .opt()
-        .await?
-    {
+    let fsp_lines = match db::fsp::fsp_link(&state.pool, user.id).await? {
         Some(link) => {
             let list = pool::achievements(Some(&link.achievements));
             let mut lines = vec![Line::KeyValue("ФСП ID".into(), link.fsp_id)];

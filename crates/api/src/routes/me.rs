@@ -62,10 +62,7 @@ pub struct MeResponse {
     responses((status = 200, body = MeResponse), (status = 401, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn me(State(state): State<AppState>, user: AuthUser) -> ApiResult<Json<MeResponse>> {
-    let client = state.pool.get().await?;
-    let row = db::queries::users::user_by_id()
-        .bind(&client, &user.id)
-        .opt()
+    let row = db::users::user_by_id(&state.pool, user.id)
         .await?
         .ok_or_else(ApiError::unauthorized)?;
     let mut res = MeResponse {
@@ -78,11 +75,7 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> ApiResult<Json<MeR
     };
     match user.role {
         Role::Candidate => {
-            if let Some(c) = db::queries::me::candidate_onboarding()
-                .bind(&client, &user.id)
-                .opt()
-                .await?
-            {
+            if let Some(c) = db::me::candidate_onboarding(&state.pool, user.id).await? {
                 let category = match (c.specialization.as_deref(), c.grade.as_deref()) {
                     (Some(s), Some(g)) => Some(catalog::Category::new(s.parse()?, g.parse()?)),
                     _ => None,
@@ -105,9 +98,7 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> ApiResult<Json<MeR
             }
         }
         Role::Employer => {
-            res.company = db::queries::me::company_by_owner()
-                .bind(&client, &user.id)
-                .opt()
+            res.company = db::me::company_by_owner(&state.pool, user.id)
                 .await?
                 .map(|c| CompanySummary {
                     id: c.id,
@@ -128,29 +119,20 @@ async fn delete_me(
     user: AuthUser,
     jar: CookieJar,
 ) -> ApiResult<(CookieJar, StatusCode)> {
-    let mut client = state.pool.get().await?;
-    let tx = client.transaction().await?;
+    let mut tx = state.pool.begin().await?;
     match user.role {
         Role::Candidate => {
-            db::queries::me::delete_candidate()
-                .bind(&tx, &user.id)
-                .await?;
+            db::me::delete_candidate(&mut *tx, user.id).await?;
         }
         Role::Employer => {
-            db::queries::me::delete_company_of()
-                .bind(&tx, &user.id)
-                .await?;
+            db::me::delete_company_of(&mut *tx, user.id).await?;
         }
         Role::Admin => {}
     }
     // The users row stays as an anonymized tombstone: audit logs keep pointing at a real id.
     let tombstone = sha256(format!("deleted:{}:{}", user.id, Uuid::now_v7()).as_bytes());
-    db::queries::users::anonymize_user()
-        .bind(&tx, &tombstone, &user.id)
-        .await?;
-    db::queries::users::revoke_user_refresh_tokens()
-        .bind(&tx, &user.id)
-        .await?;
+    db::users::anonymize_user(&mut *tx, &tombstone, user.id).await?;
+    db::users::revoke_user_refresh_tokens(&mut *tx, user.id).await?;
     tx.commit().await?;
     user.revoke(&state).await?;
     Ok((clear_session_cookies(jar), StatusCode::NO_CONTENT))
@@ -175,11 +157,7 @@ async fn my_consents(
     State(state): State<AppState>,
     user: AuthUser,
 ) -> ApiResult<Json<Vec<UserConsent>>> {
-    let client = state.pool.get().await?;
-    let rows = db::queries::consents::user_consents()
-        .bind(&client, &user.id)
-        .all()
-        .await?;
+    let rows = db::consents::user_consents(&state.pool, user.id).await?;
     Ok(Json(
         rows.into_iter()
             .map(|r| UserConsent {
@@ -205,16 +183,11 @@ async fn revoke_consent(
     user: AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    let kind = db::queries::consents::revoke_user_consent()
-        .bind(&client, &id, &user.id)
-        .opt()
+    let kind = db::consents::revoke_user_consent(&state.pool, id, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     if user.role == Role::Candidate && matches!(kind.as_str(), "pd_publication" | "pd_processing") {
-        db::queries::me::hide_candidate()
-            .bind(&client, &user.id)
-            .await?;
+        db::me::hide_candidate(&state.pool, user.id).await?;
     }
     Ok(StatusCode::NO_CONTENT)
 }

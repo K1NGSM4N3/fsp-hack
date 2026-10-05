@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE invitations SET status = 'withdrawn', responded_at = now()\n         WHERE id = $1 AND company_id = $2 AND status IN ('sent', 'viewed')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8da79a81d6b7b7d07820f14d65c7e910569c9d18e81c5a2a460188c584f57a9a"
+}

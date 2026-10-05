@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE candidates\n         SET specialization = $1, grade = $2, theta = $3, category_assigned_at = $4,\n             last_activity_at = greatest(last_activity_at, $4), updated_at = now()\n         WHERE user_id = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Float8",
+        "Timestamptz",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "625d5883b963941754bc12e7d952e66276578e09dd492cf4a60cef9c5ec35003"
+}

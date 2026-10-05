@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM oidc_states WHERE created_at < now() - interval '15 minutes'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "b7bd080c2a10fe75b5754fec370c79625ecd943960933cfb65f21e37cf6d8c21"
+}

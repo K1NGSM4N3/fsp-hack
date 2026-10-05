@@ -11,10 +11,7 @@ pub async fn healthz() -> &'static str {
 }
 
 pub async fn readyz(State(state): State<AppState>) -> impl IntoResponse {
-    let db_ok = match state.pool.get().await {
-        Ok(client) => client.simple_query("SELECT 1").await.is_ok(),
-        Err(_) => false,
-    };
+    let db_ok = db::ping(&state.pool).await.is_ok();
     let kv_ok = state.kv.ping().await.is_ok();
     let status = if db_ok && kv_ok {
         StatusCode::OK

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE hiring_needs\n         SET title = $1, description = $2, specialization = $3, grades = $4,\n             allow_adjacent_grades = $5, must_skills = $6, nice_skills = $7, salary_min = $8,\n             salary_max = $9, work_formats = $10, city = $11, industries = $12, status = $13,\n             updated_at = now()\n         WHERE id = $14 AND company_id = $15",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Bool",
+        "TextArray",
+        "TextArray",
+        "Int8",
+        "Int8",
+        "TextArray",
+        "Text",
+        "TextArray",
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c1919d588561a5fb1e3683a4343cae5e2da002a3da1455635198d7b490b8f673"
+}

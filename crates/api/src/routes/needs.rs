@@ -10,6 +10,7 @@ use catalog::{Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
 use matching::{CategoryStats, Need, ParsedNeed, ScoreBreakdown, Weights};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
@@ -176,6 +177,28 @@ struct CleanNeed {
     must: Vec<String>,
     nice: Vec<String>,
     city: Option<String>,
+    grades: Vec<String>,
+    work_formats: Vec<String>,
+    industries: Vec<String>,
+}
+
+impl CleanNeed {
+    fn fields<'a>(&'a self, n: &'a NeedInput) -> db::needs::NeedFields<'a> {
+        db::needs::NeedFields {
+            title: n.title.trim(),
+            description: n.description.trim(),
+            specialization: n.specialization.slug(),
+            grades: &self.grades,
+            allow_adjacent_grades: n.allow_adjacent_grades,
+            must_skills: &self.must,
+            nice_skills: &self.nice,
+            salary_min: n.salary.min,
+            salary_max: n.salary.max,
+            work_formats: &self.work_formats,
+            city: self.city.as_deref(),
+            industries: &self.industries,
+        }
+    }
 }
 
 fn validate(n: &NeedInput) -> ApiResult<CleanNeed> {
@@ -228,26 +251,19 @@ fn validate(n: &NeedInput) -> ApiResult<CleanNeed> {
             .map(str::trim)
             .filter(|c| !c.is_empty())
             .map(str::to_owned),
+        grades: slugs(&n.grades),
+        work_formats: slugs(&n.work_formats),
+        industries: slugs(&n.industries),
     })
 }
 
-pub async fn effective_need(
-    client: &deadpool_postgres::Object,
-    company: Uuid,
-    id: Uuid,
-) -> ApiResult<Need> {
-    let need = load_need(client, company, id).await?;
+pub async fn effective_need(pool: &PgPool, company: Uuid, id: Uuid) -> ApiResult<Need> {
+    let need = load_need(pool, company, id).await?;
     Ok(need.to_need(&need.filters))
 }
 
-async fn load_need(
-    client: &deadpool_postgres::Object,
-    company: Uuid,
-    id: Uuid,
-) -> ApiResult<HiringNeed> {
-    let row = db::queries::needs::company_need()
-        .bind(client, &company, &id)
-        .opt()
+async fn load_need(pool: &PgPool, company: Uuid, id: Uuid) -> ApiResult<HiringNeed> {
+    let row = db::needs::company_need(pool, company, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     Ok(need_from_row!(row))
@@ -261,12 +277,8 @@ async fn list_needs(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<HiringNeed>>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let rows = db::queries::needs::company_needs()
-        .bind(&client, &company)
-        .all()
-        .await?;
+    let company = company_id(&state.pool, user.id).await?;
+    let rows = db::needs::company_needs(&state.pool, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(need_from_row!(r));
@@ -285,31 +297,12 @@ async fn create_need(
     Json(n): Json<NeedInput>,
 ) -> ApiResult<(StatusCode, Json<HiringNeed>)> {
     let clean = validate(&n)?;
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let id = Uuid::now_v7();
-    db::queries::needs::insert_need()
-        .bind(
-            &client,
-            &id,
-            &company,
-            &n.title.trim(),
-            &n.description.trim(),
-            &n.specialization.slug(),
-            &slugs(&n.grades),
-            &n.allow_adjacent_grades,
-            &clean.must,
-            &clean.nice,
-            &n.salary.min,
-            &n.salary.max,
-            &slugs(&n.work_formats),
-            &clean.city.as_deref(),
-            &slugs(&n.industries),
-        )
-        .await?;
+    db::needs::insert_need(&state.pool, id, company, &clean.fields(&n)).await?;
     Ok((
         StatusCode::CREATED,
-        Json(load_need(&client, company, id).await?),
+        Json(load_need(&state.pool, company, id).await?),
     ))
 }
 
@@ -343,9 +336,8 @@ async fn get_need(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<HiringNeed>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    Ok(Json(load_need(&client, company, id).await?))
+    let company = company_id(&state.pool, user.id).await?;
+    Ok(Json(load_need(&state.pool, company, id).await?))
 }
 
 /// Edit or close a need
@@ -361,36 +353,17 @@ async fn update_need(
     Json(n): Json<NeedInput>,
 ) -> ApiResult<Json<HiringNeed>> {
     let clean = validate(&n)?;
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let status = match n.status.unwrap_or(NeedStatus::Active) {
         NeedStatus::Active => "active",
         NeedStatus::Closed => "closed",
     };
-    let updated = db::queries::needs::update_need()
-        .bind(
-            &client,
-            &n.title.trim(),
-            &n.description.trim(),
-            &n.specialization.slug(),
-            &slugs(&n.grades),
-            &n.allow_adjacent_grades,
-            &clean.must,
-            &clean.nice,
-            &n.salary.min,
-            &n.salary.max,
-            &slugs(&n.work_formats),
-            &clean.city.as_deref(),
-            &slugs(&n.industries),
-            &status,
-            &id,
-            &company,
-        )
-        .await?;
+    let updated =
+        db::needs::update_need(&state.pool, id, company, status, &clean.fields(&n)).await?;
     if updated == 0 {
         return Err(ApiError::not_found());
     }
-    Ok(Json(load_need(&client, company, id).await?))
+    Ok(Json(load_need(&state.pool, company, id).await?))
 }
 
 /// Delete a need with its shortlist
@@ -403,13 +376,8 @@ async fn delete_need(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    if db::queries::needs::delete_need()
-        .bind(&client, &id, &company)
-        .await?
-        == 0
-    {
+    let company = company_id(&state.pool, user.id).await?;
+    if db::needs::delete_need(&state.pool, id, company).await? == 0 {
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
@@ -425,11 +393,16 @@ async fn need_categories(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<CategoryStats>>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let need = load_need(&client, company, id).await?;
+    let company = company_id(&state.pool, user.id).await?;
+    let need = load_need(&state.pool, company, id).await?;
     let now = Utc::now().timestamp();
-    let loaded = pool::load(&client, need.specialization, &PoolFilter::default(), now).await?;
+    let loaded = pool::load(
+        &state.pool,
+        need.specialization,
+        &PoolFilter::default(),
+        now,
+    )
+    .await?;
     Ok(Json(matching::category_stats(
         &need.to_need(&need.filters),
         &loaded.pool,
@@ -457,23 +430,21 @@ pub struct Shortlist {
     pub items: Vec<ShortlistItem>,
 }
 
-async fn shortlist_view(
-    state: &AppState,
-    client: &deadpool_postgres::Object,
-    company: Uuid,
-    need: HiringNeed,
-) -> ApiResult<Shortlist> {
-    let rows = db::queries::needs::shortlist_items()
-        .bind(client, &need.id)
-        .all()
-        .await?;
+async fn shortlist_view(state: &AppState, company: Uuid, need: HiringNeed) -> ApiResult<Shortlist> {
+    let rows = db::needs::shortlist_items(&state.pool, need.id).await?;
     let visible: Vec<_> = rows
         .into_iter()
         .filter(|r| r.in_current || r.pinned)
         .collect();
     let ids: Vec<Uuid> = visible.iter().map(|r| r.candidate_id).collect();
-    let mut cards =
-        cards::load(client, &state.crypto, company, &ids, Utc::now().timestamp()).await?;
+    let mut cards = cards::load(
+        &state.pool,
+        &state.crypto,
+        company,
+        &ids,
+        Utc::now().timestamp(),
+    )
+    .await?;
     let generated = need.shortlist_generated_at;
     let had_previous = generated.is_some_and(|g| visible.iter().any(|r| r.first_seen_at < g));
     let mut items = Vec::with_capacity(visible.len());
@@ -512,10 +483,9 @@ async fn get_shortlist(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Shortlist>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let need = load_need(&client, company, id).await?;
-    Ok(Json(shortlist_view(&state, &client, company, need).await?))
+    let company = company_id(&state.pool, user.id).await?;
+    let need = load_need(&state.pool, company, id).await?;
+    Ok(Json(shortlist_view(&state, company, need).await?))
 }
 
 /// Build or refine the shortlist; pinned and dismissed marks survive, new candidates are flagged
@@ -541,13 +511,12 @@ async fn build_shortlist(
         .limit
         .unwrap_or(SHORTLIST_DEFAULT)
         .clamp(1, SHORTLIST_MAX);
-    let mut client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let need = load_need(&client, company, id).await?;
+    let company = company_id(&state.pool, user.id).await?;
+    let need = load_need(&state.pool, company, id).await?;
     let now = Utc::now().timestamp();
     let effective = need.to_need(&filters);
     let loaded = pool::load(
-        &client,
+        &state.pool,
         need.specialization,
         &PoolFilter {
             text: Some(&effective.description),
@@ -560,33 +529,27 @@ async fn build_shortlist(
     .await?;
     let ranked = matching::rank(&effective, &loaded.pool, &Weights::default(), now, limit);
 
-    let tx = client.transaction().await?;
-    db::queries::needs::start_shortlist_generation()
-        .bind(&tx, &serde_json::to_value(&filters)?, &id)
-        .one()
-        .await?;
+    let mut tx = state.pool.begin().await?;
+    db::needs::start_shortlist_generation(&mut *tx, &serde_json::to_value(&filters)?, id).await?;
     let mut keep = Vec::with_capacity(limit);
     for (pos, r) in ranked.into_iter().take(limit).enumerate() {
         let candidate = loaded.ids[r.index];
         keep.push(candidate);
-        db::queries::needs::upsert_shortlist_item()
-            .bind(
-                &tx,
-                &id,
-                &candidate,
-                &f64::from(r.total),
-                &(pos as i32 + 1),
-                &serde_json::to_value(&r.breakdown)?,
-            )
-            .await?;
-    }
-    db::queries::needs::mark_shortlist_stale()
-        .bind(&tx, &id, &keep)
+        db::needs::upsert_shortlist_item(
+            &mut *tx,
+            id,
+            candidate,
+            f64::from(r.total),
+            pos as i32 + 1,
+            &serde_json::to_value(&r.breakdown)?,
+        )
         .await?;
+    }
+    db::needs::mark_shortlist_stale(&mut *tx, id, &keep).await?;
     tx.commit().await?;
 
-    let need = load_need(&client, company, id).await?;
-    Ok(Json(shortlist_view(&state, &client, company, need).await?))
+    let need = load_need(&state.pool, company, id).await?;
+    Ok(Json(shortlist_view(&state, company, need).await?))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -607,18 +570,16 @@ async fn patch_shortlist_item(
     Path((id, candidate_id)): Path<(Uuid, Uuid)>,
     Json(p): Json<ShortlistPatch>,
 ) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    if db::queries::needs::patch_shortlist_item()
-        .bind(
-            &client,
-            &p.pinned,
-            &p.dismissed,
-            &company,
-            &id,
-            &candidate_id,
-        )
-        .await?
+    let company = company_id(&state.pool, user.id).await?;
+    if db::needs::patch_shortlist_item(
+        &state.pool,
+        p.pinned,
+        p.dismissed,
+        company,
+        id,
+        candidate_id,
+    )
+    .await?
         == 0
     {
         return Err(ApiError::not_found());

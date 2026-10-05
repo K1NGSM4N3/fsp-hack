@@ -16,6 +16,7 @@ use catalog::{Category, Grade, Specialization};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use sqlx::{PgConnection, PgPool};
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
@@ -102,11 +103,8 @@ struct History {
     upgrade_earned: bool,
 }
 
-async fn history(client: &impl db::client::GenericClient, candidate: Uuid) -> ApiResult<History> {
-    let rows = db::queries::assessment::candidate_sessions()
-        .bind(client, &candidate)
-        .all()
-        .await?;
+async fn history(pool: &PgPool, candidate: Uuid) -> ApiResult<History> {
+    let rows = db::assessment::candidate_sessions(pool, candidate).await?;
     let upgrade_earned = rows
         .iter()
         .find(|r| r.status == db::types::AssessmentStatus::Passed)
@@ -314,28 +312,17 @@ async fn start_session(
     user: CandidateUser,
     Json(input): Json<StartInput>,
 ) -> ApiResult<(StatusCode, Json<AssessmentSession>)> {
-    let mut client = state.pool.get().await?;
-    db::queries::assessment::expire_abandoned_sessions()
-        .bind(&client, &user.id)
-        .await?;
-    if let Some(active) = db::queries::assessment::active_session()
-        .bind(&client, &user.id)
-        .opt()
-        .await?
-    {
+    db::assessment::expire_abandoned_sessions(&state.pool, user.id).await?;
+    if let Some(active) = db::assessment::active_session(&state.pool, user.id).await? {
         return Err(
             ApiError::conflict("assessment_in_progress", "Сначала завершите начатый тест")
                 .with_detail(active.to_string()),
         );
     }
-    let candidate = db::queries::candidates::candidate_invitable()
-        .bind(&client, &user.id)
-        .one()
-        .await?;
-    let survey = db::queries::survey::latest_survey()
-        .bind(&client, &user.id)
-        .opt()
-        .await?;
+    let candidate = db::candidates::candidate_invitable(&state.pool, user.id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    let survey = db::survey::latest_survey(&state.pool, user.id).await?;
     let home_spec = match (&candidate.specialization, &survey) {
         (Some(s), _) => s.parse::<Specialization>()?,
         (None, Some(s)) => s.specialization.parse::<Specialization>()?,
@@ -354,7 +341,7 @@ async fn start_session(
     }
 
     let now = Utc::now();
-    let history = history(&client, user.id).await?;
+    let history = history(&state.pool, user.id).await?;
     let p = policy(&state);
     let current = p.current_grade(input.specialization, &history.attempts);
     if current == Some(input.grade) {
@@ -397,21 +384,22 @@ async fn start_session(
     let first = assessment::next_item(&session_state).ok_or_else(|| corrupt("empty item bank"))?;
     let deadline = deadline_for(&first, now)?;
     let id = Uuid::now_v7();
-    let tx = client.transaction().await?;
-    db::queries::assessment::insert_session()
-        .bind(
-            &tx,
-            &id,
-            &user.id,
-            &input.specialization.slug(),
-            &input.grade.slug(),
-            &kind_slug(allowed.kind),
-            &serde_json::to_value(&session_state)?,
-            &serde_json::to_value(&first)?,
-            &deadline,
-            &now,
-        )
-        .await?;
+    let mut tx = state.pool.begin().await?;
+    db::assessment::insert_session(
+        &mut *tx,
+        &db::assessment::NewSession {
+            id,
+            candidate_id: user.id,
+            specialization: input.specialization.slug(),
+            claimed_grade: input.grade.slug(),
+            attempt_kind: kind_slug(allowed.kind),
+            state: &serde_json::to_value(&session_state)?,
+            current_item: &serde_json::to_value(&first)?,
+            deadline,
+            shown_at: now,
+        },
+    )
+    .await?;
     tx.commit().await?;
     let cfg = session_state.config;
     Ok((
@@ -436,9 +424,9 @@ async fn start_session(
 /// Records one outcome and either schedules the next item or finishes the session
 /// (assigning the grade and test-confirmed skills on a pass).
 async fn advance(
-    tx: &tokio_postgres::Transaction<'_>,
+    tx: &mut PgConnection,
     candidate: Uuid,
-    row: &db::queries::assessment::SessionForUpdate,
+    row: &db::assessment::SessionForUpdate,
     session: &mut SessionState,
     item: ItemRef,
     answer: Option<&Answer>,
@@ -453,23 +441,24 @@ async fn advance(
         .clamp(0, i64::from(u32::MAX)) as u32;
     assessment::record(session, item.clone(), correct, elapsed_ms).map_err(corrupt)?;
     let seq = session.administered.len() as i32 - 1;
-    db::queries::assessment::insert_response()
-        .bind(
-            tx,
-            &row.id,
-            &seq,
-            &item.template_id,
-            &i16::from(item.level),
-            &(item.seed as i64),
-            &answer.map(serde_json::to_value).transpose()?,
-            &correct,
-            &timed_out,
-            &(elapsed_ms as i32),
-            &session.summary.theta,
-            &session.summary.se,
-            &now,
-        )
-        .await?;
+    db::assessment::insert_response(
+        &mut *tx,
+        &db::assessment::NewResponse {
+            session_id: row.id,
+            seq,
+            template_id: &item.template_id,
+            level: i16::from(item.level),
+            seed: item.seed as i64,
+            answer: answer.map(serde_json::to_value).transpose()?.as_ref(),
+            correct,
+            timed_out,
+            elapsed_ms: elapsed_ms as i32,
+            theta_after: session.summary.theta,
+            se_after: session.summary.se,
+            answered_at: now,
+        },
+    )
+    .await?;
 
     let items_count = session.administered.len() as i32;
     if let Some(d) = assessment::decision(session) {
@@ -478,22 +467,23 @@ async fn advance(
         } else {
             db::types::AssessmentStatus::Failed
         };
-        db::queries::assessment::finish_session()
-            .bind(
-                tx,
-                &status,
-                &serde_json::to_value(&*session)?,
-                &d.theta,
-                &d.se,
-                &d.grade_measured.map(Grade::slug),
-                &d.confident_above_next,
-                &d.person_fit_lz,
-                &d.aberrant,
-                &items_count,
-                &now,
-                &row.id,
-            )
-            .await?;
+        db::assessment::finish_session(
+            &mut *tx,
+            row.id,
+            &db::assessment::FinishedSession {
+                status,
+                state: &serde_json::to_value(&*session)?,
+                theta: d.theta,
+                se: d.se,
+                measured_grade: d.grade_measured.map(Grade::slug),
+                confident_above_next: d.confident_above_next,
+                person_fit_lz: d.person_fit_lz,
+                aberrant: d.aberrant,
+                items_count,
+                finished_at: now,
+            },
+        )
+        .await?;
         if d.passed {
             let kind = parse_kind(&row.attempt_kind);
             let reason = match kind {
@@ -501,36 +491,35 @@ async fn advance(
                 AttemptKind::Downgrade => "downgrade",
                 _ => "placement",
             };
-            db::queries::grades::insert_grade_assignment()
-                .bind(
-                    tx,
-                    &Uuid::now_v7(),
-                    &candidate,
-                    &row.specialization,
-                    &row.claimed_grade,
-                    &d.theta,
-                    &d.se,
-                    &Some(row.id),
-                    &reason,
-                    &now,
-                )
-                .await?;
-            db::queries::grades::set_candidate_category()
-                .bind(
-                    tx,
-                    &row.specialization,
-                    &row.claimed_grade,
-                    &d.theta,
-                    &now,
-                    &candidate,
-                )
-                .await?;
+            db::grades::insert_grade_assignment(
+                &mut *tx,
+                &db::grades::NewGradeAssignment {
+                    id: Uuid::now_v7(),
+                    candidate_id: candidate,
+                    specialization: &row.specialization,
+                    grade: &row.claimed_grade,
+                    theta: d.theta,
+                    se: d.se,
+                    session_id: Some(row.id),
+                    reason,
+                    assigned_at: now,
+                },
+            )
+            .await?;
+            db::grades::set_candidate_category(
+                &mut *tx,
+                &row.specialization,
+                &row.claimed_grade,
+                d.theta,
+                now,
+                candidate,
+            )
+            .await?;
             let bank = assessment::bank();
             for a in session.administered.iter().filter(|a| a.correct) {
                 if let Some(t) = bank.template(&a.item.template_id) {
                     for skill in t.skills.iter().filter(|s| skills::is_known(s)) {
-                        db::queries::candidates::insert_candidate_skill()
-                            .bind(tx, &candidate, skill, &"test")
+                        db::candidates::insert_candidate_skill(&mut *tx, candidate, skill, "test")
                             .await?;
                     }
                 }
@@ -541,29 +530,21 @@ async fn advance(
     let next =
         assessment::next_item(session).ok_or_else(|| corrupt("no next item before decision"))?;
     let next_deadline = deadline_for(&next, now)?;
-    db::queries::assessment::update_session_progress()
-        .bind(
-            tx,
-            &serde_json::to_value(&*session)?,
-            &serde_json::to_value(&next)?,
-            &next_deadline,
-            &now,
-            &items_count,
-            &row.id,
-        )
-        .await?;
+    db::assessment::update_session_progress(
+        &mut *tx,
+        &serde_json::to_value(&*session)?,
+        &serde_json::to_value(&next)?,
+        next_deadline,
+        now,
+        items_count,
+        row.id,
+    )
+    .await?;
     Ok(())
 }
 
-async fn view(
-    state: &AppState,
-    client: &deadpool_postgres::Object,
-    candidate: Uuid,
-    id: Uuid,
-) -> ApiResult<AssessmentSession> {
-    let r = db::queries::assessment::session_state()
-        .bind(client, &id, &candidate)
-        .opt()
+async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<AssessmentSession> {
+    let r = db::assessment::session_state(&state.pool, id, candidate)
         .await?
         .ok_or_else(ApiError::not_found)?;
     let s = load_state(r.state)?;
@@ -594,7 +575,7 @@ async fn view(
                 aberrant: r.aberrant.unwrap_or(false),
                 items_administered: s.administered.len() as u16,
             };
-            let history = history(client, candidate).await?;
+            let history = history(&state.pool, candidate).await?;
             Some(AssessmentResult {
                 test_strength: Some(matching::test_strength(claimed, theta as f32)),
                 assigned_grade: r.assigned.then_some(claimed),
@@ -630,20 +611,15 @@ async fn list_sessions(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<AssessmentSession>>> {
-    let client = state.pool.get().await?;
-    db::queries::assessment::expire_abandoned_sessions()
-        .bind(&client, &user.id)
-        .await?;
-    let ids: Vec<Uuid> = db::queries::assessment::candidate_sessions()
-        .bind(&client, &user.id)
-        .all()
+    db::assessment::expire_abandoned_sessions(&state.pool, user.id).await?;
+    let ids: Vec<Uuid> = db::assessment::candidate_sessions(&state.pool, user.id)
         .await?
         .into_iter()
         .map(|r| r.id)
         .collect();
     let mut out = Vec::with_capacity(ids.len());
     for id in ids {
-        out.push(view(&state, &client, user.id, id).await?);
+        out.push(view(&state, user.id, id).await?);
     }
     Ok(Json(out))
 }
@@ -658,8 +634,7 @@ async fn get_session(
     user: CandidateUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<AssessmentSession>> {
-    let client = state.pool.get().await?;
-    Ok(Json(view(&state, &client, user.id, id).await?))
+    Ok(Json(view(&state, user.id, id).await?))
 }
 
 /// Current item without the answer key; an expired item is recorded as wrong and the next one is returned
@@ -672,11 +647,8 @@ async fn current_item(
     user: CandidateUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<AssessmentSession>> {
-    let mut client = state.pool.get().await?;
-    let tx = client.transaction().await?;
-    let row = db::queries::assessment::session_for_update()
-        .bind(&tx, &id, &user.id)
-        .opt()
+    let mut tx = state.pool.begin().await?;
+    let row = db::assessment::session_for_update(&mut *tx, id, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     let now = Utc::now();
@@ -686,10 +658,10 @@ async fn current_item(
     {
         let mut session = load_state(row.state.clone())?;
         let item: ItemRef = serde_json::from_value(item.clone()).map_err(corrupt)?;
-        advance(&tx, user.id, &row, &mut session, item, None, now).await?;
+        advance(&mut tx, user.id, &row, &mut session, item, None, now).await?;
     }
     tx.commit().await?;
-    Ok(Json(view(&state, &client, user.id, id).await?))
+    Ok(Json(view(&state, user.id, id).await?))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -715,11 +687,8 @@ async fn answer(
     Path(id): Path<Uuid>,
     Json(input): Json<AnswerInput>,
 ) -> ApiResult<Json<AssessmentSession>> {
-    let mut client = state.pool.get().await?;
-    let tx = client.transaction().await?;
-    let row = db::queries::assessment::session_for_update()
-        .bind(&tx, &id, &user.id)
-        .opt()
+    let mut tx = state.pool.begin().await?;
+    let row = db::assessment::session_for_update(&mut *tx, id, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     if row.status != db::types::AssessmentStatus::InProgress {
@@ -743,7 +712,7 @@ async fn answer(
         .map_err(corrupt)?
         .ok_or_else(|| corrupt("no current item"))?;
     advance(
-        &tx,
+        &mut tx,
         user.id,
         &row,
         &mut session,
@@ -752,11 +721,9 @@ async fn answer(
         Utc::now(),
     )
     .await?;
-    db::queries::candidates::touch_candidate_activity()
-        .bind(&tx, &user.id)
-        .await?;
+    db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
     tx.commit().await?;
-    Ok(Json(view(&state, &client, user.id, id).await?))
+    Ok(Json(view(&state, user.id, id).await?))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -793,15 +760,10 @@ async fn category(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<CategoryStatus>> {
-    let client = state.pool.get().await?;
-    let c = db::queries::candidates::candidate_profile()
-        .bind(&client, &user.id)
-        .one()
-        .await?;
-    let survey = db::queries::survey::latest_survey()
-        .bind(&client, &user.id)
-        .opt()
-        .await?;
+    let c = db::candidates::candidate_profile(&state.pool, user.id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    let survey = db::survey::latest_survey(&state.pool, user.id).await?;
     let category = match (c.specialization.as_deref(), c.grade.as_deref()) {
         (Some(s), Some(g)) => Some(Category::new(s.parse()?, g.parse()?)),
         _ => None,
@@ -810,7 +772,7 @@ async fn category(
         .map(|c| c.specialization)
         .or_else(|| survey.as_ref().and_then(|s| s.specialization.parse().ok()));
     let now = Utc::now().timestamp();
-    let history = history(&client, user.id).await?;
+    let history = history(&state.pool, user.id).await?;
     let (available, next_change_at) = match spec {
         Some(spec) => {
             let available = offers(&state, spec, &history, now);
@@ -838,10 +800,7 @@ async fn category(
         }
         None => (Vec::new(), None),
     };
-    let grades = db::queries::grades::grade_history()
-        .bind(&client, &user.id)
-        .all()
-        .await?;
+    let grades = db::grades::grade_history(&state.pool, user.id).await?;
     let mut history_out = Vec::with_capacity(grades.len());
     for g in grades {
         history_out.push(GradeHistoryEntry {
@@ -941,9 +900,8 @@ async fn need_test_plan(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<TestPlanDemo>> {
-    let client = state.pool.get().await?;
-    let company = super::company::company_id(&client, user.id).await?;
-    let need = super::needs::effective_need(&client, company, id).await?;
+    let company = super::company::company_id(&state.pool, user.id).await?;
+    let need = super::needs::effective_need(&state.pool, company, id).await?;
     let grade = need.grades.first().copied().unwrap_or(Grade::Middle);
     let skills: Vec<String> = need
         .must_skills

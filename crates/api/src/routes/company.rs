@@ -1,6 +1,7 @@
 use axum::{Json, extract::State};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
@@ -36,10 +37,8 @@ pub struct CompanyResponse {
     pub updated_at: DateTime<Utc>,
 }
 
-pub async fn company_id(client: &deadpool_postgres::Object, owner: Uuid) -> ApiResult<Uuid> {
-    db::queries::me::company_by_owner()
-        .bind(client, &owner)
-        .opt()
+pub async fn company_id(pool: &PgPool, owner: Uuid) -> ApiResult<Uuid> {
+    db::me::company_by_owner(pool, owner)
         .await?
         .map(|c| c.id)
         .ok_or_else(|| {
@@ -58,10 +57,7 @@ async fn get_company(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<CompanyResponse>> {
-    let client = state.pool.get().await?;
-    let c = db::queries::companies::company_of_owner()
-        .bind(&client, &user.id)
-        .opt()
+    let c = db::companies::company_of_owner(&state.pool, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     Ok(Json(CompanyResponse {
@@ -104,21 +100,21 @@ async fn put_company(
             "Слишком длинное описание",
         );
     v.finish()?;
-    let client = state.pool.get().await?;
-    db::queries::companies::update_company()
-        .bind(
-            &client,
-            &p.name.trim(),
-            &p.description.trim(),
-            &blank_to_none(p.industry).as_deref(),
-            &blank_to_none(p.website).as_deref(),
-            &blank_to_none(p.city).as_deref(),
-            &blank_to_none(p.size).as_deref(),
-            &blank_to_none(p.contact_email).as_deref(),
-            &blank_to_none(p.contact_phone).as_deref(),
-            &blank_to_none(p.contact_telegram).as_deref(),
-            &user.id,
-        )
-        .await?;
+    db::companies::update_company(
+        &state.pool,
+        user.id,
+        &db::companies::CompanyUpdate {
+            name: p.name.trim(),
+            description: p.description.trim(),
+            industry: blank_to_none(p.industry).as_deref(),
+            website: blank_to_none(p.website).as_deref(),
+            city: blank_to_none(p.city).as_deref(),
+            size: blank_to_none(p.size).as_deref(),
+            contact_email: blank_to_none(p.contact_email).as_deref(),
+            contact_phone: blank_to_none(p.contact_phone).as_deref(),
+            contact_telegram: blank_to_none(p.contact_telegram).as_deref(),
+        },
+    )
+    .await?;
     get_company(State(state), user).await
 }

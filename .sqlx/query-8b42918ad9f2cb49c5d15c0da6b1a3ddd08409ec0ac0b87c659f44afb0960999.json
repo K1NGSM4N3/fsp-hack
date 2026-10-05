@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE fsp_links SET achievements = $1, last_sync_at = now() WHERE candidate_id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8b42918ad9f2cb49c5d15c0da6b1a3ddd08409ec0ac0b87c659f44afb0960999"
+}

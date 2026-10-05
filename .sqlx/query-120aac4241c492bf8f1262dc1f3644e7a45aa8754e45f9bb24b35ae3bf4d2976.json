@@ -1,0 +1,31 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO invitation_events (id, invitation_id, status, actor_user_id)\n         VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "invitation_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "declined",
+                "expired",
+                "withdrawn"
+              ]
+            }
+          }
+        },
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "120aac4241c492bf8f1262dc1f3644e7a45aa8754e45f9bb24b35ae3bf4d2976"
+}

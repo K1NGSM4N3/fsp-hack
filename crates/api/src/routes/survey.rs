@@ -96,30 +96,26 @@ async fn submit_survey(
     v.finish()?;
 
     let id = Uuid::now_v7();
-    let mut client = state.pool.get().await?;
-    let tx = client.transaction().await?;
-    db::queries::survey::insert_survey()
-        .bind(
-            &tx,
-            &id,
-            &user.id,
-            &s.direction.slug(),
-            &s.specialization.slug(),
-            &s.claimed_grade.slug(),
-            &s.skills,
-            &slugs(&s.industries),
-            &s.experience_years,
-            &serde_json::to_value(&s.self_assessment)?,
-        )
-        .await?;
+    let mut tx = state.pool.begin().await?;
+    db::survey::insert_survey(
+        &mut *tx,
+        &db::survey::NewSurvey {
+            id,
+            candidate_id: user.id,
+            direction: s.direction.slug(),
+            specialization: s.specialization.slug(),
+            claimed_grade: s.claimed_grade.slug(),
+            skills: &s.skills,
+            industries: &slugs(&s.industries),
+            experience_years: s.experience_years,
+            self_assessment: &serde_json::to_value(&s.self_assessment)?,
+        },
+    )
+    .await?;
     for skill in &s.skills {
-        db::queries::candidates::insert_candidate_skill()
-            .bind(&tx, &user.id, skill, &"declared")
-            .await?;
+        db::candidates::insert_candidate_skill(&mut *tx, user.id, skill, "declared").await?;
     }
-    db::queries::candidates::touch_candidate_activity()
-        .bind(&tx, &user.id)
-        .await?;
+    db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
     tx.commit().await?;
 
     Ok((
@@ -146,11 +142,7 @@ async fn survey_history(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<SurveyResponse>>> {
-    let client = state.pool.get().await?;
-    let rows = db::queries::survey::survey_history()
-        .bind(&client, &user.id)
-        .all()
-        .await?;
+    let rows = db::survey::survey_history(&state.pool, user.id).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(SurveyResponse {

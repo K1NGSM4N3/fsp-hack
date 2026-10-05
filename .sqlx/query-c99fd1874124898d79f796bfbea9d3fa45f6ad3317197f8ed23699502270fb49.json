@@ -1,0 +1,112 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.id, v.company_id, co.name AS company_name, co.city AS company_city, v.title,\n                  v.description, v.specialization, v.grade, v.skills, v.salary_min, v.salary_max,\n                  v.work_format, v.city, v.published_at, count(*) OVER () AS \"total!\"\n           FROM vacancies v\n           JOIN companies co ON co.id = v.company_id\n           WHERE v.status = 'published'\n             AND ($1::text IS NULL OR v.specialization = $1)\n             AND ($2::text IS NULL OR v.grade = $2)\n             AND ($3::text IS NULL OR v.work_format = $3)\n             AND ($4::bigint IS NULL OR v.salary_max >= $4)\n             AND ($5::text IS NULL OR v.search_tsv @@ websearch_to_tsquery('russian', $5))\n           ORDER BY v.published_at DESC\n           LIMIT $6 OFFSET $7",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "company_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "company_city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "skills",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 9,
+        "name": "salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "salary_max",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 11,
+        "name": "work_format",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 13,
+        "name": "published_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "total!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      null
+    ]
+  },
+  "hash": "c99fd1874124898d79f796bfbea9d3fa45f6ad3317197f8ed23699502270fb49"
+}

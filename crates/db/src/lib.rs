@@ -1,32 +1,36 @@
-// This file was generated with `clorinde`. Do not modify.
+//! PostgreSQL access: one module per domain area. Every query is a `sqlx` macro checked against
+//! the schema at compile time; offline metadata lives in `.sqlx/` (`make db-prepare`).
 
-mod array_iterator;
-pub mod client;
-mod domain;
-#[allow(clippy::all, clippy::pedantic)]
-#[allow(unused_variables)]
-#[allow(unused_imports)]
-#[allow(dead_code)]
-pub mod queries;
-mod type_traits;
-#[allow(clippy::all, clippy::pedantic)]
-#[allow(unused_variables)]
-#[allow(unused_imports)]
-#[allow(dead_code)]
+pub mod assessment;
+pub mod candidates;
+pub mod companies;
+pub mod consents;
+pub mod contacts;
+pub mod fsp;
+pub mod grades;
+pub mod invitations;
+pub mod market;
+pub mod me;
+pub mod needs;
+pub mod pool;
+pub mod reports;
+pub mod seed;
+pub mod survey;
+pub mod tasks;
 pub mod types;
-mod utils;
-pub use array_iterator::ArrayIterator;
-#[cfg(feature = "deadpool")]
-pub use deadpool_postgres;
-pub use domain::{Domain, DomainArray};
-#[cfg(not(any(feature = "deadpool", feature = "wasm-async")))]
-pub use postgres;
-#[cfg(not(any(feature = "deadpool", feature = "wasm-async")))]
-pub use postgres::fallible_iterator;
-#[cfg(any(feature = "deadpool", feature = "wasm-async"))]
-pub use tokio_postgres;
-#[cfg(any(feature = "deadpool", feature = "wasm-async"))]
-pub use tokio_postgres::fallible_iterator;
-pub use type_traits::JsonSql;
-pub use type_traits::{ArraySql, BytesSql, IterSql, StringSql};
-pub(crate) use utils::slice_iter;
+pub mod users;
+pub mod vacancies;
+
+use sqlx::{Connection, PgPool, migrate::Migrator};
+
+pub static MIGRATOR: Migrator = sqlx::migrate!("../../db/migrations");
+
+pub async fn ping(pool: &PgPool) -> Result<(), sqlx::Error> {
+    pool.acquire().await?.ping().await
+}
+
+/// SQLSTATE 23505: the caller maps it to a domain conflict (an active invitation, a repeated application).
+pub fn is_unique_violation(e: &sqlx::Error) -> bool {
+    e.as_database_error()
+        .is_some_and(|d| d.is_unique_violation())
+}

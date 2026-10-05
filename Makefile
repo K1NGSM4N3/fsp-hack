@@ -1,17 +1,19 @@
 SHELL := /bin/bash
 DATABASE_URL ?= postgres://$(USER)@localhost:5432/fsp_hack
 PG_ADMIN_URL ?= postgres://postgres@localhost:5432
-MIGRATIONS := $(sort $(wildcard db/migrations/*.sql))
+# sqlx::test creates a throwaway database per test on this server; the role needs CREATEDB.
+TEST_DATABASE_URL ?= $(PG_ADMIN_URL)/postgres
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo 'docker compose' || echo docker-compose) -f deploy/compose.yml
 
-.PHONY: db gen-db api fsp-mock gen-api web test lint validate docs up down logs
+.PHONY: db db-prepare api fsp-mock gen-api web test lint validate docs up down logs
 
 db:
 	@psql "$(PG_ADMIN_URL)/postgres" -tAc "select 1 from pg_database where datname='fsp_hack'" | grep -q 1 \
 		|| psql "$(PG_ADMIN_URL)/postgres" -c "create database fsp_hack owner \"$(USER)\""
 
-gen-db:
-	clorinde fresh -u "$(PG_ADMIN_URL)" $(MIGRATIONS)
+db-prepare:
+	sqlx migrate run --source db/migrations --database-url "$(DATABASE_URL)"
+	cargo sqlx prepare --workspace --database-url "$(DATABASE_URL)" -- --all-targets
 
 api:
 	DATABASE_URL="$(DATABASE_URL)" PUBLIC_URL=$${PUBLIC_URL:-http://localhost:3000} FSP_DEV_LINK=$${FSP_DEV_LINK:-true} \
@@ -28,7 +30,7 @@ web:
 	cd web && npm run dev
 
 test:
-	cargo test --workspace
+	DATABASE_URL="$(TEST_DATABASE_URL)" cargo test --workspace
 	cd web && npx tsc --noEmit
 
 lint:

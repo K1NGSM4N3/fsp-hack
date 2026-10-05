@@ -17,7 +17,7 @@
 |---|---|---|
 | Backend | Rust (edition 2024), axum, tokio | Скорость, типобезопасность правил видимости |
 | API-контракт | utoipa → OpenAPI 3.1, Swagger UI (`utoipa-swagger-ui`) | Требование `N-6`; из спеки генерируем TS-клиент |
-| Доступ к БД | tokio-postgres + deadpool-postgres; типизированные запросы — **clorinde** (SQL в `.sql`, генерация Rust); миграции — **refinery** | SQL-first, проверка запросов на этапе генерации |
+| Доступ к БД | **sqlx** (пул `PgPool`): SQL пишется руками в макросах `query!`/`query_as!`, проверяется по схеме при компиляции; офлайн-метаданные в `.sqlx/`, сборка без БД; миграции — `sqlx::migrate!` | SQL-first без генератора кода: ошибка в запросе или схеме ловится компилятором |
 | СУБД | PostgreSQL + pgvector + `tsvector` (russian) + `pg_trgm` + JSONB | Одна база на всё; без OLAP и SurrealDB (лицензия BSL, лишняя RAM) |
 | Кэш, лимиты | Valkey (BSD, совместим с Redis); в dev — in-memory реализация за тем же трейтом | Rate limit, deny-list токенов, кэш статистики категорий |
 | Frontend | Next.js (App Router) + TypeScript, TanStack Query, `openapi-typescript` + `openapi-fetch`, Tailwind CSS, GSAP + Lenis для анимаций публичного сайта | Без Vite. Права — только на бэке. Анимации отключаются при `prefers-reduced-motion` |
@@ -30,7 +30,7 @@
 | Деплой | Docker (multi-stage, cargo-chef), docker compose с профилями, Caddy (TLS, роутинг), VPS в РФ | `N-5`, 152-ФЗ |
 | Dev-окружение | Nix flake (devShell) — опционально; Makefile — основные команды | Жюри Nix не нужен |
 
-Чего **не** берём и почему: Vite (решение команды), sqlx (выбран tokio-postgres + clorinde), SurrealDB (BSL), ClickHouse/OLAP (нагрузка — десятки пользователей), Redis (лицензия RSAL/SSPL → Valkey), ГОСТ-криптография в рантайме (нужна сертификация СКЗИ, самописный алгоритм соответствия не даёт — см. §9.4).
+Чего **не** берём и почему: Vite (решение команды), SurrealDB (BSL), ClickHouse/OLAP (нагрузка — десятки пользователей), Redis (лицензия RSAL/SSPL → Valkey), ГОСТ-криптография в рантайме (нужна сертификация СКЗИ, самописный алгоритм соответствия не даёт — см. §9.4).
 
 ## 3. Компоненты
 
@@ -55,18 +55,19 @@
 .
 ├── README.md  AGENTS.md  CLAUDE.md  specs.md  architecture.md  api.md
 ├── Cargo.toml                 # workspace
+├── .cargo/config.toml         # SQLX_OFFLINE=true: сборка по .sqlx/ без базы
+├── .sqlx/                     # метаданные запросов sqlx (make db-prepare)
 ├── Makefile                   # основные команды
 ├── crates/
 │   ├── catalog/               # справочники: направления, специализации, грейды, категории, отрасли
 │   ├── assessment/            # ЧИСТАЯ логика тестирования: IRT, CAT, шаблоны заданий, политика грейда
 │   ├── matching/              # ЧИСТАЯ логика подбора: навыки, ФСП-скор, скоринг с объяснениями, разбор резюме
-│   ├── db/                    # СГЕНЕРИРОВАН clorinde из db/queries — руками не править
+│   ├── db/                    # доступ к PostgreSQL на sqlx: запросы, типы строк и enum'ов, тесты на живой БД
 │   ├── api/                   # axum: HTTP, auth, OpenAPI, сервисы (оркестрация логики + db)
 │   ├── fsp-mock/              # заглушка реестра достижений ФСП (axum, данные из JSON)
 │   └── validate/              # симуляция и отчёт валидации (использует assessment и matching)
 ├── db/
-│   ├── migrations/            # refinery: V001__init.sql, V002__...
-│   └── queries/               # clorinde: *.sql с аннотациями --! name
+│   └── migrations/            # sqlx: 0001_init.sql, 0002_...
 ├── web/                       # Next.js
 ├── deploy/                    # compose, Dockerfile'ы, Caddyfile, keycloak realm, grafana, prometheus
 ├── docs/validation/           # сгенерированные отчёты валидации
@@ -343,4 +344,4 @@
 | `obs` | prometheus, loki, alloy, grafana |
 | `full` | всё вместе — для демо |
 
-Порты наружу: 8080 (Caddy), 8025 (Mailpit UI), 8081 (Keycloak), 3001 (Grafana). Миграции применяет api при старте. Демо-данные — `make seed` (или `SEED_DEMO=true`).
+Порты наружу: 8080 (Caddy), 8025 (Mailpit UI), 8081 (Keycloak), 3001 (Grafana). Миграции применяет api при старте (`sqlx::migrate!`, advisory lock — безопасно для нескольких реплик). Демо-данные — `make seed` (или `SEED_DEMO=true`).

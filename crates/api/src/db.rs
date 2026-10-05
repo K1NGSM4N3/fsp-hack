@@ -1,40 +1,35 @@
-use deadpool_postgres::{BuildError, Manager, ManagerConfig, Pool, PoolError, RecyclingMethod};
-use tokio_postgres::NoTls;
-
-mod embedded {
-    refinery::embed_migrations!("../../db/migrations");
-}
+use sqlx::{
+    PgPool,
+    migrate::{Migrate, MigrateError},
+    postgres::{PgConnectOptions, PgPoolOptions},
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum DbSetupError {
-    #[error("DATABASE_URL: {0}")]
-    Url(#[from] tokio_postgres::Error),
-    #[error("pool: {0}")]
-    Build(#[from] BuildError),
-    #[error("pool: {0}")]
-    Pool(#[from] PoolError),
+    #[error("database: {0}")]
+    Db(#[from] sqlx::Error),
     #[error("migration: {0}")]
-    Migration(#[from] refinery::Error),
+    Migration(#[from] MigrateError),
 }
 
-pub fn pool(database_url: &str) -> Result<Pool, DbSetupError> {
-    let pg: tokio_postgres::Config = database_url.parse()?;
-    let manager = Manager::from_config(
-        pg,
-        NoTls,
-        ManagerConfig {
-            recycling_method: RecyclingMethod::Fast,
-        },
-    );
-    Ok(Pool::builder(manager).max_size(16).build()?)
+pub fn pool(database_url: &str) -> Result<PgPool, DbSetupError> {
+    let options: PgConnectOptions = database_url.parse()?;
+    Ok(PgPoolOptions::new()
+        .max_connections(16)
+        .connect_lazy_with(options))
 }
 
-pub async fn migrate(pool: &Pool) -> Result<(), DbSetupError> {
-    let mut client = pool.get().await?;
-    let client: &mut tokio_postgres::Client = &mut client;
-    let report = embedded::migrations::runner().run_async(client).await?;
-    for m in report.applied_migrations() {
-        tracing::info!(migration = %m, "applied");
+/// Concurrent replicas are safe: `Migrator::run` holds a Postgres advisory lock while applying.
+pub async fn migrate(pool: &PgPool) -> Result<(), DbSetupError> {
+    let mut conn = pool.acquire().await?;
+    // The history table does not exist before the very first run.
+    let before = conn.list_applied_migrations().await.unwrap_or_default();
+    db::MIGRATOR.run(&mut *conn).await?;
+    for m in db::MIGRATOR
+        .iter()
+        .filter(|m| before.iter().all(|a| a.version != m.version))
+    {
+        tracing::info!(version = m.version, name = %m.description, "migration applied");
     }
     Ok(())
 }

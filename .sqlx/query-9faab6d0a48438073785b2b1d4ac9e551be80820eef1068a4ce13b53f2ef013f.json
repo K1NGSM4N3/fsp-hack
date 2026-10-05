@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO assessment_sessions (id, candidate_id, specialization, claimed_grade, attempt_kind,\n                                          state, current_item, current_item_deadline, current_item_shown_at)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Text",
+        "Text",
+        "Text",
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9faab6d0a48438073785b2b1d4ac9e551be80820eef1068a4ce13b53f2ef013f"
+}

@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT\n               (SELECT count(DISTINCT pv.company_id) FROM profile_views pv\n                 WHERE pv.candidate_id = $1 AND pv.viewed_on >= current_date - 30) AS \"companies_viewed_you!\",\n               (SELECT count(*) FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id\n                 WHERE ic.specialization = $2 AND ic.grade = $3\n                   AND i.created_at >= now() - interval '30 days') AS \"invitations_in_category!\",\n               (SELECT count(*) FROM hiring_needs n\n                 WHERE n.status = 'active' AND n.specialization = $2 AND $3 = ANY (n.grades)) AS \"open_needs!\",\n               (SELECT count(*) FROM candidates oc\n                 WHERE oc.specialization = $2 AND oc.grade = $3 AND oc.visible\n                   AND oc.search_status <> 'closed') AS \"peers!\",\n               (SELECT (percentile_cont(0.5) WITHIN GROUP (ORDER BY i.salary_min))::bigint\n                  FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id\n                 WHERE ic.specialization = $2 AND ic.grade = $3\n                   AND i.created_at >= now() - interval '90 days') AS median_salary_min,\n               (SELECT (percentile_cont(0.5) WITHIN GROUP (ORDER BY i.salary_max))::bigint\n                  FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id\n                 WHERE ic.specialization = $2 AND ic.grade = $3\n                   AND i.created_at >= now() - interval '90 days') AS median_salary_max",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "companies_viewed_you!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "invitations_in_category!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "open_needs!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "peers!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "median_salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "median_salary_max",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "e9081c27647fe059de9817045f07772626494c2560d44ba5cd7489407ec71c22"
+}

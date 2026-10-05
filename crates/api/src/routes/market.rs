@@ -4,6 +4,7 @@
 use axum::{Json, extract::State};
 use catalog::{Category, Grade, Specialization};
 use serde::Serialize;
+use sqlx::PgPool;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -31,11 +32,8 @@ pub struct CategoryCard {
     pub median_expectation: Option<i64>,
 }
 
-pub async fn category_cards(client: &deadpool_postgres::Object) -> ApiResult<Vec<CategoryCard>> {
-    let rows = db::queries::market::category_overview()
-        .bind(client)
-        .all()
-        .await?;
+pub async fn category_cards(pool: &PgPool) -> ApiResult<Vec<CategoryCard>> {
+    let rows = db::market::category_overview(pool).await?;
     let mut cards = Vec::with_capacity(rows.len());
     for r in rows {
         let category = Category::new(
@@ -63,8 +61,7 @@ async fn categories(
     State(state): State<AppState>,
     _user: EmployerUser,
 ) -> ApiResult<Json<Vec<CategoryCard>>> {
-    let client = state.pool.get().await?;
-    Ok(Json(category_cards(&client).await?))
+    Ok(Json(category_cards(&state.pool).await?))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -86,21 +83,16 @@ async fn market(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<MarketStats>> {
-    let client = state.pool.get().await?;
-    let c = db::queries::candidates::candidate_invitable()
-        .bind(&client, &user.id)
-        .one()
-        .await?;
+    let c = db::candidates::candidate_invitable(&state.pool, user.id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
     let (Some(spec), Some(grade)) = (c.specialization, c.grade) else {
         return Err(ApiError::conflict(
             "no_category",
             "Категория появится после теста",
         ));
     };
-    let m = db::queries::market::candidate_market()
-        .bind(&client, &user.id, &spec, &grade)
-        .one()
-        .await?;
+    let m = db::market::candidate_market(&state.pool, user.id, &spec, &grade).await?;
     Ok(Json(MarketStats {
         category: Category::new(spec.parse()?, grade.parse()?),
         companies_viewed_you_30d: m.companies_viewed_you,

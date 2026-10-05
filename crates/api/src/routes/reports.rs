@@ -68,13 +68,7 @@ async fn create_report(
     if comment.is_some_and(|c| c.len() > 2000) {
         return Err(ApiError::field("comment", "Не длиннее 2000 символов"));
     }
-    let client = state.pool.get().await?;
-    if db::queries::reports::recent_reports_by()
-        .bind(&client, &user.id)
-        .one()
-        .await?
-        >= DAILY_LIMIT
-    {
+    if db::reports::recent_reports_by(&state.pool, user.id).await? >= DAILY_LIMIT {
         return Err(ApiError::too_many_requests());
     }
     let kind = match r.target_kind {
@@ -90,16 +84,7 @@ async fn create_report(
         ReportReason::Other => "other",
     };
     let id = Uuid::now_v7();
-    db::queries::reports::insert_report()
-        .bind(
-            &client,
-            &id,
-            &user.id,
-            &kind,
-            &r.target_id,
-            &reason,
-            &comment,
-        )
+    db::reports::insert_report(&state.pool, id, user.id, kind, r.target_id, reason, comment)
         .await?;
     Ok((StatusCode::CREATED, Json(ReportCreated { id })))
 }

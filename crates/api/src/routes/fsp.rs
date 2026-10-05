@@ -10,6 +10,7 @@ use axum::{
 use chrono::{DateTime, Duration, Utc};
 use matching::{Achievement, FspScore};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -77,17 +78,15 @@ async fn link_start(State(state): State<AppState>, user: CandidateUser) -> ApiRe
     let request = fsp_client::authorization_request(&state.http, &state.config.fsp)
         .await
         .map_err(fsp_error)?;
-    let client = state.pool.get().await?;
-    db::queries::fsp::purge_oidc_states().bind(&client).await?;
-    db::queries::fsp::insert_oidc_state()
-        .bind(
-            &client,
-            &request.state,
-            &user.id,
-            &request.pkce_verifier,
-            &request.nonce,
-        )
-        .await?;
+    db::fsp::purge_oidc_states(&state.pool).await?;
+    db::fsp::insert_oidc_state(
+        &state.pool,
+        &request.state,
+        user.id,
+        &request.pkce_verifier,
+        &request.nonce,
+    )
+    .await?;
     Ok(Redirect::to(&request.url))
 }
 
@@ -122,10 +121,7 @@ async fn finish_link(state: &AppState, q: CallbackQuery) -> Result<(), &'static 
     let (Some(code), Some(oidc_state)) = (q.code, q.state) else {
         return Err("bad_request");
     };
-    let client = state.pool.get().await.map_err(|_| "internal")?;
-    let pending = db::queries::fsp::take_oidc_state()
-        .bind(&client, &oidc_state)
-        .opt()
+    let pending = db::fsp::take_oidc_state(&state.pool, &oidc_state)
         .await
         .map_err(|_| "internal")?
         .ok_or("expired")?;
@@ -147,7 +143,7 @@ async fn finish_link(state: &AppState, q: CallbackQuery) -> Result<(), &'static 
             _ => "verification_failed",
         }
     })?;
-    link(state, &client, pending.user_id, &fsp_id, "oidc")
+    link(state, pending.user_id, &fsp_id, "oidc")
         .await
         .map_err(|e| match e {
             ApiError::Status {
@@ -158,17 +154,8 @@ async fn finish_link(state: &AppState, q: CallbackQuery) -> Result<(), &'static 
         })
 }
 
-async fn link(
-    state: &AppState,
-    client: &deadpool_postgres::Object,
-    candidate: uuid::Uuid,
-    fsp_id: &str,
-    via: &str,
-) -> ApiResult<()> {
-    if let Some(owner) = db::queries::fsp::fsp_link_owner()
-        .bind(client, &fsp_id)
-        .opt()
-        .await?
+async fn link(state: &AppState, candidate: uuid::Uuid, fsp_id: &str, via: &str) -> ApiResult<()> {
+    if let Some(owner) = db::fsp::fsp_link_owner(&state.pool, fsp_id).await?
         && owner != candidate
     {
         return Err(ApiError::conflict(
@@ -176,33 +163,27 @@ async fn link(
             "Этот ФСП ID уже привязан к другому профилю",
         ));
     }
-    db::queries::fsp::upsert_fsp_link()
-        .bind(client, &candidate, &fsp_id, &via)
-        .await?;
-    if let Err(e) = sync_achievements(state, client, candidate, fsp_id).await {
+    db::fsp::upsert_fsp_link(&state.pool, candidate, fsp_id, via).await?;
+    if let Err(e) = sync_achievements(state, candidate, fsp_id).await {
         tracing::warn!(error = %e, "fsp registry sync failed, link kept");
     }
     Ok(())
 }
 
-async fn sync_achievements(
-    state: &AppState,
-    client: &deadpool_postgres::Object,
-    candidate: uuid::Uuid,
-    fsp_id: &str,
-) -> ApiResult<()> {
+async fn sync_achievements(state: &AppState, candidate: uuid::Uuid, fsp_id: &str) -> ApiResult<()> {
     let achievements =
         match fsp_client::fetch_achievements(&state.http, &state.config.fsp, fsp_id).await {
             Ok(a) => a,
             Err(FspError::NotFound) => Vec::new(),
             Err(e) => return Err(fsp_error(e)),
         };
-    db::queries::fsp::store_fsp_achievements()
-        .bind(client, &serde_json::Value::Array(achievements), &candidate)
-        .await?;
-    db::queries::candidates::touch_candidate_activity()
-        .bind(client, &candidate)
-        .await?;
+    db::fsp::store_fsp_achievements(
+        &state.pool,
+        &serde_json::Value::Array(achievements),
+        candidate,
+    )
+    .await?;
+    db::candidates::touch_candidate_activity(&state.pool, candidate).await?;
     Ok(())
 }
 
@@ -249,27 +230,18 @@ async fn link_dev(
     if fsp_id.is_empty() || fsp_id.len() > 40 {
         return Err(ApiError::field("fsp_id", "Укажите ФСП ID"));
     }
-    let client = state.pool.get().await?;
-    link(&state, &client, user.id, &fsp_id, "dev").await?;
-    load_status(&client, user.id).await.map(Json)
+    link(&state, user.id, &fsp_id, "dev").await?;
+    load_status(&state.pool, user.id).await.map(Json)
 }
 
-async fn load_status(
-    client: &deadpool_postgres::Object,
-    candidate: uuid::Uuid,
-) -> ApiResult<FspStatus> {
-    let Some(l) = db::queries::fsp::fsp_link()
-        .bind(client, &candidate)
-        .opt()
-        .await?
-    else {
+async fn load_status(pool: &PgPool, candidate: uuid::Uuid) -> ApiResult<FspStatus> {
+    let Some(l) = db::fsp::fsp_link(pool, candidate).await? else {
         return Ok(FspStatus::unlinked());
     };
     let list = crate::pool::achievements(Some(&l.achievements));
-    let spec = db::queries::candidates::candidate_invitable()
-        .bind(client, &candidate)
-        .one()
+    let spec = db::candidates::candidate_invitable(pool, candidate)
         .await?
+        .ok_or(sqlx::Error::RowNotFound)?
         .specialization
         .and_then(|s| s.parse().ok());
     let score = spec.map(|s| matching::fsp_score(&list, s, Utc::now().timestamp()));
@@ -297,8 +269,7 @@ async fn achievements(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<FspStatus>> {
-    let client = state.pool.get().await?;
-    load_status(&client, user.id).await.map(Json)
+    load_status(&state.pool, user.id).await.map(Json)
 }
 
 /// Re-sync achievements from the registry
@@ -306,14 +277,11 @@ async fn achievements(
     responses((status = 200, body = FspStatus), (status = 404, body = Problem), (status = 502, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn sync(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Json<FspStatus>> {
-    let client = state.pool.get().await?;
-    let link = db::queries::fsp::fsp_link()
-        .bind(&client, &user.id)
-        .opt()
+    let link = db::fsp::fsp_link(&state.pool, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    sync_achievements(&state, &client, user.id, &link.fsp_id).await?;
-    load_status(&client, user.id).await.map(Json)
+    sync_achievements(&state, user.id, &link.fsp_id).await?;
+    load_status(&state.pool, user.id).await.map(Json)
 }
 
 /// Unlink FSP ID and drop the achievements snapshot
@@ -321,9 +289,6 @@ async fn sync(State(state): State<AppState>, user: CandidateUser) -> ApiResult<J
     responses((status = 204)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn unlink(State(state): State<AppState>, user: CandidateUser) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    db::queries::fsp::delete_fsp_link()
-        .bind(&client, &user.id)
-        .await?;
+    db::fsp::delete_fsp_link(&state.pool, user.id).await?;
     Ok(StatusCode::NO_CONTENT)
 }

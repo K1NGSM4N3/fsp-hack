@@ -5,6 +5,7 @@ use catalog::{Category, Industry, WorkFormat};
 use chrono::{DateTime, Utc};
 use matching::{FspScore, SkillSource};
 use serde::Serialize;
+use sqlx::PgPool;
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -89,20 +90,14 @@ pub struct CandidateCard {
 }
 
 pub async fn load(
-    client: &deadpool_postgres::Object,
+    pg: &PgPool,
     crypto: &Crypto,
     company_id: Uuid,
     ids: &[Uuid],
     now: i64,
 ) -> ApiResult<Vec<CandidateCard>> {
-    let rows = db::queries::pool::candidate_cards()
-        .bind(client, &ids)
-        .all()
-        .await?;
-    let relations = db::queries::pool::company_relations()
-        .bind(client, &company_id, &ids)
-        .all()
-        .await?;
+    let rows = db::pool::candidate_cards(pg, ids).await?;
+    let relations = db::pool::company_relations(pg, company_id, ids).await?;
     let mut cards = Vec::with_capacity(rows.len());
     for r in rows {
         let category = match (r.specialization.as_deref(), r.grade.as_deref()) {

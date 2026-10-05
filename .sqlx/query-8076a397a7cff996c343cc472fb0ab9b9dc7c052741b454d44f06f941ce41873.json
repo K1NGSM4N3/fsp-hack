@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE assessment_sessions\n         SET state = $1, current_item = $2, current_item_deadline = $3,\n             current_item_shown_at = $4, items_count = $5\n         WHERE id = $6",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Jsonb",
+        "Timestamptz",
+        "Timestamptz",
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8076a397a7cff996c343cc472fb0ab9b9dc7c052741b454d44f06f941ce41873"
+}

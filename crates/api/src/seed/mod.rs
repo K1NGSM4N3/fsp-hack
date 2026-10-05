@@ -12,6 +12,7 @@ use rand::{
 };
 use rand_chacha::ChaCha8Rng;
 use serde::Deserialize;
+use sqlx::{PgConnection, PgPool};
 use uuid::Uuid;
 
 use crate::{
@@ -45,7 +46,7 @@ struct Account {
 }
 
 async fn account(
-    tx: &tokio_postgres::Transaction<'_>,
+    tx: &mut PgConnection,
     crypto: &Crypto,
     hash: &str,
     email: &str,
@@ -54,24 +55,22 @@ async fn account(
 ) -> ApiResult<Account> {
     let id = Uuid::now_v7();
     let email = normalize_email(email);
-    db::queries::seed::seed_verified_user()
-        .bind(
-            tx,
-            &id,
-            &role,
-            &crypto.encrypt_str(&email),
-            &crypto.blind_index(&email),
-            &hash,
-            &at,
-        )
-        .await?;
+    db::seed::seed_verified_user(
+        &mut *tx,
+        id,
+        role,
+        &crypto.encrypt_str(&email),
+        &crypto.blind_index(&email),
+        hash,
+        at,
+    )
+    .await?;
     let docs: &[Uuid] = match role {
         db::types::UserRole::Candidate => &[CONSENT_PROCESSING, CONSENT_PUBLICATION, CONSENT_TERMS],
         _ => &[CONSENT_PROCESSING, CONSENT_TERMS],
     };
     for doc in docs {
-        db::queries::consents::insert_user_consent()
-            .bind(tx, &Uuid::now_v7(), &id, doc, &None::<&str>, &Some("seed"))
+        db::consents::insert_user_consent(&mut *tx, Uuid::now_v7(), id, *doc, None, Some("seed"))
             .await?;
     }
     Ok(Account { id, email })
@@ -225,7 +224,7 @@ fn simulate(
 }
 
 async fn store_session(
-    tx: &tokio_postgres::Transaction<'_>,
+    tx: &mut PgConnection,
     candidate: Uuid,
     kind: &str,
     sim: &SimulatedSession,
@@ -240,63 +239,61 @@ async fn store_session(
     } else {
         db::types::AssessmentStatus::Failed
     };
-    db::queries::seed::seed_session()
-        .bind(
-            tx,
-            &id,
-            &candidate,
-            &sim.state.specialization.slug(),
-            &sim.state.claimed_grade.slug(),
-            &kind,
-            &status,
-            &serde_json::to_value(&sim.state)?,
-            &d.theta,
-            &d.se,
-            &d.grade_measured.map(Grade::slug),
-            &d.confident_above_next,
-            &d.person_fit_lz,
-            &d.aberrant,
-            &(sim.responses.len() as i32),
-            &started,
-            &finished,
-        )
-        .await?;
+    db::seed::seed_session(
+        &mut *tx,
+        &db::seed::SeedSession {
+            id,
+            candidate_id: candidate,
+            specialization: sim.state.specialization.slug(),
+            claimed_grade: sim.state.claimed_grade.slug(),
+            attempt_kind: kind,
+            status,
+            state: &serde_json::to_value(&sim.state)?,
+            theta: d.theta,
+            se: d.se,
+            measured_grade: d.grade_measured.map(Grade::slug),
+            confident_above_next: d.confident_above_next,
+            person_fit_lz: d.person_fit_lz,
+            aberrant: d.aberrant,
+            items_count: sim.responses.len() as i32,
+            started_at: started,
+            finished_at: finished,
+        },
+    )
+    .await?;
     let mut at = started;
     for (seq, (item, correct, elapsed, theta, se)) in sim.responses.iter().enumerate() {
         at += Duration::milliseconds(i64::from(*elapsed));
-        db::queries::assessment::insert_response()
-            .bind(
-                tx,
-                &id,
-                &(seq as i32),
-                &item.template_id,
-                &i16::from(item.level),
-                &(item.seed as i64),
-                &None::<serde_json::Value>,
-                correct,
-                &false,
-                &(*elapsed as i32),
-                theta,
-                se,
-                &at,
-            )
-            .await?;
+        db::assessment::insert_response(
+            &mut *tx,
+            &db::assessment::NewResponse {
+                session_id: id,
+                seq: seq as i32,
+                template_id: &item.template_id,
+                level: i16::from(item.level),
+                seed: item.seed as i64,
+                answer: None,
+                correct: *correct,
+                timed_out: false,
+                elapsed_ms: *elapsed as i32,
+                theta_after: *theta,
+                se_after: *se,
+                answered_at: at,
+            },
+        )
+        .await?;
     }
     Ok((id, finished))
 }
 
-pub async fn seed(
-    pool: &deadpool_postgres::Pool,
-    crypto: &Crypto,
-) -> ApiResult<Option<SeedReport>> {
-    let mut client = pool.get().await?;
-    if db::queries::seed::demo_seeded().bind(&client).one().await? > 0 {
+pub async fn seed(pool: &PgPool, crypto: &Crypto) -> ApiResult<Option<SeedReport>> {
+    if db::seed::demo_seeded(pool).await? > 0 {
         return Ok(None);
     }
     let hash = crypto.passwords.hash(DEMO_PASSWORD)?;
     let mut rng = ChaCha8Rng::seed_from_u64(42);
     let now = Utc::now();
-    let tx = client.transaction().await?;
+    let mut tx = pool.begin().await?;
 
     let mut companies = Vec::with_capacity(corpus::COMPANIES.len());
     for (i, c) in corpus::COMPANIES.iter().enumerate() {
@@ -306,7 +303,7 @@ pub async fn seed(
             format!("hr{i}@demo.fsp")
         };
         let owner = account(
-            &tx,
+            &mut tx,
             crypto,
             &hash,
             &email,
@@ -315,64 +312,67 @@ pub async fn seed(
         )
         .await?;
         let id = Uuid::now_v7();
-        db::queries::seed::seed_company()
-            .bind(
-                &tx,
-                &id,
-                &owner.id,
-                &c.name,
-                &c.description,
-                &c.industry,
-                &c.city,
-                &c.size,
-                &c.email,
-                &c.telegram,
-            )
-            .await?;
+        db::seed::seed_company(
+            &mut *tx,
+            &db::seed::SeedCompany {
+                id,
+                owner_user_id: owner.id,
+                name: c.name,
+                description: c.description,
+                industry: c.industry,
+                city: c.city,
+                size: c.size,
+                contact_email: c.email,
+                contact_telegram: c.telegram,
+            },
+        )
+        .await?;
         companies.push(id);
     }
     for v in corpus::VACANCIES {
         let company = companies[v.company];
         let skills: Vec<String> = v.skills.iter().map(|s| (*s).to_owned()).collect();
         let published = now - Duration::days(rng.random_range(1..30));
-        db::queries::vacancies::insert_vacancy()
-            .bind(
-                &tx,
-                &Uuid::now_v7(),
-                &company,
-                &v.title,
-                &v.description,
-                &v.specialization,
-                &v.grade,
-                &skills,
-                &v.salary.0,
-                &v.salary.1,
-                &v.work_format,
-                &Some(corpus::COMPANIES[v.company].city),
-                &db::types::VacancyStatus::Published,
-                &Some(published),
-            )
-            .await?;
+        db::vacancies::insert_vacancy(
+            &mut *tx,
+            Uuid::now_v7(),
+            company,
+            db::types::VacancyStatus::Published,
+            Some(published),
+            &db::vacancies::VacancyFields {
+                title: v.title,
+                description: v.description,
+                specialization: v.specialization,
+                grade: v.grade,
+                skills: &skills,
+                salary_min: v.salary.0,
+                salary_max: v.salary.1,
+                work_format: v.work_format,
+                city: Some(corpus::COMPANIES[v.company].city),
+            },
+        )
+        .await?;
         let split = skills.len().min(3);
-        db::queries::needs::insert_need()
-            .bind(
-                &tx,
-                &Uuid::now_v7(),
-                &company,
-                &v.title,
-                &v.description,
-                &v.specialization,
-                &vec![v.grade.to_owned()],
-                &true,
-                &skills[..split].to_vec(),
-                &skills[split..].to_vec(),
-                &v.salary.0,
-                &v.salary.1,
-                &vec![v.work_format.to_owned()],
-                &None::<&str>,
-                &vec![corpus::COMPANIES[v.company].industry.to_owned()],
-            )
-            .await?;
+        db::needs::insert_need(
+            &mut *tx,
+            Uuid::now_v7(),
+            company,
+            &db::needs::NeedFields {
+                title: v.title,
+                description: v.description,
+                specialization: v.specialization,
+                grades: &[v.grade.to_owned()],
+                allow_adjacent_grades: true,
+                must_skills: &skills[..split],
+                nice_skills: &skills[split..],
+                salary_min: v.salary.0,
+                salary_max: v.salary.1,
+                work_formats: &[v.work_format.to_owned()],
+                city: None,
+                industries: &[corpus::COMPANIES[v.company].industry.to_owned()],
+            },
+        )
+        .await?;
     }
 
     let participants: Vec<Participant> =
@@ -427,7 +427,7 @@ pub async fn seed(
             };
             let created = now - Duration::days(rng.random_range(30..200));
             let acc = account(
-                &tx,
+                &mut tx,
                 crypto,
                 &hash,
                 &email,
@@ -528,36 +528,35 @@ pub async fn seed(
                 (base / 10_000.0).round() as i64 * 10_000
             });
             let last_activity = now - Duration::hours(rng.random_range(1..24 * 90));
-            db::queries::seed::seed_candidate()
-                .bind(
-                    &tx,
-                    &acc.id,
-                    &crate::auth::routes::public_code(acc.id),
-                    &crypto.encrypt_str(&full_name),
-                    &crypto.encrypt_json(&contacts)?,
-                    &corpus::CITIES.choose(&mut rng).copied(),
-                    &rng.random_bool(0.2),
-                    &formats,
-                    &salary,
-                    &about,
-                    &Some(years),
-                    &vec![role_name(spec).to_owned()],
-                    &SOFT
+            db::seed::seed_candidate(
+                &mut *tx,
+                &db::seed::SeedCandidate {
+                    user_id: acc.id,
+                    public_code: &crate::auth::routes::public_code(acc.id),
+                    full_name_enc: &crypto.encrypt_str(&full_name),
+                    contacts_enc: &crypto.encrypt_json(&contacts)?,
+                    city: corpus::CITIES.choose(&mut rng).copied(),
+                    relocation: rng.random_bool(0.2),
+                    work_formats: &formats,
+                    salary_expectation_min: salary,
+                    about: &about,
+                    experience_years: Some(years),
+                    roles: &[role_name(spec).to_owned()],
+                    soft_skills: &SOFT
                         .choose_multiple(&mut rng, 2)
                         .map(|s| (*s).to_owned())
                         .collect::<Vec<_>>(),
-                    &industries,
-                    &serde_json::to_value(&experience)?,
-                    &status,
-                    &rng.random_bool(0.3),
-                    &last_activity,
-                    &created,
-                )
-                .await?;
+                    industries: &industries,
+                    experience: &serde_json::to_value(&experience)?,
+                    search_status: status,
+                    show_name: rng.random_bool(0.3),
+                    last_activity_at: last_activity,
+                    created_at: created,
+                },
+            )
+            .await?;
             for (skill, source) in &skills {
-                db::queries::candidates::insert_candidate_skill()
-                    .bind(&tx, &acc.id, skill, source)
-                    .await?;
+                db::candidates::insert_candidate_skill(&mut *tx, acc.id, skill, source).await?;
             }
             let mut started = created + Duration::days(rng.random_range(1..10));
             let mut kind = "placement";
@@ -569,7 +568,7 @@ pub async fn seed(
                     break;
                 };
                 let (session_id, finished) =
-                    store_session(&tx, acc.id, kind, &sim, started).await?;
+                    store_session(&mut tx, acc.id, kind, &sim, started).await?;
                 started = finished + Duration::minutes(rng.random_range(5..120));
                 if sim.decision.passed {
                     let bank = assessment::bank();
@@ -614,29 +613,34 @@ pub async fn seed(
                 }
             }
             for skill in &verified {
-                db::queries::candidates::insert_candidate_skill()
-                    .bind(&tx, &acc.id, skill, &"test")
-                    .await?;
+                db::candidates::insert_candidate_skill(&mut *tx, acc.id, skill, "test").await?;
             }
             if let Some((g, theta, se, session_id, at)) = assigned {
                 let reason = if g > claimed { "upgrade" } else { "placement" };
-                db::queries::grades::insert_grade_assignment()
-                    .bind(
-                        &tx,
-                        &Uuid::now_v7(),
-                        &acc.id,
-                        &spec.slug(),
-                        &g.slug(),
-                        &theta,
-                        &se,
-                        &Some(session_id),
-                        &reason,
-                        &at,
-                    )
-                    .await?;
-                db::queries::grades::set_candidate_category()
-                    .bind(&tx, &spec.slug(), &g.slug(), &theta, &at, &acc.id)
-                    .await?;
+                db::grades::insert_grade_assignment(
+                    &mut *tx,
+                    &db::grades::NewGradeAssignment {
+                        id: Uuid::now_v7(),
+                        candidate_id: acc.id,
+                        specialization: spec.slug(),
+                        grade: g.slug(),
+                        theta,
+                        se,
+                        session_id: Some(session_id),
+                        reason,
+                        assigned_at: at,
+                    },
+                )
+                .await?;
+                db::grades::set_candidate_category(
+                    &mut *tx,
+                    spec.slug(),
+                    g.slug(),
+                    theta,
+                    at,
+                    acc.id,
+                )
+                .await?;
             }
             let fsp_pick = if n == 0 {
                 fsp_queue.first().map(|_| 0)
@@ -651,9 +655,7 @@ pub async fn seed(
             };
             if let Some(i) = fsp_pick {
                 let (fsp_id, _, raw) = fsp_queue.remove(i);
-                db::queries::seed::seed_fsp_link()
-                    .bind(&tx, &acc.id, &fsp_id, &raw)
-                    .await?;
+                db::seed::seed_fsp_link(&mut *tx, acc.id, &fsp_id, &raw).await?;
                 fsp_linked += 1;
             }
             n += 1;

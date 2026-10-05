@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO assessment_responses (session_id, seq, template_id, level, seed, answer, correct,\n                                           timed_out, elapsed_ms, theta_after, se_after, answered_at)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Text",
+        "Int2",
+        "Int8",
+        "Jsonb",
+        "Bool",
+        "Bool",
+        "Int4",
+        "Float8",
+        "Float8",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2bef8bbef7e51816618e6bd29541cbdfeb21ef47a44530ea0857cff59b21c777"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE companies\n         SET name = $1, description = $2, industry = $3, website = $4, city = $5, size = $6,\n             contact_email = $7, contact_phone = $8, contact_telegram = $9, updated_at = now()\n         WHERE owner_user_id = $10",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "21418f7185d2ad1b6a519d245843091f23157e78c4ab109353ce473eb87fe269"
+}

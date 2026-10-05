@@ -10,6 +10,7 @@ use axum::{
 use catalog::{Category, Grade, Specialization};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::PgPool;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
@@ -101,12 +102,8 @@ async fn list_tasks(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<EmployerTask>>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let rows = db::queries::tasks::company_tasks()
-        .bind(&client, &company)
-        .all()
-        .await?;
+    let company = company_id(&state.pool, user.id).await?;
+    let rows = db::tasks::company_tasks(&state.pool, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(EmployerTask {
@@ -162,23 +159,23 @@ async fn create_task(
         format!("Неизвестные навыки: {}", unknown.join(", "))
     });
     v.finish()?;
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let id = Uuid::now_v7();
-    let grades: Vec<&str> = t.grades.iter().map(|g| g.slug()).collect();
-    db::queries::tasks::insert_task()
-        .bind(
-            &client,
-            &id,
-            &company,
-            &t.specialization.slug(),
-            &grades,
-            &t.skills,
-            &t.title.trim(),
-            &t.body.trim(),
-            &t.kind.slug(),
-        )
-        .await?;
+    let grades: Vec<String> = t.grades.iter().map(|g| g.slug().to_owned()).collect();
+    db::tasks::insert_task(
+        &state.pool,
+        &db::tasks::NewTask {
+            id,
+            company_id: company,
+            specialization: t.specialization.slug(),
+            grades: &grades,
+            skills: &t.skills,
+            title: t.title.trim(),
+            body: t.body.trim(),
+            kind: t.kind.slug(),
+        },
+    )
+    .await?;
     Ok((
         StatusCode::CREATED,
         Json(EmployerTask {
@@ -214,13 +211,8 @@ async fn set_active(
     Path(id): Path<Uuid>,
     Json(input): Json<ActiveInput>,
 ) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    if db::queries::tasks::set_task_active()
-        .bind(&client, &input.active, &id, &company)
-        .await?
-        == 0
-    {
+    let company = company_id(&state.pool, user.id).await?;
+    if db::tasks::set_task_active(&state.pool, input.active, id, company).await? == 0 {
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
@@ -249,12 +241,8 @@ async fn submissions(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<Submission>>> {
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
-    let rows = db::queries::tasks::task_submissions()
-        .bind(&client, &id, &company)
-        .all()
-        .await?;
+    let company = company_id(&state.pool, user.id).await?;
+    let rows = db::tasks::task_submissions(&state.pool, id, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(Submission {
@@ -297,16 +285,13 @@ async fn review(
     if !(1..=5).contains(&input.rating) {
         return Err(ApiError::field("rating", "Оценка от 1 до 5"));
     }
-    let client = state.pool.get().await?;
-    let company = company_id(&client, user.id).await?;
+    let company = company_id(&state.pool, user.id).await?;
     let comment = input
         .comment
         .as_deref()
         .map(str::trim)
         .filter(|c| !c.is_empty());
-    if db::queries::tasks::review_submission()
-        .bind(&client, &input.rating, &comment, &sid, &id, &company)
-        .await?
+    if db::tasks::review_submission(&state.pool, input.rating, comment, sid, id, company).await?
         == 0
     {
         return Err(ApiError::not_found());
@@ -332,50 +317,30 @@ pub struct MyTask {
     pub reviewed_at: Option<DateTime<Utc>>,
 }
 
-async fn assign_if_due(client: &deadpool_postgres::Object, candidate: Uuid) -> ApiResult<()> {
-    db::queries::tasks::expire_assignments()
-        .bind(client, &candidate)
-        .await?;
-    if db::queries::tasks::has_open_assignment()
-        .bind(client, &candidate)
-        .one()
-        .await?
-        > 0
-    {
+async fn assign_if_due(pool: &PgPool, candidate: Uuid) -> ApiResult<()> {
+    db::tasks::expire_assignments(pool, candidate).await?;
+    if db::tasks::has_open_assignment(pool, candidate).await? > 0 {
         return Ok(());
     }
-    let last = db::queries::tasks::last_assignment_at()
-        .bind(client, &candidate)
-        .one()
-        .await?;
+    let last = db::tasks::last_assignment_at(pool, candidate).await?;
     if last.is_some_and(|at| at > Utc::now() - Duration::days(ASSIGN_EVERY_DAYS)) {
         return Ok(());
     }
-    if let Some(task) = db::queries::tasks::pick_task_for()
-        .bind(client, &candidate)
-        .opt()
-        .await?
-    {
-        db::queries::tasks::insert_assignment()
-            .bind(
-                client,
-                &Uuid::now_v7(),
-                &task,
-                &candidate,
-                &(Utc::now() + Duration::days(DUE_IN_DAYS)),
-            )
-            .await?;
+    if let Some(task) = db::tasks::pick_task_for(pool, candidate).await? {
+        db::tasks::insert_assignment(
+            pool,
+            Uuid::now_v7(),
+            task,
+            candidate,
+            Utc::now() + Duration::days(DUE_IN_DAYS),
+        )
+        .await?;
     }
     Ok(())
 }
 
-async fn load_my_tasks(
-    client: &deadpool_postgres::Object,
-    candidate: Uuid,
-) -> ApiResult<Vec<MyTask>> {
-    Ok(db::queries::tasks::candidate_assignments()
-        .bind(client, &candidate)
-        .all()
+async fn load_my_tasks(pool: &PgPool, candidate: Uuid) -> ApiResult<Vec<MyTask>> {
+    Ok(db::tasks::candidate_assignments(pool, candidate)
         .await?
         .into_iter()
         .map(|r| MyTask {
@@ -405,9 +370,8 @@ async fn my_tasks(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<MyTask>>> {
-    let client = state.pool.get().await?;
-    assign_if_due(&client, user.id).await?;
-    Ok(Json(load_my_tasks(&client, user.id).await?))
+    assign_if_due(&state.pool, user.id).await?;
+    Ok(Json(load_my_tasks(&state.pool, user.id).await?))
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -431,21 +395,14 @@ async fn submit(
     if answer.is_empty() || answer.len() > 20_000 {
         return Err(ApiError::field("answer", "Ответ от 1 до 20 000 символов"));
     }
-    let client = state.pool.get().await?;
-    if db::queries::tasks::submit_assignment()
-        .bind(&client, &answer, &id, &user.id)
-        .await?
-        == 0
-    {
+    if db::tasks::submit_assignment(&state.pool, answer, id, user.id).await? == 0 {
         return Err(ApiError::conflict(
             "task_closed",
             "Задание уже закрыто или просрочено",
         ));
     }
-    db::queries::candidates::touch_candidate_activity()
-        .bind(&client, &user.id)
-        .await?;
-    Ok(Json(load_my_tasks(&client, user.id).await?))
+    db::candidates::touch_candidate_activity(&state.pool, user.id).await?;
+    Ok(Json(load_my_tasks(&state.pool, user.id).await?))
 }
 
 /// Skip the current task
@@ -458,12 +415,7 @@ async fn skip(
     user: CandidateUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let client = state.pool.get().await?;
-    if db::queries::tasks::skip_assignment()
-        .bind(&client, &id, &user.id)
-        .await?
-        == 0
-    {
+    if db::tasks::skip_assignment(&state.pool, id, user.id).await? == 0 {
         return Err(ApiError::conflict("task_closed", "Задание уже закрыто"));
     }
     Ok(StatusCode::NO_CONTENT)

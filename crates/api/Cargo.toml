@@ -10,7 +10,7 @@ publish.workspace = true
 catalog = { workspace = true, features = ["openapi"] }
 matching = { workspace = true, features = ["openapi"] }
 assessment = { workspace = true, features = ["openapi"] }
-db = { workspace = true, features = ["deadpool"] }
+db.workspace = true
 
 thiserror.workspace = true
 time.workspace = true
@@ -29,10 +29,8 @@ utoipa-axum = "0.3"
 utoipa-swagger-ui = { version = "10", features = ["axum", "vendored"] }
 tower-http = { version = "0.6", features = ["trace", "request-id", "util", "limit", "timeout", "catch-panic", "sensitive-headers"] }
 
-chrono = { version = "0.4", features = ["serde"] }
-tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-chrono-0_4", "with-serde_json-1"] }
-deadpool-postgres = "0.14"
-refinery = { version = "0.10", default-features = false, features = ["tokio-postgres"] }
+chrono.workspace = true
+sqlx.workspace = true
 
 argon2 = "0.5"
 chacha20poly1305 = "0.10"

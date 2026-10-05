@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE shortlist_items s\n         SET pinned = coalesce($1, s.pinned), dismissed = coalesce($2, s.dismissed), updated_at = now()\n         FROM hiring_needs n\n         WHERE s.need_id = n.id AND n.company_id = $3 AND s.need_id = $4 AND s.candidate_id = $5",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Bool",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ce22187df11b63156e2cdfcac4c0816f0e783729a5d2719074f179ed794ed5e3"
+}

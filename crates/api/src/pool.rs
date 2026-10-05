@@ -6,6 +6,7 @@ use chrono::{DateTime, Utc};
 use matching::{
     Achievement, CandidatePool, CandidateSkill, CandidateSnapshot, FspSummary, SkillSource,
 };
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{dto::parse_slugs, error::ApiResult};
@@ -62,21 +63,19 @@ pub fn unix(t: DateTime<Utc>) -> i64 {
 }
 
 pub async fn load(
-    client: &deadpool_postgres::Object,
+    pool: &PgPool,
     spec: Specialization,
     filter: &PoolFilter<'_>,
     now: i64,
 ) -> ApiResult<LoadedPool> {
     let text_query = filter.text.and_then(or_tsquery);
-    let rows = db::queries::pool::candidate_pool()
-        .bind(
-            client,
-            &text_query.as_deref(),
-            &spec.slug(),
-            &filter.grade.map(Grade::slug),
-        )
-        .all()
-        .await?;
+    let rows = db::pool::candidate_pool(
+        pool,
+        text_query.as_deref(),
+        spec.slug(),
+        filter.grade.map(Grade::slug),
+    )
+    .await?;
     let max_rank = rows.iter().map(|r| r.text_rank).fold(0.0f32, f32::max);
     let mut snapshots = Vec::with_capacity(rows.len());
     let mut ids = Vec::with_capacity(rows.len());

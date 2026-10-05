@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE invitations SET status = 'viewed', viewed_at = now()\n         WHERE id = $1 AND candidate_id = $2 AND status = 'sent'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ff178f638cfa866e57f135ca51aae5fedc9c0336a8a093a68631e1fcea0f4849"
+}
