@@ -142,6 +142,13 @@ internal_from!(
     std::io::Error,
 );
 
+/// Input of `POST /eval/pairs` over a limit or inconsistent: 422 naming the top-level field.
+impl From<matching::pairs::PairsError> for ApiError {
+    fn from(e: matching::pairs::PairsError) -> Self {
+        ApiError::field(e.field(), e.to_string())
+    }
+}
+
 impl From<catalog::UnknownSlug> for ApiError {
     fn from(e: catalog::UnknownSlug) -> Self {
         ApiError::Internal(InternalError::Corrupt(e.to_string()))

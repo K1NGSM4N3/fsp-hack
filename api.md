@@ -162,6 +162,14 @@
 | GET | `/api/v1/guardian/consent?token=` | 🅰 | Что за ссылка (`link`: `confirm` / `revoke`), состояние, доступные действия (`actions`), замаскированная почта участника, ФИО представителя, действующий текст `guardian_consent`. `participant_adult: true` — участнику уже 18, действий нет. 400 `invalid_token` — неизвестная ссылка или ссылка из старого письма | ✅ |
 | POST | `/api/v1/guardian/consent` | 🅰 | `{token, action}`: `grant` / `decline` — по ссылке ответа, пока она жива; `revoke` — по ссылке отзыва (до ответа она работает как `decline`). `grant` пишет выдачу `guardian_consent` на участника с IP, User-Agent и временем представителя; `decline` и `revoke` скрывают профиль. 400 `invalid_token`, `token_expired`; 409 `token_used`, `action_unavailable`, `guardian_not_needed` | ✅ |
 
+## Валидация
+
+Проверка подбора на своём наборе «вакансия – кандидат» (`docs/solution.md` §6.4). Та же логика, что у `validate pairs`: `matching::pairs`. Базу и данные пользователей не трогает, ничего не сохраняет.
+
+| Метод | Путь | Роль | Описание | Статус |
+|---|---|---|---|---|
+| POST | `/api/v1/eval/pairs` | 🅰 | `{vacancies: [{id, text, …}], candidates: [{id, resume_text, …}], labels?: [{vacancy_id, candidate_id, relevance 0–3}], k?, now?}` → как распознана каждая вакансия, топ-k нашего подбора с объяснениями и топ-k базовой линии «ключевые слова + стаж», Precision@5/@k, nDCG@k, MAP, MRR по вакансиям и в среднем, покрытие. Тело ≤ 8 МиБ (413 `payload_too_large`), ≤ 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты ≤ 20 000 символов (422 `validation_failed`, поле в `errors`); JSON не по схеме — 400/422 `invalid_json`; 10 запросов за 10 минут с IP (429) | ✅ |
+
 ## Статусы
 
 **Приглашение:** `sent` → `viewed` → `accepted` | `declined`; из `sent`/`viewed` → `expired` (14 дней) | `withdrawn`.

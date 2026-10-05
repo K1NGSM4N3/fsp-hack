@@ -136,6 +136,14 @@ pub(crate) fn salary(folded: &str) -> Option<SalaryRange> {
     None
 }
 
+/// "2 млн учеников" is a count, not money: a bare multiplier is trusted only when no other
+/// word follows it ("от 180 тыс", "200k-300k", "300к в месяц").
+fn counts_something(rest: &str) -> bool {
+    const MONEY_TAILS: [&str; 4] = ["в мес", "per month", "a month", "monthly"];
+    let rest = rest.trim_start();
+    rest.starts_with(char::is_alphabetic) && !MONEY_TAILS.iter().any(|t| rest.starts_with(t))
+}
+
 fn salary_from(caps: &Captures<'_>, line: &str) -> Option<SalaryRange> {
     let start = caps.get(0)?.start();
     let a = parse_amount(caps.name("a")?.as_str())?;
@@ -147,6 +155,9 @@ fn salary_from(caps: &Captures<'_>, line: &str) -> Option<SalaryRange> {
     let ctx_before = SALARY_WORDS.iter().any(|w| line[..start].contains(w));
     let ctx_line = ctx_before || SALARY_WORDS.iter().any(|w| line.contains(w));
     if !(has_mult || has_currency || ctx_line) {
+        return None;
+    }
+    if !has_currency && !ctx_line && counts_something(&line[caps.get(0)?.end()..]) {
         return None;
     }
     // "200–300 тыс." — the multiplier written once applies to both ends.
@@ -401,6 +412,12 @@ mod tests {
         assert_eq!(sal("опыт от 3 лет"), None);
         assert_eq!(sal("10 000 пользователей в сутки"), None);
         assert_eq!(sal("2019 - 2021"), None);
+        assert_eq!(sal("2 млн учеников, 100 тыс. запросов"), None);
+        assert_eq!(
+            sal("Онлайн-школа: 2 млн учеников.\nВилка 330 000 – 420 000 ₽"),
+            Some((Some(330_000), Some(420_000)))
+        );
+        assert_eq!(sal("до 300к в месяц"), Some((None, Some(300_000))));
     }
 
     #[test]

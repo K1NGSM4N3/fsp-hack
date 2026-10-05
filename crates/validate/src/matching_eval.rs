@@ -17,7 +17,7 @@ use rand::{
 use rand_chacha::ChaCha8Rng;
 use serde::Serialize;
 
-use crate::stats::{self, Summary};
+use matching::metrics::{self as stats, Summary};
 
 const NOW: i64 = 1_790_000_000;
 const DAY: i64 = 86_400;
@@ -252,20 +252,12 @@ fn relevance(need: &Need, c: &Synthetic) -> u8 {
     }
 }
 
-fn years_fit(grade: Grade, years: f64) -> bool {
-    match grade {
-        Grade::Junior => years < 2.5,
-        Grade::Middle => (2.0..6.0).contains(&years),
-        Grade::Senior => years >= 5.0,
-    }
-}
-
 /// Classic job-board search: self-reported experience filter + keyword overlap with the resume.
 fn keyword_rank(need: &Need, pool: &[Synthetic], rng: &mut ChaCha8Rng) -> Vec<usize> {
     let mut scored: Vec<(f64, usize)> = pool
         .iter()
         .enumerate()
-        .filter(|(_, c)| years_fit(need.grades[0], c.self_years))
+        .filter(|(_, c)| matching::pairs::years_fit(need.grades[0], c.self_years))
         .map(|(i, c)| {
             let hits = need
                 .must_skills
