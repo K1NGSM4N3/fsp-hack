@@ -13,6 +13,7 @@ import type {
   FspPlace,
   FspRank,
   Grade,
+  HiringStage,
   Industry,
   InvitationStatus,
   NeedStatus,
@@ -152,6 +153,14 @@ export const APPLICATION_STATUS_LABEL: Record<ApplicationStatus, string> = {
   accepted: "Приглашён",
   rejected: "Отказ",
   withdrawn: "Отозван",
+};
+
+/** Stages a company's hiring system reports back; the candidate reads them as «Компания отметила: …». */
+export const HIRING_STAGE_LABEL: Record<HiringStage, string> = {
+  interview: "собеседование",
+  offer: "оффер",
+  hired: "вы наняты",
+  rejected: "отказ",
 };
 
 export const ASSESSMENT_STATUS_LABEL: Record<AssessmentStatus, string> = {

@@ -9,6 +9,7 @@ pub mod dto;
 pub mod error;
 pub mod fsp_client;
 pub mod guardian;
+pub mod integrations;
 pub mod kv;
 pub mod mail;
 pub mod metrics;
@@ -72,7 +73,10 @@ use crate::state::AppState;
         (name = "guardian", description = "Согласие законного представителя соискателя 14–17 лет: публичная страница по ссылке из письма"),
         (name = "Валидация", description = "Проверка подбора на своих данных: ваш набор «вакансия – кандидат» через рабочий подбор и базовую линию, метрики по разметке"),
         (name = "trust", description = "Антифейк: уровень доверия и квота компании, проверка вилки и дублей вакансий, очередь модерации"),
-    )
+        (name = "integrations", description = "Кабинет работодателя: вебхук в ATS компании, журнал доставок, API-ключи"),
+        (name = "Интеграции ATS", description = "API для ATS работодателя. Доступ — только API-ключом компании: `Authorization: Bearer fsp_live_…`, cookie и JWT здесь не принимаются. Лимит — 120 запросов в минуту на ключ. События приходят вебхуком (тело — схема `WebhookEvent`, подпись — заголовок `FSP-Signature: t=…,v1=HMAC-SHA256(secret, t + \".\" + body)`), здесь — опрос, профиль кандидата после согласия, этапы найма и импорт вакансий"),
+    ),
+    components(schemas(integrations::events::WebhookEvent))
 )]
 struct ApiDoc;
 
@@ -87,6 +91,16 @@ impl Modify for SecuritySchemes {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .bearer_format("JWT")
+                    .build(),
+            ),
+        );
+        components.add_security_scheme(
+            "api_key",
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("fsp_live_…")
+                    .description(Some("API-ключ компании из кабинета «Интеграции»"))
                     .build(),
             ),
         );
@@ -123,8 +137,10 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
                 .merge(routes::needs::router())
                 .merge(routes::candidates::router())
                 .merge(routes::assessment::employer_router())
-                .merge(routes::trust::employer_router()),
+                .merge(routes::trust::employer_router())
+                .merge(routes::integrations::router()),
         )
+        .nest("/integrations", routes::ats::router())
         .nest("/fsp", routes::fsp::router())
         .nest(
             "/admin",

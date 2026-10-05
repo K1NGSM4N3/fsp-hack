@@ -9,6 +9,7 @@ pub mod contacts;
 pub mod fsp;
 pub mod grades;
 pub mod guardians;
+pub mod integrations;
 pub mod invitations;
 pub mod market;
 pub mod me;

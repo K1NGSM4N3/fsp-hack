@@ -21,6 +21,7 @@ crates/matching    чистая логика подбора: навыки, ФС�
 crates/db          доступ к PostgreSQL на sqlx: запросы с проверкой при компиляции, миграции, тесты на живой БД
 crates/api         axum-сервер: HTTP, auth, OpenAPI, сервисы
 crates/fsp-mock    заглушка реестра ФСП
+crates/ats-mock    демо-ATS работодателя: подписанные вебхуки, этапы найма обратно
 crates/validate    симуляция и отчёт валидации
 db/migrations      миграции sqlx: NNNN_name.sql
 .sqlx/             метаданные запросов для офлайн-сборки (make db-prepare)

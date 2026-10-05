@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT stage AS \"stage: HiringStage\", count(*) AS \"count!\"\n           FROM hiring_outcomes\n           WHERE company_id = $1\n           GROUP BY stage\n           ORDER BY stage",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "stage: HiringStage",
+        "type_info": {
+          "Custom": {
+            "name": "hiring_stage",
+            "kind": {
+              "Enum": [
+                "interview",
+                "offer",
+                "hired",
+                "rejected"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "189efce68413bf0fd4ee9cb997276fcb20f452de9ef21c4ffedcc7494eecfe51"
+}

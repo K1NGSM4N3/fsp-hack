@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.status AS \"status: ApplicationStatus\"\n           FROM applications a\n           JOIN vacancies v ON v.id = a.vacancy_id\n           WHERE a.id = $1 AND v.company_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status: ApplicationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "application_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "rejected",
+                "withdrawn"
+              ]
+            }
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "fc3e5f7f7d14b4406d85ad7307e48b32a1766853e9b73d2cc450bb545668be40"
+}

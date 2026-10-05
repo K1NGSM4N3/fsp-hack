@@ -86,3 +86,20 @@ pub enum GuardianDecision {
     Granted,
     Declined,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "integration_event_status", rename_all = "snake_case")]
+pub enum IntegrationEventStatus {
+    Pending,
+    Delivered,
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "hiring_stage", rename_all = "snake_case")]
+pub enum HiringStage {
+    Interview,
+    Offer,
+    Hired,
+    Rejected,
+}

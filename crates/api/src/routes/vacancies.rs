@@ -20,6 +20,10 @@ use crate::{
     auth::{CandidateUser, EmployerUser},
     dto::{ApplicationStatus, Page, SalaryRange, VacancyStatus},
     error::{ApiError, ApiResult, Problem, Validator},
+    integrations::{
+        events::{EventType, Outbox},
+        outcomes::{HiringOutcome, OutcomeIndex},
+    },
     skills,
     state::AppState,
     trust,
@@ -322,9 +326,17 @@ async fn set_application_status(
     }
     let company = company_id(&state.pool, user.id).await?;
     let status: db::types::ApplicationStatus = input.status.into();
-    if db::vacancies::set_application_status(&state.pool, status, id, company).await? == 0 {
+    let mut tx = state.pool.begin().await?;
+    let before = db::integrations::application_status(&mut *tx, company, id).await?;
+    if db::vacancies::set_application_status(&mut *tx, status, id, company).await? == 0 {
         return Err(ApiError::not_found());
     }
+    if before != Some(status) {
+        Outbox::new(&state)
+            .application(&mut tx, EventType::ApplicationStatusChanged, id)
+            .await?;
+    }
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -463,6 +475,8 @@ pub struct MyApplication {
     pub status: ApplicationStatus,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Stages the company's hiring system reported.
+    pub outcomes: Vec<HiringOutcome>,
 }
 
 /// Apply to a vacancy: the company gets access to your contacts. Under 18 this needs the legal
@@ -490,15 +504,14 @@ async fn apply(
         });
     }
     let letter = input.cover_letter.trim();
-    let reopened =
-        db::vacancies::reopen_application(&state.pool, letter, vacancy_id, user.id).await?;
+    let mut tx = state.pool.begin().await?;
+    let reopened = db::vacancies::reopen_application(&mut *tx, letter, vacancy_id, user.id).await?;
     let id = match reopened {
         Some(id) => id,
         None => {
             let id = Uuid::now_v7();
             let inserted =
-                db::vacancies::insert_application(&state.pool, id, vacancy_id, user.id, letter)
-                    .await;
+                db::vacancies::insert_application(&mut *tx, id, vacancy_id, user.id, letter).await;
             match inserted {
                 Ok(_) => id,
                 Err(e) if db::is_unique_violation(&e) => {
@@ -511,7 +524,11 @@ async fn apply(
             }
         }
     };
-    db::candidates::touch_candidate_activity(&state.pool, user.id).await?;
+    db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
+    Outbox::new(&state)
+        .application(&mut tx, EventType::ApplicationCreated, id)
+        .await?;
+    tx.commit().await?;
     let app = my_apps(&state.pool, user.id)
         .await?
         .into_iter()
@@ -521,6 +538,7 @@ async fn apply(
 }
 
 pub(crate) async fn my_apps(pool: &PgPool, candidate: Uuid) -> ApiResult<Vec<MyApplication>> {
+    let outcomes = OutcomeIndex::for_candidate(pool, candidate).await?;
     Ok(db::vacancies::candidate_applications(pool, candidate)
         .await?
         .into_iter()
@@ -537,6 +555,7 @@ pub(crate) async fn my_apps(pool: &PgPool, candidate: Uuid) -> ApiResult<Vec<MyA
             status: r.status.into(),
             created_at: r.created_at,
             updated_at: r.updated_at,
+            outcomes: outcomes.of(r.id),
         })
         .collect())
 }
@@ -562,11 +581,16 @@ async fn withdraw_application(
     user: CandidateUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    if db::vacancies::withdraw_application(&state.pool, id, user.id).await? == 0 {
+    let mut tx = state.pool.begin().await?;
+    if db::vacancies::withdraw_application(&mut *tx, id, user.id).await? == 0 {
         return Err(ApiError::conflict(
             "application_closed",
             "Отклик уже рассмотрен или отозван",
         ));
     }
+    Outbox::new(&state)
+        .application(&mut tx, EventType::ApplicationStatusChanged, id)
+        .await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }

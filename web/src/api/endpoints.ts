@@ -488,3 +488,54 @@ export async function createReport(body: T.ReportInput): Promise<void> {
   if (USE_MOCKS) return (await mocks()).createReport(body);
   return http("POST", "/reports", { body });
 }
+
+export async function getIntegrations(): Promise<T.IntegrationsOverview> {
+  if (USE_MOCKS) return (await mocks()).getIntegrations();
+  return http("GET", "/employer/integrations");
+}
+
+/** The first save creates the signing secret and returns it once; later saves keep it. */
+export async function saveWebhook(body: T.WebhookInput): Promise<T.WebhookSaved> {
+  if (USE_MOCKS) return (await mocks()).saveWebhook(body);
+  return http("PUT", "/employer/integrations/webhook", { body });
+}
+
+export async function deleteWebhook(): Promise<void> {
+  if (USE_MOCKS) return (await mocks()).deleteWebhook();
+  return http("DELETE", "/employer/integrations/webhook");
+}
+
+export async function rotateWebhookSecret(): Promise<T.WebhookSaved> {
+  if (USE_MOCKS) return (await mocks()).rotateWebhookSecret();
+  return http("POST", "/employer/integrations/webhook/rotate");
+}
+
+export async function sendTestEvent(): Promise<T.TestDelivery> {
+  if (USE_MOCKS) return (await mocks()).sendTestEvent();
+  return http("POST", "/employer/integrations/webhook/test");
+}
+
+export async function listDeliveries(limit = 50): Promise<T.DeliveryView[]> {
+  if (USE_MOCKS) return (await mocks()).listDeliveries(limit);
+  return http("GET", "/employer/integrations/deliveries", { query: { limit } });
+}
+
+export async function retryDelivery(eventId: T.Uuid): Promise<void> {
+  if (USE_MOCKS) return (await mocks()).retryDelivery(eventId);
+  return http("POST", `/employer/integrations/deliveries/${eventId}/retry`);
+}
+
+export async function listApiKeys(): Promise<T.ApiKeyView[]> {
+  if (USE_MOCKS) return (await mocks()).listApiKeys();
+  return http("GET", "/employer/integrations/keys");
+}
+
+export async function createApiKey(body: T.ApiKeyInput): Promise<T.ApiKeyCreated> {
+  if (USE_MOCKS) return (await mocks()).createApiKey(body);
+  return http("POST", "/employer/integrations/keys", { body });
+}
+
+export async function revokeApiKey(id: T.Uuid): Promise<void> {
+  if (USE_MOCKS) return (await mocks()).revokeApiKey(id);
+  return http("DELETE", `/employer/integrations/keys/${id}`);
+}

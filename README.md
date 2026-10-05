@@ -21,9 +21,12 @@ docker compose -f deploy/compose.yml --profile full up -d --build
 | Swagger UI | http://localhost:8080/api/docs |
 | Письма (подтверждение email) | http://localhost:8025 |
 | Keycloak (заглушка ФСП ID) | http://localhost:8081 |
+| Демо-ATS работодателя (вебхуки и этапы найма) | http://localhost:8082 |
 | Grafana | http://localhost:3001 |
 
 Без профиля `full` поднимается только ядро: приложение, API, Postgres, Valkey, Mailpit.
+Демо-компания `employer@demo.fsp` сразу подключена к демо-ATS (профиль `ats`): события о приглашениях
+приходят туда с подписью, а кнопки «Собеседование», «Оффер», «Нанят», «Отказ» возвращают этап кандидату.
 
 При первом запуске API заполняет демо-данные. Пароль у всех демо-аккаунтов — `demo12345`:
 

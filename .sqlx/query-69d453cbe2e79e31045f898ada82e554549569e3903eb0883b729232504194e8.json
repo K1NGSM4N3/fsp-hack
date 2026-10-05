@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT l.company_id, co.name AS \"company_name?\", l.basis, l.accessed_at\n           FROM contact_access_log l\n           LEFT JOIN companies co ON co.id = l.company_id\n           WHERE l.candidate_id = $1\n           ORDER BY l.accessed_at DESC\n           LIMIT $2",
+  "query": "SELECT l.company_id, co.name AS \"company_name?\", l.basis, l.channel, l.accessed_at\n           FROM contact_access_log l\n           LEFT JOIN companies co ON co.id = l.company_id\n           WHERE l.candidate_id = $1\n           ORDER BY l.accessed_at DESC\n           LIMIT $2",
   "describe": {
     "columns": [
       {
@@ -20,6 +20,11 @@
       },
       {
         "ordinal": 3,
+        "name": "channel",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
         "name": "accessed_at",
         "type_info": "Timestamptz"
       }
@@ -34,8 +39,9 @@
       false,
       false,
       false,
+      false,
       false
     ]
   },
-  "hash": "d86e492f23db3adc81268a21d69d8507c1544cc62072bf92e7b269410b811eb3"
+  "hash": "69d453cbe2e79e31045f898ada82e554549569e3903eb0883b729232504194e8"
 }

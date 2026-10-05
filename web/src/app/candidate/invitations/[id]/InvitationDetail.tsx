@@ -7,6 +7,7 @@ import { isApiError } from "@/api/client";
 import type { DeclineReason, ReceivedInvitation } from "@/api/types";
 import { SalaryRange } from "@/components/domain/Category";
 import { DomainBadge } from "@/components/domain/DomainBadge";
+import { HiringOutcomes } from "@/components/domain/HiringOutcomes";
 import { ReportButton } from "@/components/domain/ReportButton";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
 import { Alert, Button, Card, CardHeader, ChipSelect, Dialog, ErrorAlert, Field, PageHeader, PageSkeleton, Textarea, useToast } from "@/components/ui";
@@ -28,6 +29,11 @@ function Timeline({ inv }: { inv: ReceivedInvitation }) {
           <span className="tabular text-ink-subtle">{r.at ? formatDateTime(r.at) : "—"}</span>
         </li>
       ))}
+      {inv.outcomes.length > 0 && (
+        <li className="border-t border-line pt-3">
+          <HiringOutcomes outcomes={inv.outcomes} />
+        </li>
+      )}
       {(inv.status === "sent" || inv.status === "viewed") && (
         <li className="flex items-center justify-between gap-3 border-t border-line pt-3">
           <span className="text-ink">Действует до</span>
@@ -133,6 +139,7 @@ function AcceptDialog({ inv, open, onClose }: { inv: ReceivedInvitation; open: b
           <Lock className="mt-0.5 size-4 shrink-0 text-ink-subtle" aria-hidden />
           Каждый просмотр контактов записывается в журнал доступа.
         </p>
+        <p>Если у компании подключена своя система подбора (ATS), эти же данные попадут туда — это тоже отразится в журнале.</p>
       </div>
     </Dialog>
   );

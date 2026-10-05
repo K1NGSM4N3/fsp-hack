@@ -43,8 +43,11 @@ jsonwebtoken = { version = "11", default-features = false, features = ["rust_cry
 
 lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "hostname"] }
 redis = { version = "1", default-features = false, features = ["aio", "tokio-comp", "connection-manager"] }
-reqwest = { version = "0.13", default-features = false, features = ["json", "form"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "form", "rustls"] }
 metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.18", default-features = false }
 krilla = "0.8"
 pdf-extract = "0.12"
+
+[dev-dependencies]
+ats-mock = { path = "../ats-mock" }

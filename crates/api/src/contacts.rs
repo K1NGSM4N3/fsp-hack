@@ -5,7 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use sqlx::{PgConnection, PgExecutor};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -35,6 +35,35 @@ impl ContactBasis {
     }
 }
 
+/// How the contacts left the platform: the employer's cabinet, the company's ATS over the API,
+/// or a webhook payload sent to the ATS right after acceptance.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum AccessChannel {
+    Cabinet,
+    Api,
+    Webhook,
+}
+
+impl AccessChannel {
+    pub const fn slug(self) -> &'static str {
+        match self {
+            AccessChannel::Cabinet => "cabinet",
+            AccessChannel::Api => "api",
+            AccessChannel::Webhook => "webhook",
+        }
+    }
+
+    pub fn from_slug(s: &str) -> Option<Self> {
+        match s {
+            "cabinet" => Some(AccessChannel::Cabinet),
+            "api" => Some(AccessChannel::Api),
+            "webhook" => Some(AccessChannel::Webhook),
+            _ => None,
+        }
+    }
+}
+
 /// One line of the candidate's «Кто открывал ваши контакты»: the company and the legal basis.
 /// The employee, IP and browser stay in the audit log and are not part of this view.
 #[derive(Serialize, ToSchema)]
@@ -43,6 +72,7 @@ pub struct ContactAccessEntry {
     /// `None` when the company has since deleted its account.
     pub company_name: Option<String>,
     pub basis: ContactBasis,
+    pub channel: AccessChannel,
     pub accessed_at: DateTime<Utc>,
 }
 
@@ -74,27 +104,32 @@ pub struct AccessContext<'a> {
     pub company_id: Uuid,
     pub ip: Option<&'a str>,
     pub user_agent: Option<&'a str>,
+    pub channel: AccessChannel,
+    pub api_key_id: Option<Uuid>,
 }
 
 impl ContactGrant {
+    /// Takes a connection so the check, the log entry and whatever the grant is used for (an
+    /// outbox event) commit together.
     pub async fn obtain(
-        pool: &PgPool,
+        conn: &mut PgConnection,
         ctx: &AccessContext<'_>,
         candidate_id: Uuid,
     ) -> ApiResult<Option<ContactGrant>> {
         let invitation =
-            db::contacts::accepted_invitation_basis(pool, ctx.company_id, candidate_id).await?;
+            db::contacts::accepted_invitation_basis(&mut *conn, ctx.company_id, candidate_id)
+                .await?;
         let (basis, basis_id) = match invitation {
             Some(id) => (ContactBasis::Invitation, id),
-            None => {
-                match db::contacts::application_basis(pool, ctx.company_id, candidate_id).await? {
-                    Some(id) => (ContactBasis::Application, id),
-                    None => return Ok(None),
-                }
-            }
+            None => match db::contacts::application_basis(&mut *conn, ctx.company_id, candidate_id)
+                .await?
+            {
+                Some(id) => (ContactBasis::Application, id),
+                None => return Ok(None),
+            },
         };
         db::contacts::insert_contact_access(
-            pool,
+            &mut *conn,
             &db::contacts::ContactAccess {
                 id: Uuid::now_v7(),
                 employer_user_id: ctx.employer_user_id,
@@ -104,6 +139,8 @@ impl ContactGrant {
                 basis_id,
                 ip: ctx.ip,
                 user_agent: ctx.user_agent,
+                channel: ctx.channel.slug(),
+                api_key_id: ctx.api_key_id,
             },
         )
         .await?;
@@ -113,15 +150,27 @@ impl ContactGrant {
             basis_id,
         }))
     }
+
+    pub fn candidate_id(&self) -> Uuid {
+        self.candidate_id
+    }
+
+    pub fn basis(&self) -> ContactBasis {
+        self.basis
+    }
+
+    pub fn basis_id(&self) -> Uuid {
+        self.basis_id
+    }
 }
 
 impl CandidateContacts {
     pub async fn reveal(
-        pool: &PgPool,
+        db: impl PgExecutor<'_>,
         crypto: &Crypto,
         grant: ContactGrant,
     ) -> ApiResult<CandidateContacts> {
-        let row = db::contacts::candidate_secrets(pool, grant.candidate_id).await?;
+        let row = db::contacts::candidate_secrets(db, grant.candidate_id).await?;
         Ok(CandidateContacts {
             candidate_id: grant.candidate_id,
             full_name: row
@@ -151,5 +200,12 @@ mod tests {
             assert_eq!(ContactBasis::from_slug(b.slug()), Some(b));
         }
         assert_eq!(ContactBasis::from_slug("profile_view"), None);
+        for c in [
+            AccessChannel::Cabinet,
+            AccessChannel::Api,
+            AccessChannel::Webhook,
+        ] {
+            assert_eq!(AccessChannel::from_slug(c.slug()), Some(c));
+        }
     }
 }

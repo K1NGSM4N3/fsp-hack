@@ -26,6 +26,7 @@ pub struct Config {
     pub fsp: FspConfig,
     pub grade_change_cooldown_days: i64,
     pub proctoring: ProctoringConfig,
+    pub integrations: IntegrationsConfig,
     pub seed_demo: bool,
     pub log_json: bool,
 }
@@ -50,6 +51,26 @@ pub struct ProctoringConfig {
     /// Encrypted video chunks; a persistent volume in production.
     pub dir: PathBuf,
     pub retention_days: i64,
+}
+
+#[derive(Clone, Default)]
+pub struct IntegrationsConfig {
+    /// Hosts a webhook may reach over plain http and on private addresses (the ATS mock in
+    /// compose). Empty in production: https to public addresses only.
+    pub webhook_dev_hosts: Vec<String>,
+    /// Outbox polling period; `None` uses the dispatcher default.
+    pub dispatch_interval: Option<std::time::Duration>,
+    pub demo: Option<DemoIntegration>,
+}
+
+/// Connects the demo company to the ATS mock at startup: the key and the secret come from
+/// `.env`, so both services agree on them without manual steps.
+#[derive(Clone)]
+pub struct DemoIntegration {
+    pub owner_email: String,
+    pub api_key: String,
+    pub webhook_url: Option<String>,
+    pub webhook_secret: Option<String>,
 }
 
 #[derive(Clone)]
@@ -164,6 +185,34 @@ impl Config {
             retention_days: parsed("PROCTORING_RETENTION_DAYS", 90)?,
         };
 
+        let integrations = IntegrationsConfig {
+            webhook_dev_hosts: var("WEBHOOK_DEV_HOSTS")
+                .map(|v| {
+                    v.split(',')
+                        .map(|h| h.trim().to_ascii_lowercase())
+                        .filter(|h| !h.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            dispatch_interval: var("WEBHOOK_DISPATCH_INTERVAL_MS")
+                .map(|v| {
+                    v.parse::<u64>()
+                        .map(std::time::Duration::from_millis)
+                        .map_err(|e| ConfigError::Invalid {
+                            name: "WEBHOOK_DISPATCH_INTERVAL_MS",
+                            reason: e.to_string(),
+                        })
+                })
+                .transpose()?,
+            demo: var("ATS_DEMO_API_KEY").map(|api_key| DemoIntegration {
+                owner_email: var("ATS_DEMO_OWNER_EMAIL")
+                    .unwrap_or_else(|| "employer@demo.fsp".into()),
+                api_key,
+                webhook_url: var("ATS_DEMO_WEBHOOK_URL"),
+                webhook_secret: var("ATS_DEMO_WEBHOOK_SECRET"),
+            }),
+        };
+
         Ok(Self {
             bind: parsed("API_BIND", SocketAddr::from(([0, 0, 0, 0], 8000)))?,
             database_url: var("DATABASE_URL").ok_or(ConfigError::Missing("DATABASE_URL"))?,
@@ -182,6 +231,7 @@ impl Config {
             },
             grade_change_cooldown_days: parsed("GRADE_CHANGE_COOLDOWN_DAYS", 90)?,
             proctoring,
+            integrations,
             seed_demo: flag("SEED_DEMO", false),
             log_json: var("LOG_FORMAT").as_deref() == Some("json"),
             public_url,

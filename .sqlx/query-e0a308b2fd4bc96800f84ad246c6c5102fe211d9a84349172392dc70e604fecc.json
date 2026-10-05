@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE company_webhooks SET url = $2, updated_at = now() WHERE company_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e0a308b2fd4bc96800f84ad246c6c5102fe211d9a84349172392dc70e604fecc"
+}

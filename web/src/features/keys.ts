@@ -43,6 +43,9 @@ export const qk = {
   trust: ["employer", "trust"] as const,
   salaryCheck: (q: SalaryCheckQuery) => ["employer", "salary-check", q] as const,
   submissions: (taskId: string) => ["employer", "tasks", taskId, "submissions"] as const,
+  integrations: ["employer", "integrations"] as const,
+  deliveries: ["employer", "integrations", "deliveries"] as const,
+  apiKeys: ["employer", "integrations", "keys"] as const,
 
   vacancies: (p: VacancyQuery) => ["vacancies", p] as const,
   vacancy: (id: string) => ["vacancies", "one", id] as const,

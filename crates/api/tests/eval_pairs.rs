@@ -5,8 +5,9 @@ use std::sync::Arc;
 
 use api::{
     auth::jwt::JwtKeys,
-    config::{Config, FspConfig, MailConfig, ProctoringConfig},
+    config::{Config, FspConfig, IntegrationsConfig, MailConfig, ProctoringConfig},
     crypto::Crypto,
+    integrations::webhook::WebhookSender,
     kv::Kv,
     mail::Mailer,
     proctoring::{ProctoringMode, RecordingStore},
@@ -38,6 +39,7 @@ async fn start() -> String {
             dir: std::env::temp_dir().join("eval-pairs-test"),
             retention_days: 90,
         },
+        integrations: IntegrationsConfig::default(),
         seed_demo: false,
         log_json: false,
     };
@@ -49,6 +51,7 @@ async fn start() -> String {
         http: reqwest::Client::new(),
         metrics: None,
         recordings: Arc::new(RecordingStore::new(config.proctoring.dir.clone())),
+        webhooks: WebhookSender::new(Vec::new()).unwrap(),
         pool: api::db::pool("postgres://nobody@127.0.0.1:1/none").unwrap(),
         config: Arc::new(config),
     };

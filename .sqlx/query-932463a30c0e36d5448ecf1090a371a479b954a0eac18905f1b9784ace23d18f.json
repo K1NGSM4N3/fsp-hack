@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE company_webhooks\n         SET prev_secret_enc = secret_enc, prev_expires_at = $4, secret_enc = $2, secret_hint = $3,\n             secret_rotated_at = now(), updated_at = now()\n         WHERE company_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Text",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "932463a30c0e36d5448ecf1090a371a479b954a0eac18905f1b9784ace23d18f"
+}

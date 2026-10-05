@@ -376,7 +376,10 @@ function ContactAccessSection() {
             <li key={`${a.company_id}-${a.accessed_at}-${i}`} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-ink">{a.company_name ?? "Компания удалила аккаунт"}</p>
-                <p className="text-xs text-ink-subtle">{BASIS_LABEL[a.basis]}</p>
+                <p className="text-xs text-ink-subtle">
+                  {BASIS_LABEL[a.basis]}
+                  {a.channel !== "cabinet" && " · передано в систему подбора компании"}
+                </p>
               </div>
               <time dateTime={a.accessed_at} className="shrink-0 text-xs text-ink-subtle tabular">
                 {formatDateTime(a.accessed_at)}

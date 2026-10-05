@@ -6,8 +6,9 @@ use std::sync::Arc;
 
 use api::{
     auth::{Role, jwt::JwtKeys},
-    config::{Config, FspConfig, MailConfig, ProctoringConfig},
+    config::{Config, FspConfig, IntegrationsConfig, MailConfig, ProctoringConfig},
     crypto::Crypto,
+    integrations::webhook::WebhookSender,
     kv::Kv,
     mail::Mailer,
     proctoring::{ProctoringMode, RecordingStore},
@@ -67,6 +68,7 @@ impl Api {
                 dir: std::env::temp_dir().join(format!("trust-test-{}", Uuid::now_v7())),
                 retention_days: 90,
             },
+            integrations: IntegrationsConfig::default(),
             seed_demo: false,
             log_json: false,
         };
@@ -78,6 +80,7 @@ impl Api {
             http: reqwest::Client::new(),
             metrics: None,
             recordings: Arc::new(RecordingStore::new(config.proctoring.dir.clone())),
+            webhooks: WebhookSender::new(Vec::new()).unwrap(),
             pool,
             config: Arc::new(config),
         };
