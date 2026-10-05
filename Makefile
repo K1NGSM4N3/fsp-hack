@@ -4,7 +4,7 @@ PG_ADMIN_URL ?= postgres://postgres@localhost:5432
 MIGRATIONS := $(sort $(wildcard db/migrations/*.sql))
 COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo 'docker compose' || echo docker-compose) -f deploy/compose.yml
 
-.PHONY: db gen-db api fsp-mock gen-api web test lint validate up down logs
+.PHONY: db gen-db api fsp-mock gen-api web test lint validate docs up down logs
 
 db:
 	@psql "$(PG_ADMIN_URL)/postgres" -tAc "select 1 from pg_database where datname='fsp_hack'" | grep -q 1 \
@@ -38,6 +38,10 @@ lint:
 
 validate:
 	cargo run --release -p validate -- --out docs/validation
+
+docs:
+	pandoc docs/solution.md -o docs/solution.pdf --pdf-engine=typst --pdf-engine-opt=--font-path=crates/api/assets/fonts --metadata-file=docs/pdf-meta.yaml --toc --toc-depth=2
+	pandoc docs/solution.md -o docs/solution.docx --metadata-file=docs/pdf-meta.yaml --toc --toc-depth=2
 
 up:
 	$(COMPOSE) --profile full up -d --build

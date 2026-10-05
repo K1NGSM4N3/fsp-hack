@@ -54,6 +54,8 @@
                 pkgs.pkg-config
                 pkgs.openssl
                 pkgs.jq
+                pkgs.pandoc
+                pkgs.typst
               ]
               ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isDarwin [
                 pkgs.libiconv
@@ -74,6 +76,7 @@
                 make test      cargo test + web type check
                 make lint      fmt, clippy, eslint
                 make validate  validation report -> docs/validation/
+                make docs      docs/solution.md -> PDF and DOCX
                 make up        docker compose (profile full); on macOS run `colima start` first
               EOF
             '';

@@ -1,0 +1,14 @@
+title: "ФСП Таланты"
+subtitle: "Платформа подбора ИТ-специалистов с подтверждённой категорией. Сопроводительная документация"
+lang: ru
+mainfont: "PT Sans"
+monofont: "JetBrains Mono"
+fontsize: 10pt
+papersize: a4
+margin:
+  x: 1.8cm
+  y: 2cm
+toc-title: "Содержание"
+header-includes: |
+  #show table.cell: set par(justify: false)
+  #show table.cell: set text(size: 9pt, hyphenate: false)
