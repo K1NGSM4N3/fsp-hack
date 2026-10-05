@@ -8,7 +8,7 @@ import { StartLine } from "@/components/site/fsp/StartLine";
 
 export const metadata: Metadata = {
   title: { absolute: "Участникам ФСП · ФСП Таланты" },
-  description: "Привяжите ФСП ID, и разряды и призовые места из реестра Федерации появятся в профиле кандидата со ссылками на протоколы.",
+  description: "Привяжите ФСП ID, и разряды и призовые места из реестра Федерации появятся в вашем профиле со ссылками на протоколы.",
 };
 
 export default function FspPage() {

@@ -76,11 +76,11 @@ export function FspHero() {
           Участникам ФСП
         </p>
         <h1 data-hero data-hero-title className="display-1 mt-6 max-w-[15ch] text-balance perspective-[900px] sm:max-w-[18ch] lg:max-w-none">
-          Результаты с&nbsp;соревнований теперь видят <span className="text-gradient-night">работодатели</span>
+          Результаты с&nbsp;соревнований теперь видят <span className="text-gradient-night">компании</span>
         </h1>
         <div className="mt-8 grid grid-cols-1 gap-8 lg:mt-10 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-16">
           <p data-hero data-hero-fade className="max-w-2xl text-lg leading-relaxed text-pretty text-night-muted sm:text-xl">
-            Привяжите ФСП ID к профилю кандидата, и ваши разряды и призовые места из реестра Федерации появятся в карточке. Рядом с каждым будет ссылка на официальный протокол.
+            Привяжите ФСП ID к профилю, и ваши разряды и призовые места из реестра Федерации появятся в карточке. Рядом с каждым будет ссылка на официальный протокол.
           </p>
           <div data-hero data-hero-fade className="flex flex-col gap-3 sm:flex-row">
             <Link

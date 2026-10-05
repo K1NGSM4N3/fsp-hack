@@ -96,7 +96,7 @@ export function StartLine() {
               Старт за&nbsp;вами
             </h2>
             <p className="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-night-muted sm:text-xl">
-              Создайте профиль кандидата и пройдите тест. Потом нажмите «Привязать ФСП ID» в настройках, и ваши результаты появятся в карточке.
+              Создайте профиль и пройдите тест. Потом нажмите «Привязать ФСП ID» в настройках, и ваши результаты появятся в карточке.
             </p>
             <Link
               href="/register?role=candidate"

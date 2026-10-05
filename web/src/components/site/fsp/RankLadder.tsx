@@ -125,7 +125,7 @@ export function RankLadder() {
 
           <div className="hidden grid-cols-[3.5rem_1.2fr_1fr_1fr] gap-6 border-b border-line py-3 font-mono text-[11px] tracking-[0.12em] text-ink-faint uppercase sm:grid">
             <span>Место</span>
-            <span>Кандидат</span>
+            <span>Профиль</span>
             <span>Результат теста</span>
             <span>Достижения ФСП</span>
           </div>
@@ -138,7 +138,7 @@ export function RankLadder() {
                 </li>
               ))}
             </ol>
-            <ol aria-label="Подборка кандидатов" className="relative">
+            <ol aria-label="Подборка соискателей" className="relative">
               {rows.map((r) => (
                 <li key={r.id} data-row data-flip-id={r.id} className={cn("relative", ROW_H, r.you && "z-10")}>
                   <div
