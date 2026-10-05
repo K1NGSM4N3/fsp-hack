@@ -152,8 +152,8 @@ export function RegisterForm() {
               setErrors({});
             }}
             options={[
-              { value: "candidate", title: "Ищу работу", description: "Тест, категория и приглашения с вилкой", icon: <UserRound className="size-5" aria-hidden /> },
-              { value: "employer", title: "Ищу специалиста", description: "Подборка с объяснением", icon: <Building2 className="size-5" aria-hidden /> },
+              { value: "candidate", title: "Ищу работу", description: "Один тест, дальше компании пишут вам сами и называют зарплату", icon: <UserRound className="size-5" aria-hidden /> },
+              { value: "employer", title: "Ищу специалистов", description: "Подборка людей, чей уровень уже проверен тестом", icon: <Building2 className="size-5" aria-hidden /> },
             ]}
           />
         </FieldSet>

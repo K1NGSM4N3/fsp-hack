@@ -57,7 +57,7 @@ export function VerifyEmail() {
       <div>
         <CheckCircle2 className="size-10 text-success" aria-hidden />
         <h1 className="mt-4 text-[28px] leading-tight font-semibold tracking-[-0.03em]">Email подтверждён</h1>
-        <p className="mt-2 text-ink-muted">Теперь можно войти. Кандидатов после входа ждёт короткий путь: профиль → опрос → тест → категория.</p>
+        <p className="mt-2 text-ink-muted">Теперь можно войти. Если вы ищете работу, после входа заполните профиль и пройдите тест, чтобы получить категорию.</p>
         <ButtonLink href="/login" size="lg" className="mt-6">
           Войти
         </ButtonLink>
