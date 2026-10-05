@@ -370,6 +370,23 @@ export async function getInvitationStats(): Promise<T.InvitationStats> {
   return http("GET", "/employer/invitations/stats");
 }
 
+export async function getTrustStatus(): Promise<T.TrustStatus> {
+  if (USE_MOCKS) return (await mocks()).getTrustStatus();
+  return http("GET", "/employer/trust");
+}
+
+/** Soft check of a salary range against the category market; never blocks anything. */
+export async function checkSalary(query: T.SalaryCheckQuery): Promise<T.SalaryCheck> {
+  if (USE_MOCKS) return (await mocks()).checkSalary(query);
+  return http("GET", "/employer/salary-check", { query: { ...query } });
+}
+
+/** Own drafts and published vacancies with nearly the same text. */
+export async function findSimilarVacancies(body: T.SimilarInput): Promise<T.SimilarVacancy[]> {
+  if (USE_MOCKS) return (await mocks()).findSimilarVacancies(body);
+  return http("POST", "/employer/vacancies/similar", { body });
+}
+
 export async function listOwnVacancies(): Promise<T.Vacancy[]> {
   if (USE_MOCKS) return (await mocks()).listOwnVacancies();
   return http("GET", "/employer/vacancies");

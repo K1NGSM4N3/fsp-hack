@@ -8,13 +8,35 @@ import type {
   EmployerApplicationStatus,
   NeedInput,
   ReviewInput,
+  SalaryCheckQuery,
   SendInvitation,
   ShortlistFilters,
   ShortlistPatch,
+  SimilarInput,
   TaskInput,
   VacancyInput,
 } from "@/api/types";
 import { qk } from "../keys";
+
+export function useTrustStatus() {
+  return useQuery({ queryKey: qk.trust, queryFn: api.getTrustStatus });
+}
+
+/** `null` while the range is incomplete; callers debounce the inputs. */
+export function useSalaryCheck(query: SalaryCheckQuery | null) {
+  return useQuery({
+    queryKey: query ? qk.salaryCheck(query) : ["employer", "salary-check", "idle"],
+    queryFn: () => api.checkSalary(query as SalaryCheckQuery),
+    enabled: query !== null,
+    staleTime: 5 * 60_000,
+    placeholderData: keepPreviousData,
+    retry: false,
+  });
+}
+
+export function useSimilarVacancies() {
+  return useMutation({ mutationFn: (body: SimilarInput) => api.findSimilarVacancies(body) });
+}
 
 export function useCompany() {
   return useQuery({ queryKey: qk.company, queryFn: api.getCompany });
@@ -27,6 +49,8 @@ export function useUpdateCompany() {
     onSuccess: (data) => {
       qc.setQueryData(qk.company, data);
       void qc.invalidateQueries({ queryKey: qk.me });
+      void qc.invalidateQueries({ queryKey: qk.trust });
+      void qc.invalidateQueries({ queryKey: qk.stats });
     },
   });
 }
@@ -134,6 +158,7 @@ export function useSendInvitation() {
     onSuccess: (inv) => {
       void qc.invalidateQueries({ queryKey: qk.sent });
       void qc.invalidateQueries({ queryKey: qk.stats });
+      void qc.invalidateQueries({ queryKey: qk.trust });
       void qc.invalidateQueries({ queryKey: ["employer", "candidate", inv.candidate_id] });
       if (inv.need_id) void qc.invalidateQueries({ queryKey: qk.shortlist(inv.need_id) });
     },
@@ -171,6 +196,7 @@ export function useSaveVacancy(id?: string) {
       qc.setQueryData(qk.ownVacancy(v.id), v);
       void qc.invalidateQueries({ queryKey: qk.ownVacancies });
       void qc.invalidateQueries({ queryKey: ["vacancies"] });
+      void qc.invalidateQueries({ queryKey: qk.trust });
     },
   });
 }

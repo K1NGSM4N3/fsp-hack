@@ -67,9 +67,14 @@ async fn main() -> Result<(), StartupError> {
             Ok(None) => tracing::info!("demo data already present"),
             Err(e) => tracing::error!(error = %e, "demo seed failed"),
         }
-        if command == "seed" {
-            return Ok(());
-        }
+    }
+    match api::trust::backfill_signatures(&pool).await {
+        Ok(0) => {}
+        Ok(n) => tracing::info!(vacancies = n, "vacancy text signatures backfilled"),
+        Err(e) => tracing::warn!(error = %e, "vacancy text signature backfill failed"),
+    }
+    if command == "seed" {
+        return Ok(());
     }
 
     let recordings = Arc::new(RecordingStore::new(config.proctoring.dir.clone()));

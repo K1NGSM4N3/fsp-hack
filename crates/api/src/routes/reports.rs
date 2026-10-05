@@ -1,5 +1,5 @@
-//! Complaints about vacancies, invitations and companies (X-1). In the MVP they are only
-//! collected; moderation and reputation scoring are described in architecture.md §11.
+//! Complaints about vacancies, invitations and companies (X-1). Unresolved complaints from
+//! candidates lower the company's trust level and invitation quota (architecture.md §11.1).
 
 use axum::{Json, extract::State, http::StatusCode};
 use serde::{Deserialize, Serialize};

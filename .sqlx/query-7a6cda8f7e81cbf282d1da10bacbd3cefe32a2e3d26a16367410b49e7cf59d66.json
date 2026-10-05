@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.id, v.company_id, co.name AS company_name, v.title,\n                  v.status AS \"status: VacancyStatus\", v.text_signature AS \"text_signature!\"\n           FROM vacancies v\n           JOIN companies co ON co.id = v.company_id\n           WHERE v.status = 'published' AND v.published_at >= now() - interval '90 days'\n             AND v.text_signature IS NOT NULL AND v.id <> $1\n           ORDER BY v.published_at DESC\n           LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "company_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: VacancyStatus",
+        "type_info": {
+          "Custom": {
+            "name": "vacancy_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "published",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "text_signature!",
+        "type_info": "Bytea"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "7a6cda8f7e81cbf282d1da10bacbd3cefe32a2e3d26a16367410b49e7cf59d66"
+}

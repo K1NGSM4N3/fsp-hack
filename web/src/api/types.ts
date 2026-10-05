@@ -149,6 +149,20 @@ export type VacancyInput = S["VacancyInput"];
 export type Vacancy = S["Vacancy"];
 export type PublicVacancy = S["PublicVacancy"];
 
+export type TrustLevel = S["TrustLevel"];
+export type TrustReason = S["TrustReason"];
+export type TrustReasonKind = S["TrustReasonKind"];
+export type TrustStatus = S["TrustStatus"];
+export type DomainCheck = S["DomainCheck"];
+export type DomainStatus = S["DomainStatus"];
+export type SalaryCheck = S["SalaryCheck"];
+export type SalaryCheckQuery = NonNullable<operations["salary_check"]["parameters"]["query"]>;
+export type TrustWarning = S["TrustWarning"];
+export type WarningKind = S["WarningKind"];
+export type MarketView = S["MarketView"];
+export type SimilarInput = S["SimilarInput"];
+export type SimilarVacancy = S["SimilarVacancy"];
+
 export type ReportInput = S["ReportInput"];
 export type ReportReason = S["ReportReason"];
 

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT i.id, i.company_id, co.name AS company_name, co.description AS company_description,\n                  co.industry AS company_industry, co.city AS company_city,\n                  co.website AS company_website, i.vacancy_id, i.title, i.message, i.salary_min,\n                  i.salary_max, i.work_format, i.contact, i.status AS \"status: InvitationStatus\",\n                  i.decline_reason, i.decline_comment, i.created_at, i.viewed_at, i.responded_at,\n                  i.expires_at\n           FROM invitations i\n           JOIN companies co ON co.id = i.company_id\n           WHERE i.candidate_id = $1 AND i.id = $2",
+  "query": "SELECT i.id, i.company_id, co.name AS company_name, co.description AS company_description,\n                  co.industry AS company_industry, co.city AS company_city,\n                  co.website AS company_website, co.verified_domain AS company_verified_domain,\n                  i.vacancy_id, i.title, i.message, i.salary_min,\n                  i.salary_max, i.work_format, i.contact, i.status AS \"status: InvitationStatus\",\n                  i.decline_reason, i.decline_comment, i.created_at, i.viewed_at, i.responded_at,\n                  i.expires_at\n           FROM invitations i\n           JOIN companies co ON co.id = i.company_id\n           WHERE i.candidate_id = $1\n           ORDER BY i.created_at DESC",
   "describe": {
     "columns": [
       {
@@ -40,41 +40,46 @@
       },
       {
         "ordinal": 7,
+        "name": "company_verified_domain",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
         "name": "vacancy_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "title",
         "type_info": "Text"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "message",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 11,
         "name": "salary_min",
         "type_info": "Int8"
       },
       {
-        "ordinal": 11,
+        "ordinal": 12,
         "name": "salary_max",
         "type_info": "Int8"
       },
       {
-        "ordinal": 12,
+        "ordinal": 13,
         "name": "work_format",
         "type_info": "Text"
       },
       {
-        "ordinal": 13,
+        "ordinal": 14,
         "name": "contact",
         "type_info": "Text"
       },
       {
-        "ordinal": 14,
+        "ordinal": 15,
         "name": "status: InvitationStatus",
         "type_info": {
           "Custom": {
@@ -93,39 +98,38 @@
         }
       },
       {
-        "ordinal": 15,
+        "ordinal": 16,
         "name": "decline_reason",
         "type_info": "Text"
       },
       {
-        "ordinal": 16,
+        "ordinal": 17,
         "name": "decline_comment",
         "type_info": "Text"
       },
       {
-        "ordinal": 17,
+        "ordinal": 18,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 18,
+        "ordinal": 19,
         "name": "viewed_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 19,
+        "ordinal": 20,
         "name": "responded_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 20,
+        "ordinal": 21,
         "name": "expires_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid",
         "Uuid"
       ]
     },
@@ -134,6 +138,7 @@
       false,
       false,
       false,
+      true,
       true,
       true,
       true,
@@ -153,5 +158,5 @@
       false
     ]
   },
-  "hash": "25370187ee177101c9e8c28fcf9a9ae2e60c6de6fbd64e2e83d8c699fb44b61f"
+  "hash": "98be41cd6ec0c2de57b4ef73f3a62afa9cbd222f2a1ee9214e2aebfd96e240c4"
 }

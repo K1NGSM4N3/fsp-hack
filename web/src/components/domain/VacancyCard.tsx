@@ -7,6 +7,7 @@ import { formatRelative } from "@/lib/format";
 import { WORK_FORMAT_LABEL } from "@/lib/labels";
 import { skillName } from "@/lib/skills";
 import { CategoryBadge, SalaryRange } from "./Category";
+import { DomainBadge } from "./DomainBadge";
 
 export function VacancyCard({ vacancy: v, href, footer }: { vacancy: PublicVacancy; href: string; footer?: ReactNode }) {
   return (
@@ -23,6 +24,7 @@ export function VacancyCard({ vacancy: v, href, footer }: { vacancy: PublicVacan
               <Building2 className="size-4 text-ink-subtle" aria-hidden />
               {v.company_name}
             </span>
+            <DomainBadge domain={v.company_verified_domain} />
             <span className="inline-flex items-center gap-1.5">
               <MapPin className="size-4 text-ink-subtle" aria-hidden />
               {WORK_FORMAT_LABEL[v.work_format]}

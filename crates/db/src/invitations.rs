@@ -59,6 +59,7 @@ pub struct CandidateInvitation {
     pub company_industry: Option<String>,
     pub company_city: Option<String>,
     pub company_website: Option<String>,
+    pub company_verified_domain: Option<String>,
     pub vacancy_id: Option<Uuid>,
     pub title: String,
     pub message: String,
@@ -243,7 +244,8 @@ pub async fn candidate_invitations(
         CandidateInvitation,
         r#"SELECT i.id, i.company_id, co.name AS company_name, co.description AS company_description,
                   co.industry AS company_industry, co.city AS company_city,
-                  co.website AS company_website, i.vacancy_id, i.title, i.message, i.salary_min,
+                  co.website AS company_website, co.verified_domain AS company_verified_domain,
+                  i.vacancy_id, i.title, i.message, i.salary_min,
                   i.salary_max, i.work_format, i.contact, i.status AS "status: InvitationStatus",
                   i.decline_reason, i.decline_comment, i.created_at, i.viewed_at, i.responded_at,
                   i.expires_at
@@ -266,7 +268,8 @@ pub async fn candidate_invitation(
         CandidateInvitation,
         r#"SELECT i.id, i.company_id, co.name AS company_name, co.description AS company_description,
                   co.industry AS company_industry, co.city AS company_city,
-                  co.website AS company_website, i.vacancy_id, i.title, i.message, i.salary_min,
+                  co.website AS company_website, co.verified_domain AS company_verified_domain,
+                  i.vacancy_id, i.title, i.message, i.salary_min,
                   i.salary_max, i.work_format, i.contact, i.status AS "status: InvitationStatus",
                   i.decline_reason, i.decline_comment, i.created_at, i.viewed_at, i.responded_at,
                   i.expires_at

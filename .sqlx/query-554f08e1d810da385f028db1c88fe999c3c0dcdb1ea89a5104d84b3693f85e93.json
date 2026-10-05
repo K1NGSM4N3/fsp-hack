@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id, i.company_id, co.name AS company_name, i.title, i.salary_min, i.salary_max,\n                  i.trust_flags, i.created_at\n           FROM invitations i\n           JOIN companies co ON co.id = i.company_id\n           WHERE i.trust_flags <> '[]'\n           ORDER BY i.created_at DESC\n           LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "company_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "salary_max",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "trust_flags",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "554f08e1d810da385f028db1c88fe999c3c0dcdb1ea89a5104d84b3693f85e93"
+}

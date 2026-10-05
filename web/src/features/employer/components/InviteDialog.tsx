@@ -7,6 +7,7 @@ import { isApiError } from "@/api/client";
 import type { Category, HiringNeed, WorkFormat } from "@/api/types";
 import { CategoryBadge } from "@/components/domain/Category";
 import { Alert, Button, Dialog, Field, Input, MoneyInput, ProgressBar, Select, Textarea, useToast } from "@/components/ui";
+import { SalaryHint } from "@/features/employer/components/SalaryHint";
 import { useCompany, useInvitationStats, useNeeds, useOwnVacancies, useSendInvitation } from "@/features/employer/hooks";
 import { WORK_FORMAT_LABEL, WORK_FORMATS } from "@/lib/labels";
 
@@ -148,6 +149,10 @@ function InviteForm({ target, need, onClose, onSent }: { target: InviteTarget; n
               <Link href="/employer/invitations" className="text-sm font-medium text-primary hover:underline">
                 Открыть приглашения
               </Link>
+            ) : conflict.code === "invitation_quota_exceeded" ? (
+              <Link href="/employer/trust" className="text-sm font-medium text-primary hover:underline">
+                Как поднять квоту
+              </Link>
             ) : undefined
           }
         >
@@ -172,6 +177,7 @@ function InviteForm({ target, need, onClose, onSent }: { target: InviteTarget; n
           </Field>
         </div>
         <p className="mt-1.5 text-xs text-ink-subtle">Обязательно: кандидат видит вилку до начала общения</p>
+        <SalaryHint category={target.category} min={draft.min} max={draft.max} className="mt-3" />
       </fieldset>
 
       <Field label="Сообщение кандидату" error={errors.message} required hint="Чем занимается команда, какая задача, почему именно этот кандидат">

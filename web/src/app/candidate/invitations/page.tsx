@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { ReceivedInvitation } from "@/api/types";
 import { SalaryRange } from "@/components/domain/Category";
+import { DomainBadge } from "@/components/domain/DomainBadge";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
 import { ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs } from "@/components/ui";
 import { useReceivedInvitations } from "@/features/candidate/hooks";
@@ -44,6 +45,7 @@ function InvitationRow({ inv }: { inv: ReceivedInvitation }) {
                 <Building2 className="size-4 text-ink-subtle" aria-hidden />
                 {inv.company_name}
               </span>
+              <DomainBadge domain={inv.company_verified_domain} />
               {inv.work_format && (
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="size-4 text-ink-subtle" aria-hidden />

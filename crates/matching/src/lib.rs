@@ -11,6 +11,7 @@ mod ru;
 pub mod scoring;
 pub mod skills;
 mod text;
+pub mod trust;
 
 pub use extract::SpecializationGuess;
 pub use fsp::{

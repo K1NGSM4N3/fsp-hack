@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, name, description, industry, website, city, size, contact_email, contact_phone,\n                contact_telegram, updated_at\n         FROM companies\n         WHERE owner_user_id = $1",
+  "query": "SELECT id, name, description, industry, website, city, size, contact_email, contact_phone,\n                contact_telegram, verified_domain, updated_at\n         FROM companies\n         WHERE owner_user_id = $1",
   "describe": {
     "columns": [
       {
@@ -55,6 +55,11 @@
       },
       {
         "ordinal": 10,
+        "name": "verified_domain",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -75,8 +80,9 @@
       true,
       true,
       true,
+      true,
       false
     ]
   },
-  "hash": "3cc6f769e4da19e2cde91a51204facc4e6cb6a0b153d97aaca970912b2274e33"
+  "hash": "47b738380705c313cdc1a66a32266a8b3c410bc9fe99c52c982240c38721d069"
 }

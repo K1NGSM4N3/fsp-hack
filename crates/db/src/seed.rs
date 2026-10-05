@@ -30,6 +30,7 @@ pub struct SeedCompany<'a> {
     pub id: Uuid,
     pub owner_user_id: Uuid,
     pub name: &'a str,
+    pub website: &'a str,
     pub description: &'a str,
     pub industry: &'a str,
     pub city: &'a str,
@@ -127,8 +128,8 @@ pub async fn seed_company(
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
         "INSERT INTO companies (id, owner_user_id, name, description, industry, city, size,
-                                contact_email, contact_telegram)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+                                contact_email, contact_telegram, website)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         c.id,
         c.owner_user_id,
         c.name,
@@ -138,6 +139,7 @@ pub async fn seed_company(
         c.size,
         c.contact_email,
         c.contact_telegram,
+        c.website,
     )
     .execute(db)
     .await

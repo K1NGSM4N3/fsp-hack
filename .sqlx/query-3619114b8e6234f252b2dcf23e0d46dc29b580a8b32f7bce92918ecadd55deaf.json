@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT v.id, v.company_id, co.name AS company_name, co.city AS company_city,\n                co.description AS company_description, v.title, v.description, v.specialization,\n                v.grade, v.skills, v.salary_min, v.salary_max, v.work_format, v.city, v.published_at\n         FROM vacancies v\n         JOIN companies co ON co.id = v.company_id\n         WHERE v.id = $1 AND v.status = 'published'",
+  "query": "SELECT v.id, v.company_id, co.name AS company_name, co.city AS company_city,\n                  co.verified_domain AS company_verified_domain, v.title,\n                  v.description, v.specialization, v.grade, v.skills, v.salary_min, v.salary_max,\n                  v.work_format, v.city, v.published_at, count(*) OVER () AS \"total!\"\n           FROM vacancies v\n           JOIN companies co ON co.id = v.company_id\n           WHERE v.status = 'published'\n             AND ($1::text IS NULL OR v.specialization = $1)\n             AND ($2::text IS NULL OR v.grade = $2)\n             AND ($3::text IS NULL OR v.work_format = $3)\n             AND ($4::bigint IS NULL OR v.salary_max >= $4)\n             AND ($5::text IS NULL OR v.search_tsv @@ websearch_to_tsquery('russian', $5))\n           ORDER BY v.published_at DESC\n           LIMIT $6 OFFSET $7",
   "describe": {
     "columns": [
       {
@@ -25,7 +25,7 @@
       },
       {
         "ordinal": 4,
-        "name": "company_description",
+        "name": "company_verified_domain",
         "type_info": "Text"
       },
       {
@@ -77,11 +77,22 @@
         "ordinal": 14,
         "name": "published_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 15,
+        "name": "total!",
+        "type_info": "Int8"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Text",
+        "Text",
+        "Text",
+        "Int8",
+        "Text",
+        "Int8",
+        "Int8"
       ]
     },
     "nullable": [
@@ -89,7 +100,7 @@
       false,
       false,
       true,
-      false,
+      true,
       false,
       false,
       false,
@@ -99,8 +110,9 @@
       false,
       false,
       true,
-      true
+      true,
+      null
     ]
   },
-  "hash": "3b1bea48368598930fc53f9da89ccdba4b32230bce6e78eb203ae36bb04e3efd"
+  "hash": "3619114b8e6234f252b2dcf23e0d46dc29b580a8b32f7bce92918ecadd55deaf"
 }

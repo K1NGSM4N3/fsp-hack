@@ -132,6 +132,44 @@
         ]
       }
     },
+    "/api/v1/admin/trust": {
+      "get": {
+        "tags": [
+          "trust"
+        ],
+        "summary": "Flagged companies, vacancies and invitations with their reasons (moderation)",
+        "operationId": "moderation",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModerationQueue"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -3080,6 +3118,89 @@
         ]
       }
     },
+    "/api/v1/employer/salary-check": {
+      "get": {
+        "tags": [
+          "trust"
+        ],
+        "summary": "Compare a salary range with the category market before publishing or inviting",
+        "operationId": "salary_check",
+        "parameters": [
+          {
+            "name": "specialization",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Specialization"
+            }
+          },
+          {
+            "name": "grade",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/Grade"
+            }
+          },
+          {
+            "name": "min",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "max",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SalaryCheck"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/employer/tasks": {
       "get": {
         "tags": [
@@ -3316,6 +3437,54 @@
         ]
       }
     },
+    "/api/v1/employer/trust": {
+      "get": {
+        "tags": [
+          "trust"
+        ],
+        "summary": "The company's trust level, weekly invitation quota, the reasons behind it and how to raise it",
+        "operationId": "trust_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustStatus"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/employer/vacancies": {
       "get": {
         "tags": [
@@ -3368,6 +3537,76 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Vacancy"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/employer/vacancies/similar": {
+      "post": {
+        "tags": [
+          "trust"
+        ],
+        "summary": "Own drafts and published vacancies with nearly the same text — offer to edit one instead",
+        "operationId": "similar_vacancies",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SimilarInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SimilarVacancy"
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5665,6 +5904,13 @@
                 "type": "string",
                 "format": "uuid"
               },
+              "verified_domain": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Website and login email share this domain; candidates see «Домен подтверждён»."
+              },
               "updated_at": {
                 "type": "string",
                 "format": "date-time"
@@ -6080,6 +6326,142 @@
           "uav"
         ]
       },
+      "DomainCheck": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "`domain` is the shared registrable part, e.g. `corp.ru` for `hr@corp.ru` and `jobs.corp.ru`.",
+            "required": [
+              "domain",
+              "status"
+            ],
+            "properties": {
+              "domain": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "verified"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "status"
+            ],
+            "properties": {
+              "status": {
+                "type": "string",
+                "enum": [
+                  "email_unverified"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "email_domain",
+              "status"
+            ],
+            "properties": {
+              "email_domain": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "public_mail"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "email_domain",
+              "status"
+            ],
+            "properties": {
+              "email_domain": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "no_website"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "email_domain",
+              "status"
+            ],
+            "properties": {
+              "email_domain": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "bad_website"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "email_domain",
+              "site",
+              "status"
+            ],
+            "properties": {
+              "email_domain": {
+                "type": "string"
+              },
+              "site": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "mismatch"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "DomainStatus": {
+        "type": "object",
+        "required": [
+          "check",
+          "hint"
+        ],
+        "properties": {
+          "domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shared domain of the login email and the website, in display form (Unicode for IDN)."
+          },
+          "check": {
+            "$ref": "#/components/schemas/DomainCheck"
+          },
+          "hint": {
+            "type": "string",
+            "description": "The result in words and, if it failed, how to fix it."
+          }
+        }
+      },
       "EmployerData": {
         "type": "object",
         "required": [
@@ -6395,6 +6777,130 @@
           },
           "explanation_ru": {
             "type": "string"
+          }
+        }
+      },
+      "FlaggedCompany": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "level",
+          "quota",
+          "reasons"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "level": {
+            "$ref": "#/components/schemas/TrustLevel"
+          },
+          "quota": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "verified_domain": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrustReason"
+            }
+          }
+        }
+      },
+      "FlaggedInvitation": {
+        "type": "object",
+        "required": [
+          "id",
+          "company_id",
+          "company_name",
+          "title",
+          "salary",
+          "reasons",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company_name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "salary": {
+            "$ref": "#/components/schemas/SalaryRange"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "FlaggedVacancy": {
+        "type": "object",
+        "required": [
+          "id",
+          "company_id",
+          "company_name",
+          "title",
+          "status",
+          "salary",
+          "reasons",
+          "flagged_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company_name": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VacancyStatus"
+          },
+          "salary": {
+            "$ref": "#/components/schemas/SalaryRange"
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "flagged_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -6725,6 +7231,8 @@
         "type": "object",
         "required": [
           "quota_limit",
+          "quota_max",
+          "trust_level",
           "quota_used",
           "quota_resets_in_days",
           "by_status",
@@ -6734,7 +7242,16 @@
         "properties": {
           "quota_limit": {
             "type": "integer",
-            "format": "int64"
+            "format": "int64",
+            "description": "Weekly quota set by the company's trust level (`GET /employer/trust`)."
+          },
+          "quota_max": {
+            "type": "integer",
+            "format": "int64",
+            "description": "The quota a trusted company gets."
+          },
+          "trust_level": {
+            "$ref": "#/components/schemas/TrustLevel"
           },
           "quota_used": {
             "type": "integer",
@@ -6929,6 +7446,29 @@
           }
         }
       },
+      "MarketView": {
+        "type": "object",
+        "description": "Stated expectations of the category's candidates.",
+        "required": [
+          "samples",
+          "median",
+          "p90"
+        ],
+        "properties": {
+          "samples": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "median": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "p90": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "MeResponse": {
         "type": "object",
         "required": [
@@ -6970,6 +7510,35 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "ModerationQueue": {
+        "type": "object",
+        "required": [
+          "companies",
+          "vacancies",
+          "invitations"
+        ],
+        "properties": {
+          "companies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlaggedCompany"
+            },
+            "description": "Companies with at least one negative signal, lowest quota first."
+          },
+          "vacancies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlaggedVacancy"
+            }
+          },
+          "invitations": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FlaggedInvitation"
+            }
           }
         }
       },
@@ -7423,6 +7992,13 @@
                     "string",
                     "null"
                   ]
+                },
+                "company_verified_domain": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "description": "«Домен подтверждён»: the company's login email and website share this domain."
                 },
                 "company_description": {
                   "type": [
@@ -8124,6 +8700,13 @@
               "null"
             ]
           },
+          "company_verified_domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "«Домен подтверждён»: the company's login email and website share this domain."
+          },
           "company_description": {
             "type": [
               "string",
@@ -8249,6 +8832,13 @@
               "string",
               "null"
             ]
+          },
+          "company_verified_domain": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "«Домен подтверждён»: the company's login email and website share this domain."
           },
           "vacancy_id": {
             "type": [
@@ -8562,6 +9152,36 @@
           "employer",
           "admin"
         ]
+      },
+      "SalaryCheck": {
+        "type": "object",
+        "required": [
+          "category",
+          "warnings"
+        ],
+        "properties": {
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "market": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MarketView",
+                "description": "Absent when the category has too few stated expectations."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrustWarning"
+            },
+            "description": "Soft warnings: publishing and sending are never blocked."
+          }
+        }
       },
       "SalaryRange": {
         "type": "object",
@@ -9000,6 +9620,54 @@
               "boolean",
               "null"
             ]
+          }
+        }
+      },
+      "SimilarInput": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "exclude_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The vacancy being edited, so it does not match itself."
+          }
+        }
+      },
+      "SimilarVacancy": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "status",
+          "similarity"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/VacancyStatus"
+          },
+          "similarity": {
+            "type": "number",
+            "format": "float",
+            "description": "Share of common word pairs, 0..1 (MinHash estimate); listed from 0.6."
           }
         }
       },
@@ -9578,6 +10246,142 @@
           }
         }
       },
+      "TrustLevel": {
+        "type": "string",
+        "enum": [
+          "low",
+          "new",
+          "standard",
+          "high"
+        ]
+      },
+      "TrustReason": {
+        "type": "object",
+        "required": [
+          "kind",
+          "points",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TrustReasonKind"
+          },
+          "points": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Change of the weekly quota."
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
+      "TrustReasonKind": {
+        "type": "string",
+        "enum": [
+          "domain",
+          "account_age",
+          "accepted",
+          "complaints",
+          "bad_declines",
+          "withdrawals",
+          "no_answers",
+          "salary_flags",
+          "own_duplicates",
+          "copies"
+        ]
+      },
+      "TrustStatus": {
+        "type": "object",
+        "required": [
+          "level",
+          "quota_limit",
+          "quota_used",
+          "quota_base",
+          "quota_min",
+          "quota_max",
+          "bonus",
+          "penalty",
+          "reasons",
+          "advice",
+          "domain",
+          "rule"
+        ],
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/TrustLevel"
+          },
+          "quota_limit": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Invitations allowed per 7 days right now."
+          },
+          "quota_used": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "quota_base": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "quota_min": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "quota_max": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "bonus": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sum of positive reasons, capped at `quota_max − quota_base`."
+          },
+          "penalty": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Sum of negative reasons (≤ 0)."
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrustReason"
+            }
+          },
+          "advice": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What raises the quota, most effective first."
+          },
+          "domain": {
+            "$ref": "#/components/schemas/DomainStatus"
+          },
+          "rule": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The quota rule in plain words."
+          }
+        }
+      },
+      "TrustWarning": {
+        "type": "object",
+        "required": [
+          "kind",
+          "text"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/WarningKind"
+          },
+          "text": {
+            "type": "string"
+          }
+        }
+      },
       "UserConsent": {
         "type": "object",
         "required": [
@@ -9761,6 +10565,15 @@
           }
         }
       },
+      "WarningKind": {
+        "type": "string",
+        "enum": [
+          "salary_above_market",
+          "salary_wide_range",
+          "duplicate_own",
+          "copy_of_other"
+        ]
+      },
       "WorkFormat": {
         "type": "string",
         "enum": [
@@ -9831,6 +10644,10 @@
     {
       "name": "invitations",
       "description": "Приглашения — выход работодателя на кандидата, раскрытие контактов"
+    },
+    {
+      "name": "trust",
+      "description": "Антифейк: уровень доверия и квота компании, проверка вилки и дублей вакансий, очередь модерации"
     }
   ]
 }

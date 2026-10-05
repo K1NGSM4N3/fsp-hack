@@ -57,7 +57,15 @@ function QuotaCard({ s }: { s: InvitationStats }) {
   const left = s.quota_limit - s.quota_used;
   return (
     <Card>
-      <CardHeader title="Квота приглашений" description="Не больше 30 за 7 дней — кандидаты получают только точечные предложения" />
+      <CardHeader
+        title="Квота приглашений"
+        description={`До ${s.quota_max} за 7 дней — лимит зависит от уровня доверия к компании, кандидаты получают только точечные предложения`}
+        action={
+          <Link href="/employer/trust" className="text-sm font-medium text-primary hover:underline">
+            Как поднять
+          </Link>
+        }
+      />
       <p className="tabular font-mono text-3xl font-semibold tracking-tight text-ink">
         {s.quota_used}
         <span className="text-xl text-ink-subtle"> / {s.quota_limit}</span>

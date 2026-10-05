@@ -285,3 +285,19 @@ pub async fn patch_shortlist_item(
     .await
     .map(|r| r.rows_affected())
 }
+
+/// Demo seed: needs inserted in one transaction share `now()`, which makes their order unstable.
+pub async fn set_need_created_at(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+    at: DateTime<Utc>,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "UPDATE hiring_needs SET created_at = $2, updated_at = $2 WHERE id = $1",
+        id,
+        at,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}

@@ -1,6 +1,10 @@
 //! Fictional demo corpus. Company names are invented and do not refer to real organizations.
 
 pub struct CompanySeed {
+    /// Owner's login. The first company is the demo employer; the others sign in from their
+    /// corporate domain, so candidates see «Домен подтверждён» on their vacancies.
+    pub owner: &'static str,
+    pub website: &'static str,
     pub name: &'static str,
     pub industry: &'static str,
     pub city: &'static str,
@@ -12,6 +16,8 @@ pub struct CompanySeed {
 
 pub const COMPANIES: &[CompanySeed] = &[
     CompanySeed {
+        owner: "employer@demo.fsp",
+        website: "https://severny-kod.example",
         name: "Северный Код",
         industry: "fintech",
         city: "Москва",
@@ -21,6 +27,8 @@ pub const COMPANIES: &[CompanySeed] = &[
         telegram: "@severny_kod_hr",
     },
     CompanySeed {
+        owner: "hr@pixel-manufactura.example",
+        website: "https://pixel-manufactura.example",
         name: "Пиксельная Мануфактура",
         industry: "gamedev",
         city: "Санкт-Петербург",
@@ -30,6 +38,8 @@ pub const COMPANIES: &[CompanySeed] = &[
         telegram: "@pixel_jobs",
     },
     CompanySeed {
+        owner: "hr@oblakostroy.example",
+        website: "https://www.oblakostroy.example",
         name: "ОблакоСтрой",
         industry: "telecom",
         city: "Новосибирск",
@@ -39,6 +49,8 @@ pub const COMPANIES: &[CompanySeed] = &[
         telegram: "@oblakostroy",
     },
     CompanySeed {
+        owner: "hr@medsignal.example",
+        website: "https://careers.medsignal.example",
         name: "МедСигнал",
         industry: "healthtech",
         city: "Казань",
@@ -48,6 +60,8 @@ pub const COMPANIES: &[CompanySeed] = &[
         telegram: "@medsignal_team",
     },
     CompanySeed {
+        owner: "it-hr@logplus.example",
+        website: "https://logplus.example/career",
         name: "Логистика Плюс Цифра",
         industry: "logistics",
         city: "Екатеринбург",
@@ -57,6 +71,8 @@ pub const COMPANIES: &[CompanySeed] = &[
         telegram: "@logplus_it",
     },
     CompanySeed {
+        owner: "career@shield-key.example",
+        website: "https://shield-key.example",
         name: "Щит и Ключ",
         industry: "outsourcing",
         city: "Москва",

@@ -18,6 +18,7 @@ pub mod reports;
 pub mod seed;
 pub mod survey;
 pub mod tasks;
+pub mod trust;
 pub mod types;
 pub mod users;
 pub mod vacancies;
