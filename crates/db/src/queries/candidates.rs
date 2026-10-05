@@ -67,6 +67,11 @@ pub struct InsertResumeUploadParams<
     pub size_bytes: i32,
     pub recognized_fields: T3,
 }
+#[derive(Clone, Copy, Debug)]
+pub struct SetSearchStatusParams {
+    pub search_status: crate::types::SearchStatus,
+    pub user_id: uuid::Uuid,
+}
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]
 pub struct CandidateProfile {
     pub user_id: uuid::Uuid,
@@ -1012,5 +1017,51 @@ impl CandidateInvitableStmt {
             },
             mapper: |it| CandidateInvitable::from(it),
         }
+    }
+}
+pub struct SetSearchStatusStmt(&'static str, Option<tokio_postgres::Statement>);
+pub fn set_search_status() -> SetSearchStatusStmt {
+    SetSearchStatusStmt(
+        "UPDATE candidates SET search_status = $1, updated_at = now() WHERE user_id = $2",
+        None,
+    )
+}
+impl SetSearchStatusStmt {
+    pub async fn prepare<'a, C: GenericClient>(
+        mut self,
+        client: &'a C,
+    ) -> Result<Self, tokio_postgres::Error> {
+        self.1 = Some(client.prepare(self.0).await?);
+        Ok(self)
+    }
+    pub async fn bind<'c, 'a, 's, C: GenericClient>(
+        &'s self,
+        client: &'c C,
+        search_status: &'a crate::types::SearchStatus,
+        user_id: &'a uuid::Uuid,
+    ) -> Result<u64, tokio_postgres::Error> {
+        client.execute(self.0, &[search_status, user_id]).await
+    }
+}
+impl<'a, C: GenericClient + Send + Sync>
+    crate::client::async_::Params<
+        'a,
+        'a,
+        'a,
+        SetSearchStatusParams,
+        std::pin::Pin<
+            Box<dyn futures::Future<Output = Result<u64, tokio_postgres::Error>> + Send + 'a>,
+        >,
+        C,
+    > for SetSearchStatusStmt
+{
+    fn params(
+        &'a self,
+        client: &'a C,
+        params: &'a SetSearchStatusParams,
+    ) -> std::pin::Pin<
+        Box<dyn futures::Future<Output = Result<u64, tokio_postgres::Error>> + Send + 'a>,
+    > {
+        Box::pin(self.bind(client, &params.search_status, &params.user_id))
     }
 }

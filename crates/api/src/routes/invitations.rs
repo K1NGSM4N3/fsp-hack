@@ -683,7 +683,7 @@ async fn decline(
         .comment
         .map(|c| c.chars().take(1000).collect::<String>())
         .filter(|c| !c.trim().is_empty());
-    respond(
+    let declined = respond(
         &state,
         user,
         id,
@@ -691,5 +691,12 @@ async fn decline(
         Some(req.reason),
         comment,
     )
-    .await
+    .await?;
+    if req.reason == DeclineReason::NotLooking {
+        let client = state.pool.get().await?;
+        db::queries::candidates::set_search_status()
+            .bind(&client, &db::types::SearchStatus::Closed, &user.id)
+            .await?;
+    }
+    Ok(declined)
 }

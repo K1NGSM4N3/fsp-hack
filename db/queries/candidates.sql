@@ -42,3 +42,6 @@ UPDATE candidates SET last_activity_at = now() WHERE user_id = :user_id;
 
 --! candidate_invitable : (specialization?, grade?)
 SELECT visible, search_status, specialization, grade FROM candidates WHERE user_id = :user_id;
+
+--! set_search_status
+UPDATE candidates SET search_status = :search_status, updated_at = now() WHERE user_id = :user_id;

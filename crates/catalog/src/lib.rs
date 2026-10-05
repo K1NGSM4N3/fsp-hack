@@ -173,7 +173,7 @@ slug_enum! {
         Edtech => "edtech", "Образование";
         Healthtech => "healthtech", "Медицина";
         Media => "media", "Медиа и контент";
-        Industry40 => "industry", "Промышленность";
+        Manufacturing => "manufacturing", "Промышленность";
         Logistics => "logistics", "Логистика и транспорт";
         Outsourcing => "outsourcing", "Заказная разработка";
     }
@@ -252,6 +252,23 @@ mod tests {
         for d in Direction::ALL {
             assert!(d.specializations().next().is_some(), "{d}");
         }
+    }
+
+    #[test]
+    fn serde_names_equal_slugs() {
+        fn check<T: Serialize + Copy>(all: &[T], slug: fn(T) -> &'static str) {
+            for &v in all {
+                assert_eq!(
+                    serde_json::to_string(&v).unwrap(),
+                    format!("\"{}\"", slug(v))
+                );
+            }
+        }
+        check(Direction::ALL, Direction::slug);
+        check(Specialization::ALL, Specialization::slug);
+        check(Grade::ALL, Grade::slug);
+        check(WorkFormat::ALL, WorkFormat::slug);
+        check(Industry::ALL, Industry::slug);
     }
 
     #[test]
