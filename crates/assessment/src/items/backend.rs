@@ -41,7 +41,7 @@ pub(crate) const TEMPLATES: &[Template] = &[
         levels: &[
             Level::new(1, 1.0, -0.5, C_CHOICE, 90),
             Level::new(2, 1.3, 0.4, C_CHOICE, 120),
-            Level::new(3, 1.5, 1.2, C_OPEN, 150),
+            Level::new(3, 1.2, 0.9, C_OPEN, 150),
         ],
         source: Source::Computed(go_defer),
     },
@@ -777,13 +777,23 @@ impl DeferUpdate {
 
 fn go_named_results(rng: &mut Rng) -> Draft {
     let named = chance(rng, 0.6);
-    let var = if named { "result" } else { "x" };
-    let init = range(rng, 2, 6);
-    let ret_add = range(rng, 0, 3);
+    let var = if named {
+        *pick(rng, &["result", "res", "total", "out", "n", "sum"])
+    } else {
+        *pick(rng, &["x", "v", "acc", "val", "cnt", "k"])
+    };
+    let func = *pick(
+        rng,
+        &[
+            "calc", "compute", "build", "eval", "score", "measure", "next", "load",
+        ],
+    );
+    let init = range(rng, 2, 9);
+    let ret_add = range(rng, 0, 5);
     let updates: Vec<DeferUpdate> = (0..range(rng, 1, 2))
         .map(|_| {
             if chance(rng, 0.5) {
-                DeferUpdate::Add(range(rng, 1, 5))
+                DeferUpdate::Add(range(rng, 1, 9))
             } else {
                 DeferUpdate::Mul(range(rng, 2, 3))
             }
@@ -803,9 +813,9 @@ fn go_named_results(rng: &mut Rng) -> Draft {
     };
     let mut body = String::new();
     if named {
-        body.push_str(&format!("func calc() ({var} int) {{\n"));
+        body.push_str(&format!("func {func}() ({var} int) {{\n"));
     } else {
-        body.push_str(&format!("func calc() int {{\n\t{var} := 0\n"));
+        body.push_str(&format!("func {func}() int {{\n\t{var} := 0\n"));
     }
     for u in &updates {
         body.push_str(&format!(
@@ -815,18 +825,97 @@ fn go_named_results(rng: &mut Rng) -> Draft {
     }
     body.push_str(&format!("\t{var} = {init}\n\treturn {ret_expr}\n}}\n"));
     let code = format!(
-        "package main\n\nimport \"fmt\"\n\n{body}\nfunc main() {{\n\tfmt.Println(calc())\n}}\n"
+        "package main\n\nimport \"fmt\"\n\n{body}\nfunc main() {{\n\tfmt.Println({func}())\n}}\n"
     );
     Draft::integer("Что выведет программа?", answer).code("go", code)
 }
 
-const INDEX_COLUMNS: &[&str] = &[
-    "customer_id",
-    "status",
-    "region",
-    "manager_id",
-    "channel",
-    "warehouse_id",
+struct IndexTable {
+    name: &'static str,
+    equality: [&'static str; 6],
+    time: &'static str,
+    amount: &'static str,
+}
+
+const INDEX_TABLES: &[IndexTable] = &[
+    IndexTable {
+        name: "orders",
+        equality: [
+            "customer_id",
+            "status",
+            "region",
+            "manager_id",
+            "channel",
+            "warehouse_id",
+        ],
+        time: "created_at",
+        amount: "amount",
+    },
+    IndexTable {
+        name: "payments",
+        equality: [
+            "merchant_id",
+            "status",
+            "currency",
+            "method",
+            "account_id",
+            "country",
+        ],
+        time: "created_at",
+        amount: "amount",
+    },
+    IndexTable {
+        name: "tickets",
+        equality: [
+            "assignee_id",
+            "status",
+            "priority",
+            "queue_id",
+            "project_id",
+            "reporter_id",
+        ],
+        time: "opened_at",
+        amount: "sla_minutes",
+    },
+    IndexTable {
+        name: "shipments",
+        equality: [
+            "carrier_id",
+            "status",
+            "warehouse_id",
+            "region",
+            "client_id",
+            "route_id",
+        ],
+        time: "shipped_at",
+        amount: "weight_kg",
+    },
+    IndexTable {
+        name: "invoices",
+        equality: [
+            "client_id",
+            "status",
+            "currency",
+            "contract_id",
+            "manager_id",
+            "branch_id",
+        ],
+        time: "issued_at",
+        amount: "total",
+    },
+    IndexTable {
+        name: "bookings",
+        equality: [
+            "hotel_id",
+            "status",
+            "guest_id",
+            "channel",
+            "room_type",
+            "agent_id",
+        ],
+        time: "check_in",
+        amount: "price",
+    },
 ];
 
 fn idx(cols: &[&str]) -> String {
@@ -834,9 +923,12 @@ fn idx(cols: &[&str]) -> String {
 }
 
 fn index_choice(level: u8, rng: &mut Rng) -> Draft {
-    let cols = pick_n(rng, INDEX_COLUMNS, 4);
+    let table = pick(rng, INDEX_TABLES);
+    let name = table.name;
+    let cols = pick_n(rng, &table.equality, 4);
     let (a, b, x, y) = (cols[0], cols[1], cols[2], cols[3]);
-    let range_col = *pick(rng, &["created_at", "amount"]);
+    let time = table.time;
+    let range_col = if chance(rng, 0.5) { time } else { table.amount };
     match level {
         1 => {
             let correct = if chance(rng, 0.5) {
@@ -855,11 +947,11 @@ fn index_choice(level: u8, rng: &mut Rng) -> Draft {
                 ],
             );
             Draft::choice(
-                "Таблица `orders` большая. Какой B-tree индекс позволит найти строки для запроса ниже поиском по дереву, а не полным просмотром таблицы или индекса?".to_string(),
+                format!("Таблица `{name}` большая. Какой B-tree индекс позволит найти строки для запроса ниже поиском по дереву, а не полным просмотром таблицы или индекса?"),
                 correct,
                 distractors,
             )
-            .code("sql", format!("SELECT * FROM orders\nWHERE {a} = $1;"))
+            .code("sql", format!("SELECT * FROM {name}\nWHERE {a} = $1;"))
         }
         2 => {
             let (e1, e2) = if chance(rng, 0.5) { (a, b) } else { (b, a) };
@@ -882,7 +974,7 @@ fn index_choice(level: u8, rng: &mut Rng) -> Draft {
             .code(
                 "sql",
                 format!(
-                    "SELECT * FROM orders\nWHERE {a} = $1\n  AND {b} = $2\n  AND {range_col} > $3;"
+                    "SELECT * FROM {name}\nWHERE {a} = $1\n  AND {b} = $2\n  AND {range_col} > $3;"
                 ),
             )
         }
@@ -891,38 +983,34 @@ fn index_choice(level: u8, rng: &mut Rng) -> Draft {
             let (correct, distractors, filter) = if two {
                 let (e1, e2) = if chance(rng, 0.5) { (a, b) } else { (b, a) };
                 (
-                    idx(&[e1, e2, "created_at"]),
+                    idx(&[e1, e2, time]),
                     vec![
-                        idx(&[a, "created_at", b]),
-                        idx(&["created_at", a, b]),
+                        idx(&[a, time, b]),
+                        idx(&[time, a, b]),
                         idx(&[a, b]),
-                        idx(&[b, "created_at"]),
-                        idx(&[a, b, x, "created_at"]),
+                        idx(&[b, time]),
+                        idx(&[a, b, x, time]),
                     ],
                     format!("WHERE {a} = $1\n  AND {b} = $2"),
                 )
             } else {
                 (
-                    idx(&[a, "created_at"]),
-                    vec![
-                        idx(&["created_at", a]),
-                        idx(&[a]),
-                        idx(&["created_at"]),
-                        idx(&[a, x, "created_at"]),
-                    ],
+                    idx(&[a, time]),
+                    vec![idx(&[time, a]), idx(&[a]), idx(&[time]), idx(&[a, x, time])],
                     format!("WHERE {a} = $1"),
                 )
             };
             let distractors = shuffled(rng, distractors);
             let dir = if chance(rng, 0.5) { "DESC" } else { "ASC" };
+            let limit = *pick(rng, &[10, 20, 25, 50, 100]);
             Draft::choice(
-                "Какой индекс позволит ограничить сканирование B-tree всеми условиями WHERE и выдать первые 20 строк в нужном порядке без отдельной сортировки?",
+                format!("Какой индекс позволит ограничить сканирование B-tree всеми условиями WHERE и выдать первые {limit} строк в нужном порядке без отдельной сортировки?"),
                 correct,
                 distractors,
             )
             .code(
                 "sql",
-                format!("SELECT * FROM orders\n{filter}\nORDER BY created_at {dir}\nLIMIT 20;"),
+                format!("SELECT * FROM {name}\n{filter}\nORDER BY {time} {dir}\nLIMIT {limit};"),
             )
         }
     }
@@ -944,8 +1032,33 @@ fn run_bucket(capacity: i64, rate_num: i64, denom: i64, bursts: &[(i64, i64)]) -
     rejected
 }
 
+const RATE_LIMITED: &[&str] = &[
+    "Эндпоинт `POST /api/login`",
+    "Эндпоинт `GET /api/search`",
+    "Эндпоинт `POST /api/orders`",
+    "Эндпоинт `GET /api/v2/products`",
+    "Эндпоинт `POST /api/sms/send`",
+    "Публичный API погоды",
+    "API платёжного шлюза",
+    "API отправки уведомлений",
+    "Webhook-приёмник",
+    "API геокодера",
+    "API загрузки файлов",
+    "Внутренний API рекомендаций",
+];
+
 fn token_bucket(level: u8, rng: &mut Rng) -> Draft {
-    let capacity = range(rng, 4, 10);
+    let subject = *pick(rng, RATE_LIMITED);
+    let (scope, source) = *pick(
+        rng,
+        &[
+            ("на каждый API-ключ", "с одного API-ключа"),
+            ("на каждого клиента", "от одного клиента"),
+            ("на каждый IP-адрес", "с одного IP-адреса"),
+            ("на каждого пользователя", "от одного пользователя"),
+        ],
+    );
+    let capacity = range(rng, 4, 15);
     let (rate_num, denom, rate_text) = match level {
         3 => {
             if chance(rng, 0.5) {
@@ -955,11 +1068,11 @@ fn token_bucket(level: u8, rng: &mut Rng) -> Draft {
             }
         }
         _ => {
-            let r = range(rng, 1, 3);
+            let r = range(rng, 1, 4);
             (
                 r,
                 1,
-                format!("{r} токен{} в секунду", if r == 1 { "" } else { "а" }),
+                format!("{} в секунду", plural_ru(r, "токен", "токена", "токенов")),
             )
         }
     };
@@ -972,12 +1085,12 @@ fn token_bucket(level: u8, rng: &mut Rng) -> Draft {
     let mut t = 0;
     for i in 0..n_bursts {
         if i > 0 {
-            t += range(rng, 1, 4);
+            t += range(rng, 1, 6);
         }
         let n = if i == 0 {
-            capacity + range(rng, 1, 5)
+            capacity + range(rng, 1, 8)
         } else {
-            range(rng, 2, capacity + 2)
+            range(rng, 2, capacity + 4)
         };
         bursts.push((t, n));
     }
@@ -997,11 +1110,12 @@ fn token_bucket(level: u8, rng: &mut Rng) -> Draft {
     } else {
         ""
     };
+    let capacity_text = plural_ru(capacity, "токен", "токена", "токенов");
     Draft::integer(
         format!(
-            "API защищён rate limiter'ом по алгоритму token bucket: ёмкость {capacity} токенов, пополнение {rate_text}, в момент t = 0 корзина полна. \
+            "{subject} защищён rate limiter'ом по алгоритму token bucket ({scope}): ёмкость {capacity_text}, пополнение {rate_text}, в момент t = 0 корзина полна. \
              Каждый запрос забирает 1 токен; если токена нет, запрос отклоняется (429).{fractional}\n\n\
-             Запросы приходят пачками (внутри пачки — мгновенно):\n\n{schedule}\n\nСколько запросов будет отклонено всего?"
+             Запросы {source} приходят пачками (внутри пачки — мгновенно):\n\n{schedule}\n\nСколько запросов будет отклонено всего?"
         ),
         rejected,
     )
@@ -1044,13 +1158,31 @@ fn run_cache(cap: usize, accesses: &[char], policy: Eviction) -> (usize, Vec<cha
     (misses, keys)
 }
 
+/// Letters that cannot be confused with digits or with each other in a monospace sequence.
+const CACHE_KEYS: &[char] = &[
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'K', 'M', 'N', 'P', 'R', 'S', 'T', 'X', 'Y', 'Z',
+];
+
+const CACHED: &[&str] = &[
+    "профилей пользователей",
+    "сессий",
+    "карточек товаров",
+    "DNS-ответов",
+    "результатов SQL-запросов",
+    "превью изображений",
+    "конфигураций тенантов",
+    "курсов валют",
+];
+
 fn lru_cache(level: u8, rng: &mut Rng) -> Draft {
     let (cap, len, alphabet) = match level {
         1 => (2usize, range(rng, 6, 7) as usize, 3usize),
         2 => (3, range(rng, 9, 11) as usize, 5),
         _ => (3, range(rng, 9, 10) as usize, 5),
     };
-    let keys: Vec<char> = ('A'..='E').take(alphabet).collect();
+    let mut keys = pick_n(rng, CACHE_KEYS, alphabet);
+    keys.sort_unstable();
+    let what = *pick(rng, CACHED);
     for _ in 0..64 {
         let mut accesses: Vec<char> = Vec::with_capacity(len);
         while accesses.len() < len {
@@ -1072,7 +1204,7 @@ fn lru_cache(level: u8, rng: &mut Rng) -> Draft {
             }
             return Draft::integer(
                 format!(
-                    "LRU-кэш вмещает {cap} ключа и изначально пуст. Последовательность обращений:\n\n`{sequence}`\n\n\
+                    "LRU-кэш {what} вмещает {cap} ключа и изначально пуст. Последовательность обращений:\n\n`{sequence}`\n\n\
                      Сколько будет промахов (cache miss)? Первое обращение к ключу — тоже промах."
                 ),
                 misses as i64,
@@ -1107,7 +1239,7 @@ fn lru_cache(level: u8, rng: &mut Rng) -> Draft {
         distractors.extend(shuffled(rng, combos).iter().map(|c| render(c)));
         return Draft::choice(
             format!(
-                "LRU-кэш вмещает {cap} ключа и изначально пуст. Последовательность обращений (каждое обращение — чтение с загрузкой при промахе):\n\n`{sequence}`\n\n\
+                "LRU-кэш {what} вмещает {cap} ключа и изначально пуст. Последовательность обращений (каждое обращение — чтение с загрузкой при промахе):\n\n`{sequence}`\n\n\
                  Какие ключи окажутся в кэше после последнего обращения?"
             ),
             render(&contents),

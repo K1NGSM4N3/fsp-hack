@@ -29,7 +29,7 @@ use crate::irt::ItemParams;
 pub(crate) type Rng = ChaCha8Rng;
 
 /// Bumped whenever calibration or generators change so that old `ItemRef`s render differently.
-pub const BANK_VERSION: u32 = 1;
+pub const BANK_VERSION: u32 = 2;
 
 /// Every single-choice item shows exactly this many options, so `c = 1 / CHOICE_OPTIONS`.
 pub const CHOICE_OPTIONS: usize = 4;

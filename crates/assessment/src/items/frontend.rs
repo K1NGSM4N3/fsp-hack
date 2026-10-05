@@ -400,7 +400,13 @@ fn event_loop(level: u8, rng: &mut Rng) -> Draft {
     let mut labeler = Labeler(0);
     let blocks = event_loop_blocks(level, rng, &mut labeler);
     let program = shuffled(rng, blocks);
-    let labels: Vec<char> = shuffled(rng, ('A'..='I').take(labeler.0).collect());
+    let first = range(rng, 0, 26 - labeler.0 as i64) as u8;
+    let labels: Vec<char> = shuffled(
+        rng,
+        (0..labeler.0 as u8)
+            .map(|i| char::from(b'A' + first + i))
+            .collect(),
+    );
 
     let answer = EventLoop::run(&labels, &program, LoopModel::default());
     let models = [
@@ -489,10 +495,37 @@ impl ClosureCase {
     }
 }
 
+const LOOP_VARS: &[&str] = &["i", "k", "n", "idx", "x", "pos", "cur", "num"];
+const INNER_VARS: &[&str] = &["j", "v", "y", "val", "res", "m", "z", "w"];
+const FN_LISTS: &[&str] = &[
+    "fns",
+    "callbacks",
+    "getters",
+    "handlers",
+    "tasks",
+    "thunks",
+    "readers",
+];
+
+/// Equal delays keep timers in registration order, so the delay value is an incidental.
+fn timeout_log(rng: &mut Rng, expr: &str) -> String {
+    let delay = *pick(rng, &[0, 0, 1, 10, 50, 100]);
+    let tail = if delay == 0 && chance(rng, 0.3) {
+        String::new()
+    } else {
+        format!(", {delay}")
+    };
+    match range(rng, 0, 2) {
+        0 => format!("  setTimeout(() => console.log({expr}){tail});\n"),
+        1 => format!("  setTimeout(() => {{\n    console.log({expr});\n  }}{tail});\n"),
+        _ => format!("  setTimeout(function () {{\n    console.log({expr});\n  }}{tail});\n"),
+    }
+}
+
 fn closure_loop(level: u8, rng: &mut Rng) -> Draft {
     let iterations = range(rng, 2, 4);
     let (start, step) = match level {
-        1 => (0, 1),
+        1 => (range(rng, 0, 5), 1),
         _ => (range(rng, 0, 2), range(rng, 1, 3)),
     };
     let last = start + (iterations - 1) * step;
@@ -539,30 +572,61 @@ fn closure_loop(level: u8, rng: &mut Rng) -> Draft {
     distractors.push(fmt((0..iterations).collect()));
     distractors.push(fmt((1..=iterations).collect()));
 
+    let i = *pick(rng, LOOP_VARS);
+    let j = *pick(rng, INNER_VARS);
     let increment = if step == 1 {
-        "i++".to_owned()
+        format!("{i}++")
     } else {
-        format!("i += {step}")
+        format!("{i} += {step}")
     };
     let header = match decl {
-        Decl::Var => format!("for (var i = {start}; i < {limit}; {increment}) {{\n"),
-        Decl::Let => format!("for (let i = {start}; i < {limit}; {increment}) {{\n"),
-        Decl::LetOutside => format!("let i;\nfor (i = {start}; i < {limit}; {increment}) {{\n"),
+        Decl::Var => format!("for (var {i} = {start}; {i} < {limit}; {increment}) {{\n"),
+        Decl::Let => format!("for (let {i} = {start}; {i} < {limit}; {increment}) {{\n"),
+        Decl::LetOutside => {
+            format!("let {i};\nfor ({i} = {start}; {i} < {limit}; {increment}) {{\n")
+        }
     };
     let factor = case.factor;
+    let inner_decl = format!(
+        "  {} {j} = {};\n",
+        pick(rng, &["let", "const"]),
+        if chance(rng, 0.5) {
+            format!("{i} * {factor}")
+        } else {
+            format!("{factor} * {i}")
+        }
+    );
     let code = if level == 3 {
-        format!(
-            "const fns = [];\n{header}  let j = i * {factor};\n  fns.push(() => i + j);\n}}\nconsole.log(fns.map((f) => f()).join(' '));\n"
-        )
+        let list = *pick(rng, FN_LISTS);
+        let sum = if chance(rng, 0.5) {
+            format!("{i} + {j}")
+        } else {
+            format!("{j} + {i}")
+        };
+        let print = match range(rng, 0, 2) {
+            0 => format!("console.log({list}.map((f) => f()).join(' '));\n"),
+            1 => format!("{list}.forEach((f) => console.log(f()));\n"),
+            _ => format!("for (const f of {list}) {{\n  console.log(f());\n}}\n"),
+        };
+        format!("const {list} = [];\n{header}{inner_decl}  {list}.push(() => {sum});\n}}\n{print}")
     } else {
         let (inner, expr) = match captured {
-            Captured::J => (format!("  const j = i * {factor};\n"), "j"),
-            _ => (String::new(), "i"),
+            Captured::J => (inner_decl, j),
+            _ => (String::new(), i),
         };
-        format!("{header}{inner}  setTimeout(() => console.log({expr}), 0);\n}}\n")
+        let call = timeout_log(rng, expr);
+        format!("{header}{inner}{call}}}\n")
     };
+    let prompt = pick(
+        rng,
+        &[
+            "Что будет выведено?",
+            "Что выведет этот код в консоль?",
+            "Какие числа появятся в консоли?",
+        ],
+    );
     Draft::choice(
-        "Что будет выведено? Значения перечислены через пробел в порядке вывода.",
+        format!("{prompt} Значения перечислены через пробел в порядке вывода."),
         answer,
         distractors,
     )
@@ -696,6 +760,10 @@ fn random_operand(level: u8, rng: &mut Rng) -> JsVal {
     }
 }
 
+const COERCION_VARS: &[&str] = &[
+    "result", "value", "res", "out", "output", "x", "y", "z", "v", "r", "val", "tmp",
+];
+
 fn type_coercion(level: u8, rng: &mut Rng) -> Draft {
     for _ in 0..64 {
         let n = if level == 1 { 2 } else { 3 };
@@ -763,12 +831,32 @@ fn type_coercion(level: u8, rng: &mut Rng) -> Draft {
         for (i, op) in ops.iter().enumerate() {
             expr.push_str(&format!(" {} {}", op.symbol(), values[i + 1].literal()));
         }
+        let (question, code) = if chance(rng, 0.2) {
+            let question = pick(
+                rng,
+                &[
+                    "Чему равно значение выражения?",
+                    "Каков результат вычисления выражения?",
+                    "Что получится в результате вычисления выражения?",
+                ],
+            );
+            ((*question).to_owned(), format!("{expr}\n"))
+        } else {
+            let name = *pick(rng, COERCION_VARS);
+            let keyword = *pick(rng, &["const", "let"]);
+            let question = match range(rng, 0, 2) {
+                0 => format!("Чему будет равно значение `{name}`?"),
+                1 => format!("Какое значение получит переменная `{name}`?"),
+                _ => format!("Что окажется в переменной `{name}`?"),
+            };
+            (question, format!("{keyword} {name} = {expr};\n"))
+        };
         return Draft::choice(
-            "Чему равно значение выражения? Строковые значения в вариантах указаны в кавычках.",
+            format!("{question} Строковые значения в вариантах указаны в кавычках."),
             answer,
             distractors,
         )
-        .code("javascript", format!("{expr}\n"));
+        .code("javascript", code);
     }
     Draft::choice(
         "Чему равно значение выражения? Строковые значения в вариантах указаны в кавычках.",
@@ -1122,12 +1210,40 @@ fn collapse(a: i64, b: i64) -> i64 {
     pos + neg
 }
 
+const BOX_CLASSES: &[&str] = &[
+    "box", "card", "panel", "tile", "badge", "banner", "button", "modal", "alert", "chip",
+];
+const BORDER_STYLES: &[&str] = &[
+    "solid #333",
+    "solid #ccc",
+    "solid black",
+    "dashed #999",
+    "dotted #666",
+];
+const LIST_CLASSES: &[&str] = &[
+    "list", "stack", "column", "feed", "menu", "sidebar", "content", "wrapper",
+];
+const SIBLING_CLASSES: &[(&str, &str)] = &[
+    ("a", "b"),
+    ("first", "second"),
+    ("top", "bottom"),
+    ("heading", "excerpt"),
+    ("title", "text"),
+    ("card", "note"),
+    ("intro", "details"),
+    ("upper", "lower"),
+    ("item-1", "item-2"),
+    ("alert", "form"),
+];
+
 fn box_model(level: u8, rng: &mut Rng) -> Draft {
     match level {
         1 | 2 => {
+            let class = *pick(rng, BOX_CLASSES);
             let width = range(rng, 20, 60) * 10;
             let (padding, left, right) = padding_shorthand(rng);
             let border = range(rng, 1, 5);
+            let border_style = *pick(rng, BORDER_STYLES);
             let margin = range(rng, 1, 5) * 5;
             let border_box = level == 2;
             let sizing = if border_box {
@@ -1136,17 +1252,21 @@ fn box_model(level: u8, rng: &mut Rng) -> Draft {
                 ""
             };
             let css = format!(
-                ".box {{\n{sizing}  width: {width}px;\n  padding: {padding};\n  border: {border}px solid #333;\n  margin: {margin}px;\n}}\n"
+                ".{class} {{\n{sizing}  width: {width}px;\n  padding: {padding};\n  border: {border}px {border_style};\n  margin: {margin}px;\n}}\n"
             );
             if border_box {
                 Draft::integer(
-                    "Какой будет ширина области контента элемента `.box` (без padding и border), px?",
+                    format!(
+                        "Какой будет ширина области контента элемента `.{class}` (без padding и border), px?"
+                    ),
                     width - left - right - 2 * border,
                 )
                 .code("css", css)
             } else {
                 Draft::integer(
-                    "Какой будет ширина элемента `.box` от внешнего края левой рамки до внешнего края правой (без margin), px?",
+                    format!(
+                        "Какой будет ширина элемента `.{class}` от внешнего края левой рамки до внешнего края правой (без margin), px?"
+                    ),
                     width + left + right + 2 * border,
                 )
                 .code("css", css)
@@ -1154,23 +1274,43 @@ fn box_model(level: u8, rng: &mut Rng) -> Draft {
         }
         _ => {
             let (a, b) = match range(rng, 0, 3) {
-                0 => (-range(rng, 1, 3) * 5, range(rng, 4, 10) * 5),
-                1 => (range(rng, 4, 8) * 5, -range(rng, 1, 3) * 5),
-                _ => (range(rng, 2, 8) * 5, range(rng, 2, 10) * 5),
+                0 => (-range(rng, 1, 10) * 2, range(rng, 12, 32) * 2),
+                1 => (range(rng, 12, 32) * 2, -range(rng, 1, 10) * 2),
+                _ => (range(rng, 4, 32) * 2, range(rng, 4, 32) * 2),
             };
             let flex = chance(rng, 0.4);
             let gap = if flex { a + b } else { collapse(a, b) };
-            let container = if flex {
-                ".list {\n  display: flex;\n  flex-direction: column;\n}\n\n"
+            let list = *pick(rng, LIST_CLASSES);
+            let (first, second) = *pick(rng, SIBLING_CLASSES);
+            let outer_tag = *pick(rng, &["div", "section", "main"]);
+            let tag = *pick(rng, &["div", "section", "article"]);
+            let display = if flex {
+                "display: flex;\n  flex-direction: column;"
             } else {
-                ".list {\n  display: block;\n}\n\n"
+                "display: block;"
             };
-            let css = format!(
-                ".a {{\n  margin-bottom: {a}px;\n}}\n\n.b {{\n  margin-top: {b}px;\n}}\n\n{container}"
+            let container = format!(".{list} {{\n  {display}\n}}\n");
+            let items = format!(
+                ".{first} {{\n  margin-bottom: {a}px;\n}}\n\n.{second} {{\n  margin-top: {b}px;\n}}\n"
             );
+            let css = if chance(rng, 0.5) {
+                format!("{items}\n{container}")
+            } else {
+                format!("{container}\n{items}")
+            };
+            let question = if chance(rng, 0.5) {
+                format!(
+                    "Каким будет расстояние по вертикали между нижней границей `.{first}` и верхней границей `.{second}`, px?"
+                )
+            } else {
+                format!(
+                    "Сколько пикселей по вертикали будет между нижним краем `.{first}` и верхним краем `.{second}`?"
+                )
+            };
             Draft::integer(
-                "Внутри `<div class=\"list\">` подряд идут `<div class=\"a\">` и `<div class=\"b\">` без padding и border. \
-                 Каким будет расстояние по вертикали между нижней границей `.a` и верхней границей `.b`, px?",
+                format!(
+                    "Внутри `<{outer_tag} class=\"{list}\">` подряд идут блоки с текстом `<{tag} class=\"{first}\">` и `<{tag} class=\"{second}\">`, у них нет padding и border. {question}"
+                ),
                 gap,
             )
             .code("css", css)
@@ -1199,6 +1339,30 @@ fn run_click(state: i64, updates: &[Update]) -> i64 {
     })
 }
 
+const COUNTERS: &[(&str, &str, &str)] = &[
+    ("count", "setCount", "Counter"),
+    ("score", "setScore", "ScoreBoard"),
+    ("likes", "setLikes", "LikeButton"),
+    ("clicks", "setClicks", "ClickCounter"),
+    ("total", "setTotal", "TotalCounter"),
+    ("points", "setPoints", "PointsWidget"),
+    ("votes", "setVotes", "VoteButton"),
+    ("value", "setValue", "Stepper"),
+    ("level", "setLevel", "LevelUp"),
+    ("stars", "setStars", "StarRating"),
+    ("steps", "setSteps", "StepCounter"),
+    ("coins", "setCoins", "CoinBank"),
+];
+const HANDLERS: &[&str] = &[
+    "handleClick",
+    "handlePress",
+    "handleButtonClick",
+    "handleTap",
+    "onButtonClick",
+];
+/// Never equal to a state name: shadowing the state inside the updater would be an extra trap.
+const UPDATER_ARGS: &[&str] = &["c", "prev", "p", "x", "n", "v", "cur"];
+
 fn state_batching(level: u8, rng: &mut Rng) -> Draft {
     let initial = range(rng, 0, 5);
     let n = range(rng, 2, 4) as usize;
@@ -1225,28 +1389,41 @@ fn state_batching(level: u8, rng: &mut Rng) -> Draft {
     }
     let clicks = if level == 3 { 2 } else { 1 };
     let answer = (0..clicks).fold(initial, |s, _| run_click(s, &updates));
+    let (state, setter, component) = *pick(rng, COUNTERS);
+    let handler = *pick(rng, HANDLERS);
+    let arg = *pick(rng, UPDATER_ARGS);
     let calls: String = updates
         .iter()
         .map(|u| match *u {
-            Update::Value(op, k) => format!("    setCount(count {} {k});\n", op.symbol()),
-            Update::Func(op, k) => format!("    setCount((c) => c {} {k});\n", op.symbol()),
+            Update::Value(op, k) => format!("    {setter}({state} {} {k});\n", op.symbol()),
+            Update::Func(op, k) => {
+                format!("    {setter}(({arg}) => {arg} {} {k});\n", op.symbol())
+            }
         })
         .collect();
+    let handler_fn = if chance(rng, 0.5) {
+        format!("  function {handler}() {{\n{calls}  }}\n")
+    } else {
+        format!("  const {handler} = () => {{\n{calls}  }};\n")
+    };
     let code = format!(
-        "import {{ useState }} from 'react';\n\nexport default function Counter() {{\n  const [count, setCount] = useState({initial});\n\n  function handleClick() {{\n{calls}  }}\n\n  return <button onClick={{handleClick}}>{{count}}</button>;\n}}\n"
+        "import {{ useState }} from 'react';\n\nexport default function {component}() {{\n  const [{state}, {setter}] = useState({initial});\n\n{handler_fn}\n  return <button onClick={{{handler}}}>{{{state}}}</button>;\n}}\n"
     );
     let clicks_text = if clicks == 1 {
         "одного клика"
     } else {
         "двух кликов подряд (после каждого компонент успевает перерисоваться)"
     };
-    Draft::integer(
-        format!(
-            "Компонент на React 18. Какое значение `count` отобразит кнопка после {clicks_text}?"
+    let question = match range(rng, 0, 2) {
+        0 => format!(
+            "Компонент на React 18. Какое значение `{state}` отобразит кнопка после {clicks_text}?"
         ),
-        answer,
-    )
-    .code("jsx", code)
+        1 => format!(
+            "Компонент работает на React 18. Какое число покажет кнопка после {clicks_text}?"
+        ),
+        _ => format!("Компонент на React 18. Что будет написано на кнопке после {clicks_text}?"),
+    };
+    Draft::integer(question, answer).code("jsx", code)
 }
 
 #[cfg(test)]

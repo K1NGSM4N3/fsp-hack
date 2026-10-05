@@ -3,7 +3,7 @@
 
 use catalog::Specialization::{Backend, Devops, Security};
 
-use super::util::{chance, pick, pick_n, py_replace, range, shuffled};
+use super::util::{chance, pick, pick_n, plural_ru, py_replace, range, shuffled};
 use super::{C_CHOICE, C_OPEN, Draft, Level, Rng, Source, Template, Topic};
 
 pub(crate) const TEMPLATES: &[Template] = &[
@@ -140,6 +140,9 @@ struct Names {
     route: &'static str,
     param: &'static str,
     table: &'static str,
+    link: &'static str,
+    next: &'static str,
+    allowed: &'static str,
 }
 
 fn snippet(v: Vuln, level: u8, python: bool, n: &Names) -> (String, &'static str) {
@@ -147,6 +150,9 @@ fn snippet(v: Vuln, level: u8, python: bool, n: &Names) -> (String, &'static str
         route,
         param,
         table,
+        link,
+        next,
+        allowed,
     } = n;
     match (v, level, python) {
         (Vuln::Sqli, 3, _) => (
@@ -217,31 +223,31 @@ fn snippet(v: Vuln, level: u8, python: bool, n: &Names) -> (String, &'static str
         ),
         (Vuln::Ssrf, 3, _) => (
             format!(
-                "@app.post(\"/{route}\")\ndef preview():\n    url = request.json[\"url\"]\n    if not url.startswith(\"https://img.example.ru\"):\n        abort(400)\n    resp = requests.get(url, timeout=5)\n    return resp.content\n"
+                "@app.post(\"/{route}\")\ndef preview():\n    url = request.json[\"{link}\"]\n    if not url.startswith(\"https://{allowed}\"):\n        abort(400)\n    resp = requests.get(url, timeout=5)\n    return resp.content\n"
             ),
             "python",
         ),
         (Vuln::Ssrf, _, true) => (
             format!(
-                "@app.post(\"/{route}\")\ndef preview():\n    url = request.json[\"url\"]\n    resp = requests.get(url, timeout=5)\n    return {{\"title\": extract_title(resp.text)}}\n"
+                "@app.post(\"/{route}\")\ndef preview():\n    url = request.json[\"{link}\"]\n    resp = requests.get(url, timeout=5)\n    return {{\"title\": extract_title(resp.text)}}\n"
             ),
             "python",
         ),
         (Vuln::Ssrf, _, false) => (
             format!(
-                "app.post('/{route}', async (req, res) => {{\n  const r = await fetch(req.body.url);\n  res.json({{ status: r.status, body: await r.text() }});\n}});\n"
+                "app.post('/{route}', async (req, res) => {{\n  const r = await fetch(req.body.{link});\n  res.json({{ status: r.status, body: await r.text() }});\n}});\n"
             ),
             "javascript",
         ),
         (Vuln::OpenRedirect, _, true) => (
             format!(
-                "@app.get(\"/{route}\")\ndef after_login():\n    target = request.args.get(\"next\", \"/\")\n    return redirect(target)\n"
+                "@app.get(\"/{route}\")\ndef after_login():\n    target = request.args.get(\"{next}\", \"/\")\n    return redirect(target)\n"
             ),
             "python",
         ),
         (Vuln::OpenRedirect, _, false) => (
             format!(
-                "app.get('/{route}', (req, res) => {{\n  res.redirect(req.query.returnTo || '/');\n}});\n"
+                "app.get('/{route}', (req, res) => {{\n  res.redirect(req.query.{next} || '/');\n}});\n"
             ),
             "javascript",
         ),
@@ -286,10 +292,44 @@ fn vulnerability_class(level: u8, rng: &mut Rng) -> Draft {
     let names = Names {
         route: pick(
             rng,
-            &["search", "reports", "export", "profile", "tools", "files"],
+            &[
+                "search", "reports", "export", "profile", "tools", "files", "lookup", "status",
+                "share", "archive", "media", "billing",
+            ],
         ),
-        param: pick(rng, &["name", "query", "term", "target", "doc", "host"]),
-        table: pick(rng, &["invoices", "orders", "documents", "tickets"]),
+        param: pick(
+            rng,
+            &[
+                "name", "query", "term", "target", "doc", "host", "q", "value", "input", "keyword",
+            ],
+        ),
+        table: pick(
+            rng,
+            &[
+                "invoices",
+                "orders",
+                "documents",
+                "tickets",
+                "contracts",
+                "payments",
+                "reports",
+                "messages",
+            ],
+        ),
+        link: pick(rng, &["url", "image_url", "feed_url", "source", "callback"]),
+        next: pick(
+            rng,
+            &["next", "return_to", "redirect_uri", "back_url", "dest"],
+        ),
+        allowed: pick(
+            rng,
+            &[
+                "img.example.ru",
+                "cdn.example.ru",
+                "static.example.ru",
+                "media.example.ru",
+            ],
+        ),
     };
     let python = chance(rng, 0.6);
     let (code, language) = snippet(vuln, level, python, &names);
@@ -318,30 +358,123 @@ fn vulnerability_class(level: u8, rng: &mut Rng) -> Draft {
     } else {
         ""
     };
-    Draft::choice(
-        format!("Какая уязвимость есть в этом фрагменте?{note}"),
-        vuln.label(),
-        distractors,
-    )
-    .code(language, code)
+    let question = *pick(
+        rng,
+        &[
+            "Какая уязвимость есть в этом фрагменте?",
+            "К какому классу относится уязвимость в этом коде?",
+            "Код ниже попал на ревью. Какую уязвимость в нём нужно отметить?",
+            "Какая уязвимость присутствует в этом коде?",
+        ],
+    );
+    Draft::choice(format!("{question}{note}"), vuln.label(), distractors).code(language, code)
+}
+
+/// Fictional organisations for scenario wording; generic nouns, deliberately not real brands.
+const COMPANIES: &[&str] = &[
+    "«Вектор»",
+    "«Орбита»",
+    "«Кедр»",
+    "«Пульсар»",
+    "«Гранит»",
+    "«Сигма»",
+    "«Меридиан»",
+    "«Альтаир»",
+    "«Бриз»",
+    "«Ладога»",
+    "«Зенит»",
+    "«Комета»",
+    "«Тайга»",
+    "«Фарватер»",
+    "«Импульс»",
+    "«Сфера»",
+];
+
+/// (who issues the secrets, nominative and genitive of one secret).
+const SECRET_ISSUERS: &[(&str, &str, &str)] = &[
+    (
+        "менеджер паролей генерирует пароли для сотрудников",
+        "пароль",
+        "пароля",
+    ),
+    (
+        "сервис аутентификации выдаёт временные пароли",
+        "пароль",
+        "пароля",
+    ),
+    (
+        "скрипт развёртывания создаёт пароли для баз данных",
+        "пароль",
+        "пароля",
+    ),
+    (
+        "сервис сброса доступа отправляет токены восстановления",
+        "токен",
+        "токена",
+    ),
+    (
+        "система SSO выдаёт одноразовые токены входа",
+        "токен",
+        "токена",
+    ),
+    (
+        "платформа выпускает API-ключи для интеграций",
+        "ключ",
+        "ключа",
+    ),
+    (
+        "бэкенд мобильного приложения выпускает ключи устройств",
+        "ключ",
+        "ключа",
+    ),
+    ("интернет-магазин рассылает коды приглашения", "код", "кода"),
+    (
+        "CI-пайплайн создаёт секреты для тестовых стендов",
+        "секрет",
+        "секрета",
+    ),
+    (
+        "сервис вебхуков генерирует секреты для подписи запросов",
+        "секрет",
+        "секрета",
+    ),
+];
+
+fn entropy_question(rng: &mut Rng, nom: &str, gen_: &str) -> String {
+    match range(rng, 0, 2) {
+        0 => format!("Какова энтропия одного {gen_} в битах?"),
+        1 => format!("Сколько бит энтропии содержит один {nom}?"),
+        _ => format!("Оцените энтропию одного {gen_} в битах."),
+    }
 }
 
 fn password_entropy(level: u8, rng: &mut Rng) -> Draft {
+    let company = *pick(rng, COMPANIES);
     match level {
         1 => {
             let (text, n) = *pick(
                 rng,
                 &[
-                    ("строчных латинских букв (26 символов)", 26u32),
-                    ("цифр (10 символов)", 10),
+                    ("цифр (10 символов)", 10u32),
                     ("шестнадцатеричных цифр 0–9a–f (16 символов)", 16),
+                    ("строчных латинских букв (26 символов)", 26),
+                    ("заглавных латинских букв (26 символов)", 26),
+                    ("алфавита Base32: A–Z и 2–7 (32 символа)", 32),
                     ("строчных латинских букв и цифр (36 символов)", 36),
+                    ("заглавных латинских букв и цифр (36 символов)", 36),
+                    ("строчных и заглавных латинских букв (52 символа)", 52),
+                    ("алфавита Base58 (58 символов)", 58),
+                    ("латинских букв обоих регистров и цифр (62 символа)", 62),
+                    ("алфавита Base64: A–Z, a–z, 0–9, + и / (64 символа)", 64),
                 ],
             );
-            let len = range(rng, 6, 16);
+            let (issuer, nom, gen_) = *pick(rng, SECRET_ISSUERS);
+            let len = range(rng, 6, 32);
+            let len_text = plural_ru(len, "символ", "символа", "символов");
+            let question = entropy_question(rng, nom, gen_);
             entropy_draft(
                 format!(
-                    "Пароль длиной {len} символов, каждый символ выбирается случайно и независимо из {text}. Какова энтропия пароля в битах?"
+                    "В компании {company} {issuer}. Каждый {nom} — строка длиной {len_text}, каждый символ выбирается случайно и независимо из {text}. {question}"
                 ),
                 len as f64 * f64::from(n).log2(),
             )
@@ -354,33 +487,55 @@ fn password_entropy(level: u8, rng: &mut Rng) -> Draft {
                     ("строчные и заглавные латинские буквы и цифры", 62),
                     ("все 94 печатных символа ASCII без пробела", 94),
                     ("строчные латинские буквы, цифры и 10 спецсимволов", 46),
+                    ("заглавные латинские буквы и цифры", 36),
+                    ("строчные латинские буквы и цифры", 36),
+                    ("строчные и заглавные латинские буквы, цифры, `-` и `_`", 64),
+                    ("заглавные латинские буквы, цифры и 4 спецсимвола", 40),
+                    ("строчные латинские буквы и 6 спецсимволов", 32),
                 ],
             );
-            let len = range(rng, 8, 20);
+            let (issuer, nom, gen_) = *pick(rng, SECRET_ISSUERS);
+            let len = range(rng, 8, 30);
+            let len_text = plural_ru(len, "символ", "символа", "символов");
+            let question = entropy_question(rng, nom, gen_);
             entropy_draft(
                 format!(
-                    "Генератор создаёт пароль длиной {len}: каждый символ выбирается случайно и независимо, алфавит — {text}. Какова энтропия пароля в битах?"
+                    "В компании {company} {issuer}. Каждый {nom} имеет длину {len_text}: каждый символ выбирается случайно и независимо, алфавит — {text}. {question}"
                 ),
                 len as f64 * f64::from(n).log2(),
             )
         }
         _ => {
-            let dict: u32 = *pick(rng, &[2048, 7776, 4096, 10000]);
-            let (alphabet, n) = *pick(
+            let dict = *pick(rng, &[1296i64, 2048, 4096, 7776, 8192, 10000]);
+            let n = *pick(rng, &[26i64, 36, 52, 62, 94]);
+            let purpose = *pick(
                 rng,
                 &[
-                    ("62 символа", 62u32),
-                    ("94 символа", 94),
-                    ("36 символов", 36),
+                    "мастер-пароля менеджера паролей",
+                    "ключа шифрования резервных копий",
+                    "входа в корпоративный VPN",
+                    "шифрования ноутбуков",
+                    "защиты закрытых SSH-ключей",
+                    "доступа к хранилищу секретов",
                 ],
             );
-            let len = range(rng, 10, 20);
-            let target = len as f64 * f64::from(n).log2();
-            let words = (target / f64::from(dict).log2()).ceil() as i64;
+            let len = range(rng, 10, 24);
+            let target = len as f64 * (n as f64).log2();
+            // Alphabet and dictionary can be powers of a common base (36 and 7776 are powers of 6),
+            // making the exact ratio an integer; the epsilon keeps float noise from adding a word.
+            let words = (target / (dict as f64).log2() - 1e-9).ceil() as i64;
+            let dict_text = plural_ru(dict, "слово", "слова", "слов");
+            let alphabet = plural_ru(n, "символ", "символа", "символов");
+            let len_text = plural_ru(len, "символ", "символа", "символов");
+            let question = if chance(rng, 0.5) {
+                "Сколько слов нужно минимум"
+            } else {
+                "Какое наименьшее число слов нужно"
+            };
             Draft::integer(
                 format!(
-                    "Парольная фраза составляется из слов, выбранных случайно и независимо из словаря на {dict} слов. \
-                     Сколько слов нужно минимум, чтобы энтропия фразы была не меньше, чем у случайного пароля длиной {len} из алфавита в {alphabet}?"
+                    "В компании {company} для {purpose} вместо случайных паролей вводят парольные фразы: слова выбираются случайно и независимо из словаря на {dict_text}. \
+                     {question}, чтобы энтропия фразы была не меньше, чем у случайного пароля длиной {len_text} из алфавита в {alphabet}?"
                 ),
                 words,
             )
@@ -427,7 +582,13 @@ fn xor_cipher(level: u8, rng: &mut Rng) -> Draft {
             )
         }
         2 => {
-            let ch = *pick(rng, &['A', 'Z', 'a', 'z', '0', '{', 'f', 'P']);
+            let ch = *pick(
+                rng,
+                &[
+                    'A', 'Z', 'a', 'z', '0', '9', '{', '[', '<', '%', '#', 'f', 'P', 'G', 'M', 'H',
+                    'R', 's', 'x', 'k',
+                ],
+            );
             let p = ch as u8;
             let k = range(rng, 1, 255) as u8;
             let c = p ^ k;
@@ -500,7 +661,8 @@ fn base64(input: &[u8]) -> String {
 }
 
 const LOGINS: &[&str] = &[
-    "admin", "root", "ivanov", "deploy", "backup", "svc_api", "guest", "operator",
+    "admin", "root", "ivanov", "deploy", "backup", "svc_api", "guest", "operator", "petrova",
+    "jenkins", "monitor", "billing", "support", "sidorov", "devops", "reporter",
 ];
 const SECRETS: &[&str] = &[
     "qwerty",
@@ -510,15 +672,54 @@ const SECRETS: &[&str] = &[
     "hunter2",
     "Secret!1",
     "changeme",
+    "welcome1",
+    "admin123",
+    "Passw0rd!",
+    "zaq12wsx",
+    "Winter#24",
+    "1q2w3e4r",
+    "dragon77",
+];
+
+/// Genitive phrases for what gets encoded; all of them are raw bytes, so length is given in bytes.
+const ENCODED: &[&str] = &[
+    "строки",
+    "бинарного ключа",
+    "случайной соли",
+    "цифровой подписи",
+    "вложения",
+    "сессионного токена",
+    "идентификатора",
+    "фрагмента файла",
+    "зашифрованного блока",
+    "одноразового значения (nonce)",
 ];
 
 fn base64_item(level: u8, rng: &mut Rng) -> Draft {
     if level == 1 {
-        let n = range(rng, 1, 40);
-        let what = *pick(rng, &["байт", "символов ASCII"]);
+        let n = range(rng, 1, 64);
+        let size = if chance(rng, 0.5) {
+            plural_ru(n, "байт", "байта", "байт")
+        } else {
+            plural_ru(n, "символ ASCII", "символа ASCII", "символов ASCII")
+        };
+        let what = *pick(rng, ENCODED);
+        let company = *pick(rng, COMPANIES);
+        let channel = *pick(
+            rng,
+            &[
+                "в JSON-поле ответа API",
+                "в HTTP-заголовке",
+                "в теле письма (MIME)",
+                "в поле XML-документа",
+                "в значении cookie",
+                "в конфигурационном файле",
+            ],
+        );
         return Draft::integer(
             format!(
-                "Сколько символов (включая `=` в конце) займёт Base64-представление строки длиной {n} {what}?"
+                "Сервис компании {company} передаёт данные {channel}, кодируя их стандартным Base64 (алфавит `A–Z a–z 0–9 + /`, с дополнением `=`). \
+                 Сколько символов (включая `=` в конце) займёт Base64-представление {what} длиной {size}?"
             ),
             (n + 2) / 3 * 4,
         );
@@ -533,9 +734,18 @@ fn base64_item(level: u8, rng: &mut Rng) -> Draft {
         format!("{}:{secret}", logins[3]),
         "Без ключа сервера расшифровать нельзя".to_owned(),
     ];
+    let place = *pick(
+        rng,
+        &[
+            "В перехваченном HTTP-запросе",
+            "В логе обратного прокси",
+            "В HAR-файле, приложенном к баг-репорту,",
+            "В дампе трафика из Wireshark",
+        ],
+    );
     Draft::choice(
         format!(
-            "В перехваченном HTTP-запросе есть заголовок `Authorization: Basic {encoded}`. Какие учётные данные он передаёт?"
+            "{place} есть заголовок `Authorization: Basic {encoded}`. Какие учётные данные он передаёт?"
         ),
         creds,
         distractors,
@@ -581,21 +791,58 @@ fn service_ports(level: u8, rng: &mut Rng) -> Draft {
     let mut others: Vec<&(u8, &str, &str)> =
         same.iter().copied().filter(|p| p.1 != target.1).collect();
     others = shuffled(rng, others);
+    let host = format!(
+        "10.{}.{}.{}",
+        range(rng, 0, 255),
+        range(rng, 0, 255),
+        range(rng, 2, 254)
+    );
     if chance(rng, 0.5) {
-        Draft::choice(
-            format!(
-                "Сканер показал открытый порт `{}`. Какой сервис обычно работает на нём по умолчанию?",
+        let observed = match range(rng, 0, 3) {
+            0 => format!(
+                "Сканер (nmap) показал на хосте `{host}` открытый порт `{}`.",
                 target.1
             ),
+            1 => format!(
+                "В выводе `ss -lntu` на сервере `{host}` виден слушающий порт `{}`.",
+                target.1
+            ),
+            2 => format!(
+                "IDS зафиксировала входящие подключения к `{host}` на порт `{}`.",
+                target.1
+            ),
+            _ => format!(
+                "В отчёте об инвентаризации для `{host}` указан открытый порт `{}`.",
+                target.1
+            ),
+        };
+        let question = *pick(
+            rng,
+            &[
+                "Какой сервис обычно работает на нём по умолчанию?",
+                "Какой сервис по умолчанию использует этот порт?",
+                "Какой сервис, скорее всего, его слушает?",
+            ],
+        );
+        Draft::choice(
+            format!("{observed} {question}"),
             target.2,
             others.iter().map(|p| p.2.to_owned()),
         )
     } else {
-        Draft::choice(
-            format!("Какой порт по умолчанию использует {}?", target.2),
-            target.1,
-            others.iter().map(|p| p.1.to_owned()),
-        )
+        let question = match range(rng, 0, 3) {
+            0 => format!("Какой порт по умолчанию использует {}?", target.2),
+            1 => format!("На каком порту по умолчанию слушает {}?", target.2),
+            2 => format!(
+                "На хосте `{host}` поднимают сервис {} с настройками по умолчанию. Какой порт нужно открыть в межсетевом экране?",
+                target.2
+            ),
+            _ => format!(
+                "Аудитор проверяет, доступен ли снаружи сервис {} на хосте `{host}`. Какой порт он проверит в первую очередь (порт по умолчанию)?",
+                target.2
+            ),
+        };
+        Draft::choice(question, target.1, others.iter().map(|p| p.1.to_owned()))
     }
 }
 
@@ -815,7 +1062,7 @@ struct Payload {
     code: String,
     input: String,
     steps: Vec<(&'static str, &'static str)>,
-    sink: &'static str,
+    sink: String,
 }
 
 fn nest(token: &str, depth: usize, split: usize) -> String {
@@ -847,13 +1094,48 @@ fn sanitize_fixpoint(input: &str, steps: &[(&str, &str)]) -> String {
 fn filter_bypass(level: u8, rng: &mut Rng) -> Draft {
     let traversal = chance(rng, 0.5);
     let payload = if traversal {
-        // `nest("../", 1, 2)` is `....//`: a single non-overlapping `.replace("../", "")`
-        // collapses each unit back to `../`, so one filtering pass does not neutralise it.
-        let unit = nest("../", 1, 2);
+        // `nest("../", 1, 1)` is `..././` and `nest("../", 1, 2)` is `....//`: a single
+        // non-overlapping `.replace("../", "")` collapses each unit back to `../`.
+        let unit = nest("../", 1, range(rng, 1, 2) as usize);
         let hops = range(rng, 2, 3) as usize;
         let target = *pick(
             rng,
-            &["etc/app.conf", "data/report.csv", "var/log/service.log"],
+            &[
+                "etc/app.conf",
+                "data/report.csv",
+                "var/log/service.log",
+                "config/settings.yaml",
+                "logs/audit.log",
+                "backup/db.sql",
+                "data/users.csv",
+            ],
+        );
+        let func = *pick(
+            rng,
+            &[
+                "read_report",
+                "load_template",
+                "get_attachment",
+                "open_invoice",
+                "read_log",
+                "export_file",
+                "show_document",
+            ],
+        );
+        let param = *pick(
+            rng,
+            &["name", "filename", "path", "doc", "file_name", "item"],
+        );
+        let base = *pick(
+            rng,
+            &[
+                "/srv/reports",
+                "/var/app/uploads",
+                "/opt/data/files",
+                "/srv/templates",
+                "/var/lib/app/attachments",
+                "/home/app/storage",
+            ],
         );
         let mut steps = vec![("../", "")];
         if level == 2 {
@@ -863,7 +1145,7 @@ fn filter_bypass(level: u8, rng: &mut Rng) -> Draft {
         Payload {
             language: "python",
             code: format!(
-                "def read_report(name):\n    safe = name{}\n    with open(os.path.join(\"/srv/reports\", safe)) as f:\n        return f.read()\n",
+                "def {func}({param}):\n    safe = {param}{}\n    with open(os.path.join(\"{base}\", safe)) as f:\n        return f.read()\n",
                 steps
                     .iter()
                     .map(|(a, b)| format!(".replace({a:?}, {b:?})"))
@@ -871,22 +1153,50 @@ fn filter_bypass(level: u8, rng: &mut Rng) -> Draft {
             ),
             input,
             steps,
-            sink: "Какой путь (аргумент `safe`) будет передан в `os.path.join`?",
+            sink: "Какой путь (аргумент `safe`) будет передан в `os.path.join`?".to_owned(),
         }
     } else {
         let open = nest("<script>", 1, range(rng, 2, 6) as usize);
         let close = nest("</script>", 1, range(rng, 2, 7) as usize);
         let steps = vec![("<script>", ""), ("</script>", "")];
         let payload_body = if level == 2 {
-            "alert(document.cookie)"
+            *pick(
+                rng,
+                &[
+                    "alert(document.cookie)",
+                    "alert(document.domain)",
+                    "console.log(document.cookie)",
+                ],
+            )
         } else {
-            "alert(1)"
+            *pick(
+                rng,
+                &[
+                    "alert(1)",
+                    "alert(42)",
+                    "alert('xss')",
+                    "confirm(1)",
+                    "print()",
+                ],
+            )
         };
+        let func = *pick(
+            rng,
+            &[
+                "clean_comment",
+                "sanitize_bio",
+                "strip_scripts",
+                "clean_review",
+                "safe_title",
+                "clean_message",
+            ],
+        );
+        let param = *pick(rng, &["text", "comment", "body", "bio", "message", "value"]);
         let input = format!("{open}{payload_body}{close}");
         Payload {
             language: "python",
             code: format!(
-                "def clean_comment(text):\n    return text{}\n",
+                "def {func}({param}):\n    return {param}{}\n",
                 steps
                     .iter()
                     .map(|(a, b)| format!(".replace({a:?}, {b:?})"))
@@ -894,7 +1204,7 @@ fn filter_bypass(level: u8, rng: &mut Rng) -> Draft {
             ),
             input,
             steps,
-            sink: "Что вернёт функция `clean_comment` для этого ввода?",
+            sink: format!("Что вернёт функция `{func}` для этого ввода?"),
         }
     };
     let answer = sanitize(&payload.input, &payload.steps);
@@ -915,11 +1225,16 @@ fn filter_bypass(level: u8, rng: &mut Rng) -> Draft {
     distractors.push(format!("{answer}/"));
     distractors.push(answer.chars().skip(1).collect());
     let fmt = |s: &str| format!("`{s}`");
+    let source = *pick(
+        rng,
+        &[
+            "Пользователь передал строку",
+            "На вход функции пришла строка",
+            "Тестировщик безопасности отправил строку",
+        ],
+    );
     Draft::choice(
-        format!(
-            "Пользователь передал строку `{}`. {}",
-            payload.input, payload.sink
-        ),
+        format!("{source} `{}`. {}", payload.input, payload.sink),
         fmt(&answer),
         distractors.iter().map(|d| fmt(d)),
     )

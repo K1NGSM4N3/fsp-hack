@@ -2,7 +2,9 @@
 
 use catalog::Specialization::{Backend, Devops, Security};
 
-use super::util::{chance, fmt_number, join, md_table, pick, pick_n, range, shuffled};
+use super::util::{
+    PEOPLE, chance, fmt_number, join, md_table, pick, pick_n, plural_ru, range, shuffled,
+};
 use super::{C_CHOICE, C_MULTI5, C_OPEN, Draft, Level, Rng, Source, Template, Topic};
 
 pub(crate) const TEMPLATES: &[Template] = &[
@@ -112,6 +114,29 @@ pub(crate) const TEMPLATES: &[Template] = &[
     },
 ];
 
+const SERVICES: &[&str] = &[
+    "checkout",
+    "payments",
+    "auth",
+    "search",
+    "catalog",
+    "orders",
+    "notifications",
+    "billing",
+    "profile",
+    "delivery",
+    "inventory",
+    "recommendations",
+    "media",
+    "chat",
+    "gateway",
+    "reports",
+    "booking",
+    "pricing",
+    "cart",
+    "loyalty",
+];
+
 #[derive(Clone)]
 enum Instr {
     From(&'static str),
@@ -166,66 +191,240 @@ fn matches_ignore(pattern: &str, file: &str) -> bool {
 }
 
 struct Stack {
-    base: &'static str,
-    workdir: &'static str,
+    bases: &'static [&'static str],
     deps: &'static [&'static str],
     dep_copy: &'static [&'static str],
     install: &'static str,
     build: &'static str,
-    cmd: &'static str,
-    sources: &'static [&'static str],
-    dirs: &'static [&'static str],
+    cmds: &'static [&'static str],
+    /// Two top-level source directories with the files inside them.
+    dirs: [(&'static str, &'static [&'static str]); 2],
+    /// Sources outside `dirs`: reached only by `COPY . .`.
+    loose: &'static [&'static str],
 }
+
+impl Stack {
+    fn sources(&self) -> Vec<&'static str> {
+        self.dirs
+            .iter()
+            .flat_map(|(_, files)| files.iter().copied())
+            .chain(self.loose.iter().copied())
+            .collect()
+    }
+}
+
+const PYTHON_BASES: &[&str] = &["python:3.11-slim", "python:3.12-slim", "python:3.13-slim"];
 
 const STACKS: &[Stack] = &[
     Stack {
-        base: "python:3.12-slim",
-        workdir: "/app",
+        bases: PYTHON_BASES,
         deps: &["requirements.txt"],
         dep_copy: &["requirements.txt"],
         install: "pip install --no-cache-dir -r requirements.txt",
         build: "python -m compileall -q app",
-        cmd: "[\"python\", \"-m\", \"app\"]",
-        sources: &["app/main.py", "app/api/routes.py", "config/settings.yaml"],
-        dirs: &["app/", "config/"],
+        cmds: &[
+            "[\"python\", \"-m\", \"app\"]",
+            "[\"uvicorn\", \"app.main:app\", \"--host\", \"0.0.0.0\"]",
+        ],
+        dirs: [
+            (
+                "app/",
+                &[
+                    "app/main.py",
+                    "app/api/routes.py",
+                    "app/models/user.py",
+                    "app/services/billing.py",
+                ],
+            ),
+            ("config/", &["config/settings.yaml", "config/logging.yaml"]),
+        ],
+        loose: &[],
     },
     Stack {
-        base: "node:20-alpine",
-        workdir: "/app",
+        bases: PYTHON_BASES,
+        deps: &["pyproject.toml", "poetry.lock"],
+        dep_copy: &["pyproject.toml", "poetry.lock"],
+        install: "pip install --no-cache-dir poetry && poetry install --no-root",
+        build: "python -m compileall -q service",
+        cmds: &["[\"poetry\", \"run\", \"python\", \"-m\", \"service\"]"],
+        dirs: [
+            (
+                "service/",
+                &[
+                    "service/__main__.py",
+                    "service/handlers/orders.py",
+                    "service/db/session.py",
+                ],
+            ),
+            (
+                "migrations/",
+                &["migrations/env.py", "migrations/versions/0001_init.py"],
+            ),
+        ],
+        loose: &["alembic.ini"],
+    },
+    Stack {
+        bases: &["node:18-alpine", "node:20-alpine", "node:22-alpine"],
         deps: &["package.json", "package-lock.json"],
         dep_copy: &["package*.json"],
         install: "npm ci",
         build: "npm run build",
-        cmd: "[\"node\", \"dist/server.js\"]",
-        sources: &["src/server.ts", "src/routes/users.ts", "public/index.html"],
-        dirs: &["src/", "public/"],
+        cmds: &["[\"node\", \"dist/server.js\"]", "[\"npm\", \"start\"]"],
+        dirs: [
+            (
+                "src/",
+                &[
+                    "src/server.ts",
+                    "src/routes/users.ts",
+                    "src/services/auth.ts",
+                ],
+            ),
+            ("public/", &["public/index.html", "public/robots.txt"]),
+        ],
+        loose: &[],
     },
     Stack {
-        base: "golang:1.22",
-        workdir: "/src",
+        bases: &["node:18-slim", "node:20-slim", "node:22-slim"],
+        deps: &["package.json", "yarn.lock"],
+        dep_copy: &["package.json", "yarn.lock"],
+        install: "yarn install --frozen-lockfile",
+        build: "yarn build",
+        cmds: &["[\"node\", \"dist/index.js\"]", "[\"yarn\", \"start\"]"],
+        dirs: [
+            (
+                "src/",
+                &["src/index.ts", "src/api/orders.ts", "src/lib/cache.ts"],
+            ),
+            ("prisma/", &["prisma/schema.prisma", "prisma/seed.ts"]),
+        ],
+        loose: &[],
+    },
+    Stack {
+        bases: &["node:20-alpine", "node:22-alpine"],
+        deps: &["package.json", "pnpm-lock.yaml"],
+        dep_copy: &["package.json", "pnpm-lock.yaml"],
+        install: "corepack enable && pnpm install --frozen-lockfile",
+        build: "pnpm run build",
+        cmds: &["[\"node\", \"build/main.js\"]"],
+        dirs: [
+            (
+                "src/",
+                &[
+                    "src/main.ts",
+                    "src/modules/users.ts",
+                    "src/common/logger.ts",
+                ],
+            ),
+            ("views/", &["views/index.hbs", "views/layout.hbs"]),
+        ],
+        loose: &[],
+    },
+    Stack {
+        bases: &["golang:1.21", "golang:1.22", "golang:1.23"],
         deps: &["go.mod", "go.sum"],
         dep_copy: &["go.mod", "go.sum"],
         install: "go mod download",
         build: "go build -o /bin/app ./cmd/app",
-        cmd: "[\"/bin/app\"]",
-        sources: &[
-            "cmd/app/main.go",
-            "internal/db/db.go",
-            "migrations/001_init.sql",
+        cmds: &["[\"/bin/app\"]"],
+        dirs: [
+            ("cmd/", &["cmd/app/main.go", "cmd/app/flags.go"]),
+            (
+                "internal/",
+                &[
+                    "internal/db/db.go",
+                    "internal/http/handler.go",
+                    "internal/config/config.go",
+                ],
+            ),
         ],
-        dirs: &["cmd/", "internal/"],
+        loose: &["migrations/001_init.sql"],
     },
+    Stack {
+        bases: &["composer:2.6", "composer:2.7"],
+        deps: &["composer.json", "composer.lock"],
+        dep_copy: &["composer.json", "composer.lock"],
+        install: "composer install --no-dev --no-scripts --no-autoloader",
+        build: "composer dump-autoload --optimize",
+        cmds: &["[\"php\", \"-S\", \"0.0.0.0:8080\", \"-t\", \"public\"]"],
+        dirs: [
+            (
+                "src/",
+                &[
+                    "src/Controller/UserController.php",
+                    "src/Service/Mailer.php",
+                ],
+            ),
+            ("public/", &["public/index.php", "public/favicon.ico"]),
+        ],
+        loose: &["config/services.yaml"],
+    },
+    Stack {
+        bases: &["ruby:3.2-slim", "ruby:3.3-slim"],
+        deps: &["Gemfile", "Gemfile.lock"],
+        dep_copy: &["Gemfile", "Gemfile.lock"],
+        install: "bundle install --jobs 4",
+        build: "bundle exec bootsnap precompile --gemfile app/",
+        cmds: &["[\"bundle\", \"exec\", \"puma\", \"-C\", \"config/puma.rb\"]"],
+        dirs: [
+            (
+                "app/",
+                &["app/models/user.rb", "app/controllers/orders_controller.rb"],
+            ),
+            ("config/", &["config/routes.rb", "config/puma.rb"]),
+        ],
+        loose: &["lib/tasks/cleanup.rake"],
+    },
+];
+
+const WORKDIRS: &[&str] = &[
+    "/app",
+    "/src",
+    "/srv/app",
+    "/usr/src/app",
+    "/opt/app",
+    "/workspace",
+];
+
+/// Extra `.dockerignore` entries that never match any stack source.
+const IGNORE_EXTRA: &[&str] = &[
+    ".env",
+    "*.log",
+    ".github/",
+    ".idea/",
+    ".vscode/",
+    "coverage/",
+    "tmp/",
+];
+const IGNORED_MD: &[&str] = &["README.md", "CHANGELOG.md", "CONTRIBUTING.md"];
+const IGNORED_DOCS: &[&str] = &[
+    "docs/architecture.md",
+    "docs/runbook.md",
+    "docs/adr/0007-cache.md",
+    "docs/diagrams/flow.png",
+];
+const IGNORED_TESTS: &[&str] = &[
+    "tests/smoke.sh",
+    "tests/fixtures/orders.json",
+    "tests/load/checkout.js",
 ];
 
 const NO_REBUILD: &str = "Ни с какой: кэш будет использован для всех инструкций";
 
 fn layer_cache(level: u8, rng: &mut Rng) -> Draft {
     let stack = pick(rng, STACKS);
+    let sources = stack.sources();
     let dep_copy = Instr::Copy {
         sources: stack.dep_copy.to_vec(),
         dest: "./",
     };
-    let mut instrs = vec![Instr::From(stack.base), Instr::Workdir(stack.workdir)];
+    let copy_all = || Instr::Copy {
+        sources: vec!["."],
+        dest: ".",
+    };
+    let mut instrs = vec![
+        Instr::From(pick(rng, stack.bases)),
+        Instr::Workdir(pick(rng, WORKDIRS)),
+    ];
     let mut ignored: Vec<&str> = Vec::new();
     let changed: &str;
     match level {
@@ -233,75 +432,64 @@ fn layer_cache(level: u8, rng: &mut Rng) -> Draft {
             instrs.extend([
                 dep_copy,
                 Instr::Run(stack.install),
-                Instr::Copy {
-                    sources: vec!["."],
-                    dest: ".",
-                },
+                copy_all(),
+                Instr::Run(stack.build),
             ]);
-            instrs.push(Instr::Run(stack.build));
             changed = if chance(rng, 0.5) {
                 *pick(rng, stack.deps)
             } else {
-                *pick(rng, stack.sources)
+                *pick(rng, &sources)
             };
         }
         2 => {
             if chance(rng, 0.5) {
                 instrs.extend([
-                    Instr::Copy {
-                        sources: vec!["."],
-                        dest: ".",
-                    },
+                    copy_all(),
                     Instr::Run(stack.install),
+                    Instr::Run(stack.build),
                 ]);
-                instrs.push(Instr::Run(stack.build));
-                changed = *pick(rng, stack.sources);
+                changed = *pick(rng, &sources);
             } else {
                 let mut dirs = stack.dirs.to_vec();
                 if chance(rng, 0.5) {
                     dirs.reverse();
                 }
                 instrs.extend([dep_copy, Instr::Run(stack.install)]);
-                for d in &dirs {
+                for (d, _) in &dirs {
                     instrs.push(Instr::Copy {
                         sources: vec![d],
                         dest: d,
                     });
                 }
                 instrs.push(Instr::Run(stack.build));
-                let in_dirs: Vec<&str> = stack
-                    .sources
+                let in_dirs: Vec<&str> = dirs
                     .iter()
-                    .copied()
-                    .filter(|f| dirs.iter().any(|d| f.starts_with(d)))
+                    .flat_map(|(_, files)| files.iter().copied())
                     .collect();
                 changed = *pick(rng, &in_dirs);
             }
         }
         _ => {
             ignored = vec!["*.md", "docs/", "tests/", ".git/"];
+            let n_extra = range(rng, 0, 2) as usize;
+            ignored.extend(pick_n(rng, IGNORE_EXTRA, n_extra));
+            ignored = shuffled(rng, ignored);
             instrs.extend([
                 dep_copy,
                 Instr::Run(stack.install),
-                Instr::Copy {
-                    sources: vec!["."],
-                    dest: ".",
-                },
+                copy_all(),
+                Instr::Run(stack.build),
             ]);
-            instrs.push(Instr::Run(stack.build));
-            changed = *pick(
-                rng,
-                &[
-                    "README.md",
-                    "docs/architecture.md",
-                    "tests/smoke.sh",
-                    stack.sources[0],
-                    stack.deps[0],
-                ],
-            );
+            changed = match range(rng, 0, 4) {
+                0 => *pick(rng, IGNORED_MD),
+                1 => *pick(rng, IGNORED_DOCS),
+                2 => *pick(rng, IGNORED_TESTS),
+                3 => *pick(rng, &sources),
+                _ => *pick(rng, stack.deps),
+            };
         }
     }
-    instrs.push(Instr::Cmd(stack.cmd));
+    instrs.push(Instr::Cmd(pick(rng, stack.cmds)));
 
     let lines: Vec<String> = instrs.iter().map(Instr::render).collect();
     let option = |i: usize| format!("`{}` (строка {})", lines[i], i + 1);
@@ -328,11 +516,31 @@ fn layer_cache(level: u8, rng: &mut Rng) -> Draft {
             ignored.join("\n")
         )
     };
-    Draft::choice(
-        format!(
-            "Образ уже собирался, кэш слоёв на месте. Затем в репозитории изменили только файл `{changed}` и запустили `docker build` снова.{ignore_text}\n\n\
-             Начиная с какой инструкции Docker перестанет использовать кэш?"
+    let svc = *pick(rng, SERVICES);
+    let scenario = match range(rng, 0, 3) {
+        0 => format!(
+            "Образ уже собирался, кэш слоёв на месте. Затем в репозитории изменили только файл `{changed}` и запустили `docker build` снова."
         ),
+        1 => format!(
+            "Образ сервиса `{svc}` уже собирали на этой машине, кэш слоёв сохранился. Разработчик поменял в репозитории только `{changed}` и снова запустил `docker build -t {svc} .`."
+        ),
+        2 => format!(
+            "CI-агент уже собирал этот образ, и кэш слоёв на нём остался. В новом коммите изменён единственный файл — `{changed}`; сборка запускается тем же `docker build`."
+        ),
+        _ => format!(
+            "Предыдущая сборка образа `{svc}` прошла успешно, кэш слоёв не очищали. После неё в рабочей копии репозитория изменился только `{changed}`, и `docker build` запустили повторно."
+        ),
+    };
+    let question = *pick(
+        rng,
+        &[
+            "Начиная с какой инструкции Docker перестанет использовать кэш?",
+            "С какой инструкции сборка перестанет брать слои из кэша?",
+            "Начиная с какой строки Dockerfile слои будут собираться заново, а не браться из кэша?",
+        ],
+    );
+    Draft::choice(
+        format!("{scenario}{ignore_text}\n\n{question}"),
         answer,
         distractors,
     )
@@ -370,16 +578,47 @@ impl NodeCap {
     }
 }
 
+const REGISTRIES: &[&str] = &[
+    "registry.local",
+    "harbor.internal/apps",
+    "cr.example.com/platform",
+    "docker.example.org/team",
+];
+
+/// Distinct node names in one of several common naming schemes.
+fn node_names(rng: &mut Rng, n: usize) -> Vec<String> {
+    let ids: Vec<i64> = (1..=24).collect();
+    let mut ids = pick_n(rng, &ids, n);
+    ids.sort_unstable();
+    let style = range(rng, 0, 3);
+    let pool = *pick(rng, &["prod", "main", "general", "apps", "default"]);
+    let subnet = range(rng, 0, 31);
+    ids.iter()
+        .map(|id| match style {
+            0 => format!("node-{id}"),
+            1 => format!("worker-{id:02}"),
+            2 => format!("ip-10-0-{subnet}-{}", 10 + id * 7),
+            _ => format!("{pool}-pool-{id:02}"),
+        })
+        .collect()
+}
+
 fn resource_fit(level: u8, rng: &mut Rng) -> Draft {
-    let req_cpu = *pick(rng, &[100, 200, 250, 300, 500, 750]);
-    let req_mem = *pick(rng, &[128, 256, 384, 512, 768, 1024]);
-    let lim_cpu = req_cpu * *pick(rng, &[2, 4]);
+    let req_cpu = *pick(rng, &[100, 150, 200, 250, 300, 400, 500, 600, 750, 800]);
+    let req_mem = *pick(rng, &[128, 192, 256, 320, 384, 512, 640, 768, 1024, 1536]);
+    let lim_cpu = req_cpu * *pick(rng, &[2, 3, 4]);
     let lim_mem = req_mem * 2;
     let n_nodes = if level == 3 { range(rng, 2, 3) } else { 1 } as usize;
     let nodes: Vec<NodeCap> = (0..n_nodes)
         .map(|_| {
-            let cpu = *pick(rng, &[2000, 3500, 4000, 7500, 8000]);
-            let mem = *pick(rng, &[4096, 6144, 7680, 8192, 15360]);
+            let cpu = *pick(
+                rng,
+                &[1900, 2000, 3500, 3860, 3920, 4000, 7500, 7820, 7910, 8000],
+            );
+            let mem = *pick(
+                rng,
+                &[3584, 4096, 6144, 7168, 7680, 8192, 12288, 14336, 15360],
+            );
             let (used_cpu, used_mem) = if level >= 2 {
                 (
                     range(rng, 2, cpu / 250 - 2) * 250 / 2,
@@ -398,15 +637,12 @@ fn resource_fit(level: u8, rng: &mut Rng) -> Draft {
         .collect();
     let answer: i64 = nodes.iter().map(|n| n.fits(req_cpu, req_mem)).sum();
 
+    let names = node_names(rng, n_nodes);
     let rows: Vec<Vec<String>> = nodes
         .iter()
-        .enumerate()
-        .map(|(i, n)| {
-            let mut row = vec![
-                format!("node-{}", i + 1),
-                fmt_cpu(n.cpu).replace('"', ""),
-                fmt_mem(n.mem),
-            ];
+        .zip(names)
+        .map(|(n, name)| {
+            let mut row = vec![name, fmt_cpu(n.cpu).replace('"', ""), fmt_mem(n.mem)];
             if level >= 2 {
                 row.push(format!("{}m", n.used_cpu));
                 row.push(format!("{}Mi", n.used_mem));
@@ -428,23 +664,66 @@ fn resource_fit(level: u8, rng: &mut Rng) -> Draft {
     } else {
         md_table(&["Узел", "Allocatable CPU", "Allocatable memory"], &rows)
     };
+    let app = *pick(rng, SERVICES);
+    let image = format!(
+        "{}/{app}:{}.{}.{}",
+        pick(rng, REGISTRIES),
+        range(rng, 1, 3),
+        range(rng, 0, 19),
+        range(rng, 0, 9)
+    );
     let yaml = format!(
-        "resources:\n  requests:\n    cpu: {}\n    memory: {}\n  limits:\n    cpu: {}\n    memory: {}\n",
+        "containers:\n  - name: {app}\n    image: {image}\n    resources:\n      requests:\n        cpu: {}\n        memory: {}\n      limits:\n        cpu: {}\n        memory: {}\n",
         fmt_cpu(req_cpu),
         fmt_mem(req_mem),
         fmt_cpu(lim_cpu),
         fmt_mem(lim_mem)
     );
-    let where_ = if n_nodes == 1 {
-        "на узел"
-    } else {
-        "на эти узлы суммарно"
-    };
-    Draft::integer(
-        format!(
-            "Узлы кластера:\n\n{table}\nУ контейнера Deployment такие ресурсы. Сколько реплик максимум поместится {where_}? \
-             Других ограничений (taints, affinity, лимит числа подов) нет."
+    let intro = *pick(
+        rng,
+        &[
+            "Узлы кластера:",
+            "Состояние узлов кластера:",
+            "Данные по узлам кластера:",
+        ],
+    );
+    let pod = match range(rng, 0, 2) {
+        0 => format!(
+            "Под Deployment `{app}` состоит из одного контейнера, его ресурсы — в манифесте."
         ),
+        1 => format!("У единственного контейнера Deployment `{app}` такие ресурсы."),
+        _ => format!(
+            "Deployment `{app}` масштабируют; в поде один контейнер с ресурсами из манифеста."
+        ),
+    };
+    let single = n_nodes == 1;
+    let question = match range(rng, 0, 1) {
+        0 => format!(
+            "Сколько реплик максимум поместится {}?",
+            if single {
+                "на узел"
+            } else {
+                "на эти узлы суммарно"
+            }
+        ),
+        _ => format!(
+            "Какое наибольшее число реплик планировщик сможет разместить {}?",
+            if single {
+                "на этом узле"
+            } else {
+                "на этих узлах суммарно"
+            }
+        ),
+    };
+    let rest = *pick(
+        rng,
+        &[
+            "Других ограничений (taints, affinity, лимит числа подов) нет.",
+            "Taints, affinity и лимит числа подов на узле не мешают.",
+        ],
+    );
+    Draft::integer(
+        format!("{intro}\n\n{table}\n{pod} {question} {rest}"),
         answer,
     )
     .code("yaml", yaml)
@@ -486,19 +765,47 @@ fn rng_u32(rng: &mut Rng) -> u32 {
     range(rng, 0, i64::from(u32::MAX)) as u32
 }
 
+const SEGMENTS: &[&str] = &[
+    "vlan-120",
+    "dmz",
+    "db-subnet",
+    "k8s-nodes",
+    "office-wifi",
+    "mgmt",
+    "backup-net",
+    "voip",
+    "cameras",
+    "dev-lab",
+    "guest-wifi",
+    "storage",
+];
+
 fn cidr(level: u8, rng: &mut Rng) -> Draft {
     match level {
         1 => {
             let prefix = range(rng, 20, 30) as u32;
             let network = random_private(rng) & mask(prefix);
             let hosts = (1i64 << (32 - prefix)) - 2;
-            Draft::integer(
-                format!(
-                    "Сколько адресов можно назначить хостам в подсети `{}/{prefix}` (без адреса сети и широковещательного)?",
-                    ip(network)
+            let net = format!("{}/{prefix}", ip(network));
+            let segment = *pick(rng, SEGMENTS);
+            let prompt = match range(rng, 0, 4) {
+                0 => format!(
+                    "Сколько адресов можно назначить хостам в подсети `{net}` (без адреса сети и широковещательного)?"
                 ),
-                hosts,
-            )
+                1 => format!(
+                    "Сегменту `{segment}` выделили подсеть `{net}`. Сколько адресов в ней можно раздать хостам, если адрес сети и широковещательный не используются?"
+                ),
+                2 => format!(
+                    "Для сегмента `{segment}` планируют подсеть `{net}`. Сколько узлов максимум можно в ней адресовать (адрес сети и широковещательный адрес хостам не назначаются)?"
+                ),
+                3 => format!(
+                    "Подсеть `{net}` отдана под `{segment}`. Сколько в ней адресов, пригодных для хостов? Адрес сети и широковещательный не считаются."
+                ),
+                _ => format!(
+                    "Сколько хостов поместится в подсеть `{net}`, выделенную под `{segment}`? Адрес сети и широковещательный адрес назначать нельзя."
+                ),
+            };
+            Draft::integer(prompt, hosts)
         }
         2 => {
             let prefix = *pick(rng, &[19, 20, 21, 22, 23, 25, 26, 27, 28, 29]);
@@ -1122,6 +1429,94 @@ fn octal(mode: u32) -> String {
     format!("{mode:03o}")
 }
 
+const UNIX_GROUPS: &[&str] = &[
+    "devops",
+    "www-data",
+    "staff",
+    "backup",
+    "deploy",
+    "adm",
+    "developers",
+    "ops",
+];
+
+const TEAMS: &[&str] = &[
+    "devops",
+    "analytics",
+    "backend",
+    "qa",
+    "design",
+    "billing",
+    "support",
+    "ml",
+];
+
+/// A plausible regular-file path: scripts, configs, data or logs in a fitting directory.
+fn perm_path(rng: &mut Rng) -> String {
+    let (dirs, names): (&[&str], &[&str]) = match range(rng, 0, 3) {
+        0 => (
+            &[
+                "",
+                "scripts/",
+                "/opt/{svc}/bin/",
+                "/usr/local/bin/",
+                "/home/{user}/bin/",
+            ],
+            &[
+                "deploy.sh",
+                "backup.sh",
+                "rotate-logs.sh",
+                "migrate.sh",
+                "healthcheck.sh",
+                "entrypoint.sh",
+                "sync.py",
+                "cleanup.py",
+            ],
+        ),
+        1 => (
+            &[
+                "",
+                "config/",
+                "/etc/{svc}/",
+                "/opt/{svc}/config/",
+                "/srv/{svc}/",
+            ],
+            &[
+                "config.yaml",
+                "settings.ini",
+                "app.toml",
+                "secrets.json",
+                "database.yml",
+                ".env",
+            ],
+        ),
+        2 => (
+            &["", "/var/backups/", "/srv/data/", "/home/{user}/"],
+            &[
+                "backup.tar",
+                "dump.sql",
+                "report.csv",
+                "archive.tar.gz",
+                "export.json",
+            ],
+        ),
+        _ => (
+            &["", "logs/", "/var/log/{svc}/", "/var/log/app/"],
+            &[
+                "app.log",
+                "access.log",
+                "error.log",
+                "audit.log",
+                "worker.log",
+            ],
+        ),
+    };
+    let dir = pick(rng, dirs)
+        .replace("{svc}", pick(rng, SERVICES))
+        .replace("{user}", pick(rng, PEOPLE));
+    format!("{dir}{}", pick(rng, names))
+}
+
 fn permissions(level: u8, rng: &mut Rng) -> Draft {
     let pick_mode = |rng: &mut Rng| {
         let digits = [7u32, 6, 5, 4, 0, 1, 2, 3];
@@ -1133,15 +1528,30 @@ fn permissions(level: u8, rng: &mut Rng) -> Draft {
     match level {
         1 => {
             let mode = pick_mode(rng);
-            let file = *pick(rng, &["deploy.sh", "backup.tar", "config.yaml", "app.log"]);
-            Draft::text(
+            let path = perm_path(rng);
+            let file = if chance(rng, 0.5) {
                 format!(
-                    "`ls -l` показывает для файла `{file}` права `-{}`. Какое восьмеричное значение нужно передать `chmod`, чтобы получить такие права?",
-                    rwx(mode)
+                    "`{path}` (владелец `{}`, группа `{}`)",
+                    pick(rng, PEOPLE),
+                    pick(rng, UNIX_GROUPS)
+                )
+            } else {
+                format!("`{path}`")
+            };
+            let perms = rwx(mode);
+            let prompt = match range(rng, 0, 2) {
+                0 => format!(
+                    "`ls -l` показывает для файла {file} права `-{perms}`. Какое восьмеричное значение нужно передать `chmod`, чтобы получить такие права?"
                 ),
-                vec![octal(mode), format!("0{}", octal(mode))],
-            )
-            .hint("Три восьмеричные цифры, например 640")
+                1 => format!(
+                    "В выводе `ls -l` у файла {file} права `-{perms}`. Какой восьмеричный режим нужно указать в `chmod`, чтобы выставить ровно такие права?"
+                ),
+                _ => format!(
+                    "Файлу {file} нужно выставить права `-{perms}`. Какое восьмеричное значение для этого передать `chmod`?"
+                ),
+            };
+            Draft::text(prompt, vec![octal(mode), format!("0{}", octal(mode))])
+                .hint("Три восьмеричные цифры, например 640")
         }
         2 => {
             let start = pick_mode(rng);
@@ -1188,7 +1598,12 @@ fn permissions(level: u8, rng: &mut Rng) -> Draft {
         }
         _ => {
             if chance(rng, 0.5) {
-                let umask = *pick(rng, &[0o022u32, 0o027, 0o077, 0o002, 0o007, 0o026]);
+                let umask = *pick(
+                    rng,
+                    &[
+                        0o022u32, 0o027, 0o077, 0o002, 0o007, 0o026, 0o037, 0o033, 0o023,
+                    ],
+                );
                 let file = 0o666 & !umask;
                 let dir = 0o777 & !umask;
                 let fmt = |f: u32, d: u32| format!("файл {}, каталог {}", octal(f), octal(d));
@@ -1200,14 +1615,57 @@ fn permissions(level: u8, rng: &mut Rng) -> Draft {
                     fmt(0o777 & !umask & 0o666, 0o755),
                     fmt(0o644, 0o755),
                 ];
-                Draft::choice(
-                    format!(
-                        "В shell выполнили `umask {:03o}`, затем `touch report.txt` и `mkdir backup`. Какие права получат новые файл и каталог?",
-                        umask
+                let new_file = *pick(
+                    rng,
+                    &[
+                        "report.txt",
+                        "notes.md",
+                        "data.csv",
+                        "app.log",
+                        "draft.txt",
+                        "output.json",
+                        "todo.txt",
+                        "users.csv",
+                        "summary.md",
+                        "build.log",
+                        "metrics.json",
+                        "plan.txt",
+                    ],
+                );
+                let new_dir = *pick(
+                    rng,
+                    &[
+                        "backup",
+                        "logs",
+                        "tmp",
+                        "releases",
+                        "cache",
+                        "uploads",
+                        "archive",
+                        "reports",
+                        "exports",
+                        "artifacts",
+                        "snapshots",
+                        "drafts",
+                    ],
+                );
+                let prompt = match range(rng, 0, 3) {
+                    0 => format!(
+                        "В shell выполнили `umask {umask:03o}`, затем `touch {new_file}` и `mkdir {new_dir}`. Какие права получат новые файл и каталог?"
                     ),
-                    fmt(file, dir),
-                    distractors,
-                )
+                    1 => format!(
+                        "Пользователь `{}` выполнил в своей сессии `umask {umask:03o}`, а затем создал файл (`touch {new_file}`) и каталог (`mkdir {new_dir}`). Какими будут их права?",
+                        pick(rng, PEOPLE)
+                    ),
+                    2 => format!(
+                        "Скрипт начинается с `umask {umask:03o}` и затем выполняет `mkdir {new_dir}` и `touch {new_dir}/{new_file}`. Какие права получат созданные файл и каталог?"
+                    ),
+                    _ => format!(
+                        "В сессии пользователя `{}` действует `umask {umask:03o}`. Какие права получат файл и каталог, созданные командами `touch {new_file}` и `mkdir {new_dir}`?",
+                        pick(rng, PEOPLE)
+                    ),
+                };
+                Draft::choice(prompt, fmt(file, dir), distractors)
             } else {
                 let dir = chance(rng, 0.3);
                 let special = if dir {
@@ -1216,9 +1674,14 @@ fn permissions(level: u8, rng: &mut Rng) -> Draft {
                     *pick(rng, &[0o4000u32, 0o2000])
                 };
                 let base = if dir {
-                    *pick(rng, &[0o777u32, 0o775, 0o770, 0o776])
+                    *pick(rng, &[0o777u32, 0o775, 0o770, 0o776, 0o755, 0o750, 0o771])
                 } else {
-                    *pick(rng, &[0o755u32, 0o750, 0o644, 0o711])
+                    *pick(
+                        rng,
+                        &[
+                            0o755u32, 0o750, 0o644, 0o711, 0o754, 0o700, 0o740, 0o640, 0o751,
+                        ],
+                    )
                 };
                 let mode = special | base;
                 let answer = with_special(mode, dir);
@@ -1229,19 +1692,50 @@ fn permissions(level: u8, rng: &mut Rng) -> Draft {
                     with_special(0o1000 | base, dir),
                     with_special(mode ^ 0o111, dir),
                 ];
+                let team = *pick(rng, TEAMS);
                 let target = if dir {
-                    "каталога `/srv/shared`"
+                    let path = match range(rng, 0, 5) {
+                        0 => "/srv/shared".to_owned(),
+                        1 => format!("/srv/{team}"),
+                        2 => format!("/var/shared/{team}"),
+                        3 => format!("/home/projects/{team}"),
+                        4 => "/data/exchange".to_owned(),
+                        _ => format!("/opt/{team}/drop"),
+                    };
+                    format!("каталога `{path}`")
                 } else {
-                    "файла `/usr/local/bin/tool`"
+                    let tool = *pick(
+                        rng,
+                        &[
+                            "tool",
+                            "backup-agent",
+                            "netcheck",
+                            "pinger",
+                            "mount-helper",
+                            "sync-agent",
+                            "report-gen",
+                            "db-dump",
+                        ],
+                    );
+                    let path = match range(rng, 0, 2) {
+                        0 => format!("/usr/local/bin/{tool}"),
+                        1 => format!("/usr/local/sbin/{tool}"),
+                        _ => format!("/opt/{team}/bin/{tool}"),
+                    };
+                    format!("файла `{path}`")
                 };
-                Draft::choice(
-                    format!(
-                        "Выполнили `chmod {:04o}` для {target}. Что покажет `ls -l` в колонке прав?",
-                        mode
+                let prompt = match range(rng, 0, 2) {
+                    0 => format!(
+                        "Выполнили `chmod {mode:04o}` для {target}. Что покажет `ls -l` в колонке прав?"
                     ),
-                    answer,
-                    distractors,
-                )
+                    1 => format!(
+                        "Для {target} выполнили `sudo chmod {mode:04o}`. Как будет выглядеть строка прав в выводе `ls -l`?"
+                    ),
+                    _ => format!(
+                        "Администратор задал режим `{mode:04o}` для {target} командой `chmod`. Что будет в колонке прав у `ls -l`?"
+                    ),
+                };
+                Draft::choice(prompt, answer, distractors)
             }
         }
     }
@@ -1301,19 +1795,121 @@ fn counter_increase(level: u8, rng: &mut Rng) -> Draft {
     }
 }
 
+const SLO_TARGETS: &[f64] = &[
+    98.0, 98.5, 99.0, 99.2, 99.25, 99.5, 99.6, 99.7, 99.75, 99.8, 99.85, 99.9, 99.95, 99.99,
+];
+const COMPONENT_AVAILABILITY: &[f64] = &[99.0, 99.2, 99.5, 99.7, 99.8, 99.9, 99.95, 99.98, 99.99];
+const REPLICA_AVAILABILITY: &[f64] = &[95.0, 96.0, 97.0, 98.0, 98.5, 99.0, 99.5];
+
+/// Request path tiers, so a named chain always reads edge → application → storage.
+const EDGE_TIER: &[&str] = &[
+    "CDN",
+    "балансировщик",
+    "API-шлюз",
+    "Ingress-контроллер",
+    "обратный прокси",
+];
+const APP_TIER: &[&str] = &[
+    "бэкенд",
+    "сервис авторизации",
+    "сервер приложений",
+    "приложение",
+];
+const STORAGE_TIER: &[&str] = &[
+    "база данных",
+    "кэш",
+    "брокер сообщений",
+    "объектное хранилище",
+    "поисковый кластер",
+];
+
+/// Front components named in the accusative after «через».
+const BALANCERS: &[&str] = &[
+    "балансировщик",
+    "Ingress-контроллер",
+    "API-шлюз",
+    "обратный прокси",
+    "L7-балансировщик",
+];
+
+/// Wording of the redundant pair with gender agreement.
+struct Replicas {
+    into: &'static str,
+    each: &'static str,
+    enough: &'static str,
+}
+
+const REPLICAS: &[Replicas] = &[
+    Replicas {
+        into: "в один из двух независимых экземпляров приложения",
+        each: "каждый",
+        enough: "работал хотя бы один экземпляр",
+    },
+    Replicas {
+        into: "в одну из двух независимых реплик бэкенда",
+        each: "каждая",
+        enough: "работала хотя бы одна реплика",
+    },
+    Replicas {
+        into: "на один из двух независимых серверов приложения",
+        each: "каждый",
+        enough: "работал хотя бы один сервер",
+    },
+    Replicas {
+        into: "в один из двух независимых подов сервиса",
+        each: "каждый",
+        enough: "работал хотя бы один под",
+    },
+    Replicas {
+        into: "на один из двух независимых узлов с приложением",
+        each: "каждый",
+        enough: "работал хотя бы один узел",
+    },
+];
+
 fn error_budget(level: u8, rng: &mut Rng) -> Draft {
+    let svc = *pick(rng, SERVICES);
     match level {
         1 | 2 => {
-            let slo: f64 = *pick(rng, &[99.0, 99.5, 99.9, 99.95, 99.99]);
-            let days: i64 = *pick(rng, &[7, 28, 30, 90]);
-            let budget = (1.0 - slo / 100.0) * (days * 24 * 60) as f64;
-            let period = super::util::plural_ru(days, "день", "дня", "дней");
+            let days = range(rng, 7, 90);
+            let minutes = (days * 24 * 60) as f64;
+            let budget_of = |slo: f64| (1.0 - slo / 100.0) * minutes;
+            // Level 2 lists incidents rounded to tenths of a minute: keep them meaningful.
+            let targets: Vec<f64> = SLO_TARGETS
+                .iter()
+                .copied()
+                .filter(|s| level == 1 || budget_of(*s) >= 10.0)
+                .collect();
+            let slo = *pick(rng, &targets);
+            let budget = budget_of(slo);
+            let period = plural_ru(days, "день", "дня", "дней");
+            let slo = fmt_number(slo);
+            let intro = match range(rng, 0, 3) {
+                0 => {
+                    format!("SLO доступности сервиса `{svc}` — {slo}% в скользящем окне {period}.")
+                }
+                1 => format!(
+                    "Для сервиса `{svc}` установлен SLO доступности {slo}% на скользящем окне {period}."
+                ),
+                2 => format!(
+                    "Команда сервиса `{svc}` договорилась о SLO: доступность {slo}% в окне {period}."
+                ),
+                _ => format!(
+                    "Целевая доступность (SLO) сервиса `{svc}` — {slo}% за скользящее окно {period}."
+                ),
+            };
             if level == 1 {
+                let question = *pick(
+                    rng,
+                    &[
+                        "Сколько минут полной недоступности допускает бюджет ошибок за это окно?",
+                        "Сколько минут сервис может быть полностью недоступен за это окно, не нарушив SLO?",
+                        "Чему равен бюджет ошибок за окно в минутах полной недоступности?",
+                        "Каков бюджет ошибок на это окно, если выразить его в минутах полного простоя?",
+                    ],
+                );
                 Draft::number(
-                    format!(
-                        "SLO доступности сервиса — {}% в скользящем окне {period}. Сколько минут полной недоступности допускает бюджет ошибок за это окно?",
-                        fmt_number(slo)
-                    ),
+                    format!("{intro} {question}"),
                     (budget * 10.0).round() / 10.0,
                     0.11,
                 )
@@ -1331,11 +1927,23 @@ fn error_budget(level: u8, rng: &mut Rng) -> Draft {
                     .map(|m| format!("{} мин", fmt_number(*m)))
                     .collect::<Vec<_>>()
                     .join(", ");
-                Draft::number(
-                    format!(
-                        "SLO доступности — {}% в окне {period}. В этом окне уже были инциденты с полной недоступностью: {list}. Сколько минут бюджета ошибок осталось?",
-                        fmt_number(slo)
+                let history = match range(rng, 0, 2) {
+                    0 => format!("В этом окне уже были инциденты с полной недоступностью: {list}."),
+                    1 => format!("За это окно уже случились полные отказы длительностью {list}."),
+                    _ => format!(
+                        "В текущем окне зафиксированы инциденты полной недоступности: {list}."
                     ),
+                };
+                let question = *pick(
+                    rng,
+                    &[
+                        "Сколько минут бюджета ошибок осталось?",
+                        "Сколько минут бюджета ошибок ещё не израсходовано?",
+                        "Каков остаток бюджета ошибок в минутах?",
+                    ],
+                );
+                Draft::number(
+                    format!("{intro} {history} {question}"),
                     (left * 10.0).round() / 10.0,
                     0.11,
                 )
@@ -1343,34 +1951,51 @@ fn error_budget(level: u8, rng: &mut Rng) -> Draft {
             }
         }
         _ => {
-            let pool = [99.0, 99.5, 99.9, 99.95, 99.99];
-            let parts = pick_n(rng, &pool, 2);
-            let redundant = chance(rng, 0.5);
-            let (availability, text) = if redundant {
-                let replica: f64 = *pick(rng, &[99.0, 99.5, 98.0, 95.0]);
+            let (availability, text) = if chance(rng, 0.5) {
+                let front = *pick(rng, COMPONENT_AVAILABILITY);
+                let replica = *pick(rng, REPLICA_AVAILABILITY);
                 let pair = 1.0 - (1.0 - replica / 100.0).powi(2);
+                let r = pick(rng, REPLICAS);
                 (
-                    pair * parts[0] / 100.0,
+                    pair * front / 100.0,
                     format!(
-                        "Запрос проходит через балансировщик (доступность {}%) и затем попадает в один из двух независимых экземпляров приложения (каждый — {}%); достаточно, чтобы работал хотя бы один экземпляр.",
-                        fmt_number(parts[0]),
-                        fmt_number(replica)
+                        "Запрос к сервису `{svc}` проходит через {} (доступность {}%) и затем попадает {} ({} — {}%); достаточно, чтобы {}.",
+                        pick(rng, BALANCERS),
+                        fmt_number(front),
+                        r.into,
+                        r.each,
+                        fmt_number(replica),
+                        r.enough
                     ),
                 )
             } else {
-                let third = *pick(rng, &[99.9, 99.95, 99.5]);
-                (
-                    parts[0] / 100.0 * parts[1] / 100.0 * third / 100.0,
+                let parts: Vec<f64> = (0..3).map(|_| *pick(rng, COMPONENT_AVAILABILITY)).collect();
+                let availability = parts.iter().map(|p| p / 100.0).product::<f64>();
+                let [a, b, c] = [parts[0], parts[1], parts[2]].map(fmt_number);
+                let text = if chance(rng, 0.5) {
                     format!(
-                        "Запрос последовательно проходит через три независимых компонента с доступностью {}%, {}% и {}%; отказ любого — отказ запроса.",
-                        fmt_number(parts[0]),
-                        fmt_number(parts[1]),
-                        fmt_number(third)
-                    ),
-                )
+                        "Запрос к сервису `{svc}` последовательно проходит через три независимых компонента с доступностью {a}%, {b}% и {c}%; отказ любого — отказ запроса."
+                    )
+                } else {
+                    format!(
+                        "Цепочка обработки запроса к сервису `{svc}`: {} ({a}%) → {} ({b}%) → {} ({c}%). Компоненты отказывают независимо, отказ любого — отказ запроса.",
+                        pick(rng, EDGE_TIER),
+                        pick(rng, APP_TIER),
+                        pick(rng, STORAGE_TIER)
+                    )
+                };
+                (availability, text)
             };
+            let question = *pick(
+                rng,
+                &[
+                    "Какова итоговая доступность сервиса в процентах?",
+                    "Какую доступность в процентах обеспечивает такая схема в целом?",
+                    "Оцените итоговую доступность сервиса в процентах.",
+                ],
+            );
             Draft::number(
-                format!("{text} Какова итоговая доступность сервиса в процентах?"),
+                format!("{text} {question}"),
                 (availability * 1e4).round() / 100.0,
                 0.011,
             )

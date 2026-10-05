@@ -106,7 +106,21 @@ const FIELDS: &[(&str, i64, i64)] = &[
     ("число гостей в бронировании", 1, 4),
     ("срок кредита в месяцах", 3, 12),
     ("процент скидки", 1, 5),
+    ("длина никнейма", 3, 5),
+    ("срок вклада в месяцах", 1, 6),
+    ("количество дней аренды", 1, 3),
+    ("число участников команды", 2, 5),
+    ("количество билетов в заказе", 1, 2),
+    ("вес посылки в килограммах", 1, 3),
 ];
+
+fn capitalize(s: &str) -> String {
+    let mut chars = s.chars();
+    chars
+        .next()
+        .map(|c| c.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
 
 fn set(values: &[i64]) -> String {
     join(values, ", ")
@@ -182,12 +196,48 @@ fn boundary_values(level: u8, rng: &mut Rng) -> Draft {
                     .collect::<Vec<_>>()
                     .join("; ")
             };
+            let inside = [
+                lo * 100,
+                lo * 100 + 1,
+                lo * 100 + 2,
+                hi * 100 - 2,
+                hi * 100 - 1,
+                hi * 100,
+            ]
+            .iter()
+            .map(|v| money(*v))
+            .collect::<Vec<_>>()
+            .join("; ");
+            let third = match range(rng, 0, 2) {
+                0 => three(10),
+                1 => two(100),
+                _ => inside,
+            };
+            let subject = *pick(
+                rng,
+                &[
+                    "Сумма перевода",
+                    "Сумма платежа",
+                    "Сумма пополнения кошелька",
+                    "Сумма вывода средств",
+                    "Сумма заказа",
+                    "Сумма возврата",
+                ],
+            );
+            let precision = *pick(
+                rng,
+                &[
+                    "ввод с точностью до копеек",
+                    "вводится с точностью до копейки",
+                    "допускаются копейки",
+                ],
+            );
             Draft::choice(
                 format!(
-                    "Сумма перевода — от {lo}.00 до {hi}.00 ₽ включительно, ввод с точностью до копеек. Какой набор соответствует трёхточечному анализу граничных значений (по три значения на каждую границу)?"
+                    "{subject} — от {lo}.00 до {hi}.00 ₽ включительно, {precision}. Какой набор соответствует трёхточечному анализу граничных значений (по три значения на каждую границу)?"
                 ),
                 three(1),
-                vec![three(100), two(1), three(10), two(100)],
+                vec![three(100), two(1), third],
             )
         }
     }
@@ -199,23 +249,49 @@ struct Tiering {
     invalid: i64,
 }
 
-fn tiers(rng: &mut Rng, count: usize, upper_bound: bool) -> Tiering {
+/// Field name, the per-tier benefit, and whether the rate falls as the amount grows.
+const TIERED_FIELDS: &[(&str, &str, bool)] = &[
+    ("сумма заказа", "скидка", false),
+    ("сумма покупки", "кешбэк", false),
+    ("стоимость корзины", "скидка", false),
+    ("сумма пополнения", "бонус", false),
+    ("сумма перевода", "комиссия", true),
+    ("сумма платежа", "комиссия", true),
+];
+
+/// Distinct rates keep every tier a separate class: equal neighbours would merge.
+const TIER_RATES: &[i64] = &[0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 15];
+
+fn tiers(
+    rng: &mut Rng,
+    count: usize,
+    upper_bound: bool,
+    benefit: &str,
+    descending: bool,
+) -> Tiering {
     let mut cuts = vec![1i64];
     for _ in 1..count {
         let last = cuts[cuts.len() - 1];
         cuts.push(last + range(rng, 5, 40) * 100);
     }
     let max = cuts[cuts.len() - 1] + range(rng, 10, 90) * 1000;
-    let rates = [0, 3, 5, 7, 10, 15];
+    let mut rates = pick_n(rng, TIER_RATES, count);
+    rates.sort_unstable();
+    if descending {
+        rates.reverse();
+    }
     let mut parts = Vec::new();
-    for i in 0..count {
-        let rate = rates[i.min(rates.len() - 1)];
+    for (i, rate) in rates.iter().enumerate() {
         let part = if i + 1 < count {
-            format!("от {} до {} ₽ — скидка {rate} %", cuts[i], cuts[i + 1] - 1)
+            format!(
+                "от {} до {} ₽ — {benefit} {rate} %",
+                cuts[i],
+                cuts[i + 1] - 1
+            )
         } else if upper_bound {
-            format!("от {} до {max} ₽ — скидка {rate} %", cuts[i])
+            format!("от {} до {max} ₽ — {benefit} {rate} %", cuts[i])
         } else {
-            format!("от {} ₽ и выше — скидка {rate} %", cuts[i])
+            format!("от {} ₽ и выше — {benefit} {rate} %", cuts[i])
         };
         parts.push(part);
     }
@@ -240,11 +316,18 @@ fn equivalence_classes(level: u8, rng: &mut Rng) -> Draft {
                 range(rng, 3, 4)
             } as usize;
             let upper = level == 1 || chance(rng, 0.3);
-            let t = tiers(rng, count, upper);
+            let &(field, benefit, descending) = pick(rng, TIERED_FIELDS);
+            let t = tiers(rng, count, upper, benefit, descending);
+            let question = if chance(rng, 0.5) {
+                "Сколько классов эквивалентности (валидных и невалидных) нужно выделить"
+            } else {
+                "Сколько всего классов эквивалентности — валидных и невалидных — нужно выделить"
+            };
             Draft::integer(
                 format!(
-                    "Сумма заказа — целое число рублей. Правила: {} \
-                     Сколько классов эквивалентности (валидных и невалидных) нужно выделить для поля «сумма заказа»? Нечисловой ввод не рассматривайте.",
+                    "{} — целое число рублей. Правила: {} \
+                     {question} для поля «{field}»? Нечисловой ввод не рассматривайте.",
+                    capitalize(field),
                     t.text
                 ),
                 t.valid + t.invalid,
@@ -252,7 +335,8 @@ fn equivalence_classes(level: u8, rng: &mut Rng) -> Draft {
         }
         _ => {
             let (count, upper) = (range(rng, 2, 4) as usize, chance(rng, 0.5));
-            let t = tiers(rng, count, upper);
+            let benefit = *pick(rng, &["скидка", "кешбэк"]);
+            let t = tiers(rng, count, upper, benefit, false);
             let qty_hi = range(rng, 10, 99);
             let (qty_text, qty_valid, qty_invalid) = if chance(rng, 0.5) {
                 (
@@ -351,22 +435,270 @@ fn pairwise(level: u8, rng: &mut Rng) -> Draft {
     }
 }
 
-const STATES: &[&str] = &[
-    "Новый",
-    "Оплачен",
-    "Собран",
-    "Отправлен",
-    "Доставлен",
-    "Отменён",
-    "Возврат",
+struct Lifecycle {
+    /// Genitive: "жизненный цикл заказа".
+    entity: &'static str,
+    /// Prepositional phrases: "в интернет-магазине".
+    places: &'static [&'static str],
+    /// 0..=4 are the happy path, 5 is reached by event 4 (cancel), 6 by event 5 (reversal).
+    states: [&'static str; 7],
+    events: [&'static str; 6],
+}
+
+const LIFECYCLES: &[Lifecycle] = &[
+    Lifecycle {
+        entity: "заказа",
+        places: &[
+            "в интернет-магазине",
+            "на маркетплейсе",
+            "в магазине электроники",
+            "в онлайн-гипермаркете",
+        ],
+        states: [
+            "Новый",
+            "Оплачен",
+            "Собран",
+            "Отправлен",
+            "Доставлен",
+            "Отменён",
+            "Возврат",
+        ],
+        events: [
+            "оплатить",
+            "собрать",
+            "отправить",
+            "доставить",
+            "отменить",
+            "вернуть",
+        ],
+    },
+    Lifecycle {
+        entity: "дефекта",
+        places: &[
+            "в баг-трекере",
+            "в трекере задач команды",
+            "в системе учёта дефектов",
+        ],
+        states: [
+            "Новый",
+            "Подтверждён",
+            "В работе",
+            "Исправлен",
+            "Закрыт",
+            "Отклонён",
+            "Переоткрыт",
+        ],
+        events: [
+            "подтвердить",
+            "взять в работу",
+            "исправить",
+            "проверить",
+            "отклонить",
+            "переоткрыть",
+        ],
+    },
+    Lifecycle {
+        entity: "обращения",
+        places: &["в службе поддержки", "в сервис-деске", "в helpdesk-системе"],
+        states: [
+            "Открыто",
+            "Назначено",
+            "В работе",
+            "Решено",
+            "Закрыто",
+            "Отклонено",
+            "Переоткрыто",
+        ],
+        events: [
+            "назначить",
+            "взять в работу",
+            "решить",
+            "закрыть",
+            "отклонить",
+            "переоткрыть",
+        ],
+    },
+    Lifecycle {
+        entity: "документа",
+        places: &[
+            "в системе электронного документооборота",
+            "в корпоративном портале",
+            "в сервисе согласования договоров",
+        ],
+        states: [
+            "Черновик",
+            "На согласовании",
+            "Согласован",
+            "Подписан",
+            "Опубликован",
+            "Отозван",
+            "Аннулирован",
+        ],
+        events: [
+            "отправить на согласование",
+            "согласовать",
+            "подписать",
+            "опубликовать",
+            "отозвать",
+            "аннулировать",
+        ],
+    },
+    Lifecycle {
+        entity: "посылки",
+        places: &[
+            "в службе доставки",
+            "в почтовом сервисе",
+            "в логистической системе",
+        ],
+        states: [
+            "Принята",
+            "На сортировке",
+            "В пути",
+            "В пункте выдачи",
+            "Вручена",
+            "Отменена",
+            "Возвращена",
+        ],
+        events: [
+            "передать на сортировку",
+            "отправить",
+            "доставить в пункт выдачи",
+            "вручить",
+            "отменить",
+            "вернуть отправителю",
+        ],
+    },
+    Lifecycle {
+        entity: "платежа",
+        places: &[
+            "в платёжном сервисе",
+            "в процессинге банка",
+            "в платёжном шлюзе",
+        ],
+        states: [
+            "Создан",
+            "Авторизован",
+            "Подтверждён",
+            "Списан",
+            "Зачислен",
+            "Отменён",
+            "Возвращён",
+        ],
+        events: [
+            "авторизовать",
+            "подтвердить",
+            "списать",
+            "зачислить",
+            "отменить",
+            "вернуть",
+        ],
+    },
+    Lifecycle {
+        entity: "релиза",
+        places: &[
+            "в CI/CD-системе",
+            "в системе управления релизами",
+            "в пайплайне доставки",
+        ],
+        states: [
+            "Запланирован",
+            "Собран",
+            "Протестирован",
+            "На стейджинге",
+            "В продакшене",
+            "Отменён",
+            "Откачен",
+        ],
+        events: [
+            "собрать",
+            "протестировать",
+            "выкатить на стейджинг",
+            "выкатить в продакшен",
+            "отменить",
+            "откатить",
+        ],
+    },
+    Lifecycle {
+        entity: "бронирования",
+        places: &[
+            "в системе бронирования отеля",
+            "в сервисе аренды жилья",
+            "в гостиничной CRM",
+        ],
+        states: [
+            "Создано",
+            "Подтверждено",
+            "Оплачено",
+            "Активно",
+            "Завершено",
+            "Отменено",
+            "Спор",
+        ],
+        events: [
+            "подтвердить",
+            "оплатить",
+            "заселить",
+            "выселить",
+            "отменить",
+            "открыть спор",
+        ],
+    },
+    Lifecycle {
+        entity: "отклика на вакансию",
+        places: &[
+            "на платформе найма",
+            "в ATS-системе",
+            "на карьерном портале",
+        ],
+        states: [
+            "Новый",
+            "Просмотрен",
+            "Интервью",
+            "Оффер",
+            "Принят",
+            "Отказ",
+            "Отозван",
+        ],
+        events: [
+            "просмотреть",
+            "пригласить на интервью",
+            "сделать оффер",
+            "принять оффер",
+            "отказать",
+            "отозвать",
+        ],
+    },
+    Lifecycle {
+        entity: "заявления на выплату",
+        places: &[
+            "в страховой компании",
+            "в системе урегулирования убытков",
+            "в личном кабинете страхователя",
+        ],
+        states: [
+            "Подано",
+            "Принято",
+            "Проверено",
+            "Одобрено",
+            "Выплачено",
+            "Отклонено",
+            "Оспорено",
+        ],
+        events: [
+            "принять",
+            "проверить",
+            "одобрить",
+            "выплатить",
+            "отклонить",
+            "оспорить",
+        ],
+    },
 ];
-const EVENTS: &[&str] = &[
-    "оплатить",
-    "собрать",
-    "отправить",
-    "доставить",
-    "отменить",
-    "вернуть",
+
+const TRANSITION_HEADERS: &[[&str; 3]] = &[
+    ["Из состояния", "Событие", "В состояние"],
+    ["Текущее состояние", "Событие", "Новое состояние"],
+    ["Исходное состояние", "Событие", "Целевое состояние"],
 ];
 
 struct Machine {
@@ -382,7 +714,9 @@ impl Machine {
                 t.push(o);
             }
         }
-        t.sort_unstable();
+        // Rows stay grouped by source state; only the order inside a group varies.
+        let mut t = shuffled(rng, t);
+        t.sort_by_key(|row| row.0);
         Self { transitions: t }
     }
 
@@ -404,19 +738,19 @@ impl Machine {
         true
     }
 
-    fn table(&self) -> String {
+    fn table(&self, lc: &Lifecycle, headers: &[&str; 3]) -> String {
         let rows: Vec<Vec<String>> = self
             .transitions
             .iter()
             .map(|(s, e, t)| {
                 vec![
-                    STATES[*s].to_owned(),
-                    EVENTS[*e].to_owned(),
-                    STATES[*t].to_owned(),
+                    lc.states[*s].to_owned(),
+                    lc.events[*e].to_owned(),
+                    lc.states[*t].to_owned(),
                 ]
             })
             .collect();
-        md_table(&["Из состояния", "Событие", "В состояние"], &rows)
+        md_table(headers, &rows)
     }
 
     fn used_states(&self) -> usize {
@@ -428,8 +762,20 @@ impl Machine {
 }
 
 fn state_transition(level: u8, rng: &mut Rng) -> Draft {
+    let lc = pick(rng, LIFECYCLES);
+    let place = *pick(rng, lc.places);
+    let entity = lc.entity;
     let machine = Machine::random(rng);
-    let table = machine.table();
+    let table = machine.table(lc, pick(rng, TRANSITION_HEADERS));
+    let intro = match range(rng, 0, 2) {
+        0 => format!("Жизненный цикл {entity} {place} задан таблицей допустимых переходов"),
+        1 => format!(
+            "{} жизненный цикл {entity} описан таблицей допустимых переходов",
+            capitalize(place)
+        ),
+        _ => format!("Допустимые переходы между состояниями {entity} {place} заданы таблицей"),
+    };
+    let start = lc.states[0];
     match level {
         1 => {
             let mut path = Vec::new();
@@ -448,7 +794,13 @@ fn state_transition(level: u8, rng: &mut Rng) -> Draft {
                 path.push(t.1);
                 state = t.2;
             }
-            let render = |p: &[usize]| p.iter().map(|e| EVENTS[*e]).collect::<Vec<_>>().join(" → ");
+            let events = lc.events.len() as i64;
+            let render = |p: &[usize]| {
+                p.iter()
+                    .map(|e| lc.events[*e])
+                    .collect::<Vec<_>>()
+                    .join(" → ")
+            };
             let mut wrong: Vec<Vec<usize>> = Vec::new();
             for _ in 0..200 {
                 if wrong.len() >= 6 {
@@ -460,14 +812,14 @@ fn state_transition(level: u8, rng: &mut Rng) -> Draft {
                         let i = range(rng, 0, candidate.len() as i64 - 1) as usize;
                         candidate.remove(i);
                     }
-                    1 => candidate.push(range(rng, 0, EVENTS.len() as i64 - 1) as usize),
+                    1 => candidate.push(range(rng, 0, events - 1) as usize),
                     2 if candidate.len() > 1 => {
                         let i = range(rng, 0, candidate.len() as i64 - 2) as usize;
                         candidate.swap(i, i + 1);
                     }
                     _ => {
                         let i = range(rng, 0, candidate.len() as i64 - 1) as usize;
-                        candidate[i] = range(rng, 0, EVENTS.len() as i64 - 1) as usize;
+                        candidate[i] = range(rng, 0, events - 1) as usize;
                     }
                 }
                 if !machine.accepts(&candidate)
@@ -477,10 +829,15 @@ fn state_transition(level: u8, rng: &mut Rng) -> Draft {
                     wrong.push(candidate);
                 }
             }
+            let question = if chance(rng, 0.5) {
+                "Какая последовательность событий допустима"
+            } else {
+                "Какую последовательность событий система примет целиком"
+            };
             Draft::choice(
                 format!(
-                    "Жизненный цикл заказа задан таблицей допустимых переходов (начальное состояние — «Новый»):\n\n{table}\n\
-                     Какая последовательность событий допустима, если начать с состояния «Новый»?"
+                    "{intro} (начальное состояние — «{start}»):\n\n{table}\n\
+                     {question}, если начать с состояния «{start}»?"
                 ),
                 render(&path),
                 wrong.iter().map(|p| render(p)),
@@ -488,114 +845,435 @@ fn state_transition(level: u8, rng: &mut Rng) -> Draft {
         }
         2 => {
             let states = machine.used_states() as i64;
-            let invalid = states * EVENTS.len() as i64 - machine.transitions.len() as i64;
+            let invalid = states * lc.events.len() as i64 - machine.transitions.len() as i64;
+            let events = shuffled(rng, lc.events.to_vec()).join(", ");
+            let question = if chance(rng, 0.5) {
+                "Сколько негативных тестов нужно, чтобы проверить каждое недопустимое сочетание ровно один раз?"
+            } else {
+                "Сколько негативных тестов понадобится, если каждое недопустимое сочетание проверяется ровно одним тестом?"
+            };
             Draft::integer(
                 format!(
-                    "Жизненный цикл заказа задан таблицей допустимых переходов:\n\n{table}\n\
-                     События: {}. Любое сочетание (состояние из таблицы, событие), которого нет в таблице, недопустимо и должно отклоняться. \
-                     Сколько негативных тестов нужно, чтобы проверить каждое недопустимое сочетание ровно один раз?",
-                    EVENTS.join(", ")
+                    "{intro}:\n\n{table}\n\
+                     События: {events}. Любое сочетание (состояние из таблицы, событие), которого нет в таблице, недопустимо и должно отклоняться. \
+                     {question}"
                 ),
                 invalid,
             )
         }
         _ => {
-            let pairs: i64 = (0..STATES.len())
+            let pairs: i64 = (0..lc.states.len())
                 .map(|s| {
                     let incoming = machine.transitions.iter().filter(|t| t.2 == s).count() as i64;
                     let outgoing = machine.transitions.iter().filter(|t| t.0 == s).count() as i64;
                     incoming * outgoing
                 })
                 .sum();
-            Draft::integer(
-                format!(
-                    "Жизненный цикл заказа задан таблицей допустимых переходов:\n\n{table}\n\
-                     Сколько существует различных последовательностей из двух подряд идущих допустимых переходов (именно их нужно покрыть для 1-switch coverage)?"
-                ),
-                pairs,
-            )
+            let question = if chance(rng, 0.5) {
+                "Сколько существует различных последовательностей из двух подряд идущих допустимых переходов (именно их нужно покрыть для 1-switch coverage)?"
+            } else {
+                "Для 1-switch coverage нужно покрыть все различные последовательности из двух подряд идущих допустимых переходов. Сколько их?"
+            };
+            Draft::integer(format!("{intro}:\n\n{table}\n{question}"), pairs)
         }
     }
 }
 
-const CONDITIONS: &[&str] = &[
-    "товар есть на складе",
-    "у клиента есть промокод",
-    "сумма заказа больше 3000 ₽",
-    "доставка в пределах города",
-    "клиент оформил подписку",
-    "оплата картой онлайн",
+struct Cond {
+    /// `#` is replaced by one of `values`.
+    text: &'static str,
+    values: &'static [i64],
+    /// Plausible as a precondition whose failure alone decides the outcome.
+    gate: bool,
+}
+
+const fn flag(text: &'static str) -> Cond {
+    Cond {
+        text,
+        values: &[],
+        gate: false,
+    }
+}
+
+const fn gate(text: &'static str) -> Cond {
+    Cond {
+        text,
+        values: &[],
+        gate: true,
+    }
+}
+
+const fn num(text: &'static str, values: &'static [i64]) -> Cond {
+    Cond {
+        text,
+        values,
+        gate: false,
+    }
+}
+
+impl Cond {
+    fn render(&self, rng: &mut Rng) -> String {
+        if self.values.is_empty() {
+            self.text.to_owned()
+        } else {
+            self.text.replace('#', &pick(rng, self.values).to_string())
+        }
+    }
+}
+
+struct Rulebook {
+    /// Singular nominative subjects: "<subject> зависит от условий".
+    subjects: &'static [&'static str],
+    refusal: &'static str,
+    conditions: &'static [Cond],
+    /// Multi-valued conditions: label and the value pool (at least 4).
+    multi: &'static [(&'static str, &'static [&'static str])],
+}
+
+const RULEBOOKS: &[Rulebook] = &[
+    Rulebook {
+        subjects: &[
+            "Итоговая стоимость заказа",
+            "Логика расчёта стоимости заказа",
+            "Размер скидки на заказ",
+            "Цена заказа в интернет-магазине",
+        ],
+        refusal: "отказ в оформлении заказа",
+        conditions: &[
+            gate("товар есть на складе"),
+            gate("адрес доставки входит в зону обслуживания"),
+            gate("клиент подтвердил номер телефона"),
+            flag("у клиента есть промокод"),
+            num(
+                "сумма заказа больше # ₽",
+                &[1000, 1500, 2000, 2500, 3000, 4000, 5000, 7000],
+            ),
+            flag("доставка в пределах города"),
+            flag("клиент оформил подписку"),
+            flag("оплата картой онлайн"),
+            num("в заказе больше # товаров", &[2, 3, 4, 5, 7, 9]),
+            flag("клиент делает первый заказ"),
+            flag("заказ оформлен в выходной день"),
+        ],
+        multi: &[
+            (
+                "тип клиента",
+                &[
+                    "новый",
+                    "постоянный",
+                    "VIP",
+                    "корпоративный",
+                    "сотрудник компании",
+                ],
+            ),
+            (
+                "способ доставки",
+                &["курьер", "самовывоз", "почта", "пункт выдачи", "постамат"],
+            ),
+        ],
+    },
+    Rulebook {
+        subjects: &[
+            "Решение о выдаче кредита",
+            "Одобрение кредитной заявки",
+            "Ставка по потребительскому кредиту",
+            "Кредитный лимит клиента",
+        ],
+        refusal: "отказ в выдаче кредита",
+        conditions: &[
+            Cond {
+                text: "клиенту исполнилось # лет",
+                values: &[18, 19, 20, 25, 26, 27, 28, 30],
+                gate: true,
+            },
+            gate("кредитная история клиента положительная"),
+            gate("доход клиента подтверждён справкой"),
+            num(
+                "ежемесячный доход больше # тыс. ₽",
+                &[30, 40, 50, 60, 80, 100, 120, 150],
+            ),
+            flag("есть поручитель"),
+            num(
+                "стаж на последнем месте работы больше # месяцев",
+                &[3, 6, 9, 12],
+            ),
+            num("сумма кредита больше # тыс. ₽", &[100, 200, 300, 500, 700]),
+            flag("есть залог"),
+            flag("клиент получает зарплату на карту банка"),
+            flag("у клиента уже есть кредит в этом банке"),
+        ],
+        multi: &[
+            (
+                "категория заёмщика",
+                &[
+                    "работник по найму",
+                    "ИП",
+                    "самозанятый",
+                    "пенсионер",
+                    "студент",
+                ],
+            ),
+            (
+                "цель кредита",
+                &[
+                    "ремонт",
+                    "покупка автомобиля",
+                    "образование",
+                    "рефинансирование",
+                    "покупка техники",
+                ],
+            ),
+        ],
+    },
+    Rulebook {
+        subjects: &[
+            "Доступ к разделу «Отчёты»",
+            "Доступ к разделу «Платежи»",
+            "Доступ к панели администратора",
+            "Доступ к выгрузке данных через API",
+            "Доступ к настройкам проекта",
+        ],
+        refusal: "отказ в доступе",
+        conditions: &[
+            gate("пользователь авторизован"),
+            gate("email пользователя подтверждён"),
+            gate("подписка организации оплачена"),
+            flag("у пользователя роль администратора"),
+            flag("включена двухфакторная аутентификация"),
+            flag("запрос пришёл из корпоративной сети"),
+            num(
+                "аккаунт создан больше # дней назад",
+                &[5, 7, 10, 14, 30, 60, 90],
+            ),
+            flag("пользователь принял условия соглашения"),
+            flag("пользователь входит в команду проекта"),
+            num(
+                "с последнего входа прошло меньше # минут",
+                &[15, 30, 45, 60],
+            ),
+        ],
+        multi: &[
+            (
+                "роль пользователя",
+                &[
+                    "гость",
+                    "читатель",
+                    "редактор",
+                    "модератор",
+                    "администратор",
+                ],
+            ),
+            (
+                "тариф",
+                &["бесплатный", "базовый", "профессиональный", "корпоративный"],
+            ),
+        ],
+    },
+    Rulebook {
+        subjects: &[
+            "Стоимость доставки",
+            "Тариф доставки",
+            "Срок доставки заказа",
+            "Выбор службы доставки",
+        ],
+        refusal: "отказ в доставке",
+        conditions: &[
+            gate("адрес входит в зону доставки"),
+            gate("заказ оплачен"),
+            gate("все товары есть на складе"),
+            num("вес посылки больше # кг", &[2, 3, 5, 10, 15, 20, 25, 30]),
+            flag("получатель выбрал экспресс-доставку"),
+            flag("в заказе есть хрупкий товар"),
+            flag("нужна доставка к точному времени"),
+            flag("получатель — юридическое лицо"),
+            num("длина посылки больше # см", &[50, 60, 80, 100, 120, 150]),
+            num("сумма заказа больше # ₽", &[2000, 3000, 4000, 5000, 7000]),
+            flag("доставка за город"),
+        ],
+        multi: &[
+            (
+                "способ доставки",
+                &["курьер", "самовывоз", "почта", "пункт выдачи", "постамат"],
+            ),
+            ("размер посылки", &["S", "M", "L", "XL"]),
+        ],
+    },
+    Rulebook {
+        subjects: &[
+            "Стоимость полиса автострахования",
+            "Решение об оформлении страхового полиса",
+            "Страховой тариф для водителя",
+            "Коэффициент стоимости полиса",
+        ],
+        refusal: "отказ в оформлении полиса",
+        conditions: &[
+            gate("у водителя есть действующее удостоверение"),
+            gate("автомобиль прошёл техосмотр"),
+            Cond {
+                text: "водительский стаж больше # лет",
+                values: &[2, 3, 5],
+                gate: true,
+            },
+            flag("за последний год были страховые случаи"),
+            num("автомобиль старше # лет", &[3, 5, 7, 10, 15]),
+            flag("автомобиль хранится в гараже"),
+            flag("установлена противоугонная система"),
+            num(
+                "мощность двигателя больше # л. с.",
+                &[100, 120, 150, 200, 250],
+            ),
+            num("водителю больше # лет", &[25, 30, 35, 40, 45, 50, 60]),
+            flag("полис оформляется онлайн"),
+        ],
+        multi: &[
+            (
+                "категория транспорта",
+                &[
+                    "легковой автомобиль",
+                    "грузовик",
+                    "мотоцикл",
+                    "автобус",
+                    "прицеп",
+                ],
+            ),
+            (
+                "срок страхования",
+                &["3 месяца", "полгода", "год", "два года"],
+            ),
+        ],
+    },
+    Rulebook {
+        subjects: &[
+            "Стоимость проживания",
+            "Подтверждение бронирования",
+            "Цена номера за ночь",
+            "Размер предоплаты",
+        ],
+        refusal: "отказ в бронировании",
+        conditions: &[
+            gate("есть свободные номера на эти даты"),
+            gate("гость внёс предоплату"),
+            gate("данные карты гостя прошли проверку"),
+            num(
+                "бронирование сделано больше чем за # дней до заезда",
+                &[7, 10, 14, 30, 60],
+            ),
+            flag("гость — участник программы лояльности"),
+            num("проживание дольше # ночей", &[2, 3, 5, 7, 10, 14]),
+            flag("нужен трансфер из аэропорта"),
+            flag("заезд в выходные"),
+            num("в номере больше # гостей", &[2, 3]),
+            flag("гость бронирует напрямую через сайт отеля"),
+        ],
+        multi: &[
+            (
+                "тип номера",
+                &["стандарт", "улучшенный", "люкс", "семейный", "апартаменты"],
+            ),
+            (
+                "питание",
+                &["без питания", "завтрак", "полупансион", "всё включено"],
+            ),
+        ],
+    },
 ];
 
+fn bullet_list(lines: &[String]) -> String {
+    lines
+        .iter()
+        .map(|l| format!("- {l}"))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn decision_table(level: u8, rng: &mut Rng) -> Draft {
+    let book = pick(rng, RULEBOOKS);
+    let subject = *pick(rng, book.subjects);
+    let all: Vec<&Cond> = book.conditions.iter().collect();
     match level {
         1 => {
             let n = range(rng, 2, 4) as usize;
-            let conds = pick_n(rng, CONDITIONS, n);
+            let conds: Vec<String> = pick_n(rng, &all, n).iter().map(|c| c.render(rng)).collect();
+            let lead = if chance(rng, 0.5) {
+                "зависит от булевых условий"
+            } else {
+                "определяется булевыми условиями"
+            };
+            let question = *pick(
+                rng,
+                &[
+                    "Сколько правил (столбцов) будет в полной таблице решений?",
+                    "Сколько столбцов-правил содержит полная (несокращённая) таблица решений для этих условий?",
+                    "Сколько правил получится в полной таблице решений, если перебрать все комбинации условий?",
+                ],
+            );
             Draft::integer(
-                format!(
-                    "Логика расчёта стоимости зависит от булевых условий:\n\n{}\n\nСколько правил (столбцов) будет в полной таблице решений?",
-                    conds
-                        .iter()
-                        .map(|c| format!("- {c}"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ),
+                format!("{subject} {lead}:\n\n{}\n\n{question}", bullet_list(&conds)),
                 1 << n,
             )
         }
         2 => {
             let n = range(rng, 1, 3) as usize;
-            let conds = pick_n(rng, CONDITIONS, n);
-            let (multi, k) = *pick(
-                rng,
-                &[
-                    ("тип клиента: новый, постоянный или VIP", 3i64),
-                    (
-                        "регион: Москва, Санкт-Петербург, другой город или другая страна",
-                        4,
-                    ),
-                    ("способ доставки: курьер, самовывоз или почта", 3),
-                ],
+            let &(label, pool) = pick(rng, book.multi);
+            let k = if chance(rng, 1.0 / 3.0) { 4 } else { 3 };
+            let values = pick_n(rng, pool, k);
+            let multi = format!(
+                "{label}: {} или {}",
+                values[..k - 1].join(", "),
+                values[k - 1]
             );
+            let mut lines: Vec<String> = pick_n(rng, &all, n)
+                .iter()
+                .map(|c| format!("{} (да/нет)", c.render(rng)))
+                .collect();
+            let at = range(rng, 0, n as i64) as usize;
+            lines.insert(at, multi);
+            let lead = if chance(rng, 0.5) {
+                "зависит от условий"
+            } else {
+                "определяется условиями"
+            };
+            let question = if chance(rng, 0.5) {
+                "Сколько правил будет в полной таблице решений?"
+            } else {
+                "Сколько столбцов (правил) содержит полная таблица решений?"
+            };
             Draft::integer(
-                format!(
-                    "Логика расчёта стоимости зависит от условий:\n\n- {multi}\n{}\n\nСколько правил будет в полной таблице решений?",
-                    conds
-                        .iter()
-                        .map(|c| format!("- {c} (да/нет)"))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                ),
-                k << n,
+                format!("{subject} {lead}:\n\n{}\n\n{question}", bullet_list(&lines)),
+                (k as i64) << n,
             )
         }
         _ => {
             let n = range(rng, 3, 5) as usize;
             let dominant = range(rng, 1, 2) as usize;
-            let conds = pick_n(rng, CONDITIONS, n);
-            let gates: Vec<String> = conds[..dominant]
+            let (gates, rest): (Vec<&Cond>, Vec<&Cond>) = all.iter().partition(|c| c.gate);
+            let mut chosen: Vec<&Cond> = pick_n(rng, &gates, dominant);
+            chosen.extend(pick_n(rng, &rest, n - dominant));
+            let conds: Vec<String> = chosen.iter().map(|c| c.render(rng)).collect();
+            let refusal = book.refusal;
+            let rules: Vec<String> = conds[..dominant]
                 .iter()
                 .enumerate()
                 .map(|(i, c)| {
                     if i == 0 {
-                        format!("если неверно, что {c}, — отказ независимо от остальных условий")
+                        format!("если неверно, что {c}, — {refusal} независимо от остальных условий")
                     } else {
-                        format!("если первое условие выполнено, но неверно, что {c}, — тоже отказ независимо от остальных")
+                        format!("если первое условие выполнено, но неверно, что {c}, — тоже {refusal} независимо от остальных")
                     }
                 })
                 .collect();
+            let lead = if chance(rng, 0.5) {
+                "задаётся таблицей решений"
+            } else {
+                "описывается таблицей решений"
+            };
             let answer = dominant as i64 + (1i64 << (n - dominant));
             Draft::integer(
                 format!(
-                    "Таблица решений строится по {n} булевым условиям:\n\n{}\n\nПравила: {}. Остальные комбинации дают разные результаты. \
+                    "{subject} {lead} по {n} булевым условиям:\n\n{}\n\nПравила: {}. Остальные комбинации дают разные результаты. \
                      Сколько правил останется в таблице после схлопывания столбцов с безразличными («—») условиями?",
-                    conds
-                        .iter()
-                        .map(|c| format!("- {c}"))
-                        .collect::<Vec<_>>()
-                        .join("\n"),
-                    gates.join("; ")
+                    bullet_list(&conds),
+                    rules.join("; ")
                 ),
                 answer,
             )
@@ -799,47 +1477,206 @@ fn api_assertions(level: u8, rng: &mut Rng) -> Draft {
     .code("python", code)
 }
 
+struct Flow {
+    /// Nominative, lowercase unless it starts with an acronym.
+    who: &'static str,
+    /// Genitive plural of the unit of work.
+    items: &'static str,
+    /// Per-item time in nominative and prepositional case.
+    time: (&'static str, &'static str),
+}
+
+const RESPONSE_TIME: (&str, &str) = ("время ответа", "времени ответа");
+
+const FLOWS: &[Flow] = &[
+    Flow {
+        who: "сервис авторизации",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "API каталога",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "сервис поиска",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "API-шлюз",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "бэкенд мобильного приложения",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "сервис рекомендаций",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "микросервис корзины",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "сервис геокодинга",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "сервис профилей пользователей",
+        items: "запросов",
+        time: RESPONSE_TIME,
+    },
+    Flow {
+        who: "платёжный шлюз",
+        items: "транзакций",
+        time: ("время обработки транзакции", "времени обработки транзакции"),
+    },
+    Flow {
+        who: "консьюмер очереди заказов",
+        items: "сообщений",
+        time: ("время обработки сообщения", "времени обработки сообщения"),
+    },
+    Flow {
+        who: "сервис уведомлений",
+        items: "сообщений",
+        time: ("время отправки сообщения", "времени отправки сообщения"),
+    },
+    Flow {
+        who: "обработчик событий аналитики",
+        items: "событий",
+        time: ("время обработки события", "времени обработки события"),
+    },
+];
+
+const LOAD_TOOLS: &[&str] = &["k6", "JMeter", "Locust", "Gatling"];
+
+const LOAD_SCENARIOS: &[&str] = &[
+    "Поиск товара",
+    "Оформление заказа",
+    "Вход в личный кабинет",
+    "Просмотр каталога",
+    "Добавление в корзину",
+    "Оплата заказа",
+    "Загрузка ленты",
+    "Отправка сообщения",
+];
+
 fn littles_law(level: u8, rng: &mut Rng) -> Draft {
-    let r: f64 = *pick(rng, &[0.2, 0.25, 0.4, 0.5, 0.8, 1.2, 1.5, 2.0]);
+    let r: f64 = *pick(
+        rng,
+        &[
+            0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.6, 0.75, 0.8, 1.2, 1.5, 2.0, 2.5,
+        ],
+    );
+    let rt = fmt_number(r);
     match level {
         1 => {
-            let x = range(rng, 2, 40) * 10;
-            Draft::number(
-                format!(
-                    "Сервис стабильно обрабатывает в среднем {x} запросов в секунду, среднее время ответа — {} с. Сколько запросов в среднем одновременно находятся в обработке?",
-                    fmt_number(r)
-                ),
-                x as f64 * r,
-                0.01,
-            )
-            .hint("Число")
+            let x = range(rng, 2, 50) * 10;
+            let f = pick(rng, FLOWS);
+            let items = f.items;
+            let lead = *pick(
+                rng,
+                &[
+                    "",
+                    "По данным мониторинга, ",
+                    "В часы пик ",
+                    "Во время нагрузочного теста ",
+                    "В установившемся режиме ",
+                ],
+            );
+            let verb = *pick(
+                rng,
+                &["стабильно обрабатывает", "обрабатывает", "обслуживает"],
+            );
+            let load = capitalize(&format!(
+                "{lead}{} {verb} в среднем {x} {items} в секунду",
+                f.who
+            ));
+            let timing = if chance(rng, 0.5) {
+                format!(", среднее {} — {rt} с.", f.time.0)
+            } else {
+                format!(" при среднем {} {rt} с.", f.time.1)
+            };
+            let question = match range(rng, 0, 2) {
+                0 => format!("Сколько {items} в среднем одновременно находятся в обработке?"),
+                1 => format!("Сколько {items} в среднем обрабатываются одновременно?"),
+                _ => format!("Какое среднее число {items} одновременно находится в системе?"),
+            };
+            Draft::number(format!("{load}{timing} {question}"), x as f64 * r, 0.01)
         }
         2 => {
             let x = range(rng, 2, 30) * 10;
             let z = range(rng, 1, 10) as f64;
+            let zt = fmt_number(z);
+            let tool = *pick(rng, LOAD_TOOLS);
+            let scenario = *pick(rng, LOAD_SCENARIOS);
+            let lead = match range(rng, 0, 2) {
+                0 => format!("Нагрузочный тест в закрытой модели ({tool}, сценарий «{scenario}»)"),
+                1 => {
+                    format!("Сценарий «{scenario}» запускается в {tool} в закрытой модели нагрузки")
+                }
+                _ => format!("В {tool} настроен тест в закрытой модели для сценария «{scenario}»"),
+            };
+            let pause = if chance(rng, 0.5) {
+                format!("затем делает паузу (think time) {zt} с")
+            } else {
+                format!("затем выдерживает think time {zt} с")
+            };
+            let question = match range(rng, 0, 2) {
+                0 => format!(
+                    "Сколько виртуальных пользователей нужно, чтобы получить {x} запросов в секунду?"
+                ),
+                1 => format!(
+                    "Сколько виртуальных пользователей нужно запустить, чтобы тест создавал {x} запросов в секунду?"
+                ),
+                _ => format!(
+                    "Какое число виртуальных пользователей обеспечит нагрузку {x} запросов в секунду?"
+                ),
+            };
             Draft::number(
                 format!(
-                    "Нагрузочный тест в закрытой модели: каждый виртуальный пользователь отправляет запрос, ждёт ответ (в среднем {} с), затем делает паузу (think time) {} с и повторяет. \
-                     Сколько виртуальных пользователей нужно, чтобы получить {x} запросов в секунду?",
-                    fmt_number(r),
-                    fmt_number(z)
+                    "{lead}: каждый виртуальный пользователь отправляет запрос, ждёт ответ (в среднем {rt} с), {pause} и повторяет. {question}"
                 ),
                 x as f64 * (r + z),
                 0.01,
             )
-            .hint("Число")
         }
         _ => {
             let users = range(rng, 5, 60) * 10;
             let z = range(rng, 1, 10) as f64;
+            let zt = fmt_number(z);
             let x = users as f64 / (r + z);
-            Draft::number(
-                format!(
-                    "В закрытой модели нагрузки {users} виртуальных пользователей; среднее время ответа — {} с, think time — {} с. \
-                     Какую пропускную способность (запросов в секунду) создаст тест в установившемся режиме?",
-                    fmt_number(r),
-                    fmt_number(z)
+            let tool = *pick(rng, LOAD_TOOLS);
+            let scenario = *pick(rng, LOAD_SCENARIOS);
+            let setup = match range(rng, 0, 2) {
+                0 => format!(
+                    "Тест в {tool} для сценария «{scenario}» работает в закрытой модели: {users} виртуальных пользователей, среднее время ответа — {rt} с, think time — {zt} с."
                 ),
+                1 => format!(
+                    "В закрытой модели нагрузки ({tool}, сценарий «{scenario}») {users} виртуальных пользователей; среднее время ответа — {rt} с, think time — {zt} с."
+                ),
+                _ => format!(
+                    "Сценарий «{scenario}» в {tool}: {users} виртуальных пользователей в закрытой модели, среднее время ответа — {rt} с, пауза между итерациями (think time) — {zt} с."
+                ),
+            };
+            let question = *pick(
+                rng,
+                &[
+                    "Какую пропускную способность (запросов в секунду) создаст тест в установившемся режиме?",
+                    "Сколько запросов в секунду создаст тест в установившемся режиме?",
+                    "Какую нагрузку в запросах в секунду даст тест в установившемся режиме?",
+                ],
+            );
+            Draft::number(
+                format!("{setup} {question}"),
                 (x * 10.0).round() / 10.0,
                 0.051,
             )

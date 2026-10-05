@@ -108,6 +108,32 @@ fn every_template_level_generates_valid_items() {
     }
 }
 
+/// Leak resistance (architecture §5.2) needs a leaked instance to practically never recur:
+/// with N equally likely variants, 500 seeds collide about 500² / 2N times, so ≥ 490 distinct
+/// means N in the tens of thousands. Pools are capped by their hand-written combinations.
+#[test]
+fn instances_rarely_repeat() {
+    const VARIETY_SEEDS: u64 = 500;
+    for t in bank().templates() {
+        let min = if t.is_pool() { 430 } else { 490 };
+        for level in t.levels {
+            let rendered: Vec<String> = (0..VARIETY_SEEDS)
+                .map(|seed| {
+                    let v = render(&item(t, level.level, seed)).unwrap();
+                    format!("{}|{:?}|{:?}", v.prompt, v.code, v.options)
+                })
+                .collect();
+            let distinct = distinct_count(rendered.iter().map(String::as_str));
+            assert!(
+                distinct >= min,
+                "{} L{}: only {distinct} distinct instances in {VARIETY_SEEDS} seeds",
+                t.id,
+                level.level
+            );
+        }
+    }
+}
+
 #[test]
 fn generation_is_deterministic() {
     for t in bank().templates() {

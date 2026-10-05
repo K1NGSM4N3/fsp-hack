@@ -2,7 +2,7 @@
 
 use catalog::Specialization::{self, Backend, Devops, Frontend, Ml, Qa, Security};
 
-use super::util::{chance, join, md_table, pick, pick_n, range, shuffled};
+use super::util::{chance, join, md_table, pick, pick_n, plural_ru, range, shuffled};
 use super::{C_CHOICE, C_MULTI5, C_OPEN, Draft, Level, Rng, Source, Template, Topic};
 
 const ALL_SPECS: &[Specialization] = &[Backend, Frontend, Devops, Qa, Ml, Security];
@@ -196,17 +196,75 @@ impl Loop {
     }
 }
 
-const LOOP_VARS: &[&str] = &["i", "j", "k", "m"];
+/// Loop variables by nesting depth; none of them may be `n` or a counter name.
+const LOOP_VAR_SETS: &[[&str; 4]] = &[
+    ["i", "j", "k", "m"],
+    ["i", "j", "k", "t"],
+    ["a", "b", "c", "d"],
+    ["x", "y", "z", "w"],
+    ["p", "q", "r", "s"],
+    ["u", "v", "w", "t"],
+];
 
-fn render_loops(loops: &[Loop], depth: usize, indent: usize, rng: &mut Rng, out: &mut String) {
+const LOOP_COUNTERS: &[&str] = &["total", "count", "ops", "steps", "calls", "hits"];
+
+const LOOP_FUNCTIONS: &[&str] = &[
+    "count_ops",
+    "work",
+    "process",
+    "solve",
+    "run",
+    "compute",
+    "simulate",
+    "scan",
+    "crunch",
+    "measure",
+    "tally",
+    "evaluate",
+    "walk",
+    "estimate",
+    "churn",
+    "build_index",
+];
+
+/// Purely cosmetic rendering choices: none of them changes the iteration count's asymptotics.
+struct LoopStyle {
+    vars: [&'static str; 4],
+    counter: &'static str,
+    one_based: bool,
+    long_assign: bool,
+}
+
+fn render_loops(
+    loops: &[Loop],
+    depth: usize,
+    indent: usize,
+    style: &LoopStyle,
+    rng: &mut Rng,
+    out: &mut String,
+) {
     let pad = "    ".repeat(indent);
     let Some((&first, rest)) = loops.split_first() else {
-        out.push_str(&format!("{pad}total += 1\n"));
+        out.push_str(&format!("{pad}{} += 1\n", style.counter));
         return;
     };
-    let v = LOOP_VARS[depth];
-    let outer = if depth > 0 { LOOP_VARS[depth - 1] } else { "n" };
+    let v = style.vars[depth];
+    let outer = if depth > 0 {
+        style.vars[depth - 1]
+    } else {
+        "n"
+    };
+    let update = |op: &str| {
+        if style.long_assign {
+            format!("{pad}    {v} = {v} {op} 2\n")
+        } else {
+            format!("{pad}    {v} {op}= 2\n")
+        }
+    };
     match first {
+        Loop::Linear if style.one_based => {
+            out.push_str(&format!("{pad}for {v} in range(1, n + 1):\n"));
+        }
         Loop::Linear => out.push_str(&format!("{pad}for {v} in range(n):\n")),
         Loop::LinearDependent => {
             if chance(rng, 0.5) {
@@ -220,24 +278,24 @@ fn render_loops(loops: &[Loop], depth: usize, indent: usize, rng: &mut Rng, out:
         Loop::Square => out.push_str(&format!("{pad}for {v} in range(n * n):\n")),
         Loop::Doubling => {
             out.push_str(&format!("{pad}{v} = 1\n{pad}while {v} < n:\n"));
-            render_loops(rest, depth + 1, indent + 1, rng, out);
-            out.push_str(&format!("{pad}    {v} *= 2\n"));
+            render_loops(rest, depth + 1, indent + 1, style, rng, out);
+            out.push_str(&update("*"));
             return;
         }
         Loop::Halving => {
             out.push_str(&format!("{pad}{v} = n\n{pad}while {v} > 1:\n"));
-            render_loops(rest, depth + 1, indent + 1, rng, out);
-            out.push_str(&format!("{pad}    {v} //= 2\n"));
+            render_loops(rest, depth + 1, indent + 1, style, rng, out);
+            out.push_str(&update("//"));
             return;
         }
         Loop::HalvingDependent => {
             out.push_str(&format!("{pad}{v} = {outer}\n{pad}while {v} > 0:\n"));
-            render_loops(rest, depth + 1, indent + 1, rng, out);
-            out.push_str(&format!("{pad}    {v} //= 2\n"));
+            render_loops(rest, depth + 1, indent + 1, style, rng, out);
+            out.push_str(&update("//"));
             return;
         }
     }
-    render_loops(rest, depth + 1, indent + 1, rng, out);
+    render_loops(rest, depth + 1, indent + 1, style, rng, out);
 }
 
 fn block_complexity(block: &[Loop]) -> Complexity {
@@ -250,18 +308,22 @@ fn loop_complexity(level: u8, rng: &mut Rng) -> Draft {
     use Loop::*;
     let blocks: Vec<Vec<Loop>> = match level {
         1 => {
+            let inner = range(rng, 5, 20) as u32;
+            let outer = range(rng, 100, 500) as u32;
+            let step = range(rng, 2, 4) as u8;
             let patterns: [&[Loop]; 7] = [
                 &[Linear],
                 &[Linear, Linear],
                 &[Linear, LinearDependent],
-                &[Linear, Constant(10)],
-                &[Constant(100), Linear],
-                &[Linear, LinearStep(2)],
+                &[Linear, Constant(inner)],
+                &[Constant(outer), Linear],
+                &[Linear, LinearStep(step)],
                 &[Linear, Linear, Linear],
             ];
             vec![pick(rng, &patterns).to_vec()]
         }
         2 => {
+            let outer = range(rng, 10, 50) as u32 * 100;
             let patterns: [&[Loop]; 8] = [
                 &[Doubling],
                 &[Linear, Doubling],
@@ -269,24 +331,26 @@ fn loop_complexity(level: u8, rng: &mut Rng) -> Draft {
                 &[Linear, HalvingDependent],
                 &[Doubling, Halving],
                 &[Linear, Linear, Doubling],
-                &[Constant(1000), Halving],
+                &[Constant(outer), Halving],
                 &[Linear, LinearDependent, Halving],
             ];
             vec![pick(rng, &patterns).to_vec()]
         }
         _ => {
+            let tiny = range(rng, 3, 9) as u32;
+            let mid = range(rng, 20, 80) as u32;
             let heavy: [&[Loop]; 6] = [
                 &[Square],
                 &[Square, Doubling],
                 &[Linear, Linear, Halving],
                 &[Linear, LinearDependent, LinearDependent],
                 &[Linear, Doubling, Halving],
-                &[Square, Constant(5)],
+                &[Square, Constant(tiny)],
             ];
             let light: [&[Loop]; 6] = [
                 &[Linear, HalvingDependent],
                 &[Doubling, Doubling],
-                &[Linear, Constant(50), Linear],
+                &[Linear, Constant(mid), Linear],
                 &[Linear, Linear],
                 &[Halving, Linear],
                 &[Linear],
@@ -305,12 +369,19 @@ fn loop_complexity(level: u8, rng: &mut Rng) -> Draft {
         .max()
         .unwrap_or(Complexity::new(0, 0));
 
-    let fname = pick(rng, &["count_ops", "work", "process", "solve"]).to_string();
-    let mut code = format!("def {fname}(n):\n    total = 0\n");
+    let fname = *pick(rng, LOOP_FUNCTIONS);
+    let style = LoopStyle {
+        vars: *pick(rng, LOOP_VAR_SETS),
+        counter: pick(rng, LOOP_COUNTERS),
+        one_based: chance(rng, 0.5),
+        long_assign: chance(rng, 0.5),
+    };
+    let counter = style.counter;
+    let mut code = format!("def {fname}(n):\n    {counter} = 0\n");
     for block in &blocks {
-        render_loops(block, 0, 1, rng, &mut code);
+        render_loops(block, 0, 1, &style, rng, &mut code);
     }
-    code.push_str("    return total\n");
+    code.push_str(&format!("    return {counter}\n"));
 
     let mut candidates = vec![
         complexities
@@ -340,14 +411,21 @@ fn loop_complexity(level: u8, rng: &mut Rng) -> Draft {
         .filter(|c| *c != answer)
         .map(Complexity::render);
 
-    Draft::choice(
-        format!(
-            "Какова асимптотическая сложность функции `{fname}` по времени (сколько раз выполнится `total += 1` в зависимости от `n`)?"
+    let prompt = match range(rng, 0, 3) {
+        0 => format!(
+            "Какова асимптотическая сложность функции `{fname}` по времени (сколько раз выполнится `{counter} += 1` в зависимости от `n`)?"
         ),
-        answer.render(),
-        distractors,
-    )
-    .code("python", code)
+        1 => format!(
+            "Сколько раз выполнится строка `{counter} += 1` при вызове `{fname}(n)`? Выберите точную асимптотическую оценку в зависимости от `n`."
+        ),
+        2 => format!(
+            "Функция `{fname}` считает шаги в переменной `{counter}`. Какой асимптотикой (точной оценкой) описывается её время работы в зависимости от `n`?"
+        ),
+        _ => format!(
+            "Оцените время работы `{fname}(n)`: как растёт число выполнений `{counter} += 1` с ростом `n`? Нужна точная асимптотическая оценка."
+        ),
+    };
+    Draft::choice(prompt, answer.render(), distractors).code("python", code)
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -1040,6 +1118,7 @@ fn left_join_rows(level: u8, rng: &mut Rng) -> Draft {
     )
 }
 
+/// Stems may contain `{key}` placeholders that [`http_vars`] fills per instance.
 struct StatusCase {
     code: &'static str,
     level: u8,
@@ -1054,8 +1133,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "200 OK",
         level: 1,
         stems: &[
-            "Клиент запросил `GET /api/products/42`, товар найден и возвращён в теле ответа. Какой код ответа уместен?",
-            "Запрос `GET /api/profile` выполнен успешно, сервер возвращает JSON с данными профиля. Какой код ответа?",
+            "Клиент запросил `GET /api/{res}/{id}`, запись найдена и возвращена в теле ответа. {q}",
+            "Запрос `GET /api/{res}` к сервису `{svc}` выполнен успешно, сервер возвращает JSON со списком записей. {q}",
+            "Сервис `{svc}` нашёл запись по запросу `GET /api/{res}/{id}` и отдаёт её представление в теле ответа. {q}",
         ],
         confusable: &[
             "201 Created",
@@ -1069,8 +1149,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "201 Created",
         level: 1,
         stems: &[
-            "`POST /api/orders` создал новый заказ; в ответе — его представление и заголовок `Location`. Какой код ответа?",
-            "Регистрация пользователя через `POST /api/users` прошла успешно, новый ресурс создан. Какой код ответа?",
+            "`POST /api/{res}` создал новую запись; в ответе — её представление и заголовок `Location: /api/{res}/{id}`. {q}",
+            "Регистрация пользователя через `POST /api/users` в сервисе `{svc}` прошла успешно, новый ресурс создан. {q}",
+            "Сервис `{svc}` обработал `POST /api/{res}` синхронно: новая запись уже сохранена и получила id {id}. {q}",
         ],
         confusable: &[
             "202 Accepted",
@@ -1084,8 +1165,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "400 Bad Request",
         level: 1,
         stems: &[
-            "Клиент прислал тело с синтаксически некорректным JSON (не закрыта фигурная скобка). Какой код ответа?",
-            "Сервер не смог разобрать запрос: тело `{\"name\": \"x\",,}` не является валидным JSON. Какой код ответа?",
+            "Клиент прислал в `POST /api/{res}` тело с синтаксически некорректным JSON (не закрыта фигурная скобка). {q}",
+            "Сервис `{svc}` не смог разобрать запрос: тело `{\"name\": \"x\",,}` не является валидным JSON. {q}",
+            "В `PATCH /api/{res}/{id}` пришло тело `{\"status\": }` — это синтаксически некорректный JSON. {q}",
         ],
         confusable: &[
             "401 Unauthorized",
@@ -1099,8 +1181,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "401 Unauthorized",
         level: 1,
         stems: &[
-            "Запрос к защищённому API пришёл без заголовка `Authorization`. Какой код ответа?",
-            "Срок действия access-токена истёк, клиент должен заново аутентифицироваться. Какой код ответа?",
+            "Запрос `GET /api/{res}` к защищённому API пришёл без заголовка `Authorization`. {q}",
+            "Срок действия access-токена истёк, клиент сервиса `{svc}` должен заново аутентифицироваться. {q}",
+            "Сервис `{svc}` получил `GET /api/{res}/{id}` с токеном, подпись которого не прошла проверку: клиент не аутентифицирован. {q}",
         ],
         confusable: &[
             "403 Forbidden",
@@ -1114,8 +1197,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "403 Forbidden",
         level: 1,
         stems: &[
-            "Пользователь аутентифицирован, но его роли не разрешено удалять чужие проекты. Какой код ответа?",
-            "Токен валиден, однако у сотрудника нет прав на просмотр раздела бухгалтерии. Какой код ответа?",
+            "Пользователь аутентифицирован, но его роли не разрешено удалять чужие записи в `/api/{res}`. {q}",
+            "Токен валиден, однако у сотрудника нет прав на просмотр раздела бухгалтерии в сервисе `{svc}`. {q}",
+            "Пользователь вошёл в систему, но изменять `/api/{res}/{id}` в сервисе `{svc}` могут только администраторы, а у него обычная роль. {q}",
         ],
         confusable: &[
             "401 Unauthorized",
@@ -1129,8 +1213,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "404 Not Found",
         level: 1,
         stems: &[
-            "`GET /api/users/9999` — пользователя с таким id не существует. Какой код ответа?",
-            "Клиент обратился по адресу `/api/v1/reprots` (опечатка в пути), такого ресурса нет. Какой код ответа?",
+            "`GET /api/{res}/{id}` — записи с таким id не существует. {q}",
+            "Клиент обратился к сервису `{svc}` по адресу `/api/v1/reprots` (опечатка в пути), такого ресурса нет. {q}",
+            "Сервис `{svc}` получил `GET /api/{res}/{id}`, но записи с таким идентификатором нет и никогда не было. {q}",
         ],
         confusable: &[
             "400 Bad Request",
@@ -1144,8 +1229,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "500 Internal Server Error",
         level: 1,
         stems: &[
-            "Обработчик корректного запроса упал с необработанным исключением `NullPointerException`. Какой код ответа?",
-            "В коде сервера произошла непредвиденная ошибка (деление на ноль), хотя запрос клиента корректен. Какой код ответа?",
+            "Обработчик корректного запроса `GET /api/{res}/{id}` упал с необработанным исключением `{exc}`. {q}",
+            "В коде сервиса `{svc}` произошла непредвиденная ошибка (деление на ноль), хотя запрос клиента корректен. {q}",
         ],
         confusable: &[
             "400 Bad Request",
@@ -1159,8 +1244,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "204 No Content",
         level: 2,
         stems: &[
-            "`DELETE /api/files/17` выполнен успешно, тело ответа не нужно. Какой код ответа точнее всего?",
-            "`PUT /api/settings` сохранил настройки, сервер ничего не возвращает в теле. Какой код ответа точнее всего?",
+            "`DELETE /api/{res}/{id}` выполнен успешно, тело ответа не нужно. Какой код ответа точнее всего?",
+            "`PUT /api/settings` в сервисе `{svc}` обновил существующие настройки, сервер ничего не возвращает в теле. Какой код ответа точнее всего?",
+            "Сервис `{svc}` успешно удалил запись по `DELETE /api/{res}/{id}` и не передаёт тело ответа. Какой код ответа точнее всего?",
         ],
         confusable: &[
             "201 Created",
@@ -1174,8 +1260,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "304 Not Modified",
         level: 2,
         stems: &[
-            "Браузер прислал `If-None-Match` с ETag, который совпадает с текущей версией ресурса. Какой код ответа?",
-            "Клиент сделал условный GET с `If-Modified-Since`, ресурс с тех пор не менялся. Какой код ответа?",
+            "Браузер прислал условный `GET /api/{res}/{id}` с `If-None-Match`, и ETag совпадает с текущей версией ресурса. {q}",
+            "Клиент сделал условный `GET /api/{res}` с `If-Modified-Since`, ресурс с тех пор не менялся. {q}",
         ],
         confusable: &[
             "204 No Content",
@@ -1189,8 +1275,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "405 Method Not Allowed",
         level: 2,
         stems: &[
-            "Эндпоинт `/api/reports` поддерживает только GET, а клиент отправил DELETE. Какой код ответа?",
-            "На ресурс, доступный только для чтения, пришёл `POST`; метод для него не поддерживается. Какой код ответа (вместе с заголовком `Allow`)?",
+            "Эндпоинт `/api/{res}` поддерживает только GET, а клиент отправил DELETE. {q}",
+            "На ресурс `/api/{res}`, доступный только для чтения, пришёл `POST`; метод для него не поддерживается. Какой код ответа (вместе с заголовком `Allow`)?",
+            "Сервис `{svc}` реализует для `/api/{res}/{id}` только GET и PUT, а клиент прислал `PATCH`. {q}",
         ],
         confusable: &[
             "403 Forbidden",
@@ -1204,8 +1291,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "409 Conflict",
         level: 2,
         stems: &[
-            "Попытка перевести заказ в статус «отправлен», хотя он уже отменён: запрос конфликтует с текущим состоянием ресурса. Какой код ответа?",
-            "Два пользователя редактировали один документ, и сервер обнаружил, что второе сохранение конфликтует с текущим состоянием ресурса. Какой код ответа?",
+            "Попытка перевести заказ №{id} в статус «отправлен», хотя он уже отменён: запрос конфликтует с текущим состоянием ресурса. {q}",
+            "Два пользователя редактировали один документ в сервисе `{svc}`, и сервер обнаружил, что второе сохранение конфликтует с текущим состоянием ресурса. {q}",
+            "`POST /api/users` пытается создать пользователя с логином, который уже занят: запрос конфликтует с текущим состоянием ресурса. {q}",
         ],
         confusable: &[
             "403 Forbidden",
@@ -1223,8 +1311,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "429 Too Many Requests",
         level: 2,
         stems: &[
-            "Клиент превысил лимит 100 запросов в минуту. Какой код ответа (обычно с заголовком `Retry-After`)?",
-            "Сработал rate limiter: с одного IP пришло слишком много попыток входа. Какой код ответа?",
+            "Клиент превысил лимит {rps} запросов в минуту к `/api/{res}`. Какой код ответа (обычно с заголовком `Retry-After`)?",
+            "Сработал rate limiter сервиса `{svc}`: с одного IP пришло слишком много попыток входа. {q}",
         ],
         confusable: &[
             "403 Forbidden",
@@ -1238,8 +1326,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "503 Service Unavailable",
         level: 2,
         stems: &[
-            "Сервис временно выведен на техническое обслуживание и вернётся через 10 минут. Какой код ответа?",
-            "Сервер перегружен и временно не принимает запросы; клиенту стоит повторить позже согласно `Retry-After`. Какой код ответа?",
+            "Сервис `{svc}` временно выведен на техническое обслуживание и вернётся через {min} минут. {q}",
+            "Сервер перегружен и временно не принимает запросы к `/api/{res}`; клиенту стоит повторить позже согласно `Retry-After`. {q}",
         ],
         confusable: &[
             "500 Internal Server Error",
@@ -1253,8 +1341,9 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "301 Moved Permanently",
         level: 2,
         stems: &[
-            "Страница навсегда переехала с `/old-blog` на `/blog`, поисковики должны обновить ссылку. Какой код ответа для GET-запросов?",
-            "Домен сменился навсегда: все GET-запросы к `old.example.ru` нужно постоянно перенаправлять на `example.ru`. Какой код ответа?",
+            "Страница навсегда переехала с `/old-{slug}` на `/{slug}`, поисковики должны обновить ссылку. Какой код ответа для GET-запросов?",
+            "Домен сменился навсегда: все GET-запросы к `old.{dom}` нужно постоянно перенаправлять на `{dom}`. {q}",
+            "Раздел `/{slug}` сайта `{dom}` навсегда переехал на поддомен `{slug}.{dom}`, браузеры и поисковики должны запомнить новый адрес. Какой код ответа для GET-запросов?",
         ],
         confusable: &[
             "302 Found",
@@ -1268,8 +1357,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "502 Bad Gateway",
         level: 3,
         stems: &[
-            "Nginx проксирует запрос на приложение, но процесс приложения упал, и соединение с upstream отклонено. Какой код вернёт nginx?",
-            "Обратный прокси получил от вышестоящего сервера некорректный ответ. Какой код он вернёт клиенту?",
+            "Nginx проксирует запрос на приложение `{svc}`, но процесс приложения упал, и соединение с upstream отклонено. Какой код вернёт nginx?",
+            "Обратный прокси получил от вышестоящего сервера `{svc}` некорректный ответ. Какой код он вернёт клиенту?",
         ],
         confusable: &[
             "504 Gateway Timeout",
@@ -1283,8 +1372,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "504 Gateway Timeout",
         level: 3,
         stems: &[
-            "Nginx ждал ответа приложения дольше `proxy_read_timeout` и не дождался. Какой код получит клиент?",
-            "API-шлюз не получил ответ от вышестоящего сервиса за отведённое время. Какой код ответа вернёт шлюз?",
+            "Nginx ждал ответа приложения `{svc}` дольше `proxy_read_timeout {sec}s` и не дождался. Какой код получит клиент?",
+            "API-шлюз не получил ответ от вышестоящего сервиса `{svc}` за отведённые {sec} секунд. Какой код ответа вернёт шлюз?",
         ],
         confusable: &[
             "502 Bad Gateway",
@@ -1298,8 +1387,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "307 Temporary Redirect",
         level: 3,
         stems: &[
-            "Нужно временно перенаправить `POST /api/upload` на другой сервер так, чтобы клиент повторил именно POST с тем же телом. Какой код ответа?",
-            "Нужен временный редирект, при котором метод и тело запроса гарантированно сохраняются. Какой код ответа?",
+            "Нужно временно перенаправить `POST /api/{res}` на другой сервер так, чтобы клиент повторил именно POST с тем же телом. Какой код ответа?",
+            "Сервису `{svc}` нужен временный редирект, при котором метод и тело запроса гарантированно сохраняются. {q}",
         ],
         confusable: &[
             "302 Found",
@@ -1313,8 +1402,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "308 Permanent Redirect",
         level: 3,
         stems: &[
-            "API навсегда переехал на новый адрес, и клиенты должны повторять даже `POST` и `PUT` без смены метода. Какой код редиректа?",
-            "Нужен постоянный редирект с гарантией сохранения метода и тела запроса. Какой код ответа?",
+            "API `{svc}` навсегда переехал на новый адрес, и клиенты должны повторять даже `POST` и `PUT` без смены метода. Какой код редиректа?",
+            "Эндпоинт `/api/{res}` навсегда переехал на `/api/v2/{res}`; нужен постоянный редирект с гарантией сохранения метода и тела запроса. {q}",
         ],
         confusable: &[
             "301 Moved Permanently",
@@ -1328,8 +1417,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "412 Precondition Failed",
         level: 3,
         stems: &[
-            "Клиент отправил `PUT` с заголовком `If-Match: \"v7\"`, а текущая версия ресурса — `\"v8\"`. Какой код ответа?",
-            "Условный запрос на обновление не выполнен: ETag в `If-Match` не совпал с актуальным. Какой код ответа?",
+            "Клиент отправил `PUT /api/{res}/{id}` с заголовком `If-Match: \"v{ver}\"`, а текущая версия ресурса — `\"v{ver2}\"`. {q}",
+            "Условный запрос на обновление `/api/{res}/{id}` не выполнен: ETag в `If-Match` не совпал с актуальным. {q}",
         ],
         confusable: &[
             "304 Not Modified",
@@ -1343,8 +1432,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "415 Unsupported Media Type",
         level: 3,
         stems: &[
-            "Эндпоинт принимает только `application/json`, а клиент отправил тело с `Content-Type: text/xml`. Какой код ответа?",
-            "Сервер не умеет обрабатывать формат тела, указанный в `Content-Type` запроса. Какой код ответа?",
+            "Эндпоинт `POST /api/{res}` принимает только `application/json`, а клиент отправил тело с `Content-Type: text/xml`. {q}",
+            "Сервис `{svc}` не умеет обрабатывать формат тела, указанный в `Content-Type` запроса. {q}",
         ],
         confusable: &[
             "406 Not Acceptable",
@@ -1358,8 +1447,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "422 Unprocessable Content",
         level: 3,
         stems: &[
-            "JSON синтаксически корректен, но поле `age` равно `-5`, что нарушает правила валидации. Какой код точнее всего по RFC 9110?",
-            "Тело запроса разобрано успешно, но семантически неверно: дата окончания раньше даты начала. Какой код точнее всего по RFC 9110?",
+            "JSON синтаксически корректен, но поле `{field}` равно `-{neg}`, что нарушает правила валидации. Какой код точнее всего по RFC 9110?",
+            "Тело запроса `POST /api/{res}` разобрано успешно, но семантически неверно: дата окончания раньше даты начала. Какой код точнее всего по RFC 9110?",
         ],
         confusable: &[
             "415 Unsupported Media Type",
@@ -1373,8 +1462,8 @@ const STATUS_CASES: &[StatusCase] = &[
         code: "406 Not Acceptable",
         level: 3,
         stems: &[
-            "Клиент прислал `Accept: application/xml`, а сервер умеет отдавать только JSON и отказывает. Какой код ответа?",
-            "Сервер не может сформировать ответ ни в одном из форматов, перечисленных клиентом в заголовке `Accept`. Какой код ответа?",
+            "Клиент прислал `GET /api/{res}` с `Accept: application/xml`, а сервер умеет отдавать только JSON и отказывает. {q}",
+            "Сервис `{svc}` не может сформировать ответ ни в одном из форматов, перечисленных клиентом в заголовке `Accept`. {q}",
         ],
         confusable: &[
             "415 Unsupported Media Type",
@@ -1386,10 +1475,126 @@ const STATUS_CASES: &[StatusCase] = &[
     },
 ];
 
+const API_SERVICES: &[&str] = &[
+    "shop-api",
+    "core-api",
+    "backoffice",
+    "portal",
+    "crm",
+    "erp",
+    "marketplace",
+    "lk-api",
+    "mobile-bff",
+    "partner-api",
+    "admin-api",
+    "public-api",
+    "b2b-api",
+    "store",
+    "platform",
+    "hub",
+];
+
+const API_RESOURCES: &[&str] = &[
+    "orders",
+    "products",
+    "users",
+    "invoices",
+    "tickets",
+    "articles",
+    "files",
+    "projects",
+    "payments",
+    "comments",
+    "reports",
+    "bookings",
+    "documents",
+    "tasks",
+    "devices",
+    "subscriptions",
+];
+
+const STATUS_QUESTIONS: &[&str] = &[
+    "Какой код ответа?",
+    "Какой код ответа уместен?",
+    "Какой статус должен вернуть сервер?",
+    "Каким кодом должен ответить сервер?",
+    "Какой HTTP-статус здесь правильный?",
+];
+
+/// Per-instance values for stem placeholders. Numbers are chosen so that the nouns after them
+/// ("запросов", "минут", "секунд") keep the same plural form.
+fn http_vars(rng: &mut Rng) -> [(&'static str, String); 14] {
+    let ver = range(rng, 2, 40);
+    [
+        ("{svc}", pick(rng, API_SERVICES).to_string()),
+        ("{res}", pick(rng, API_RESOURCES).to_string()),
+        ("{id}", range(rng, 2, 9999).to_string()),
+        ("{q}", pick(rng, STATUS_QUESTIONS).to_string()),
+        (
+            "{rps}",
+            pick(rng, &[30, 50, 60, 100, 120, 200, 300, 500, 600, 1000]).to_string(),
+        ),
+        (
+            "{min}",
+            pick(rng, &[5, 10, 15, 20, 30, 40, 45, 60]).to_string(),
+        ),
+        (
+            "{sec}",
+            pick(rng, &[10, 15, 20, 30, 45, 60, 90, 120]).to_string(),
+        ),
+        ("{ver}", ver.to_string()),
+        ("{ver2}", (ver + range(rng, 1, 3)).to_string()),
+        (
+            "{field}",
+            pick(rng, &["age", "quantity", "price", "weight"]).to_string(),
+        ),
+        ("{neg}", range(rng, 1, 99).to_string()),
+        (
+            "{slug}",
+            pick(
+                rng,
+                &[
+                    "blog", "news", "docs", "help", "catalog", "about", "careers", "faq", "promo",
+                    "contacts",
+                ],
+            )
+            .to_string(),
+        ),
+        (
+            "{dom}",
+            pick(
+                rng,
+                &["example.ru", "example.com", "example.org", "example.net"],
+            )
+            .to_string(),
+        ),
+        (
+            "{exc}",
+            pick(
+                rng,
+                &[
+                    "NullPointerException",
+                    "KeyError",
+                    "IndexOutOfBoundsException",
+                    "TypeError",
+                    "AttributeError",
+                    "NoSuchElementException",
+                ],
+            )
+            .to_string(),
+        ),
+    ]
+}
+
+fn fill(stem: &str, vars: &[(&str, String)]) -> String {
+    vars.iter()
+        .fold(stem.to_owned(), |s, (key, value)| s.replace(key, value))
+}
+
 fn http_status(level: u8, rng: &mut Rng) -> Draft {
     let cases: Vec<&StatusCase> = STATUS_CASES.iter().filter(|c| c.level == level).collect();
     let case = *pick(rng, &cases);
-    let stem = *pick(rng, case.stems);
+    let stem = fill(pick(rng, case.stems), &http_vars(rng));
     let allowed = |code: &&str| *code != case.code && !case.exclude.contains(code);
     let confusable: Vec<&str> = case.confusable.iter().copied().filter(allowed).collect();
     let mut distractors: Vec<String> = pick_n(rng, &confusable, 2)
@@ -1452,6 +1657,7 @@ const METHODS: &[Method] = &[
 ];
 
 fn http_methods(level: u8, rng: &mut Rng) -> Draft {
+    let vars = http_vars(rng);
     match level {
         1 => {
             let ask_non_idempotent = chance(rng, 0.5);
@@ -1462,24 +1668,22 @@ fn http_methods(level: u8, rng: &mut Rng) -> Draft {
             };
             let correct = pick(rng, &good).name;
             let distractors = pick_n(rng, &bad, 3).into_iter().map(|m| m.name.to_owned());
-            let stem = if ask_non_idempotent {
-                *pick(
-                    rng,
-                    &[
-                        "Какой из методов HTTP **не** является идемпотентным по RFC 9110?",
-                        "Повтор какого запроса может создать дубликат, потому что метод не идемпотентен по RFC 9110?",
-                    ],
-                )
+            let stems: &[&str] = if ask_non_idempotent {
+                &[
+                    "В API сервиса `{svc}` есть эндпоинты для `/api/{res}`. Какой из методов HTTP **не** является идемпотентным по RFC 9110?",
+                    "Мобильное приложение повторяет запрос к `/api/{res}` сервиса `{svc}`, если не дождалось ответа. Повтор какого запроса может изменить итоговое состояние (например, создать дубликат), потому что метод не идемпотентен по RFC 9110?",
+                    "HTTP-клиент сервиса `{svc}` при таймауте сам повторяет запросы к `/api/{res}`, но только для идемпотентных по RFC 9110 методов. Какой из перечисленных методов он **не** станет повторять?",
+                    "Балансировщик перед `{svc}` при обрыве соединения с бэкендом пересылает запрос к `/api/{res}` на другой узел, только если метод идемпотентен по RFC 9110. Для какого из перечисленных методов он этого **не** сделает?",
+                ]
             } else {
-                *pick(
-                    rng,
-                    &[
-                        "Какой из методов HTTP является безопасным (safe), то есть не должен менять состояние сервера?",
-                        "Какой метод по семантике HTTP предназначен только для чтения и считается безопасным (safe)?",
-                    ],
-                )
+                &[
+                    "Сервис `{svc}` отдаёт данные по адресу `/api/{res}`. Какой из методов HTTP является безопасным (safe), то есть не должен менять состояние сервера?",
+                    "Для эндпоинта `/api/{res}` в `{svc}` нужен метод, который по семантике HTTP предназначен только для чтения и считается безопасным (safe). Какой из перечисленных подходит?",
+                    "Монитор доступности раз в минуту обращается к `/api/{res}` сервиса `{svc}` и не должен ничего менять на сервере. Какой из методов HTTP безопасен (safe) для такой проверки?",
+                    "Поисковый робот обходит портал `{svc}`, включая `/api/{res}`, и отправляет только безопасные (safe) запросы, не меняющие состояние сервера. Какой метод из перечисленных он может использовать?",
+                ]
             };
-            Draft::choice(stem, correct, distractors)
+            Draft::choice(fill(pick(rng, stems), &vars), correct, distractors)
         }
         _ => {
             let is_target = |m: &Method| {
@@ -1489,35 +1693,38 @@ fn http_methods(level: u8, rng: &mut Rng) -> Draft {
                     m.idempotent && !m.safe
                 }
             };
-            loop {
-                let chosen = pick_n(rng, METHODS, 5);
-                let hits = chosen.iter().filter(|m| is_target(m)).count();
-                if hits == 0 || hits == chosen.len() {
-                    continue;
+            // Leave out two methods so that the five shown always mix targets and non-targets.
+            let mut pairs = Vec::new();
+            for a in 0..METHODS.len() {
+                for b in a + 1..METHODS.len() {
+                    let hits = (0..METHODS.len())
+                        .filter(|&i| i != a && i != b && is_target(&METHODS[i]))
+                        .count();
+                    if hits > 0 && hits < METHODS.len() - 2 {
+                        pairs.push((a, b));
+                    }
                 }
-                let stem = if level == 2 {
-                    *pick(
-                        rng,
-                        &[
-                            "Отметьте все идемпотентные методы HTTP (по RFC 9110).",
-                            "Клиент повторил запрос из-за таймаута. Повтор каких методов по семантике HTTP не меняет итоговое состояние сервера (идемпотентны)? Отметьте все.",
-                        ],
-                    )
-                } else {
-                    *pick(
-                        rng,
-                        &[
-                            "Отметьте методы, которые идемпотентны, но **не** являются безопасными (safe) по RFC 9110.",
-                            "Какие методы меняют состояние сервера, но при повторе дают тот же итоговый результат? Отметьте все.",
-                        ],
-                    )
-                };
-                let options = chosen
-                    .iter()
-                    .map(|m| (m.name.to_owned(), is_target(m)))
-                    .collect();
-                return Draft::multi(stem, options);
             }
+            let (a, b) = *pick(rng, &pairs);
+            let stems: &[&str] = if level == 2 {
+                &[
+                    "Клиент API `{svc}` работает с ресурсом `/api/{res}`. Отметьте все идемпотентные методы HTTP (по RFC 9110).",
+                    "Клиент повторил запрос к `/api/{res}` сервиса `{svc}` из-за таймаута. Повтор каких методов по семантике HTTP не меняет итоговое состояние сервера (идемпотентны)? Отметьте все.",
+                    "HTTP-клиент сервиса `{svc}` при таймауте автоматически повторяет запрос к `/api/{res}`, но только если метод идемпотентен по RFC 9110. Для каких из перечисленных методов он сделает повтор? Отметьте все.",
+                    "В `{svc}` составляют список запросов к `/api/{res}`, которые можно повторить без последствий: повторное выполнение даёт на сервере тот же эффект, что и однократное. Какие методы обладают этим свойством по RFC 9110? Отметьте все.",
+                ]
+            } else {
+                &[
+                    "На ревью эндпоинтов `/api/{res}` сервиса `{svc}` отметьте методы, которые идемпотентны, но **не** являются безопасными (safe) по RFC 9110.",
+                    "Какие методы при запросе к `/api/{res}` сервиса `{svc}` меняют состояние сервера, но при повторе дают тот же итоговый результат? Отметьте все.",
+                    "Сервис `{svc}` отдельно помечает запросы к `/api/{res}`, которые меняют состояние сервера (метод не safe), но после таймаута их можно повторить без последствий (метод идемпотентен по RFC 9110). Какие методы получат такую пометку? Отметьте все.",
+                ]
+            };
+            let options = (0..METHODS.len())
+                .filter(|&i| i != a && i != b)
+                .map(|i| (METHODS[i].name.to_owned(), is_target(&METHODS[i])))
+                .collect();
+            Draft::multi(fill(pick(rng, stems), &vars), options)
         }
     }
 }
@@ -1537,11 +1744,21 @@ enum GitOp {
     Rebase(&'static str),
 }
 
+/// Equivalent spellings of the same commands; chosen once per script.
+#[derive(Clone, Copy)]
+struct GitStyle {
+    checkout: bool,
+    add_all: bool,
+}
+
 impl GitOp {
-    fn render(&self) -> String {
+    fn render(&self, style: GitStyle) -> String {
         match self {
+            GitOp::Commit(m) if style.add_all => format!("git add -A && git commit -m \"{m}\""),
             GitOp::Commit(m) => format!("git commit -am \"{m}\""),
+            GitOp::SwitchCreate(b) if style.checkout => format!("git checkout -b {b}"),
             GitOp::SwitchCreate(b) => format!("git switch -c {b}"),
+            GitOp::Switch(b) if style.checkout => format!("git checkout {b}"),
             GitOp::Switch(b) => format!("git switch {b}"),
             GitOp::Merge(b) => format!("git merge {b}"),
             GitOp::MergeNoFf(b) => format!("git merge --no-ff {b}"),
@@ -1562,15 +1779,15 @@ struct Repo {
 }
 
 impl Repo {
-    fn new(initial: usize) -> Self {
+    fn new(initial: usize, trunk: &'static str) -> Self {
         let mut parents = vec![Vec::new()];
         for i in 1..initial {
             parents.push(vec![i - 1]);
         }
         Self {
             parents,
-            branches: vec![("main", initial - 1)],
-            head: "main",
+            branches: vec![(trunk, initial - 1)],
+            head: trunk,
         }
     }
 
@@ -1691,11 +1908,61 @@ const COMMIT_MESSAGES: &[&str] = &[
     "chore: bump deps",
     "feat: export to csv",
     "fix: off-by-one in pager",
+    "feat: add search filters",
+    "fix: null check in profile",
+    "refactor: split handlers",
+    "docs: describe api",
+    "test: add e2e for checkout",
+    "chore: update ci config",
+    "feat: dark theme",
+    "fix: timezone in reports",
+    "perf: cache user lookups",
+    "style: apply formatter",
+    "feat: password reset",
+    "fix: retry on timeout",
+    "refactor: rename models",
+    "docs: add changelog",
+    "test: fix flaky test",
+    "chore: remove dead code",
+    "feat: paginate orders",
+    "fix: race in worker",
+    "build: pin toolchain",
+    "feat: email notifications",
+    "fix: escape html in comments",
+    "ci: cache dependencies",
+    "feat: upload avatars",
+    "fix: rounding in totals",
+];
+
+const TRUNK_BRANCHES: &[&str] = &["main", "master", "develop", "trunk"];
+
+const FEATURE_BRANCHES: &[&str] = &[
+    "feature",
+    "feat/auth",
+    "bugfix",
+    "topic",
+    "feature/login",
+    "feature/export",
+    "fix/pager",
+    "feat/search",
+    "hotfix/payments",
+    "feature/profile",
+    "exp/cache",
+    "refactor/api",
+    "feat/notifications",
+    "fix/timezone",
+    "feature/reports",
+    "chore/deps",
 ];
 
 fn git_history(level: u8, rng: &mut Rng) -> Draft {
-    let initial = range(rng, 2, 4) as usize;
-    let feature = *pick(rng, &["feature", "feat/auth", "bugfix", "topic"]);
+    let initial = range(rng, 2, 7) as usize;
+    let trunk = *pick(rng, TRUNK_BRANCHES);
+    let feature = *pick(rng, FEATURE_BRANCHES);
+    let style = GitStyle {
+        checkout: chance(rng, 0.5),
+        add_all: chance(rng, 0.5),
+    };
     let mut msg = {
         let pool = shuffled(rng, COMMIT_MESSAGES.to_vec());
         let mut i = 0;
@@ -1705,14 +1972,14 @@ fn git_history(level: u8, rng: &mut Rng) -> Draft {
         }
     };
     let mut ops: Vec<GitOp> = Vec::new();
-    let mut ask = "main";
+    let mut ask = trunk;
     match level {
         1 => {
             ops.push(GitOp::SwitchCreate(feature));
             for _ in 0..range(rng, 1, 3) {
                 ops.push(GitOp::Commit(msg()));
             }
-            ops.push(GitOp::Switch("main"));
+            ops.push(GitOp::Switch(trunk));
             for _ in 0..range(rng, 0, 2) {
                 ops.push(GitOp::Commit(msg()));
             }
@@ -1749,7 +2016,7 @@ fn git_history(level: u8, rng: &mut Rng) -> Draft {
             if chance(rng, 0.5) {
                 ops.push(GitOp::Revert);
             }
-            ops.push(GitOp::Switch("main"));
+            ops.push(GitOp::Switch(trunk));
             ops.push(GitOp::Merge(feature));
         }
         _ => {
@@ -1757,7 +2024,7 @@ fn git_history(level: u8, rng: &mut Rng) -> Draft {
             for _ in 0..range(rng, 2, 3) {
                 ops.push(GitOp::Commit(msg()));
             }
-            ops.push(GitOp::Switch("main"));
+            ops.push(GitOp::Switch(trunk));
             match range(rng, 0, 3) {
                 0 => {
                     ops.push(GitOp::MergeNoFf(feature));
@@ -1781,11 +2048,11 @@ fn git_history(level: u8, rng: &mut Rng) -> Draft {
                         ops.push(GitOp::Commit(msg()));
                     }
                     ops.push(GitOp::Switch(feature));
-                    ops.push(GitOp::Rebase("main"));
+                    ops.push(GitOp::Rebase(trunk));
                     if chance(rng, 0.5) {
                         ask = feature;
                     } else {
-                        ops.push(GitOp::Switch("main"));
+                        ops.push(GitOp::Switch(trunk));
                         ops.push(GitOp::Merge(feature));
                     }
                 }
@@ -1793,7 +2060,7 @@ fn git_history(level: u8, rng: &mut Rng) -> Draft {
         }
     }
 
-    let mut repo = Repo::new(initial);
+    let mut repo = Repo::new(initial, trunk);
     for op in &ops {
         if let GitOp::ResetHard(k) | GitOp::ResetSoft(k) = op {
             debug_assert!(*k <= repo.first_parent_depth(repo.tip(repo.head)));
@@ -1801,16 +2068,36 @@ fn git_history(level: u8, rng: &mut Rng) -> Draft {
         repo.apply(op);
     }
     let answer = repo.count(ask) as i64;
-    let script = ops.iter().map(GitOp::render).collect::<Vec<_>>().join("\n");
-    Draft::integer(
-        format!(
-            "В репозитории есть ветка `main` с линейной историей из {initial} коммитов, рабочая копия чистая, вы на `main`. \
-             Выполнили команды ниже; каждый `git commit` фиксирует новые изменения, конфликтов нет.\n\n\
-             Что выведет `git rev-list --count {ask}`?"
+    let script = ops
+        .iter()
+        .map(|op| op.render(style))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let intro = match range(rng, 0, 2) {
+        0 => format!(
+            "В репозитории есть ветка `{trunk}` с линейной историей из {initial} коммитов, рабочая копия чистая, вы на `{trunk}`."
         ),
-        answer,
-    )
-    .code("bash", script)
+        1 => format!(
+            "Вы на ветке `{trunk}`: в ней {} линейной истории, рабочая копия чистая.",
+            plural_ru(initial as i64, "коммит", "коммита", "коммитов")
+        ),
+        _ => format!(
+            "Локальный репозиторий: текущая ветка `{trunk}`, её история линейна и состоит из {initial} коммитов, незакоммиченных изменений нет."
+        ),
+    };
+    let rules = *pick(
+        rng,
+        &[
+            "Выполнили команды ниже; каждый `git commit` фиксирует новые изменения, конфликтов нет.",
+            "Затем выполнили команды ниже (каждый `git commit` фиксирует новые изменения, конфликтов не возникает).",
+        ],
+    );
+    let question = match range(rng, 0, 2) {
+        0 => format!("Что выведет `git rev-list --count {ask}`?"),
+        1 => format!("Какое число напечатает `git rev-list --count {ask}`?"),
+        _ => format!("Какое число выведет команда `git rev-list --count {ask}` после этого?"),
+    };
+    Draft::integer(format!("{intro} {rules}\n\n{question}"), answer).code("bash", script)
 }
 
 struct LogLine {
@@ -2046,7 +2333,7 @@ mod tests {
 
     #[test]
     fn git_simulation() {
-        let mut repo = Repo::new(3);
+        let mut repo = Repo::new(3, "main");
         for op in [
             GitOp::SwitchCreate("feature"),
             GitOp::Commit("a"),
@@ -2058,7 +2345,7 @@ mod tests {
         }
         assert_eq!(repo.count("main"), 5);
 
-        let mut repo = Repo::new(3);
+        let mut repo = Repo::new(3, "main");
         for op in [
             GitOp::SwitchCreate("feature"),
             GitOp::Commit("a"),
@@ -2070,7 +2357,7 @@ mod tests {
         }
         assert_eq!(repo.count("main"), 6);
 
-        let mut repo = Repo::new(2);
+        let mut repo = Repo::new(2, "main");
         for op in [
             GitOp::SwitchCreate("feature"),
             GitOp::Commit("a"),
@@ -2085,7 +2372,7 @@ mod tests {
         assert_eq!(repo.count("feature"), 5);
         assert_eq!(repo.count("main"), 3);
 
-        let mut repo = Repo::new(2);
+        let mut repo = Repo::new(2, "main");
         for op in [
             GitOp::SwitchCreate("feature"),
             GitOp::Commit("a"),
@@ -2096,7 +2383,7 @@ mod tests {
         }
         assert_eq!(repo.count("main"), 4);
 
-        let mut repo = Repo::new(3);
+        let mut repo = Repo::new(3, "main");
         for op in [
             GitOp::Commit("a"),
             GitOp::Commit("b"),
