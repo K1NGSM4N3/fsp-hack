@@ -20,7 +20,7 @@
 | Доступ к БД | tokio-postgres + deadpool-postgres; типизированные запросы — **clorinde** (SQL в `.sql`, генерация Rust); миграции — **refinery** | SQL-first, проверка запросов на этапе генерации |
 | СУБД | PostgreSQL + pgvector + `tsvector` (russian) + `pg_trgm` + JSONB | Одна база на всё; без OLAP и SurrealDB (лицензия BSL, лишняя RAM) |
 | Кэш, лимиты | Valkey (BSD, совместим с Redis); в dev — in-memory реализация за тем же трейтом | Rate limit, deny-list токенов, кэш статистики категорий |
-| Frontend | Next.js (App Router) + TypeScript, TanStack Query, `openapi-typescript` + `openapi-fetch`, Tailwind CSS | Без Vite. Права — только на бэке |
+| Frontend | Next.js (App Router) + TypeScript, TanStack Query, `openapi-typescript` + `openapi-fetch`, Tailwind CSS, GSAP + Lenis для анимаций публичного сайта | Без Vite. Права — только на бэке. Анимации отключаются при `prefers-reduced-motion` |
 | ML/NLP | Фаза 1: словарь навыков с синонимами + русская морфология (`tsvector`) + граф близости навыков. Фаза 2: эмбеддинги `fastembed` (multilingual-e5) + pgvector | Объяснимость важнее «магии»; эмбеддинги — один из признаков, не основа |
 | PDF | Разбор: извлечение текста + правила и словари. Генерация профиля: серверная, шрифт JetBrains Mono | `C-1`, `C-2` |
 | Почта | SMTP (`lettre`); в compose — Mailpit; локально без Docker — ссылка в лог | `V-4` |
