@@ -2,12 +2,12 @@
 # Next.js standalone build; needs `output: "standalone"` in web/next.config.*.
 # Context: repo root (docker compose -f deploy/compose.yml build).
 
-FROM node:22-alpine AS deps
+FROM node:24-alpine AS deps
 WORKDIR /app
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 
-FROM node:22-alpine AS builder
+FROM node:24-alpine AS builder
 WORKDIR /app
 # next.config rewrites are resolved at build time, so the API address is needed here too.
 ARG API_PROXY_URL=http://api:8000
@@ -17,7 +17,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY web/ ./
 RUN mkdir -p public && npm run build
 
-FROM node:22-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \

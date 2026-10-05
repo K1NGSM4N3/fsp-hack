@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/*
+ * The default Tailwind palette is disabled so no color can bypass the brand tokens.
+ * Brand red #EC1D35 is only 4.4:1 on white (fails AA for body text), hence
+ * accent-strong #D0142C (5.5:1) for red text and destructive buttons.
+ */
+@theme {
+  --color-*: initial;
+
+  --color-white: #ffffff;
+  --color-black: #000000;
+
+  --color-primary: #402fff;
+  --color-primary-hover: #3324e0;
+  --color-primary-active: #2a1dbf;
+  --color-primary-strong: #2f22cc;
+  --color-primary-50: #f5f4ff;
+  --color-primary-100: #eceaff;
+  --color-primary-200: #d6d1ff;
+  --color-primary-300: #a9a3ff;
+
+  --color-accent: #ec1d35;
+  --color-accent-strong: #d0142c;
+  --color-accent-hover: #b3122a;
+  --color-accent-50: #fdecee;
+  --color-accent-100: #fbd5da;
+
+  --color-ink: #1b1c21;
+  --color-ink-muted: #5a5c66;
+  --color-ink-subtle: #6b6e78;
+  --color-ink-faint: #9a9ca5;
+  --color-surface: #ededed;
+  --color-canvas: #f6f6f7;
+  --color-line: #dedee2;
+  --color-line-strong: #c8c9ce;
+
+  --color-success: #0e7a4b;
+  --color-success-50: #e7f6ee;
+  --color-success-200: #b9e3cc;
+  --color-warning: #9a5b00;
+  --color-warning-50: #fff4e0;
+  --color-warning-200: #f5d9a8;
+
+  --font-sans: var(--font-inter), "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-jetbrains), "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --radius-card: 14px;
+  --radius-control: 10px;
+
+  --shadow-card: 0 1px 2px rgb(27 28 33 / 0.04);
+  --shadow-pop: 0 12px 32px -8px rgb(27 28 33 / 0.18), 0 2px 6px rgb(27 28 33 / 0.06);
+
+  --animate-fade-in: fade-in 160ms ease-out;
+  --animate-slide-up: slide-up 200ms ease-out;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
+:root {
+  color-scheme: light;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  background: var(--color-white);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+::selection {
+  background: var(--color-primary-200);
+  color: var(--color-ink);
+}
+
+dialog::backdrop {
+  background: rgb(27 28 33 / 0.45);
+  backdrop-filter: blur(2px);
+}
+body:has(dialog[open]) {
+  overflow: hidden;
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,117 @@
+"use client";
+
+import { Building2, Clock, Inbox, MapPin } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import type { ReceivedInvitation } from "@/api/types";
+import { SalaryRange } from "@/components/domain/Category";
+import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
+import { ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs } from "@/components/ui";
+import { useReceivedInvitations } from "@/features/candidate/hooks";
+import { cn } from "@/lib/cn";
+import { formatRelative } from "@/lib/format";
+import { WORK_FORMAT_LABEL } from "@/lib/labels";
+
+type Filter = "active" | "accepted" | "archive";
+
+const FILTERS: Record<Filter, (i: ReceivedInvitation) => boolean> = {
+  active: (i) => i.status === "sent" || i.status === "viewed",
+  accepted: (i) => i.status === "accepted",
+  archive: (i) => i.status === "declined" || i.status === "expired" || i.status === "withdrawn",
+};
+
+function InvitationRow({ inv }: { inv: ReceivedInvitation }) {
+  const fresh = inv.status === "sent";
+  const active = inv.status === "sent" || inv.status === "viewed";
+  return (
+    <li>
+      <Link
+        href={`/candidate/invitations/${inv.id}`}
+        className={cn(
+          "block rounded-card border bg-white p-5 shadow-card transition-colors hover:border-primary-300",
+          fresh ? "border-primary-200 ring-1 ring-primary-100" : "border-line",
+        )}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <InvitationStatusBadge status={inv.status} audience="candidate" />
+              <span className="text-xs text-ink-subtle">{formatRelative(inv.created_at)}</span>
+            </div>
+            <p className={cn("mt-2 font-mono text-base tracking-tight text-ink", fresh ? "font-semibold" : "font-medium")}>{inv.title}</p>
+            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink-muted">
+              <span className="inline-flex items-center gap-1.5">
+                <Building2 className="size-4 text-ink-subtle" aria-hidden />
+                {inv.company_name}
+              </span>
+              {inv.work_format && (
+                <span className="inline-flex items-center gap-1.5">
+                  <MapPin className="size-4 text-ink-subtle" aria-hidden />
+                  {WORK_FORMAT_LABEL[inv.work_format]}
+                  {inv.company_city && inv.work_format !== "remote" ? `, ${inv.company_city}` : ""}
+                </span>
+              )}
+            </p>
+          </div>
+          <div className="shrink-0 sm:text-right">
+            <SalaryRange salary={inv.salary} size="lg" label="Зарплата" />
+            {active && (
+              <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-subtle">
+                <Clock className="size-3.5" aria-hidden />
+                ответить {formatRelative(inv.expires_at)}
+              </p>
+            )}
+          </div>
+        </div>
+      </Link>
+    </li>
+  );
+}
+
+export default function InvitationsPage() {
+  const q = useReceivedInvitations();
+  const [filter, setFilter] = useState<Filter>("active");
+  const data = q.data ?? [];
+  const list = data.filter(FILTERS[filter]);
+  return (
+    <div>
+      <PageHeader title="Приглашения" description="Компании приходят с вилкой и описанием задачи. Контакты откроются им, только если вы примете приглашение." />
+      <Tabs<Filter>
+        ariaLabel="Фильтр приглашений"
+        value={filter}
+        onChange={setFilter}
+        className="mb-6"
+        items={[
+          { value: "active", label: "Ждут ответа", count: data.filter(FILTERS.active).length },
+          { value: "accepted", label: "Принятые", count: data.filter(FILTERS.accepted).length },
+          { value: "archive", label: "Архив", count: data.filter(FILTERS.archive).length },
+        ]}
+      />
+      {q.isPending ? (
+        <div className="space-y-3">
+          <SkeletonCard lines={2} />
+          <SkeletonCard lines={2} />
+        </div>
+      ) : q.isError ? (
+        <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
+      ) : list.length === 0 ? (
+        <EmptyState
+          icon={<Inbox className="size-5" aria-hidden />}
+          title={filter === "active" ? "Новых приглашений нет" : "Здесь пока пусто"}
+          description={
+            data.length === 0
+              ? "Компании находят кандидатов по подтверждённой категории. Пройдите тест, привяжите ФСП ID и держите статус «Активно ищу» — так вас увидят чаще."
+              : "Загляните на другие вкладки."
+          }
+          action={data.length === 0 ? <ButtonLink href="/candidate/settings" variant="secondary">Настроить статус поиска</ButtonLink> : undefined}
+        />
+      ) : (
+        <ul className="space-y-3">
+          {list.map((inv) => (
+            <InvitationRow key={inv.id} inv={inv} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
