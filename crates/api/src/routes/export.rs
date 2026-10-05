@@ -9,7 +9,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use catalog::{Grade, Specialization};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::Serialize;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -27,10 +27,12 @@ use super::{
     vacancies::{MyApplication, Vacancy, company_vacancy_views, my_apps},
 };
 use crate::{
+    age::{self, AgeBracket},
     auth::{AuthUser, CandidateUser, Role},
     contacts::ContactAccessEntry,
     dto::AssessmentStatus,
     error::{ApiError, ApiResult, Problem},
+    guardian::{self, GuardianState},
     proctoring::{self, ProctoringSummary},
     state::AppState,
 };
@@ -72,12 +74,16 @@ pub struct ConsentRecord {
     pub title: String,
     pub granted_at: DateTime<Utc>,
     pub revoked_at: Option<DateTime<Utc>>,
+    /// For `guardian_consent`: the legal representative's IP and browser, until erased.
     pub ip: Option<String>,
     pub user_agent: Option<String>,
+    /// The age declared with this grant at registration.
+    pub age_bracket: Option<AgeBracket>,
 }
 
 #[derive(Serialize, ToSchema)]
 pub struct CandidateData {
+    pub age: AgeRecord,
     pub profile: ProfileResponse,
     pub privacy: Privacy,
     pub surveys: Vec<SurveyResponse>,
@@ -90,6 +96,67 @@ pub struct CandidateData {
     pub fsp: FspStatus,
     pub tasks: Vec<MyTask>,
     pub resume_uploads: Vec<ResumeUploadRecord>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct AgeRecord {
+    /// Today, derived from the birth date; adults gave no birth date, only the declaration
+    /// recorded with their consents.
+    pub bracket: AgeBracket,
+    /// Only for those who registered as 14–17; erased 30 days after the 18th birthday.
+    pub birth_date: Option<NaiveDate>,
+    pub adult_from: Option<NaiveDate>,
+    /// Requests to legal representatives and their answers, newest first.
+    pub guardian_requests: Vec<GuardianRecord>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct GuardianRecord {
+    /// `None` once erased (30 days after the 18th birthday).
+    pub full_name: Option<String>,
+    pub email: Option<String>,
+    pub state: GuardianState,
+    pub requested_at: DateTime<Utc>,
+    pub last_letter_at: Option<DateTime<Utc>>,
+    pub answered_at: Option<DateTime<Utc>>,
+    /// The `guardian_consent` grant in `consents`, when given.
+    pub consent_id: Option<Uuid>,
+    pub granted_at: Option<DateTime<Utc>>,
+    pub revoked_at: Option<DateTime<Utc>>,
+    pub erased_at: Option<DateTime<Utc>>,
+}
+
+async fn age_record(state: &AppState, candidate: Uuid) -> ApiResult<AgeRecord> {
+    let age = db::guardians::candidate_age(&state.pool, candidate)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    let now = Utc::now();
+    let decrypt = |b: Option<Vec<u8>>| b.map(|b| state.crypto.decrypt_str(&b)).transpose();
+    let mut guardian_requests = Vec::new();
+    for r in db::guardians::requests(&state.pool, candidate).await? {
+        guardian_requests.push(GuardianRecord {
+            state: guardian::request_state(&r, now),
+            full_name: decrypt(r.full_name_enc)?,
+            email: decrypt(r.email_enc)?,
+            requested_at: r.created_at,
+            last_letter_at: r.sent_at,
+            answered_at: r.answered_at,
+            consent_id: r.consent_id,
+            granted_at: r.granted_at,
+            revoked_at: r.revoked_at,
+            erased_at: r.erased_at,
+        });
+    }
+    Ok(AgeRecord {
+        bracket: if age.minor {
+            AgeBracket::Minor
+        } else {
+            AgeBracket::Adult
+        },
+        birth_date: age.birth_date,
+        adult_from: age.birth_date.map(age::adult_from),
+        guardian_requests,
+    })
 }
 
 /// One test session: the outcome without the tasks shown or the answers given.
@@ -170,6 +237,7 @@ async fn candidate_data(state: &AppState, user: AuthUser) -> ApiResult<Candidate
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
     Ok(CandidateData {
+        age: age_record(state, user.id).await?,
         profile: load_profile(state, &CandidateUser(user)).await?,
         privacy: Privacy {
             visible: c.visible,
@@ -237,6 +305,7 @@ pub async fn build(state: &AppState, user: AuthUser, now: DateTime<Utc>) -> ApiR
             revoked_at: r.revoked_at,
             ip: r.ip,
             user_agent: r.user_agent,
+            age_bracket: r.age_bracket.map(AgeBracket::from),
         })
         .collect();
     let (candidate, employer) = match user.role {
@@ -262,8 +331,9 @@ pub async fn build(state: &AppState, user: AuthUser, now: DateTime<Utc>) -> ApiR
 }
 
 /// Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,
-/// consents, profile, tests with summaries, category history, invitations, applications, who
-/// opened your contacts, proctoring summaries; for an employer — the account and the company's data
+/// consents with the declared age, profile, age (birth date and legal representative for 14–17),
+/// tests with summaries, category history, invitations, applications, who opened your contacts,
+/// proctoring summaries; for an employer — the account and the company's data
 #[utoipa::path(get, path = "/export", tag = "account",
     responses(
         (status = 200, description = "JSON attachment `fsp-talents-<date>.json`", body = DataExport, content_type = "application/json",

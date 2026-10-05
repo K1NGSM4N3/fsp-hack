@@ -35,7 +35,7 @@ async fn published_candidate(pool: &PgPool, code: &str) -> Uuid {
 }
 
 async fn in_pool(pool: &PgPool, id: Uuid) -> bool {
-    db::pool::candidate_pool(pool, None, "backend", None)
+    db::pool::candidate_pool(pool, None, "backend", None, false)
         .await
         .unwrap()
         .iter()

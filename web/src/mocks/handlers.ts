@@ -315,7 +315,9 @@ export async function getMe(): Promise<T.Me> {
     const active = db.assessments.find((a) => a.candidate_id === c?.id && a.session.status === "in_progress");
     return {
       ...sessionDto(user),
-      candidate: c ? { public_code: c.code, onboarding_step: onboardingStep(c), category: currentAssignment(c)?.category ?? null, active_session_id: active?.session.id ?? null } : null,
+      candidate: c
+        ? { public_code: c.code, onboarding_step: onboardingStep(c), category: currentAssignment(c)?.category ?? null, active_session_id: active?.session.id ?? null, age: { bracket: "adult", adult_from: null, guardian: null } }
+        : null,
       company: null,
     };
   }
@@ -409,6 +411,33 @@ function profileDto(c: MockCandidate): T.Profile {
     category_assigned_at: a?.assigned_at ?? null,
     updated_at: c.profile_saved_at ?? c.last_active_at,
   };
+}
+
+/** Demo accounts are adults: the representative's flow exists only against the real API. */
+export async function getGuardianStatus(): Promise<T.GuardianStatus> {
+  await delay(40, 90);
+  return { required: false, adult_from: null, state: null, guardian_name: null, guardian_email: null, sent_at: null, link_expires_at: null, answered_at: null, revoked_at: null };
+}
+
+export async function resendGuardianLetter(): Promise<T.GuardianStatus> {
+  await delay(60, 120);
+  fail(409, "guardian_not_needed", "Вам уже есть 18 — согласие представителя не нужно");
+}
+
+export async function changeGuardian(body: T.GuardianContact): Promise<T.GuardianStatus> {
+  void body;
+  return resendGuardianLetter();
+}
+
+export async function getGuardianConsent(token: string): Promise<T.GuardianConsentView> {
+  void token;
+  await delay(60, 120);
+  fail(400, "invalid_token", "Ссылка недействительна", "В демо-режиме писем представителю нет");
+}
+
+export async function answerGuardianConsent(token: string, action: T.GuardianAction): Promise<T.GuardianConsentView> {
+  void action;
+  return getGuardianConsent(token);
 }
 
 export async function getProfile(): Promise<T.Profile> {

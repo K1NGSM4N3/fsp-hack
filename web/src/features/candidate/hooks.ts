@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/endpoints";
-import type { AnswerInput, DeclineRequest, Privacy, ProfileInput, StartInput, SurveyInput } from "@/api/types";
+import type { AnswerInput, DeclineRequest, GuardianAction, GuardianContact, GuardianStatus, Privacy, ProfileInput, StartInput, SurveyInput } from "@/api/types";
 import { qk } from "../keys";
 
 export function useProfile() {
@@ -37,6 +37,42 @@ export function useUpdatePrivacy() {
   return useMutation({
     mutationFn: (body: Privacy) => api.updatePrivacy(body),
     onSuccess: (data) => qc.setQueryData(qk.privacy, data),
+  });
+}
+
+/** Only minors have anything here; adults skip the request. */
+export function useGuardianStatus(enabled: boolean) {
+  return useQuery({ queryKey: qk.guardian, queryFn: api.getGuardianStatus, enabled });
+}
+
+function useGuardianMutation<V>(fn: (v: V) => Promise<GuardianStatus>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (data) => {
+      qc.setQueryData(qk.guardian, data);
+      void qc.invalidateQueries({ queryKey: qk.me });
+    },
+  });
+}
+
+export function useResendGuardianLetter() {
+  return useGuardianMutation<void>(() => api.resendGuardianLetter());
+}
+
+export function useChangeGuardian() {
+  return useGuardianMutation<GuardianContact>((body) => api.changeGuardian(body));
+}
+
+export function useGuardianConsent(token: string | null) {
+  return useQuery({ queryKey: qk.guardianConsent(token ?? ""), queryFn: () => api.getGuardianConsent(token ?? ""), enabled: Boolean(token) });
+}
+
+export function useAnswerGuardianConsent(token: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (action: GuardianAction) => api.answerGuardianConsent(token, action),
+    onSuccess: (data) => qc.setQueryData(qk.guardianConsent(token), data),
   });
 }
 

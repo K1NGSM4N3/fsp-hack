@@ -20,6 +20,8 @@ export const qk = {
   myTasks: ["candidate", "tasks"] as const,
   fsp: ["candidate", "fsp"] as const,
   contactAccess: ["candidate", "contact-access"] as const,
+  guardian: ["candidate", "guardian"] as const,
+  guardianConsent: (token: string) => ["guardian", "consent", token] as const,
 
   company: ["employer", "company"] as const,
   needs: ["employer", "needs"] as const,

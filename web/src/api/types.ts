@@ -32,6 +32,16 @@ export type UserConsent = S["UserConsent"];
 export type GrantConsent = S["GrantConsent"];
 export type ContactAccessEntry = S["ContactAccessEntry"];
 
+export type AgeBracket = S["AgeBracket"];
+export type AgeSummary = S["AgeSummary"];
+export type MinorRegistration = S["MinorRegistration"];
+export type GuardianContact = S["GuardianContact"];
+export type GuardianState = S["GuardianState"];
+export type GuardianStatus = S["GuardianStatus"];
+export type GuardianLink = S["GuardianLink"];
+export type GuardianAction = S["GuardianAction"];
+export type GuardianConsentView = S["GuardianConsentView"];
+
 export type SessionUser = S["SessionUser"];
 export type Me = S["MeResponse"];
 export type MeCandidate = S["CandidateSummary"];

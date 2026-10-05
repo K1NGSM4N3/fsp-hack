@@ -3,7 +3,7 @@ use serde_json::Value;
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::types::{AssessmentStatus, SearchStatus, UserRole};
+use crate::types::{AgeBracket, AssessmentStatus, SearchStatus, UserRole};
 
 pub struct SeedCandidate<'a> {
     pub user_id: Uuid,
@@ -213,6 +213,29 @@ pub async fn seed_consent(
     .map(|r| r.rows_affected())
 }
 
+/// A registration grant with the age declaration, as the register endpoint writes it.
+pub async fn seed_registration_consent(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+    user_id: Uuid,
+    document_id: Uuid,
+    granted_at: DateTime<Utc>,
+    age_bracket: AgeBracket,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO user_consents (id, user_id, document_id, granted_at, user_agent, age_bracket)
+         VALUES ($1, $2, $3, $4, 'seed', $5)",
+        id,
+        user_id,
+        document_id,
+        granted_at,
+        age_bracket as AgeBracket,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
 pub struct SeedProctoring {
     pub session_id: Uuid,
     pub candidate_id: Uuid,
@@ -259,6 +282,88 @@ pub async fn seed_chunks(
         count,
         size,
         from,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+pub struct SeedGuardian<'a> {
+    pub id: Uuid,
+    pub candidate_id: Uuid,
+    pub full_name_enc: &'a [u8],
+    pub email_enc: &'a [u8],
+    pub email_bidx: &'a [u8],
+    pub confirm_hash: &'a [u8],
+    pub revoke_hash: &'a [u8],
+    pub sent_at: DateTime<Utc>,
+    pub confirm_expires_at: DateTime<Utc>,
+    /// The grant the representative gave; `None` keeps the request pending.
+    pub consent_id: Option<Uuid>,
+    pub answered_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+}
+
+/// A demo candidate who registered as 14–17: birth date, the declaration on the registration
+/// grants, and no employment history.
+pub async fn seed_minor(
+    db: impl PgExecutor<'_>,
+    user_id: Uuid,
+    birth_date: chrono::NaiveDate,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "WITH c AS (UPDATE candidates SET birth_date = $2, experience = '[]'
+                    WHERE user_id = $1 RETURNING user_id)
+         UPDATE user_consents SET age_bracket = 'minor'
+         WHERE user_id IN (SELECT user_id FROM c) AND age_bracket IS NOT NULL",
+        user_id,
+        birth_date,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+pub async fn seed_guardian(
+    db: impl PgExecutor<'_>,
+    g: &SeedGuardian<'_>,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO guardian_requests (id, candidate_id, full_name_enc, email_enc, email_bidx,
+                                        confirm_hash, revoke_hash, confirm_expires_at, sent_at,
+                                        decision, answered_at, consent_id, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
+                 CASE WHEN $10::uuid IS NOT NULL THEN 'granted'::guardian_decision END, $11, $10, $12)",
+        g.id,
+        g.candidate_id,
+        g.full_name_enc,
+        g.email_enc,
+        g.email_bidx,
+        g.confirm_hash,
+        g.revoke_hash,
+        g.confirm_expires_at,
+        g.sent_at,
+        g.consent_id,
+        g.answered_at,
+        g.created_at,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+/// Gives a demo account a memorable login.
+pub async fn seed_login_email(
+    db: impl PgExecutor<'_>,
+    user_id: Uuid,
+    email_enc: &[u8],
+    email_bidx: &[u8],
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "UPDATE users SET email_enc = $2, email_bidx = $3 WHERE id = $1",
+        user_id,
+        email_enc,
+        email_bidx,
     )
     .execute(db)
     .await

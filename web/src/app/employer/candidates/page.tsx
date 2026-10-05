@@ -82,6 +82,7 @@ function SearchView() {
   const [grade, setGrade] = useState<Grade | "">((params.get("grade") as Grade | null) ?? "");
   const [skills, setSkills] = useState<string[]>([]);
   const [fspOnly, setFspOnly] = useState(false);
+  const [adultsOnly, setAdultsOnly] = useState(false);
   const [format, setFormat] = useState<WorkFormat | "">("");
   const [city, setCity] = useState("");
   const [salaryMax, setSalaryMax] = useState<number | null>(null);
@@ -98,6 +99,7 @@ function SearchView() {
     grade: grade || undefined,
     skills: skills.length ? skills.join(",") : undefined,
     fsp_only: fspOnly || undefined,
+    adults_only: adultsOnly || undefined,
     work_format: format || undefined,
     city: dcity.trim() || undefined,
     max_expectation: salaryMax ?? undefined,
@@ -113,6 +115,7 @@ function SearchView() {
     setNeedId("");
     setSkills([]);
     setFspOnly(false);
+    setAdultsOnly(false);
     setFormat("");
     setCity("");
     setSalaryMax(null);
@@ -176,6 +179,7 @@ function SearchView() {
             <MoneyInput value={salaryMax} onChange={setSalaryMax} placeholder="300 000" />
           </Field>
           <Switch checked={fspOnly} onChange={setFspOnly} label="Есть достижения ФСП" />
+          <Switch checked={adultsOnly} onChange={setAdultsOnly} label="Только 18+" description="Скрыть кандидатов 14–17 лет" />
           <Button variant="ghost" size="sm" className="w-full" onClick={reset}>
             Сбросить фильтры
           </Button>
@@ -241,7 +245,7 @@ function SearchView() {
                             size="sm"
                             icon={<Send className="size-4" aria-hidden />}
                             disabled={c.relation.invitation_status === "sent" || c.relation.invitation_status === "viewed"}
-                            onClick={() => setInvite({ id: c.id, code: c.code, display_name: c.display_name, category: c.category })}
+                            onClick={() => setInvite({ id: c.id, code: c.code, display_name: c.display_name, category: c.category, minor: c.minor })}
                           >
                             {c.relation.invitation_status === "sent" || c.relation.invitation_status === "viewed" ? "Приглашение отправлено" : "Пригласить"}
                           </Button>

@@ -79,6 +79,9 @@ pub struct ShortlistFilters {
     pub city: Option<String>,
     #[serde(default)]
     pub fsp_only: bool,
+    /// «Только 18+»: leave out candidates aged 14–17.
+    #[serde(default)]
+    pub adults_only: bool,
     /// Drop candidates whose expectations exceed this.
     pub max_expectation: Option<i64>,
     pub limit: Option<usize>,
@@ -533,6 +536,7 @@ async fn build_shortlist(
             text: Some(&effective.description),
             fsp_only: filters.fsp_only,
             max_expectation: filters.max_expectation,
+            adults_only: filters.adults_only,
             ..PoolFilter::default()
         },
         now,

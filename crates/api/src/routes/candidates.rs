@@ -37,6 +37,9 @@ pub struct SearchQuery {
     pub skills: Option<String>,
     #[serde(default)]
     pub fsp_only: bool,
+    /// «Только 18+»: leave out candidates aged 14–17.
+    #[serde(default)]
+    pub adults_only: bool,
     pub work_format: Option<WorkFormat>,
     pub city: Option<String>,
     pub max_expectation: Option<i64>,
@@ -59,7 +62,8 @@ pub struct BankItem {
     pub gaps: Vec<String>,
 }
 
-/// Search the candidate bank: specialization, grade, stack, FSP achievements, format, city, expectations
+/// Search the candidate bank: specialization, grade, stack, FSP achievements, format, city,
+/// expectations, adults only
 #[utoipa::path(get, path = "/candidates", tag = "matching",
     params(SearchQuery),
     responses((status = 200, body = Page<BankItem>), (status = 422, body = Problem)),
@@ -106,6 +110,7 @@ async fn search(
             fsp_only: q.fsp_only,
             max_expectation: q.max_expectation,
             required_skills: &required,
+            adults_only: q.adults_only,
         },
         now,
     )

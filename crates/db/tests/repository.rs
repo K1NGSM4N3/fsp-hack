@@ -329,7 +329,7 @@ async fn pool_rows_without_fsp_link(pool: PgPool) {
         .await
         .unwrap();
 
-    let rows = db::pool::candidate_pool(&pool, Some("rust | tokio"), "backend", None)
+    let rows = db::pool::candidate_pool(&pool, Some("rust | tokio"), "backend", None, false)
         .await
         .unwrap();
     assert_eq!(rows.len(), 1);

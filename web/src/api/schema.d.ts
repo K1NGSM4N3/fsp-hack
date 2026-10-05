@@ -132,7 +132,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Confirm the email address with the token from the letter */
+        /**
+         * Confirm the email address with the token from the letter. For a candidate who registered as
+         *     14–17 this also sends the legal representative their letter
+         */
         post: operations["verify_email"];
         delete?: never;
         options?: never;
@@ -334,6 +337,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/candidate/guardian": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Whether your legal representative has confirmed the consent: while you are under 18, employers
+         *     see the profile only after that. `required: false` for adults
+         */
+        get: operations["status"];
+        /**
+         * Change the representative's name or email and send them the letter. Links sent to the
+         *     previous address stop working at once
+         */
+        put: operations["change"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/candidate/guardian/resend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send the letter to the representative again with fresh links (the old ones stop working).
+         *     After a refusal or revocation it asks the same person again
+         */
+        post: operations["resend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/candidate/invitations": {
         parameters: {
             query?: never;
@@ -377,7 +424,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Accept: the company gets access to your contacts */
+        /**
+         * Accept: the company gets access to your contacts. Under 18 this needs the legal
+         *     representative's consent in force (it may have been revoked after the invitation came)
+         */
         post: operations["accept"];
         delete?: never;
         options?: never;
@@ -430,7 +480,8 @@ export interface paths {
         get: operations["get_privacy"];
         /**
          * Update privacy settings. Showing the profile in search needs active consents to processing
-         *     and to publication: without them the answer is 409 `consent_required` with the document to grant
+         *     and to publication: without them the answer is 409 `consent_required` with the document to grant.
+         *     Under 18 it also needs the legal representative's consent (409 `guardian_consent_required`)
          */
         put: operations["put_privacy"];
         post?: never;
@@ -686,7 +737,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Search the candidate bank: specialization, grade, stack, FSP achievements, format, city, expectations */
+        /**
+         * Search the candidate bank: specialization, grade, stack, FSP achievements, format, city,
+         *     expectations, adults only
+         */
         get: operations["search"];
         put?: never;
         post?: never;
@@ -1184,6 +1238,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/guardian/consent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * What a link from the representative's letter is about: the consent text, who asked, the
+         *     current answer and what this link can do now. Anonymous: the token is the credential
+         */
+        get: operations["view"];
+        put?: never;
+        /**
+         * The representative's answer. The answer link grants or declines once while it is valid; the
+         *     revocation link withdraws the consent (or declines before any answer). Granting writes a
+         *     `guardian_consent` grant on the minor's behalf with the representative's IP, User-Agent and
+         *     time; declining or revoking hides the profile
+         */
+        post: operations["answer"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -1195,7 +1275,10 @@ export interface paths {
         get: operations["me"];
         put?: never;
         post?: never;
-        /** Delete the account and personal data (152-ФЗ) */
+        /**
+         * Delete the account and personal data (152-ФЗ), including a minor's birth date and everything
+         *     about their legal representative
+         */
         delete: operations["delete_me"];
         options?: never;
         head?: never;
@@ -1234,7 +1317,8 @@ export interface paths {
         put?: never;
         /**
          * Revoke a consent. Revoking publication or processing hides the candidate from search;
-         *     revoking the video consent deletes the candidate's recordings right away.
+         *     revoking the video consent deletes the candidate's recordings right away. `guardian_consent`
+         *     belongs to the legal representative and is revoked only by the link from their letter (404).
          */
         post: operations["revoke_consent"];
         delete?: never;
@@ -1252,8 +1336,9 @@ export interface paths {
         };
         /**
          * Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,
-         *     consents, profile, tests with summaries, category history, invitations, applications, who
-         *     opened your contacts, proctoring summaries; for an employer — the account and the company's data
+         *     consents with the declared age, profile, age (birth date and legal representative for 14–17),
+         *     tests with summaries, category history, invitations, applications, who opened your contacts,
+         *     proctoring summaries; for an employer — the account and the company's data
          */
         get: operations["export"];
         put?: never;
@@ -1324,7 +1409,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Apply to a vacancy: the company gets access to your contacts */
+        /**
+         * Apply to a vacancy: the company gets access to your contacts. Under 18 this needs the legal
+         *     representative's consent first
+         */
         post: operations["apply"];
         delete?: never;
         options?: never;
@@ -1383,6 +1471,34 @@ export interface components {
             /** @description «Требует подтверждения»: the person-fit flag and integrity events together. */
             needs_confirmation: boolean;
             events: components["schemas"]["EventView"][];
+        };
+        /** @enum {string} */
+        AgeBracket: "adult" | "minor";
+        AgeRecord: {
+            /**
+             * @description Today, derived from the birth date; adults gave no birth date, only the declaration
+             *     recorded with their consents.
+             */
+            bracket: components["schemas"]["AgeBracket"];
+            /**
+             * Format: date
+             * @description Only for those who registered as 14–17; erased 30 days after the 18th birthday.
+             */
+            birth_date?: string | null;
+            /** Format: date */
+            adult_from?: string | null;
+            /** @description Requests to legal representatives and their answers, newest first. */
+            guardian_requests: components["schemas"]["GuardianRecord"][];
+        };
+        /** @description Derived from the birth date today: a minor turns into an adult on the 18th birthday. */
+        AgeSummary: {
+            bracket: components["schemas"]["AgeBracket"];
+            /**
+             * Format: date
+             * @description Minors only: the 18th birthday, when every restriction lifts.
+             */
+            adult_from?: string | null;
+            guardian?: components["schemas"]["GuardianState"] | null;
         };
         Answer: {
             /** @description Index into `ItemView::options`. */
@@ -1546,6 +1662,11 @@ export interface components {
             /** Format: int64 */
             tasks_done: number;
             proctoring?: components["schemas"]["ProctoringBadge"] | null;
+            /**
+             * @description Under 18 (registered as 14–17, legal representative's consent given): show a neutral
+             *     «14–17 лет». The birth date itself never reaches employers.
+             */
+            minor: boolean;
             relation: components["schemas"]["Relation"];
         };
         CandidateContacts: components["schemas"]["Contacts"] & {
@@ -1557,6 +1678,7 @@ export interface components {
             basis_id: string;
         };
         CandidateData: {
+            age: components["schemas"]["AgeRecord"];
             profile: components["schemas"]["ProfileResponse"];
             privacy: components["schemas"]["Privacy"];
             surveys: components["schemas"]["SurveyResponse"][];
@@ -1580,6 +1702,7 @@ export interface components {
             category?: components["schemas"]["Category"] | null;
             /** Format: uuid */
             active_session_id?: string | null;
+            age: components["schemas"]["AgeSummary"];
         };
         CardAchievement: {
             text: string;
@@ -1717,8 +1840,10 @@ export interface components {
             granted_at: string;
             /** Format: date-time */
             revoked_at?: string | null;
+            /** @description For `guardian_consent`: the legal representative's IP and browser, until erased. */
             ip?: string | null;
             user_agent?: string | null;
+            age_bracket?: components["schemas"]["AgeBracket"] | null;
         };
         /**
          * @description One line of the candidate's «Кто открывал ваши контакты»: the company and the legal basis.
@@ -1956,6 +2081,84 @@ export interface components {
              */
             document_id: string;
         };
+        /** @enum {string} */
+        GuardianAction: "grant" | "decline" | "revoke";
+        GuardianAnswer: {
+            token: string;
+            action: components["schemas"]["GuardianAction"];
+        };
+        GuardianConsentView: {
+            link: components["schemas"]["GuardianLink"];
+            state: components["schemas"]["GuardianState"];
+            /** @description The participant has turned 18: the consent is no longer needed and nothing can be done. */
+            participant_adult: boolean;
+            /** @description What this link can do right now. */
+            actions: components["schemas"]["GuardianAction"][];
+            /** @description Masked email of the participant's account, e.g. `an***@mail.ru`. */
+            participant: string;
+            /** @description As the participant entered it. */
+            guardian_name?: string | null;
+            /** Format: date-time */
+            link_expires_at?: string | null;
+            /** Format: date-time */
+            answered_at?: string | null;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            /** @description Current text of `guardian_consent`. */
+            document: components["schemas"]["ConsentDocument"];
+        };
+        GuardianContact: {
+            /** @description Full name of a parent, adoptive parent or custodian. */
+            full_name: string;
+            email: string;
+        };
+        /** @enum {string} */
+        GuardianLink: "confirm" | "revoke";
+        GuardianRecord: {
+            /** @description `None` once erased (30 days after the 18th birthday). */
+            full_name?: string | null;
+            email?: string | null;
+            state: components["schemas"]["GuardianState"];
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            last_letter_at?: string | null;
+            /** Format: date-time */
+            answered_at?: string | null;
+            /**
+             * Format: uuid
+             * @description The `guardian_consent` grant in `consents`, when given.
+             */
+            consent_id?: string | null;
+            /** Format: date-time */
+            granted_at?: string | null;
+            /** Format: date-time */
+            revoked_at?: string | null;
+            /** Format: date-time */
+            erased_at?: string | null;
+        };
+        /** @enum {string} */
+        GuardianState: "not_sent" | "pending" | "expired" | "granted" | "declined" | "revoked";
+        GuardianStatus: {
+            /** @description Under 18 today: employers see the profile only with the representative's consent. */
+            required: boolean;
+            /**
+             * Format: date
+             * @description The 18th birthday, when every restriction lifts by itself.
+             */
+            adult_from?: string | null;
+            state?: components["schemas"]["GuardianState"] | null;
+            guardian_name?: string | null;
+            guardian_email?: string | null;
+            /** Format: date-time */
+            sent_at?: string | null;
+            /** Format: date-time */
+            link_expires_at?: string | null;
+            /** Format: date-time */
+            answered_at?: string | null;
+            /** Format: date-time */
+            revoked_at?: string | null;
+        };
         HiringNeed: {
             /** Format: uuid */
             id: string;
@@ -2077,6 +2280,15 @@ export interface components {
             email_verified: boolean;
             candidate?: components["schemas"]["CandidateSummary"] | null;
             company?: components["schemas"]["CompanySummary"] | null;
+        };
+        MinorRegistration: {
+            /**
+             * Format: date
+             * @description Must be 14–17 years ago: the restriction lifts on the 18th birthday.
+             */
+            birth_date: string;
+            /** @description Gets a letter once you confirm your own email. */
+            guardian: components["schemas"]["GuardianContact"];
         };
         MyApplication: {
             /** Format: uuid */
@@ -2281,7 +2493,8 @@ export interface components {
             /**
              * Format: uuid
              * @description `consent_required`: the current version of the consent document to grant first
-             *     (`POST /api/v1/me/consents`).
+             *     (`POST /api/v1/me/consents`); `guardian_consent_required`: the document the legal
+             *     representative confirms by the link from their letter.
              */
             document_id?: string | null;
             /** @description `consent_required`: kind of that document, e.g. `pd_publication`. */
@@ -2447,6 +2660,8 @@ export interface components {
             company_name?: string | null;
             /** @description Accepted documents from `GET /api/v1/consents/current`. */
             consents: string[];
+            age?: components["schemas"]["AgeBracket"] | null;
+            minor?: components["schemas"]["MinorRegistration"] | null;
         };
         RegisterResponse: {
             /** Format: uuid */
@@ -2596,6 +2811,8 @@ export interface components {
             work_formats?: components["schemas"]["WorkFormat"][] | null;
             city?: string | null;
             fsp_only?: boolean;
+            /** @description «Только 18+»: leave out candidates aged 14–17. */
+            adults_only?: boolean;
             /**
              * Format: int64
              * @description Drop candidates whose expectations exceed this.
@@ -3040,7 +3257,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `validation_failed`, `consent_required` */
+            /** @description `validation_failed`: also `age` for a candidate without it, `minor.birth_date` outside 14–17, `minor.guardian.*` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -3533,6 +3750,127 @@ export interface operations {
             };
         };
     };
+    status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianStatus"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    change: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianContact"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianStatus"];
+                };
+            };
+            /** @description `guardian_not_needed`, `guardian_already_confirmed` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `full_name`, `email` (also when it is your own address) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    resend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianStatus"];
+                };
+            };
+            /** @description `guardian_not_needed`: you are 18 or older; `guardian_already_confirmed` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Three letters an hour, five a day to one address */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_received: {
         parameters: {
             query?: never;
@@ -3600,7 +3938,7 @@ export interface operations {
                     "application/json": components["schemas"]["ReceivedInvitation"];
                 };
             };
-            /** @description `invitation_closed` */
+            /** @description `invitation_closed`; `guardian_consent_required` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -3713,7 +4051,7 @@ export interface operations {
                     "application/json": components["schemas"]["Privacy"];
                 };
             };
-            /** @description `consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents` */
+            /** @description `consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`. `guardian_consent_required`: under 18 without an active `guardian_consent` from the legal representative */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4139,6 +4477,8 @@ export interface operations {
                 /** @description Comma-separated skills (aliases accepted); candidates must have all of them. */
                 skills?: string | null;
                 fsp_only?: boolean;
+                /** @description «Только 18+»: leave out candidates aged 14–17. */
+                adults_only?: boolean;
                 work_format?: components["schemas"]["WorkFormat"] | null;
                 city?: string | null;
                 max_expectation?: number | null;
@@ -5231,6 +5571,78 @@ export interface operations {
             };
         };
     };
+    view: {
+        parameters: {
+            query: {
+                /** @description Token from either link of the letter. */
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianConsentView"];
+                };
+            };
+            /** @description `invalid_token`: unknown token or a link of a superseded letter */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    answer: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GuardianAnswer"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GuardianConsentView"];
+                };
+            };
+            /** @description `invalid_token`; `token_expired`: the answer link is older than 7 days */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `token_used`: already answered or revoked; `action_unavailable`: granting needs the answer link; `guardian_not_needed`: the participant is 18 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     me: {
         parameters: {
             query?: never;
@@ -5341,7 +5753,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `validation_failed`: unknown document, not its current version, or not for this role */
+            /** @description `validation_failed`: unknown document, not its current version, not for this role, or `guardian_consent` (only the legal representative gives it) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5530,7 +5942,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `already_applied` */
+            /** @description `already_applied`; `guardian_consent_required` */
             409: {
                 headers: {
                     [name: string]: unknown;

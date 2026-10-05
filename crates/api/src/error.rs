@@ -25,7 +25,8 @@ pub struct Problem {
     #[schema(value_type = Option<Object>, example = json!({"salary.min": ["Зарплата «от» обязательна"]}))]
     pub errors: Option<FieldErrors>,
     /// `consent_required`: the current version of the consent document to grant first
-    /// (`POST /api/v1/me/consents`).
+    /// (`POST /api/v1/me/consents`); `guardian_consent_required`: the document the legal
+    /// representative confirms by the link from their letter.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub document_id: Option<Uuid>,
     /// `consent_required`: kind of that document, e.g. `pd_publication`.
@@ -110,6 +111,10 @@ pub enum ApiError {
         kind: String,
         title: String,
     },
+    /// 409 `guardian_consent_required`: a candidate under 18 waits for the legal representative;
+    /// the candidate cannot grant this document, it only names it.
+    #[error("guardian consent required")]
+    GuardianConsentRequired { document_id: Uuid },
     #[error(transparent)]
     Internal(#[from] InternalError),
 }
@@ -284,6 +289,18 @@ impl IntoResponse for ApiError {
                 errors: None,
                 document_id: Some(document_id),
                 document_kind: Some(kind),
+            },
+            ApiError::GuardianConsentRequired { document_id } => Problem {
+                kind: "about:blank",
+                title: "Нужно согласие законного представителя".into(),
+                status: 409,
+                code: "guardian_consent_required",
+                detail: Some(
+                    "Пока вам нет 18, компании увидят ваш профиль и контакты только после того, как законный представитель подтвердит согласие по ссылке из письма".into(),
+                ),
+                errors: None,
+                document_id: Some(document_id),
+                document_kind: Some(db::guardians::KIND.into()),
             },
             ApiError::Internal(err) => {
                 tracing::error!(error = %err, "internal error");

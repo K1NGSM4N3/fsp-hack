@@ -39,6 +39,10 @@ pub async fn category_overview(
              AND EXISTS (SELECT 1 FROM user_consents uc
                           JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
                           WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
+             AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
+                  OR EXISTS (SELECT 1 FROM user_consents gc
+                              JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
+                              WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL))
            GROUP BY c.specialization, c.grade"#,
     )
     .fetch_all(db)
@@ -66,7 +70,11 @@ pub async fn candidate_market(
                    AND oc.search_status <> 'closed'
                    AND EXISTS (SELECT 1 FROM user_consents uc
                                 JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                                WHERE uc.user_id = oc.user_id AND uc.revoked_at IS NULL)) AS "peers!",
+                                WHERE uc.user_id = oc.user_id AND uc.revoked_at IS NULL)
+                   AND (oc.birth_date IS NULL OR oc.birth_date + interval '18 years' <= current_date
+                        OR EXISTS (SELECT 1 FROM user_consents gc
+                                    JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
+                                    WHERE gc.user_id = oc.user_id AND gc.revoked_at IS NULL))) AS "peers!",
                (SELECT (percentile_cont(0.5) WITHIN GROUP (ORDER BY i.salary_min))::bigint
                   FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id
                  WHERE ic.specialization = $2 AND ic.grade = $3

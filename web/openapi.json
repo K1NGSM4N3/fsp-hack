@@ -270,7 +270,7 @@
             }
           },
           "422": {
-            "description": "`validation_failed`, `consent_required`",
+            "description": "`validation_failed`: also `age` for a candidate without it, `minor.birth_date` outside 14–17, `minor.guardian.*`",
             "content": {
               "application/json": {
                 "schema": {
@@ -327,7 +327,7 @@
         "tags": [
           "auth"
         ],
-        "summary": "Confirm the email address with the token from the letter",
+        "summary": "Confirm the email address with the token from the letter. For a candidate who registered as\n14–17 this also sends the legal representative their letter",
         "operationId": "verify_email",
         "requestBody": {
           "content": {
@@ -991,6 +991,165 @@
         ]
       }
     },
+    "/api/v1/candidate/guardian": {
+      "get": {
+        "tags": [
+          "candidate"
+        ],
+        "summary": "Whether your legal representative has confirmed the consent: while you are under 18, employers\nsee the profile only after that. `required: false` for adults",
+        "operationId": "status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardianStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "candidate"
+        ],
+        "summary": "Change the representative's name or email and send them the letter. Links sent to the\nprevious address stop working at once",
+        "operationId": "change",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardianContact"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardianStatus"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`guardian_not_needed`, `guardian_already_confirmed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `full_name`, `email` (also when it is your own address)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/candidate/guardian/resend": {
+      "post": {
+        "tags": [
+          "candidate"
+        ],
+        "summary": "Send the letter to the representative again with fresh links (the old ones stop working).\nAfter a refusal or revocation it asks the same person again",
+        "operationId": "resend",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardianStatus"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`guardian_not_needed`: you are 18 or older; `guardian_already_confirmed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Three letters an hour, five a day to one address",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/candidate/invitations": {
       "get": {
         "tags": [
@@ -1075,7 +1234,7 @@
         "tags": [
           "invitations"
         ],
-        "summary": "Accept: the company gets access to your contacts",
+        "summary": "Accept: the company gets access to your contacts. Under 18 this needs the legal\nrepresentative's consent in force (it may have been revoked after the invitation came)",
         "operationId": "accept",
         "parameters": [
           {
@@ -1099,7 +1258,7 @@
             }
           },
           "409": {
-            "description": "`invitation_closed`",
+            "description": "`invitation_closed`; `guardian_consent_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1247,7 +1406,7 @@
         "tags": [
           "candidate"
         ],
-        "summary": "Update privacy settings. Showing the profile in search needs active consents to processing\nand to publication: without them the answer is 409 `consent_required` with the document to grant",
+        "summary": "Update privacy settings. Showing the profile in search needs active consents to processing\nand to publication: without them the answer is 409 `consent_required` with the document to grant.\nUnder 18 it also needs the legal representative's consent (409 `guardian_consent_required`)",
         "operationId": "put_privacy",
         "requestBody": {
           "content": {
@@ -1270,7 +1429,7 @@
             }
           },
           "409": {
-            "description": "`consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`",
+            "description": "`consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`. `guardian_consent_required`: under 18 without an active `guardian_consent` from the legal representative",
             "content": {
               "application/json": {
                 "schema": {
@@ -1929,7 +2088,7 @@
         "tags": [
           "matching"
         ],
-        "summary": "Search the candidate bank: specialization, grade, stack, FSP achievements, format, city, expectations",
+        "summary": "Search the candidate bank: specialization, grade, stack, FSP achievements, format, city,\nexpectations, adults only",
         "operationId": "search",
         "parameters": [
           {
@@ -1970,6 +2129,15 @@
           {
             "name": "fsp_only",
             "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "adults_only",
+            "in": "query",
+            "description": "«Только 18+»: leave out candidates aged 14–17.",
             "required": false,
             "schema": {
               "type": "boolean"
@@ -3772,6 +3940,95 @@
         ]
       }
     },
+    "/api/v1/guardian/consent": {
+      "get": {
+        "tags": [
+          "guardian"
+        ],
+        "summary": "What a link from the representative's letter is about: the consent text, who asked, the\ncurrent answer and what this link can do now. Anonymous: the token is the credential",
+        "operationId": "view",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "description": "Token from either link of the letter.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardianConsentView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_token`: unknown token or a link of a superseded letter",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "guardian"
+        ],
+        "summary": "The representative's answer. The answer link grants or declines once while it is valid; the\nrevocation link withdraws the consent (or declines before any answer). Granting writes a\n`guardian_consent` grant on the minor's behalf with the representative's IP, User-Agent and\ntime; declining or revoking hides the profile",
+        "operationId": "answer",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GuardianAnswer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GuardianConsentView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_token`; `token_expired`: the answer link is older than 7 days",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`token_used`: already answered or revoked; `action_unavailable`: granting needs the answer link; `guardian_not_needed`: the participant is 18",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -3812,7 +4069,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Delete the account and personal data (152-ФЗ)",
+        "summary": "Delete the account and personal data (152-ФЗ), including a minor's birth date and everything\nabout their legal representative",
         "operationId": "delete_me",
         "responses": {
           "204": {},
@@ -3913,7 +4170,7 @@
             }
           },
           "422": {
-            "description": "`validation_failed`: unknown document, not its current version, or not for this role",
+            "description": "`validation_failed`: unknown document, not its current version, not for this role, or `guardian_consent` (only the legal representative gives it)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3938,7 +4195,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Revoke a consent. Revoking publication or processing hides the candidate from search;\nrevoking the video consent deletes the candidate's recordings right away.",
+        "summary": "Revoke a consent. Revoking publication or processing hides the candidate from search;\nrevoking the video consent deletes the candidate's recordings right away. `guardian_consent`\nbelongs to the legal representative and is revoked only by the link from their letter (404).",
         "operationId": "revoke_consent",
         "parameters": [
           {
@@ -3979,7 +4236,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,\nconsents, profile, tests with summaries, category history, invitations, applications, who\nopened your contacts, proctoring summaries; for an employer — the account and the company's data",
+        "summary": "Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,\nconsents with the declared age, profile, age (birth date and legal representative for 14–17),\ntests with summaries, category history, invitations, applications, who opened your contacts,\nproctoring summaries; for an employer — the account and the company's data",
         "operationId": "export",
         "responses": {
           "200": {
@@ -4228,7 +4485,7 @@
         "tags": [
           "vacancies"
         ],
-        "summary": "Apply to a vacancy: the company gets access to your contacts",
+        "summary": "Apply to a vacancy: the company gets access to your contacts. Under 18 this needs the legal\nrepresentative's consent first",
         "operationId": "apply",
         "parameters": [
           {
@@ -4271,7 +4528,7 @@
             }
           },
           "409": {
-            "description": "`already_applied`",
+            "description": "`already_applied`; `guardian_consent_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4488,6 +4745,79 @@
             "items": {
               "$ref": "#/components/schemas/EventView"
             }
+          }
+        }
+      },
+      "AgeBracket": {
+        "type": "string",
+        "enum": [
+          "adult",
+          "minor"
+        ]
+      },
+      "AgeRecord": {
+        "type": "object",
+        "required": [
+          "bracket",
+          "guardian_requests"
+        ],
+        "properties": {
+          "bracket": {
+            "$ref": "#/components/schemas/AgeBracket",
+            "description": "Today, derived from the birth date; adults gave no birth date, only the declaration\nrecorded with their consents."
+          },
+          "birth_date": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Only for those who registered as 14–17; erased 30 days after the 18th birthday."
+          },
+          "adult_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date"
+          },
+          "guardian_requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuardianRecord"
+            },
+            "description": "Requests to legal representatives and their answers, newest first."
+          }
+        }
+      },
+      "AgeSummary": {
+        "type": "object",
+        "description": "Derived from the birth date today: a minor turns into an adult on the 18th birthday.",
+        "required": [
+          "bracket"
+        ],
+        "properties": {
+          "bracket": {
+            "$ref": "#/components/schemas/AgeBracket"
+          },
+          "adult_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Minors only: the 18th birthday, when every restriction lifts."
+          },
+          "guardian": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GuardianState",
+                "description": "Minors only: where the legal representative's consent stands\n(details in `GET /candidate/guardian`)."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -4938,6 +5268,7 @@
           "search_status",
           "last_activity_at",
           "tasks_done",
+          "minor",
           "relation"
         ],
         "properties": {
@@ -5088,6 +5419,10 @@
               }
             ]
           },
+          "minor": {
+            "type": "boolean",
+            "description": "Under 18 (registered as 14–17, legal representative's consent given): show a neutral\n«14–17 лет». The birth date itself never reaches employers."
+          },
           "relation": {
             "$ref": "#/components/schemas/Relation"
           }
@@ -5130,6 +5465,7 @@
       "CandidateData": {
         "type": "object",
         "required": [
+          "age",
           "profile",
           "privacy",
           "surveys",
@@ -5143,6 +5479,9 @@
           "resume_uploads"
         ],
         "properties": {
+          "age": {
+            "$ref": "#/components/schemas/AgeRecord"
+          },
           "profile": {
             "$ref": "#/components/schemas/ProfileResponse"
           },
@@ -5228,7 +5567,8 @@
         "type": "object",
         "required": [
           "public_code",
-          "onboarding_step"
+          "onboarding_step",
+          "age"
         ],
         "properties": {
           "public_code": {
@@ -5253,6 +5593,9 @@
               "null"
             ],
             "format": "uuid"
+          },
+          "age": {
+            "$ref": "#/components/schemas/AgeSummary"
           }
         }
       },
@@ -5779,12 +6122,24 @@
             "type": [
               "string",
               "null"
-            ]
+            ],
+            "description": "For `guardian_consent`: the legal representative's IP and browser, until erased."
           },
           "user_agent": {
             "type": [
               "string",
               "null"
+            ]
+          },
+          "age_bracket": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AgeBracket",
+                "description": "The age declared with this grant at registration."
+              },
+              {
+                "type": "null"
+              }
             ]
           }
         }
@@ -6535,6 +6890,272 @@
           }
         }
       },
+      "GuardianAction": {
+        "type": "string",
+        "enum": [
+          "grant",
+          "decline",
+          "revoke"
+        ]
+      },
+      "GuardianAnswer": {
+        "type": "object",
+        "required": [
+          "token",
+          "action"
+        ],
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "action": {
+            "$ref": "#/components/schemas/GuardianAction"
+          }
+        }
+      },
+      "GuardianConsentView": {
+        "type": "object",
+        "required": [
+          "link",
+          "state",
+          "participant_adult",
+          "actions",
+          "participant",
+          "document"
+        ],
+        "properties": {
+          "link": {
+            "$ref": "#/components/schemas/GuardianLink"
+          },
+          "state": {
+            "$ref": "#/components/schemas/GuardianState"
+          },
+          "participant_adult": {
+            "type": "boolean",
+            "description": "The participant has turned 18: the consent is no longer needed and nothing can be done."
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GuardianAction"
+            },
+            "description": "What this link can do right now."
+          },
+          "participant": {
+            "type": "string",
+            "description": "Masked email of the participant's account, e.g. `an***@mail.ru`."
+          },
+          "guardian_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "As the participant entered it."
+          },
+          "link_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "answered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "document": {
+            "$ref": "#/components/schemas/ConsentDocument",
+            "description": "Current text of `guardian_consent`."
+          }
+        }
+      },
+      "GuardianContact": {
+        "type": "object",
+        "required": [
+          "full_name",
+          "email"
+        ],
+        "properties": {
+          "full_name": {
+            "type": "string",
+            "description": "Full name of a parent, adoptive parent or custodian."
+          },
+          "email": {
+            "type": "string"
+          }
+        }
+      },
+      "GuardianLink": {
+        "type": "string",
+        "enum": [
+          "confirm",
+          "revoke"
+        ]
+      },
+      "GuardianRecord": {
+        "type": "object",
+        "required": [
+          "state",
+          "requested_at"
+        ],
+        "properties": {
+          "full_name": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "`None` once erased (30 days after the 18th birthday)."
+          },
+          "email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/GuardianState"
+          },
+          "requested_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_letter_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "answered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "consent_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The `guardian_consent` grant in `consents`, when given."
+          },
+          "granted_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "erased_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "GuardianState": {
+        "type": "string",
+        "enum": [
+          "not_sent",
+          "pending",
+          "expired",
+          "granted",
+          "declined",
+          "revoked"
+        ]
+      },
+      "GuardianStatus": {
+        "type": "object",
+        "required": [
+          "required"
+        ],
+        "properties": {
+          "required": {
+            "type": "boolean",
+            "description": "Under 18 today: employers see the profile only with the representative's consent."
+          },
+          "adult_from": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "The 18th birthday, when every restriction lifts by itself."
+          },
+          "state": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/GuardianState",
+                "description": "`None` when not required."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "guardian_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "guardian_email": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sent_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "link_expires_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "answered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "HiringNeed": {
         "type": "object",
         "required": [
@@ -6970,6 +7591,24 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "MinorRegistration": {
+        "type": "object",
+        "required": [
+          "birth_date",
+          "guardian"
+        ],
+        "properties": {
+          "birth_date": {
+            "type": "string",
+            "format": "date",
+            "description": "Must be 14–17 years ago: the restriction lifts on the 18th birthday."
+          },
+          "guardian": {
+            "$ref": "#/components/schemas/GuardianContact",
+            "description": "Gets a letter once you confirm your own email."
           }
         }
       },
@@ -7777,7 +8416,7 @@
               "null"
             ],
             "format": "uuid",
-            "description": "`consent_required`: the current version of the consent document to grant first\n(`POST /api/v1/me/consents`)."
+            "description": "`consent_required`: the current version of the consent document to grant first\n(`POST /api/v1/me/consents`); `guardian_consent_required`: the document the legal\nrepresentative confirms by the link from their letter."
           },
           "document_kind": {
             "type": [
@@ -8364,6 +9003,28 @@
               "format": "uuid"
             },
             "description": "Accepted documents from `GET /api/v1/consents/current`."
+          },
+          "age": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AgeBracket",
+                "description": "Candidates declare their age: `adult` needs nothing else, `minor` (14–17) needs `minor`.\nUnder 14 the form does not submit. Employers are adults by the declaration in the form's\nconsent block («Я представляю компанию и мне есть 18 лет»); the field is ignored for them."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "minor": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/MinorRegistration",
+                "description": "Required with `age: minor`."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -8920,6 +9581,10 @@
           },
           "fsp_only": {
             "type": "boolean"
+          },
+          "adults_only": {
+            "type": "boolean",
+            "description": "«Только 18+»: leave out candidates aged 14–17."
           },
           "max_expectation": {
             "type": [
@@ -9831,6 +10496,10 @@
     {
       "name": "invitations",
       "description": "Приглашения — выход работодателя на кандидата, раскрытие контактов"
+    },
+    {
+      "name": "guardian",
+      "description": "Согласие законного представителя соискателя 14–17 лет: публичная страница по ссылке из письма"
     }
   ]
 }

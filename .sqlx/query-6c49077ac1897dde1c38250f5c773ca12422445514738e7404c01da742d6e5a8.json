@@ -1,0 +1,104 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.id, g.full_name_enc, g.email_enc, g.email_bidx, g.sent_at, g.confirm_expires_at,\n                  g.decision AS \"decision: GuardianDecision\", g.answered_at, g.consent_id,\n                  uc.granted_at AS \"granted_at?\", uc.revoked_at AS \"revoked_at?\", g.erased_at,\n                  g.created_at\n           FROM guardian_requests g\n           LEFT JOIN user_consents uc ON uc.id = g.consent_id\n           WHERE g.candidate_id = $1\n           ORDER BY g.created_at DESC, g.id DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "full_name_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "email_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "email_bidx",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "sent_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "confirm_expires_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "decision: GuardianDecision",
+        "type_info": {
+          "Custom": {
+            "name": "guardian_decision",
+            "kind": {
+              "Enum": [
+                "granted",
+                "declined"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "answered_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "consent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "granted_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "revoked_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "erased_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "6c49077ac1897dde1c38250f5c773ca12422445514738e7404c01da742d6e5a8"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO user_consents (id, user_id, document_id, granted_at, user_agent, age_bracket)\n         VALUES ($1, $2, $3, $4, 'seed', $5)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Timestamptz",
+        {
+          "Custom": {
+            "name": "age_bracket",
+            "kind": {
+              "Enum": [
+                "adult",
+                "minor"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "5916bb78552646eb41f0d68d4a2bd9e0628cbcc20784e3041e4415a314dc9ecd"
+}

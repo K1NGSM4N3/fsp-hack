@@ -6,7 +6,7 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use axum_extra::extract::cookie::CookieJar;
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -17,8 +17,10 @@ use super::{
     session_cookies, user_agent,
 };
 use crate::{
+    age::{self, AgeBracket},
     crypto::{new_token, normalize_email, sha256},
     error::{ApiError, ApiResult, Problem, Validator},
+    guardian::{self, GuardianContact, clean_contact},
     state::AppState,
 };
 
@@ -41,6 +43,20 @@ pub struct RegisterRequest {
     pub company_name: Option<String>,
     /// Accepted documents from `GET /api/v1/consents/current`.
     pub consents: Vec<Uuid>,
+    /// Candidates declare their age: `adult` needs nothing else, `minor` (14–17) needs `minor`.
+    /// Under 14 the form does not submit. Employers are adults by the declaration in the form's
+    /// consent block («Я представляю компанию и мне есть 18 лет»); the field is ignored for them.
+    pub age: Option<AgeBracket>,
+    /// Required with `age: minor`.
+    pub minor: Option<MinorRegistration>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct MinorRegistration {
+    /// Must be 14–17 years ago: the restriction lifts on the 18th birthday.
+    pub birth_date: NaiveDate,
+    /// Gets a letter once you confirm your own email.
+    pub guardian: GuardianContact,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -49,7 +65,7 @@ pub struct RegisterResponse {
     pub verification_required: bool,
 }
 
-fn valid_email(email: &str) -> bool {
+pub(crate) fn valid_email(email: &str) -> bool {
     let Some((local, domain)) = email.split_once('@') else {
         return false;
     };
@@ -74,7 +90,7 @@ async fn rate_limit(state: &AppState, key: String, limit: u64, window: Duration)
     responses(
         (status = 201, body = RegisterResponse),
         (status = 409, description = "`email_taken`", body = Problem),
-        (status = 422, description = "`validation_failed`, `consent_required`", body = Problem),
+        (status = 422, description = "`validation_failed`: also `age` for a candidate without it, `minor.birth_date` outside 14–17, `minor.guardian.*`", body = Problem),
         (status = 429, body = Problem),
     ))]
 async fn register(
@@ -111,7 +127,37 @@ async fn register(
             "company_name",
             "Укажите название компании",
         );
+    let age_bracket = match req.role {
+        Role::Candidate => req.age,
+        _ => Some(AgeBracket::Adult),
+    };
+    v.check(age_bracket.is_some(), "age", "Укажите, есть ли вам 18 лет");
+    let minor = match (age_bracket, &req.minor) {
+        (Some(AgeBracket::Minor), Some(m)) => {
+            if let Err(e) = age::check_minor_birth_date(m.birth_date, Utc::now().date_naive()) {
+                v.check(false, "minor.birth_date", e.message());
+            }
+            let contact = clean_contact(
+                &state.crypto,
+                &m.guardian,
+                &email,
+                &mut v,
+                ("minor.guardian.full_name", "minor.guardian.email"),
+            );
+            Some((m.birth_date, contact))
+        }
+        (Some(AgeBracket::Minor), None) => {
+            v.check(
+                false,
+                "minor",
+                "Укажите дату рождения и законного представителя",
+            );
+            None
+        }
+        _ => None,
+    };
     v.finish()?;
+    let age_bracket = age_bracket.unwrap_or(AgeBracket::Adult);
 
     let docs = db::consents::current_consent_documents(&state.pool).await?;
     let role_db: db::types::UserRole = req.role.into();
@@ -157,19 +203,32 @@ async fn register(
     )
     .await?;
     for doc in docs.iter().filter(|d| req.consents.contains(&d.id)) {
-        db::consents::insert_user_consent(
+        db::consents::insert_registration_consent(
             &mut *tx,
             Uuid::now_v7(),
             user_id,
             doc.id,
             ip.as_deref(),
             ua.as_deref(),
+            age_bracket.into(),
         )
         .await?;
     }
     match req.role {
         Role::Candidate => {
             db::candidates::insert_candidate(&mut *tx, user_id, &public_code(user_id)).await?;
+            if let Some((birth_date, contact)) = &minor {
+                db::guardians::set_birth_date(&mut *tx, user_id, *birth_date).await?;
+                db::guardians::insert_request(
+                    &mut *tx,
+                    Uuid::now_v7(),
+                    user_id,
+                    &state.crypto.encrypt_str(&contact.full_name),
+                    &state.crypto.encrypt_str(&contact.email),
+                    &contact.bidx,
+                )
+                .await?;
+            }
         }
         Role::Employer => {
             db::companies::insert_company(&mut *tx, Uuid::now_v7(), user_id, company_name).await?;
@@ -217,7 +276,8 @@ pub struct VerifyEmailRequest {
     pub token: String,
 }
 
-/// Confirm the email address with the token from the letter
+/// Confirm the email address with the token from the letter. For a candidate who registered as
+/// 14–17 this also sends the legal representative their letter
 #[utoipa::path(post, path = "/verify-email", tag = "auth",
     request_body = VerifyEmailRequest,
     responses((status = 204), (status = 400, description = "`invalid_token`", body = Problem)))]
@@ -231,7 +291,9 @@ async fn verify_email(
             .ok_or_else(|| {
                 ApiError::bad_request("invalid_token", "Ссылка недействительна или устарела")
             })?;
-    db::users::mark_email_verified(&state.pool, user_id).await?;
+    if db::users::mark_email_verified(&state.pool, user_id).await? > 0 {
+        guardian::after_email_verified(&state, user_id).await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

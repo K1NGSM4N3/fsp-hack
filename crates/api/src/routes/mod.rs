@@ -5,6 +5,7 @@ pub mod catalog;
 pub mod company;
 pub mod export;
 pub mod fsp;
+pub mod guardian;
 pub mod health;
 pub mod invitations;
 pub mod market;

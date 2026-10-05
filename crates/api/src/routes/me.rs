@@ -4,16 +4,18 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use axum_extra::extract::cookie::CookieJar;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 use crate::{
+    age::{self, AgeBracket},
     auth::{AuthUser, Role, clear_session_cookies, client_ip, user_agent},
     crypto::sha256,
     error::{ApiError, ApiResult, Problem},
+    guardian::{self, GuardianState},
     proctoring,
     state::AppState,
 };
@@ -40,6 +42,18 @@ pub struct CandidateSummary {
     pub onboarding_step: OnboardingStep,
     pub category: Option<catalog::Category>,
     pub active_session_id: Option<Uuid>,
+    pub age: AgeSummary,
+}
+
+/// Derived from the birth date today: a minor turns into an adult on the 18th birthday.
+#[derive(Serialize, ToSchema)]
+pub struct AgeSummary {
+    pub bracket: AgeBracket,
+    /// Minors only: the 18th birthday, when every restriction lifts.
+    pub adult_from: Option<NaiveDate>,
+    /// Minors only: where the legal representative's consent stands
+    /// (details in `GET /candidate/guardian`).
+    pub guardian: Option<GuardianState>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -90,11 +104,31 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> ApiResult<Json<MeR
                 } else {
                     OnboardingStep::Done
                 };
+                let guardian = if c.minor {
+                    Some(
+                        db::guardians::latest_request(&state.pool, user.id)
+                            .await?
+                            .map_or(GuardianState::NotSent, |r| {
+                                guardian::request_state(&r, Utc::now())
+                            }),
+                    )
+                } else {
+                    None
+                };
                 res.candidate = Some(CandidateSummary {
                     public_code: c.public_code,
                     onboarding_step,
                     category,
                     active_session_id: c.active_session_id,
+                    age: AgeSummary {
+                        bracket: if c.minor {
+                            AgeBracket::Minor
+                        } else {
+                            AgeBracket::Adult
+                        },
+                        adult_from: c.birth_date.filter(|_| c.minor).map(age::adult_from),
+                        guardian,
+                    },
                 });
             }
         }
@@ -111,7 +145,8 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> ApiResult<Json<MeR
     Ok(Json(res))
 }
 
-/// Delete the account and personal data (152-ФЗ)
+/// Delete the account and personal data (152-ФЗ), including a minor's birth date and everything
+/// about their legal representative
 #[utoipa::path(delete, path = "", tag = "account",
     responses((status = 204), (status = 401, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
@@ -123,6 +158,7 @@ async fn delete_me(
     let mut tx = state.pool.begin().await?;
     match user.role {
         Role::Candidate => {
+            db::guardians::erase_grant_trail(&mut *tx, user.id).await?;
             db::me::delete_candidate(&mut *tx, user.id).await?;
         }
         Role::Employer => {
@@ -193,7 +229,7 @@ pub struct GrantConsent {
         (status = 201, description = "Granted", body = UserConsent),
         (status = 200, description = "Already in force: the existing grant", body = UserConsent),
         (status = 401, body = Problem),
-        (status = 422, description = "`validation_failed`: unknown document, not its current version, or not for this role", body = Problem),
+        (status = 422, description = "`validation_failed`: unknown document, not its current version, not for this role, or `guardian_consent` (only the legal representative gives it)", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn grant_consent(
@@ -215,6 +251,12 @@ async fn grant_consent(
         return Err(ApiError::field(
             "document_id",
             "Этот документ не относится к вашему аккаунту",
+        ));
+    }
+    if doc.kind == db::guardians::KIND {
+        return Err(ApiError::field(
+            "document_id",
+            "Это согласие даёт законный представитель — по ссылке из письма",
         ));
     }
     let grant = db::consents::grant(
@@ -246,7 +288,8 @@ async fn grant_consent(
 }
 
 /// Revoke a consent. Revoking publication or processing hides the candidate from search;
-/// revoking the video consent deletes the candidate's recordings right away.
+/// revoking the video consent deletes the candidate's recordings right away. `guardian_consent`
+/// belongs to the legal representative and is revoked only by the link from their letter (404).
 #[utoipa::path(post, path = "/consents/{id}/revoke", tag = "account",
     params(("id" = Uuid, Path, description = "user consent id or consent document id")),
     responses((status = 204), (status = 404, body = Problem)),

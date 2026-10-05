@@ -72,3 +72,17 @@ pub enum IntegrityEvent {
     CameraLost,
     RecordingFailed,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "age_bracket", rename_all = "snake_case")]
+pub enum AgeBracket {
+    Adult,
+    Minor,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "guardian_decision", rename_all = "snake_case")]
+pub enum GuardianDecision {
+    Granted,
+    Declined,
+}

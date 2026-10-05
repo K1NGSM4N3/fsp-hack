@@ -80,6 +80,7 @@ interface Draft {
   allow_adjacent_grades: boolean;
   city: string;
   fsp_only: boolean;
+  adults_only: boolean;
   max_expectation: number | null;
 }
 
@@ -93,6 +94,7 @@ function draftOf(need: HiringNeed): Draft {
     work_formats: f.work_formats ?? need.work_formats,
     city: f.city ?? need.city ?? "",
     fsp_only: f.fsp_only ?? false,
+    adults_only: f.adults_only ?? false,
     max_expectation: f.max_expectation ?? null,
   };
 }
@@ -130,6 +132,7 @@ export function RefinePanel({ need, pending, onApply }: RefinePanelProps) {
             work_formats: d.work_formats,
             city: d.city.trim() || null,
             fsp_only: d.fsp_only,
+            adults_only: d.adults_only,
             max_expectation: d.max_expectation,
           });
         }}
@@ -155,6 +158,7 @@ export function RefinePanel({ need, pending, onApply }: RefinePanelProps) {
           <MoneyInput value={d.max_expectation} onChange={(max_expectation) => set({ max_expectation })} placeholder={need.salary.max.toLocaleString("ru-RU")} />
         </Field>
         <Switch checked={d.fsp_only} onChange={(fsp_only) => set({ fsp_only })} label="Только с достижениями ФСП" />
+        <Switch checked={d.adults_only} onChange={(adults_only) => set({ adults_only })} label="Только 18+" description="Без кандидатов 14–17 лет" />
         <div className="flex flex-col gap-2 pt-2">
           <Button type="submit" loading={pending}>
             Применить

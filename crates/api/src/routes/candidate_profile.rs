@@ -319,12 +319,13 @@ async fn get_privacy(
 }
 
 /// Update privacy settings. Showing the profile in search needs active consents to processing
-/// and to publication: without them the answer is 409 `consent_required` with the document to grant
+/// and to publication: without them the answer is 409 `consent_required` with the document to grant.
+/// Under 18 it also needs the legal representative's consent (409 `guardian_consent_required`)
 #[utoipa::path(put, path = "/privacy", tag = "candidate",
     request_body = Privacy,
     responses(
         (status = 200, body = Privacy),
-        (status = 409, description = "`consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`", body = Problem),
+        (status = 409, description = "`consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`. `guardian_consent_required`: under 18 without an active `guardian_consent` from the legal representative", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn put_privacy(
@@ -346,6 +347,11 @@ async fn put_privacy(
                 document_id: doc.id,
                 kind: doc.kind,
                 title: doc.title,
+            });
+        }
+        if let Some(doc) = db::guardians::missing_guardian_consent(&state.pool, user.id).await? {
+            return Err(ApiError::GuardianConsentRequired {
+                document_id: doc.id,
             });
         }
     }

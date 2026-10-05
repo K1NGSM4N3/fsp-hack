@@ -85,6 +85,33 @@ export async function getContactAccess(): Promise<T.ContactAccessEntry[]> {
   return http("GET", "/candidate/contact-access");
 }
 
+export async function getGuardianStatus(): Promise<T.GuardianStatus> {
+  if (USE_MOCKS) return (await mocks()).getGuardianStatus();
+  return http("GET", "/candidate/guardian");
+}
+
+/** Fresh links to the same representative; the previous letter's links stop working. */
+export async function resendGuardianLetter(): Promise<T.GuardianStatus> {
+  if (USE_MOCKS) return (await mocks()).resendGuardianLetter();
+  return http("POST", "/candidate/guardian/resend");
+}
+
+export async function changeGuardian(body: T.GuardianContact): Promise<T.GuardianStatus> {
+  if (USE_MOCKS) return (await mocks()).changeGuardian(body);
+  return http("PUT", "/candidate/guardian", { body });
+}
+
+/** Public: the token from the representative's letter is the only credential. */
+export async function getGuardianConsent(token: string): Promise<T.GuardianConsentView> {
+  if (USE_MOCKS) return (await mocks()).getGuardianConsent(token);
+  return http("GET", "/guardian/consent", { query: { token }, noRefresh: true });
+}
+
+export async function answerGuardianConsent(token: string, action: T.GuardianAction): Promise<T.GuardianConsentView> {
+  if (USE_MOCKS) return (await mocks()).answerGuardianConsent(token, action);
+  return http("POST", "/guardian/consent", { body: { token, action }, noRefresh: true });
+}
+
 export async function getProfile(): Promise<T.Profile> {
   if (USE_MOCKS) return (await mocks()).getProfile();
   return http("GET", "/candidate/profile");

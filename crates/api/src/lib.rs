@@ -1,3 +1,4 @@
+pub mod age;
 pub mod auth;
 pub mod cards;
 pub mod config;
@@ -7,6 +8,7 @@ pub mod db;
 pub mod dto;
 pub mod error;
 pub mod fsp_client;
+pub mod guardian;
 pub mod kv;
 pub mod mail;
 pub mod metrics;
@@ -66,6 +68,7 @@ use crate::state::AppState;
         (name = "tasks", description = "Регулярные короткие задания от работодателей"),
         (name = "vacancies", description = "Вакансии и отклики — дополнительный путь, инициатива кандидата"),
         (name = "invitations", description = "Приглашения — выход работодателя на кандидата, раскрытие контактов"),
+        (name = "guardian", description = "Согласие законного представителя соискателя 14–17 лет: публичная страница по ссылке из письма"),
     )
 )]
 struct ApiDoc;
@@ -104,7 +107,8 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
                 .merge(routes::tasks::candidate_router())
                 .merge(routes::market::candidate_router())
                 .merge(routes::assessment::candidate_router())
-                .merge(routes::proctoring::candidate_router()),
+                .merge(routes::proctoring::candidate_router())
+                .merge(routes::guardian::candidate_router()),
         )
         .nest(
             "/employer",
@@ -120,6 +124,7 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
         .nest("/fsp", routes::fsp::router())
         .nest("/admin", routes::proctoring::admin_router())
         .merge(routes::vacancies::public_router())
+        .merge(routes::guardian::public_router())
         .merge(routes::reports::router())
         .merge(routes::catalog::router())
         .merge(routes::assessment::catalog_router())

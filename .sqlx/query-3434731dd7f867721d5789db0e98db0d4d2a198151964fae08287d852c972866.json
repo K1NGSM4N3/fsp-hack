@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE guardian_requests SET decision = $2, answered_at = now(), consent_id = $3\n         WHERE id = $1 AND decision IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "guardian_decision",
+            "kind": {
+              "Enum": [
+                "granted",
+                "declined"
+              ]
+            }
+          }
+        },
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3434731dd7f867721d5789db0e98db0d4d2a198151964fae08287d852c972866"
+}

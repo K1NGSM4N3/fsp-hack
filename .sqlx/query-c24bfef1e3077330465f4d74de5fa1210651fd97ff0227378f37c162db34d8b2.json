@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE candidates SET birth_date = NULL\n         WHERE birth_date + interval '18 years' + make_interval(days => $1) <= current_date",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "c24bfef1e3077330465f4d74de5fa1210651fd97ff0227378f37c162db34d8b2"
+}

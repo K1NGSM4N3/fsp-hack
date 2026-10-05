@@ -161,7 +161,7 @@ function ShortlistSection({ need }: { need: HiringNeed }) {
                       busy={patch.isPending && patch.variables?.candidateId === item.candidate.id}
                       onPin={(pinned) => patch.mutate({ candidateId: item.candidate.id, patch: { pinned } })}
                       onDismiss={() => patch.mutate({ candidateId: item.candidate.id, patch: { dismissed: true } }, { onSuccess: () => toast.info("Кандидат скрыт из подборки", "Он не появится снова при уточнении") })}
-                      onInvite={() => setInvite({ id: item.candidate.id, code: item.candidate.code, display_name: item.candidate.display_name, category: item.candidate.category })}
+                      onInvite={() => setInvite({ id: item.candidate.id, code: item.candidate.code, display_name: item.candidate.display_name, category: item.candidate.category, minor: item.candidate.minor })}
                     />
                   </li>
                 ))}

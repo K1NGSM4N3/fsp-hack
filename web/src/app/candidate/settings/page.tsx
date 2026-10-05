@@ -63,6 +63,8 @@ function PrivacySection() {
   };
   const code = me.data?.candidate?.public_code;
   const category = me.data?.candidate?.category;
+  const age = me.data?.candidate?.age;
+  const waitsForGuardian = age?.bracket === "minor" && age.guardian !== "granted";
   return (
     <>
       <Card>
@@ -79,7 +81,16 @@ function PrivacySection() {
       <Card>
         <CardHeader title="Что видят работодатели" description="До вашего согласия компании видят анонимную карточку. Контакты не видны никогда, пока вы не примете приглашение или не откликнетесь." />
         <div className="divide-y divide-line">
-          <Switch className="py-4 first:pt-0" checked={p.visible} onChange={(v) => update({ visible: v })} disabled={save.isPending} label="Показывать профиль в поиске" description="Если выключить, вас не найдут в подборках и поиске по базе" />
+          <Switch
+            className="py-4 first:pt-0"
+            checked={p.visible}
+            onChange={(v) => update({ visible: v })}
+            disabled={save.isPending}
+            label="Показывать профиль в поиске"
+            description={
+              waitsForGuardian ? "Компании увидят профиль, когда законный представитель подтвердит согласие" : "Если выключить, вас не найдут в подборках и поиске по базе"
+            }
+          />
           <Switch className="py-4" checked={p.show_name} onChange={(v) => update({ show_name: v })} disabled={save.isPending} label="Показывать имя" description="Вместо анонимного кода в карточке будет ваше имя" />
           <Switch className="py-4" checked={p.show_fsp} onChange={(v) => update({ show_fsp: v })} disabled={save.isPending} label="Показывать достижения ФСП" description="Достижения поднимают вас внутри категории" />
           <Switch className="py-4 last:pb-0" checked={p.show_experience} onChange={(v) => update({ show_experience: v })} disabled={save.isPending} label="Показывать названия компаний в опыте" description="Иначе — только должности и описание задач" />
@@ -93,7 +104,8 @@ function PrivacySection() {
               <span className="font-mono font-semibold text-ink">{p.show_name ? profile.data?.full_name || "Ваше имя" : `Кандидат ${code}`}</span>
               {category && <CategoryBadge category={category} size="sm" />}
               {p.search_status === "active" && <Badge tone="success">Активно ищу работу</Badge>}
-              {!p.visible && <Badge tone="muted">Скрыт из поиска</Badge>}
+              {age?.bracket === "minor" && <Badge tone="neutral">14–17 лет</Badge>}
+              {(!p.visible || waitsForGuardian) && <Badge tone="muted">Скрыт из поиска</Badge>}
             </div>
           </div>
         )}
@@ -200,7 +212,7 @@ function FspSection() {
   );
 }
 
-const KIND_ORDER = ["pd_processing", "pd_publication", "terms", "proctoring_video"];
+const KIND_ORDER = ["pd_processing", "pd_publication", "terms", "proctoring_video", "guardian_consent"];
 
 const REVOKE_TEXT: Record<string, string> = {
   pd_processing: "Профиль сразу скроется из поиска, и мы перестанем подбирать вам предложения. Чтобы удалить данные полностью, удалите аккаунт.",
@@ -262,7 +274,9 @@ function ConsentsSection() {
                         : "Не выдано"}
                   </p>
                 </div>
-                {active ? (
+                {doc.kind === "guardian_consent" ? (
+                  <p className="text-xs text-ink-subtle sm:max-w-56 sm:text-right">Даёт и отзывает законный представитель — по ссылкам из письма</p>
+                ) : active ? (
                   <Button variant="ghost" size="sm" className="self-start sm:self-auto" onClick={() => setTarget(active)}>
                     Отозвать
                   </Button>

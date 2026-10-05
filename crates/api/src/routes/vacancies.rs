@@ -439,11 +439,12 @@ pub struct MyApplication {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Apply to a vacancy: the company gets access to your contacts
+/// Apply to a vacancy: the company gets access to your contacts. Under 18 this needs the legal
+/// representative's consent first
 #[utoipa::path(post, path = "/vacancies/{id}/applications", tag = "vacancies",
     params(("id" = Uuid, Path)),
     request_body = ApplyInput,
-    responses((status = 201, body = MyApplication), (status = 404, body = Problem), (status = 409, description = "`already_applied`", body = Problem)),
+    responses((status = 201, body = MyApplication), (status = 404, body = Problem), (status = 409, description = "`already_applied`; `guardian_consent_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn apply(
     State(state): State<AppState>,
@@ -457,6 +458,11 @@ async fn apply(
     db::vacancies::published_vacancy(&state.pool, vacancy_id)
         .await?
         .ok_or_else(ApiError::not_found)?;
+    if let Some(doc) = db::guardians::missing_guardian_consent(&state.pool, user.id).await? {
+        return Err(ApiError::GuardianConsentRequired {
+            document_id: doc.id,
+        });
+    }
     let letter = input.cover_letter.trim();
     let reopened =
         db::vacancies::reopen_application(&state.pool, letter, vacancy_id, user.id).await?;

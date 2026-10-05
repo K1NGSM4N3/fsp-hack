@@ -3,6 +3,7 @@
 import { Briefcase, ClipboardList, GraduationCap, LayoutDashboard, ListChecks, Mail, Settings, UserRound } from "lucide-react";
 import type { ReactNode } from "react";
 import { CabinetShell, type NavItem } from "@/components/layout/CabinetShell";
+import { GuardianBanner } from "@/features/candidate/components/GuardianBanner";
 import { useReceivedInvitations } from "@/features/candidate/hooks";
 
 export default function CandidateLayout({ children }: { children: ReactNode }) {
@@ -20,6 +21,7 @@ export default function CandidateLayout({ children }: { children: ReactNode }) {
   ];
   return (
     <CabinetShell role="candidate" nav={nav}>
+      <GuardianBanner />
       {children}
     </CabinetShell>
   );

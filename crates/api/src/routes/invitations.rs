@@ -592,16 +592,22 @@ async fn respond(
     Ok(Json(received_from_row!(row)))
 }
 
-/// Accept: the company gets access to your contacts
+/// Accept: the company gets access to your contacts. Under 18 this needs the legal
+/// representative's consent in force (it may have been revoked after the invitation came)
 #[utoipa::path(post, path = "/invitations/{id}/accept", tag = "invitations",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`", body = Problem)),
+    responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`; `guardian_consent_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn accept(
     State(state): State<AppState>,
     user: CandidateUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<ReceivedInvitation>> {
+    if let Some(doc) = db::guardians::missing_guardian_consent(&state.pool, user.id).await? {
+        return Err(ApiError::GuardianConsentRequired {
+            document_id: doc.id,
+        });
+    }
     respond(
         &state,
         user,

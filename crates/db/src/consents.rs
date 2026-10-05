@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::types::UserRole;
+use crate::types::{AgeBracket, UserRole};
 
 pub const PROCESSING: &str = "pd_processing";
 pub const PUBLICATION: &str = "pd_publication";
@@ -49,6 +49,8 @@ pub struct UserConsent {
     pub revoked_at: Option<DateTime<Utc>>,
     pub ip: Option<String>,
     pub user_agent: Option<String>,
+    /// The age the person declared with this grant (set at registration).
+    pub age_bracket: Option<AgeBracket>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -173,6 +175,31 @@ pub async fn insert_user_consent(
     .map(|r| r.rows_affected())
 }
 
+/// A grant made at registration, carrying the age declaration: adults give nothing else.
+pub async fn insert_registration_consent(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+    user_id: Uuid,
+    document_id: Uuid,
+    ip: Option<&str>,
+    user_agent: Option<&str>,
+    age_bracket: AgeBracket,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO user_consents (id, user_id, document_id, ip, user_agent, age_bracket)
+         VALUES ($1, $2, $3, $4, $5, $6)",
+        id,
+        user_id,
+        document_id,
+        ip,
+        user_agent,
+        age_bracket as AgeBracket,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
 /// Idempotent: with an active grant of the document in place, that grant is returned unchanged.
 /// The no-op `DO UPDATE` makes the conflicting row visible to `RETURNING` in the same statement
 /// (no race with a concurrent grant); `xmax = 0` holds only for a freshly inserted row.
@@ -207,18 +234,19 @@ pub async fn user_consents(
 ) -> Result<Vec<UserConsent>, sqlx::Error> {
     sqlx::query_as!(
         UserConsent,
-        "SELECT uc.id, uc.document_id, d.kind, d.version, d.title, uc.granted_at, uc.revoked_at,
-                uc.ip, uc.user_agent
-         FROM user_consents uc
-         JOIN consent_documents d ON d.id = uc.document_id
-         WHERE uc.user_id = $1
-         ORDER BY uc.granted_at DESC",
+        r#"SELECT uc.id, uc.document_id, d.kind, d.version, d.title, uc.granted_at, uc.revoked_at,
+                  uc.ip, uc.user_agent, uc.age_bracket AS "age_bracket: AgeBracket"
+           FROM user_consents uc
+           JOIN consent_documents d ON d.id = uc.document_id
+           WHERE uc.user_id = $1
+           ORDER BY uc.granted_at DESC"#,
         user_id,
     )
     .fetch_all(db)
     .await
 }
 
+/// The representative's `guardian_consent` is not the user's to revoke: it is skipped (`None`).
 pub async fn revoke_user_consent(
     db: impl PgExecutor<'_>,
     id: Uuid,
@@ -229,7 +257,7 @@ pub async fn revoke_user_consent(
          SET revoked_at = now()
          FROM consent_documents d
          WHERE (uc.id = $1 OR uc.document_id = $1) AND uc.user_id = $2 AND uc.revoked_at IS NULL
-           AND d.id = uc.document_id
+           AND d.id = uc.document_id AND d.kind <> 'guardian_consent'
          RETURNING d.kind",
         id,
         user_id,

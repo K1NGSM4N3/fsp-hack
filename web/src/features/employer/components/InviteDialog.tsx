@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { isApiError } from "@/api/client";
 import type { Category, HiringNeed, WorkFormat } from "@/api/types";
+import { MinorBadge } from "@/components/domain/CandidateCard";
 import { CategoryBadge } from "@/components/domain/Category";
 import { Alert, Button, Dialog, Field, Input, MoneyInput, ProgressBar, Select, Textarea, useToast } from "@/components/ui";
 import { useCompany, useInvitationStats, useNeeds, useOwnVacancies, useSendInvitation } from "@/features/employer/hooks";
@@ -15,6 +16,7 @@ export interface InviteTarget {
   code: string;
   display_name?: string | null;
   category?: Category | null;
+  minor?: boolean;
 }
 
 interface Draft {
@@ -128,6 +130,7 @@ function InviteForm({ target, need, onClose, onSent }: { target: InviteTarget; n
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="font-mono font-semibold text-ink">{target.display_name ?? `Кандидат ${target.code}`}</span>
           {target.category && <CategoryBadge category={target.category} size="sm" />}
+          {target.minor && <MinorBadge />}
         </div>
         {quotaLeft !== null && stats.data && (
           <div className="w-40">
@@ -138,6 +141,13 @@ function InviteForm({ target, need, onClose, onSent }: { target: InviteTarget; n
           </div>
         )}
       </div>
+
+      {target.minor && (
+        <Alert tone="info" title="Кандидату нет 18">
+          Трудовой кодекс бережёт работников до 18 лет: до 16 лет — только лёгкая работа в свободное от учёбы время и с согласия родителей, рабочая неделя и смена короче, вредные и опасные работы
+          запрещены (ТК РФ, ст. 63, 92, 94, 265). Учтите это в описании задачи и графика.
+        </Alert>
+      )}
 
       {conflict && (
         <Alert

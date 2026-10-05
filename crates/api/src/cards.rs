@@ -90,6 +90,9 @@ pub struct CandidateCard {
     /// How the test behind the current category was proctored; `None` for tests taken without
     /// proctoring. Never carries the video.
     pub proctoring: Option<ProctoringBadge>,
+    /// Under 18 (registered as 14–17, legal representative's consent given): show a neutral
+    /// «14–17 лет». The birth date itself never reaches employers.
+    pub minor: bool,
     pub relation: Relation,
 }
 
@@ -199,6 +202,7 @@ pub async fn load(
                 .iter()
                 .find(|b| b.candidate_id == r.user_id)
                 .map(proctoring::badge),
+            minor: r.minor,
             relation: Relation {
                 contacts_available: applied
                     || invitation_status == Some(InvitationStatus::Accepted),

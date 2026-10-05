@@ -65,7 +65,8 @@ pub struct ResumeUpload {
 
 #[derive(Debug, Clone)]
 pub struct CandidateInvitable {
-    /// Visible and holding an unrevoked `pd_publication` grant: employers may find and invite.
+    /// Visible, holding an unrevoked `pd_publication` grant and, while under 18, an unrevoked
+    /// `guardian_consent`: employers may find and invite.
     pub published: bool,
     pub search_status: SearchStatus,
     pub specialization: Option<String>,
@@ -266,10 +267,15 @@ pub async fn candidate_invitable(
 ) -> Result<Option<CandidateInvitable>, sqlx::Error> {
     sqlx::query_as!(
         CandidateInvitable,
-        r#"SELECT c.visible AND EXISTS (
+        r#"SELECT c.visible
+                  AND EXISTS (
                       SELECT 1 FROM user_consents uc
                       JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                      WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL) AS "published!",
+                      WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
+                  AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
+                       OR EXISTS (SELECT 1 FROM user_consents gc
+                                   JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
+                                   WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL)) AS "published!",
                   c.search_status AS "search_status: SearchStatus", c.specialization, c.grade
            FROM candidates c
            WHERE c.user_id = $1"#,

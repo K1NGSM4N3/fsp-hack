@@ -32,6 +32,10 @@ const CONSENT_VIDEO: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_0000000000
 /// Separate stream for proctoring: adding it left every earlier draw, and so the rest of the demo
 /// data, unchanged.
 const PROCTORING_SEED: u64 = 4242;
+/// Same for the 14–17-year-olds: their birth dates and representatives come from their own stream.
+const MINORS_SEED: u64 = 1417;
+const CONSENT_GUARDIAN: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000a01);
+pub const DEMO_MINOR_EMAIL: &str = "minor@demo.fsp";
 
 #[derive(Deserialize)]
 struct Participant {
@@ -48,6 +52,9 @@ pub struct SeedReport {
     pub without_video: usize,
     /// Candidates whose tests carry behavioral remarks (tab leaves, pastes).
     pub with_remarks: usize,
+    /// 14–17-year-olds whose representative confirmed the consent / has not answered yet.
+    pub minors_confirmed: usize,
+    pub minors_pending: usize,
 }
 
 struct Account {
@@ -80,7 +87,15 @@ async fn account(
         _ => &[CONSENT_PROCESSING, CONSENT_TERMS],
     };
     for doc in docs {
-        db::seed::seed_consent(&mut *tx, Uuid::now_v7(), id, *doc, at).await?;
+        db::seed::seed_registration_consent(
+            &mut *tx,
+            Uuid::now_v7(),
+            id,
+            *doc,
+            at,
+            db::types::AgeBracket::Adult,
+        )
+        .await?;
     }
     Ok(Account { id, email })
 }
@@ -413,6 +428,98 @@ async fn seed_proctoring(
     Ok(Some(ProctoringOutcome { camera, remarks }))
 }
 
+/// A categorized junior who may become one of the demo 14–17-year-olds.
+struct Junior {
+    id: Uuid,
+    spec: Specialization,
+    created: DateTime<Utc>,
+    surname: (&'static str, &'static str),
+}
+
+/// The first junior of every specialization registered as 14–17: a birth date, the declaration on
+/// the registration grants, no work history. Two of six wait for the representative (one of them
+/// logs in as `minor@demo.fsp`), the rest are confirmed and show the «14–17 лет» badge.
+async fn seed_minors(
+    tx: &mut PgConnection,
+    crypto: &Crypto,
+    rng: &mut ChaCha8Rng,
+    juniors: &[Junior],
+    now: DateTime<Utc>,
+) -> ApiResult<(usize, usize)> {
+    let today = now.date_naive();
+    let (mut confirmed, mut pending) = (0usize, 0usize);
+    let picks = Specialization::ALL
+        .iter()
+        .filter_map(|spec| juniors.iter().find(|j| j.spec == *spec));
+    for (i, j) in picks.enumerate() {
+        let days = rng.random_range(14 * 365 + 210..18 * 365 - 30);
+        let birth = today
+            .checked_sub_days(chrono::Days::new(days))
+            .unwrap_or(today);
+        db::seed::seed_minor(&mut *tx, j.id, birth).await?;
+
+        let mother = rng.random_bool(0.7);
+        let first = if mother {
+            corpus::FEMALE_FIRST.choose(rng)
+        } else {
+            corpus::MALE_FIRST.choose(rng)
+        }
+        .copied()
+        .unwrap_or("Алекс");
+        let name = format!("{} {first}", if mother { j.surname.1 } else { j.surname.0 });
+        let email = format!("parent{}@demo.fsp", i + 1);
+        let waits = i % 3 == 2;
+        let sent = if waits {
+            now - Duration::hours(rng.random_range(6..72))
+        } else {
+            j.created + Duration::hours(rng.random_range(1..30))
+        };
+        let consent_id = if waits {
+            None
+        } else {
+            let grant = Uuid::now_v7();
+            let at = sent + Duration::minutes(rng.random_range(20..2_000));
+            db::seed::seed_consent(&mut *tx, grant, j.id, CONSENT_GUARDIAN, at).await?;
+            Some((grant, at))
+        };
+        let (_, confirm_hash) = crate::crypto::new_token();
+        let (_, revoke_hash) = crate::crypto::new_token();
+        db::seed::seed_guardian(
+            &mut *tx,
+            &db::seed::SeedGuardian {
+                id: Uuid::now_v7(),
+                candidate_id: j.id,
+                full_name_enc: &crypto.encrypt_str(&name),
+                email_enc: &crypto.encrypt_str(&email),
+                email_bidx: &crypto.blind_index(&email),
+                confirm_hash: &confirm_hash,
+                revoke_hash: &revoke_hash,
+                sent_at: sent,
+                confirm_expires_at: sent + Duration::days(crate::guardian::CONFIRM_TTL_DAYS),
+                consent_id: consent_id.map(|c| c.0),
+                answered_at: consent_id.map(|c| c.1),
+                created_at: j.created,
+            },
+        )
+        .await?;
+        if waits && pending == 0 {
+            db::seed::seed_login_email(
+                &mut *tx,
+                j.id,
+                &crypto.encrypt_str(DEMO_MINOR_EMAIL),
+                &crypto.blind_index(DEMO_MINOR_EMAIL),
+            )
+            .await?;
+        }
+        if waits {
+            pending += 1;
+        } else {
+            confirmed += 1;
+        }
+    }
+    Ok((confirmed, pending))
+}
+
 pub async fn seed(
     pool: &PgPool,
     crypto: &Crypto,
@@ -424,6 +531,8 @@ pub async fn seed(
     let hash = crypto.passwords.hash(DEMO_PASSWORD)?;
     let mut rng = ChaCha8Rng::seed_from_u64(42);
     let mut proctoring_rng = ChaCha8Rng::seed_from_u64(PROCTORING_SEED);
+    let mut minors_rng = ChaCha8Rng::seed_from_u64(MINORS_SEED);
+    let mut juniors: Vec<Junior> = Vec::new();
     let now = Utc::now();
     let mut tx = pool.begin().await?;
 
@@ -815,9 +924,19 @@ pub async fn seed(
                 db::seed::seed_fsp_link(&mut *tx, acc.id, &fsp_id, &raw).await?;
                 fsp_linked += 1;
             }
+            if matches!(assigned, Some((Grade::Junior, ..))) && n != 0 {
+                juniors.push(Junior {
+                    id: acc.id,
+                    spec,
+                    created,
+                    surname: last_pair,
+                });
+            }
             n += 1;
         }
     }
+    let (minors_confirmed, minors_pending) =
+        seed_minors(&mut tx, crypto, &mut minors_rng, &juniors, now).await?;
     tx.commit().await?;
     Ok(Some(SeedReport {
         companies: companies.len(),
@@ -826,5 +945,7 @@ pub async fn seed(
         with_video,
         without_video,
         with_remarks,
+        minors_confirmed,
+        minors_pending,
     }))
 }

@@ -1,3 +1,4 @@
+use chrono::NaiveDate;
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
@@ -9,6 +10,8 @@ pub struct CandidateOnboarding {
     pub specialization: Option<String>,
     pub grade: Option<String>,
     pub active_session_id: Option<Uuid>,
+    pub birth_date: Option<NaiveDate>,
+    pub minor: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -29,7 +32,9 @@ pub async fn candidate_onboarding(
                   c.specialization,
                   c.grade,
                   (SELECT a.id FROM assessment_sessions a
-                    WHERE a.candidate_id = c.user_id AND a.status = 'in_progress') AS active_session_id
+                    WHERE a.candidate_id = c.user_id AND a.status = 'in_progress') AS active_session_id,
+                  c.birth_date,
+                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS "minor!"
            FROM candidates c
            WHERE c.user_id = $1"#,
         user_id,

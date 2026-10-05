@@ -55,6 +55,8 @@ pub struct CandidateCard {
     pub skill_sources: Vec<String>,
     pub task_rating: Option<f32>,
     pub tasks_done: i64,
+    /// Under 18 today; the birth date itself never leaves the database for employers.
+    pub minor: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -68,14 +70,17 @@ pub struct CompanyRelation {
 /// `skills`/`skill_sources` are parallel arrays; `text_rank` scores the "about" text against an
 /// OR-query built from the need description.
 ///
-/// Searchable means visible, not closed, and holding an unrevoked `pd_publication` grant. The
-/// grant check repeats what `PUT /candidate/privacy` enforces, so a stale `visible` flag can never
-/// publish a profile; it is a semi-join over the partial `user_consents_active_idx`.
+/// Searchable means visible, not closed, holding an unrevoked `pd_publication` grant and, while
+/// under 18, an unrevoked `guardian_consent` given by the legal representative. The grant checks
+/// repeat what `PUT /candidate/privacy` enforces, so a stale `visible` flag can never publish a
+/// profile; each is a semi-join over the partial `user_consents_active_idx`. `adults_only` is the
+/// employer's «Только 18+» filter: it drops minors, it does not rank them lower.
 pub async fn candidate_pool(
     db: impl PgExecutor<'_>,
     text_query: Option<&str>,
     specialization: &str,
     grade: Option<&str>,
+    adults_only: bool,
 ) -> Result<Vec<PoolCandidate>, sqlx::Error> {
     sqlx::query_as!(
         PoolCandidate,
@@ -97,6 +102,10 @@ pub async fn candidate_pool(
              AND EXISTS (SELECT 1 FROM user_consents uc
                           JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
                           WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
+             AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
+                  OR (NOT $4 AND EXISTS (SELECT 1 FROM user_consents gc
+                                          JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
+                                          WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL)))
              AND c.specialization = $2
              AND c.grade IS NOT NULL
              AND ($3::text IS NULL OR c.grade = $3)
@@ -104,6 +113,7 @@ pub async fn candidate_pool(
         text_query,
         specialization,
         grade,
+        adults_only,
     )
     .fetch_all(db)
     .await
@@ -127,7 +137,8 @@ pub async fn candidate_cards(
                   (SELECT avg(a.rating)::real FROM task_assignments a
                     WHERE a.candidate_id = c.user_id AND a.status = 'reviewed') AS task_rating,
                   (SELECT count(*) FROM task_assignments a
-                    WHERE a.candidate_id = c.user_id AND a.status IN ('submitted', 'reviewed')) AS "tasks_done!"
+                    WHERE a.candidate_id = c.user_id AND a.status IN ('submitted', 'reviewed')) AS "tasks_done!",
+                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS "minor!"
            FROM candidates c
            LEFT JOIN fsp_links f ON f.candidate_id = c.user_id
            LEFT JOIN candidate_skills s ON s.candidate_id = c.user_id
@@ -152,7 +163,11 @@ pub async fn searchable_among(
            AND c.search_status <> 'closed'
            AND EXISTS (SELECT 1 FROM user_consents uc
                         JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                        WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)",
+                        WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
+           AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
+                OR EXISTS (SELECT 1 FROM user_consents gc
+                            JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
+                            WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL))",
         ids,
     )
     .fetch_all(db)

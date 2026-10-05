@@ -4,7 +4,7 @@ import { Eye, Lock, Mail, MapPin, Phone, Send, ShieldCheck, Star, Trophy, UserRo
 import Link from "next/link";
 import { useState } from "react";
 import type { CandidateCard } from "@/api/types";
-import { candidateTitle, strengthPoints } from "@/components/domain/CandidateCard";
+import { MinorBadge, candidateTitle, strengthPoints } from "@/components/domain/CandidateCard";
 import { CategoryBadge } from "@/components/domain/Category";
 import { ExplanationPanel, ScoreRing } from "@/components/domain/Explanation";
 import { FspEmpty } from "@/components/domain/Fsp";
@@ -123,6 +123,7 @@ export function EmployerCandidateView({ id, needId }: { id: string; needId: stri
         eyebrow={
           <span className="flex flex-wrap items-center gap-2">
             {c.category && <CategoryBadge category={c.category} long />}
+            {c.minor && <MinorBadge />}
             {c.search_status === "active" && <Badge tone="success">{SEARCH_STATUS_LABEL.active}</Badge>}
             {status && <InvitationStatusBadge status={status} />}
             <ProctoringBadge badge={c.proctoring} />
@@ -276,7 +277,7 @@ export function EmployerCandidateView({ id, needId }: { id: string; needId: stri
         </div>
       </div>
 
-      <InviteDialog open={invite} onClose={() => setInvite(false)} target={{ id: c.id, code: c.code, display_name: c.display_name, category: c.category }} need={need.data ?? null} />
+      <InviteDialog open={invite} onClose={() => setInvite(false)} target={{ id: c.id, code: c.code, display_name: c.display_name, category: c.category, minor: c.minor }} need={need.data ?? null} />
     </div>
   );
 }

@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT d.id AS \"id!\", d.kind AS \"kind!\", d.title AS \"title!\"\n           FROM candidates c\n           CROSS JOIN LATERAL (SELECT id, kind, title FROM consent_documents\n                               WHERE kind = 'guardian_consent'\n                               ORDER BY version DESC LIMIT 1) d\n           WHERE c.user_id = $1\n             AND c.birth_date + interval '18 years' > current_date\n             AND NOT EXISTS (SELECT 1 FROM user_consents uc\n                              JOIN consent_documents g ON g.id = uc.document_id AND g.kind = 'guardian_consent'\n                              WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "title!",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "ad55dcb219702c8e7933b45780f1be34e58de55c00219b4fb56e2bf76b2c2ea4"
+}

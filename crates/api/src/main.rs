@@ -62,6 +62,8 @@ async fn main() -> Result<(), StartupError> {
                 with_video = r.with_video,
                 without_video = r.without_video,
                 with_remarks = r.with_remarks,
+                minors_confirmed = r.minors_confirmed,
+                minors_pending = r.minors_pending,
                 "demo data seeded"
             ),
             Ok(None) => tracing::info!("demo data already present"),
@@ -72,6 +74,7 @@ async fn main() -> Result<(), StartupError> {
         }
     }
 
+    api::guardian::spawn_sweeper(pool.clone());
     let recordings = Arc::new(RecordingStore::new(config.proctoring.dir.clone()));
     match recordings.init().await {
         Ok(()) => api::proctoring::spawn_sweeper(

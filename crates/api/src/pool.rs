@@ -23,6 +23,8 @@ pub struct PoolFilter<'a> {
     pub fsp_only: bool,
     pub max_expectation: Option<i64>,
     pub required_skills: &'a [String],
+    /// «Только 18+»: a filter, never a ranking penalty.
+    pub adults_only: bool,
 }
 
 pub fn source(s: &str) -> SkillSource {
@@ -74,6 +76,7 @@ pub async fn load(
         text_query.as_deref(),
         spec.slug(),
         filter.grade.map(Grade::slug),
+        filter.adults_only,
     )
     .await?;
     let max_rank = rows.iter().map(|r| r.text_rank).fold(0.0f32, f32::max);

@@ -13,6 +13,15 @@ export function candidateTitle(c: { code: string; display_name?: string | null }
   return c.display_name || `Кандидат ${c.code}`;
 }
 
+/** Neutral on purpose: an age bracket, not a warning. The birth date never reaches employers. */
+export function MinorBadge() {
+  return (
+    <Badge tone="neutral" title="Кандидату от 14 до 18 лет; согласие законного представителя получено">
+      14–17 лет
+    </Badge>
+  );
+}
+
 /** test_strength is θ's position inside the grade band, 0..1. */
 export function strengthPoints(v: number | null | undefined): number | null {
   return v === null || v === undefined ? null : Math.round(v * 100);
@@ -58,6 +67,7 @@ export function CandidateCardView({ candidate: c, href, highlightSkills, aside, 
               {candidateTitle(c)}
             </Link>
             {c.category && <CategoryBadge category={c.category} size="sm" />}
+            {c.minor && <MinorBadge />}
             {badges}
           </div>
           <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">

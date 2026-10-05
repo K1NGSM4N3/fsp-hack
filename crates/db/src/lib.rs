@@ -8,6 +8,7 @@ pub mod consents;
 pub mod contacts;
 pub mod fsp;
 pub mod grades;
+pub mod guardians;
 pub mod invitations;
 pub mod market;
 pub mod me;
