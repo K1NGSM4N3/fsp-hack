@@ -25,20 +25,29 @@ docker compose -f deploy/compose.yml --profile full up -d --build
 
 Без профиля `full` поднимается только ядро: приложение, API, Postgres, Valkey, Mailpit.
 
+При первом запуске API заполняет демо-данные. Пароль у всех демо-аккаунтов — `demo12345`:
+
+| Роль | Вход |
+|---|---|
+| Работодатель | `employer@demo.fsp` |
+| Кандидат | `candidate@demo.fsp`, `cand1@demo.fsp` … `cand239@demo.fsp` |
+| Участник ФСП (вход в ФСП ID) | `fsp-000001` … `fsp-000010` |
+
 ## Локальная разработка без Docker
 
-Нужны Rust ≥ 1.85, Node.js ≥ 20, PostgreSQL ≥ 14.
+Нужны Rust ≥ 1.85, Node.js ≥ 22, PostgreSQL ≥ 14 — или `nix develop`, где есть всё, включая Colima и Docker.
 
 ```sh
 make db      # создать базу fsp_hack
 make api     # API на :8000
-make web     # фронтенд на :3000
+make web     # фронтенд на :3000 (без бэкенда: NEXT_PUBLIC_USE_MOCKS=1 в web/.env.local)
 ```
 
 Подробнее о командах и правилах — в `AGENTS.md`.
 
 ## Документация
 
+- `docs/solution.md` — описание решения для жюри: архитектура, механики, валидация, API, запуск
 - `architecture.md` — архитектура, механики тестирования и подбора, интеграция с ФСП
 - `api.md` — API; актуальная спецификация — `/api/v1/openapi.json`
 - `docs/validation/` — процедура валидации и результаты
