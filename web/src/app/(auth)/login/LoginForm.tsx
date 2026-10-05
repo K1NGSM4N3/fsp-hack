@@ -109,10 +109,10 @@ export function LoginForm() {
           <p className="mt-1 text-xs text-ink-subtle">Пароль {DEMO_PASSWORD}. {USE_MOCKS ? "Данные живут в этом браузере." : "Доступны, если API запущен с SEED_DEMO=true."}</p>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <Button variant="soft" size="sm" icon={<UserRound className="size-4" aria-hidden />} onClick={() => demo("candidate@demo.fsp")} disabled={login.isPending}>
-              Кандидат
+              Соискатель
             </Button>
             <Button variant="soft" size="sm" icon={<Building2 className="size-4" aria-hidden />} onClick={() => demo("employer@demo.fsp")} disabled={login.isPending}>
-              Работодатель
+              Компания
             </Button>
           </div>
         </div>

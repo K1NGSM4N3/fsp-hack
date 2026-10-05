@@ -4,28 +4,25 @@ export interface SiteLink {
 }
 
 export const SITE_NAV: SiteLink[] = [
-  { href: "/candidates", label: "Кандидатам" },
-  { href: "/employers", label: "Работодателям" },
+  { href: "/seekers", label: "Соискателям" },
+  { href: "/business", label: "Компаниям" },
   { href: "/fsp", label: "Участникам ФСП" },
   { href: "/vacancies", label: "Вакансии" },
 ];
 
 export const FOOTER_COLUMNS: { title: string; links: SiteLink[] }[] = [
   {
-    title: "Кандидатам",
+    title: "Соискателям",
     links: [
-      { href: "/candidates", label: "Как это работает" },
-      { href: "/candidates#test", label: "Каким будет тест" },
-      { href: "/candidates#privacy", label: "Приватность и контакты" },
+      { href: "/seekers", label: "Как найти работу" },
+      { href: "/vacancies", label: "Открытые вакансии" },
       { href: "/register?role=candidate", label: "Пройти тест" },
     ],
   },
   {
-    title: "Работодателям",
+    title: "Компаниям",
     links: [
-      { href: "/employers", label: "Как нанимать" },
-      { href: "/employers#rules", label: "Правила контакта" },
-      { href: "/employers#analytics", label: "Воронка и отказы" },
+      { href: "/business", label: "Как нанимать" },
       { href: "/register?role=employer", label: "Начать подбор" },
     ],
   },
@@ -33,8 +30,6 @@ export const FOOTER_COLUMNS: { title: string; links: SiteLink[] }[] = [
     title: "Ещё",
     links: [
       { href: "/fsp", label: "Участникам ФСП" },
-      { href: "/vacancies", label: "Вакансии" },
-      { href: "/#how", label: "Как устроен тест" },
       { href: "/login", label: "Войти" },
     ],
   },

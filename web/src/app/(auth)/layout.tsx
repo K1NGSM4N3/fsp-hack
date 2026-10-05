@@ -5,9 +5,9 @@ import { Logo } from "@/components/brand/Logo";
 import { HeroGraph } from "@/components/site/HeroGraph";
 
 const POINTS = [
-  { icon: BadgeCheck, text: "Категорию даёт адаптивный тест, обычно за 10–25 минут" },
+  { icon: BadgeCheck, text: "Тест по вашему направлению: 8–20 заданий, на каждое до трёх минут" },
   { icon: Banknote, text: "Зарплата указана в первом же сообщении от компании" },
-  { icon: Trophy, text: "Достижения ФСП поднимают в подборке, без них штрафа нет" },
+  { icon: Trophy, text: "Разряды и призовые места ФСП поднимают вас в подборке" },
   { icon: ShieldCheck, text: "Контакты компания увидит, только когда вы нажмёте «Принять»" },
 ];
 

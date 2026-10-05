@@ -28,8 +28,8 @@ interface CabinetShellProps {
 }
 
 const ROLE_HOME: Record<string, string> = { candidate: "/candidate", employer: "/employer" };
-const ROLE_LABEL: Record<string, string> = { candidate: "Кандидат", employer: "Работодатель" };
-const ROLE_CABINET: Record<string, string> = { candidate: "Кабинет кандидата", employer: "Кабинет работодателя" };
+const ROLE_LABEL: Record<string, string> = { candidate: "Соискатель", employer: "Компания" };
+const ROLE_CABINET: Record<string, string> = { candidate: "Кабинет соискателя", employer: "Кабинет компании" };
 
 function isActive(item: NavItem, pathname: string) {
   return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);

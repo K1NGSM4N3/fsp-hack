@@ -15,14 +15,14 @@ export function SiteFooter() {
             <div data-reveal>
               <Image src="/brand/fsp-logo-full-dark.svg" alt="Федерация спортивного программирования России" width={320} height={40} unoptimized className="h-9 w-auto" />
               <p className="mt-6 max-w-sm leading-relaxed text-night-muted">
-                Подбор ИТ-специалистов от Федерации спортивного программирования. Кандидат один раз сдаёт тест, компании пишут ему сами и сразу называют зарплату.
+                Подбор ИТ-специалистов от Федерации спортивного программирования России. Соискатель один раз проходит тест, и компании пишут ему сами, называя зарплату в первом же сообщении.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Link href="/register?role=candidate" className="inline-flex h-11 items-center rounded-full bg-white px-5 text-sm font-medium text-ink transition-colors hover:bg-primary-100">
-                  Я ищу работу
+                <Link href="/seekers" className="inline-flex h-11 items-center rounded-full bg-white px-5 text-sm font-medium text-ink transition-colors hover:bg-primary-100">
+                  Ищу работу
                 </Link>
-                <Link href="/register?role=employer" className="inline-flex h-11 items-center rounded-full border border-white/25 px-5 text-sm font-medium text-white transition-colors hover:border-white">
-                  Я нанимаю
+                <Link href="/business" className="inline-flex h-11 items-center rounded-full border border-white/25 px-5 text-sm font-medium text-white transition-colors hover:border-white">
+                  Ищу специалистов
                 </Link>
               </div>
             </div>
@@ -54,7 +54,7 @@ export function SiteFooter() {
           <div className="mt-10 flex flex-col gap-4 border-t border-night-line pt-6 text-sm text-night-faint md:flex-row md:items-center md:justify-between">
             <p>© 2026 ФСП Таланты · Хакатон «Лидеры цифровой трансформации 2026», спецтрек ФСП</p>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <span>Персональные данные обрабатываем по 152-ФЗ</span>
+              <span>Персональные данные храним и обрабатываем по 152-ФЗ</span>
               <a href="https://fsp-russia.com" target="_blank" rel="noreferrer" className="transition-colors hover:text-white">
                 fsp-russia.com
               </a>

@@ -26,7 +26,7 @@ export default function VacanciesPage() {
             </h1>
             <p data-hero className="text-lg leading-relaxed text-ink-muted">
               Здесь можно откликнуться по-старому. Но после теста компании пишут сами, и откликаться становится необязательно.{" "}
-              <Link href="/candidates" className="font-medium text-primary underline-offset-4 hover:underline">
+              <Link href="/seekers" className="font-medium text-primary underline-offset-4 hover:underline">
                 Про тест
               </Link>
             </p>
