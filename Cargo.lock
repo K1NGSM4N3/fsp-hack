@@ -76,6 +76,7 @@ dependencies = [
  "chrono",
  "db",
  "ed25519-dalek",
+ "futures-util",
  "hmac",
  "jsonwebtoken",
  "krilla",

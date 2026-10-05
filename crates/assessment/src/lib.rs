@@ -8,6 +8,7 @@ pub mod cat;
 pub mod irt;
 pub mod items;
 pub mod policy;
+pub mod proctoring;
 
 pub use cat::{
     AdministeredItem, CatConfig, Decision, PosteriorSummary, RecordError, SessionState, TestPlan,
@@ -19,3 +20,4 @@ pub use items::{
     bank, check, generate, render,
 };
 pub use policy::{AttemptKind, GradePolicy, PlacementStage, PolicyError};
+pub use proctoring::{EventCounts, IntegrityEvent, ProctoringStatus};

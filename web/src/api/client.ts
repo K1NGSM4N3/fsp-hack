@@ -144,19 +144,21 @@ export interface HttpOptions {
   headers?: Record<string, string>;
   blob?: boolean;
   noRefresh?: boolean;
+  /** Lets the request outlive the page (pagehide flush). */
+  keepalive?: boolean;
 }
 
 export async function http<T>(method: string, path: string, options: HttpOptions = {}): Promise<T> {
   const url = `${API_BASE}${path}${toQueryString(options.query)}`;
   const headers: Record<string, string> = { Accept: "application/json", ...options.headers };
   let body: BodyInit | undefined;
-  if (options.body instanceof FormData) {
+  if (options.body instanceof FormData || options.body instanceof Blob) {
     body = options.body;
   } else if (options.body !== undefined) {
     headers["Content-Type"] = "application/json";
     body = JSON.stringify(options.body);
   }
-  const init: RequestInit = { method, headers, body, credentials: "include" };
+  const init: RequestInit = { method, headers, body, credentials: "include", keepalive: options.keepalive };
 
   const send = async () => {
     try {

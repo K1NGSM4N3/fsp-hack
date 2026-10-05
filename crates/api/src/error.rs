@@ -78,6 +78,8 @@ pub enum InternalError {
     Http(#[from] reqwest::Error),
     #[error("pdf: {0}")]
     Pdf(#[from] PdfError),
+    #[error("recording storage: {0}")]
+    Io(#[from] std::io::Error),
     #[error("corrupt stored value: {0}")]
     Corrupt(String),
 }
@@ -117,6 +119,7 @@ internal_from!(
     MailError,
     reqwest::Error,
     PdfError,
+    std::io::Error,
 );
 
 impl From<catalog::UnknownSlug> for ApiError {

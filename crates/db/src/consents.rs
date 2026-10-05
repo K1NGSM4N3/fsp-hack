@@ -40,6 +40,42 @@ pub async fn current_consent_documents(
     .await
 }
 
+pub async fn current_document(
+    db: impl PgExecutor<'_>,
+    kind: &str,
+) -> Result<Option<ConsentDocument>, sqlx::Error> {
+    sqlx::query_as!(
+        ConsentDocument,
+        r#"SELECT id, kind, version, title, body,
+                  required_for AS "required_for: Vec<UserRole>", published_at
+           FROM consent_documents
+           WHERE kind = $1
+           ORDER BY version DESC
+           LIMIT 1"#,
+        kind,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+/// The user's unrevoked grant of this exact document version, if any.
+pub async fn active_grant(
+    db: impl PgExecutor<'_>,
+    user_id: Uuid,
+    document_id: Uuid,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT id FROM user_consents
+         WHERE user_id = $1 AND document_id = $2 AND revoked_at IS NULL
+         ORDER BY granted_at DESC
+         LIMIT 1",
+        user_id,
+        document_id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn insert_user_consent(
     db: impl PgExecutor<'_>,
     id: Uuid,
@@ -88,7 +124,8 @@ pub async fn revoke_user_consent(
         "UPDATE user_consents uc
          SET revoked_at = now()
          FROM consent_documents d
-         WHERE uc.id = $1 AND uc.user_id = $2 AND uc.revoked_at IS NULL AND d.id = uc.document_id
+         WHERE (uc.id = $1 OR uc.document_id = $1) AND uc.user_id = $2 AND uc.revoked_at IS NULL
+           AND d.id = uc.document_id
          RETURNING d.kind",
         id,
         user_id,

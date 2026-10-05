@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE proctoring_sessions SET purged_at = now()\n         WHERE session_id = ANY ($1) AND purged_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dc77d7bb94d64ec5164163e9dc57c0637fc1afb72ea573c2e152dcc0e57efe34"
+}

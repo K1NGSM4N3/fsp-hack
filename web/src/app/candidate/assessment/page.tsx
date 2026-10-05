@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CalendarClock, Clock, Lock, PlayCircle, RotateCcw, Shuffle, TrendingUp } from "lucide-react";
+import { ArrowRight, CalendarClock, Clock, Lock, PlayCircle, RotateCcw, Shuffle, TrendingUp, Video } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
@@ -8,18 +8,23 @@ import { isApiError } from "@/api/client";
 import type { Grade } from "@/api/types";
 import { CategoryBadge } from "@/components/domain/Category";
 import { AssessmentStatusBadge } from "@/components/domain/StatusBadges";
-import { Alert, Button, ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, FieldSet, PageHeader, PageSkeleton, RadioCards, SkeletonCard } from "@/components/ui";
+import { Alert, Badge, Button, ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, FieldSet, PageHeader, PageSkeleton, RadioCards, SkeletonCard } from "@/components/ui";
 import { useAssessments, useCategory, useStartAssessment } from "@/features/candidate/hooks";
 import { OnboardingStrip } from "@/features/candidate/components/Onboarding";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { ATTEMPT_KIND_HINT, ATTEMPT_KIND_LABEL, GRADE_HINT, GRADE_LABEL, GRADES, SPEC_LONG_LABEL } from "@/lib/labels";
+import { ProctoringMark, useProctoringOptions } from "./_proctoring/ui";
 
 function Rules() {
+  const options = useProctoringOptions();
   const items = [
     { icon: <Shuffle className="size-4" aria-hidden />, text: "У каждого кандидата свой вариант заданий одинаковой сложности, слитые ответы не помогут" },
     { icon: <Clock className="size-4" aria-hidden />, text: "У каждого задания свой таймер; если время вышло — ответ не засчитывается" },
     { icon: <TrendingUp className="size-4" aria-hidden />, text: "Тест адаптивный: следующий вопрос подбирается под ваш уровень и заканчивается, как только уровень ясен" },
     { icon: <Lock className="size-4" aria-hidden />, text: "Правильность ответов во время теста не показывается" },
+    ...(options.data?.mode === "optional"
+      ? [{ icon: <Video className="size-4" aria-hidden />, text: "Видеозапись — по желанию: её видите вы, а работодатель — только отметку «с видеозаписью» или «без»" }]
+      : []),
   ];
   return (
     <Card>
@@ -50,6 +55,7 @@ function StartCard() {
   const preselect = useSearchParams().get("grade") as Grade | null;
   const category = useCategory();
   const start = useStartAssessment();
+  const options = useProctoringOptions();
   const [picked, setPicked] = useState<Grade | null>(null);
   const [error, setError] = useState<{ title: string; detail: string | null } | null>(null);
 
@@ -128,20 +134,27 @@ function StartCard() {
             icon={<PlayCircle className="size-5" aria-hidden />}
             disabled={!grade}
             loading={start.isPending}
-            onClick={() =>
-              grade &&
+            onClick={() => {
+              if (!grade) return;
+              if (options.data?.mode !== "off") {
+                router.push(`/candidate/assessment/start?grade=${grade}`);
+                return;
+              }
               start.mutate(
                 { specialization, grade },
                 {
                   onSuccess: (s) => router.push(`/candidate/assessment/${s.id}`),
                   onError: (e) => setError(isApiError(e) ? { title: e.title, detail: e.detail } : { title: "Не удалось начать тест", detail: null }),
                 },
-              )
-            }
+              );
+            }}
           >
             Начать тест{grade ? ` на ${GRADE_LABEL[grade]}` : ""}
           </Button>
-          <span className="text-sm text-ink-subtle">Займёт 10–25 минут. Лучше пройти без перерывов.</span>
+          <span className="text-sm text-ink-subtle">
+            Займёт 10–25 минут. Лучше пройти без перерывов.
+            {options.data?.mode === "optional" ? " Перед началом предложим включить камеру — по желанию." : ""}
+          </span>
         </div>
       )}
     </Card>
@@ -199,6 +212,8 @@ function HistoryCard() {
                 <span className="flex flex-wrap items-center gap-3">
                   <CategoryBadge category={{ specialization: s.specialization, grade: s.claimed_grade }} size="sm" />
                   <AssessmentStatusBadge status={s.status} />
+                  {s.proctoring && <ProctoringMark summary={s.proctoring} />}
+                  {s.result?.needs_review && <Badge tone="warning">требует подтверждения</Badge>}
                   <span className="text-sm text-ink-muted">{ATTEMPT_KIND_LABEL[s.attempt_kind]}</span>
                 </span>
                 <span className="flex items-center gap-3 text-sm text-ink-subtle">

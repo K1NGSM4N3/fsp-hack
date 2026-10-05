@@ -9,6 +9,7 @@ import { ExplanationPanel, ScoreRing } from "@/components/domain/Explanation";
 import { SkillInput } from "@/components/domain/Skills";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
 import { Badge, Button, Card, Checkbox, ChipSelect, Field, Input, MoneyInput, Switch } from "@/components/ui";
+import { ProctoringBadge } from "./ProctoringBadge";
 import { cn } from "@/lib/cn";
 import { GRADE_LABEL, GRADES, WORK_FORMAT_LABEL, WORK_FORMATS } from "@/lib/labels";
 
@@ -43,6 +44,7 @@ export function ShortlistCard({ item, need, onPin, onDismiss, onInvite, busy }: 
           {!item.in_current && <Badge tone="muted">Вне текущих условий</Badge>}
           {status && <InvitationStatusBadge status={status} />}
           {c.relation.applied && <Badge tone="success">Откликнулся</Badge>}
+          <ProctoringBadge badge={c.proctoring} />
         </>
       }
       footer={

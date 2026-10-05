@@ -10,7 +10,8 @@
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
-		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		# Camera for the optional proctoring of the test; never the microphone.
+		Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=()"
 		Cross-Origin-Opener-Policy "same-origin"
 		# 'unsafe-inline' scripts: Next.js App Router inlines its RSC payload scripts (no nonce
 		# middleware); Swagger UI at /api/docs also needs inline styles and data: images.

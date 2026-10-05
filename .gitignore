@@ -5,6 +5,9 @@
 # Rust
 /target/
 
+# Local proctoring chunks (PROCTORING_DIR default for `make api`)
+/data/
+
 # Node / Next.js
 node_modules/
 /web/.next/
@@ -19,3 +22,4 @@ next-env.d.ts
 # Editors
 .idea/
 .vscode/
+.claude/worktrees/

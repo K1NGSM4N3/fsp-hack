@@ -1,6 +1,8 @@
-use std::net::SocketAddr;
+use std::{net::SocketAddr, path::PathBuf};
 
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
+
+use crate::proctoring::ProctoringMode;
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
@@ -23,6 +25,7 @@ pub struct Config {
     pub mail: MailConfig,
     pub fsp: FspConfig,
     pub grade_change_cooldown_days: i64,
+    pub proctoring: ProctoringConfig,
     pub seed_demo: bool,
     pub log_json: bool,
 }
@@ -39,6 +42,14 @@ pub struct FspConfig {
     pub registry_url: Option<String>,
     pub registry_token: String,
     pub dev_link: bool,
+}
+
+#[derive(Clone)]
+pub struct ProctoringConfig {
+    pub mode: ProctoringMode,
+    /// Encrypted video chunks; a persistent volume in production.
+    pub dir: PathBuf,
+    pub retention_days: i64,
 }
 
 #[derive(Clone)]
@@ -137,6 +148,22 @@ impl Config {
             _ => None,
         };
 
+        let proctoring = ProctoringConfig {
+            mode: match var("PROCTORING").as_deref() {
+                None | Some("optional") => ProctoringMode::Optional,
+                Some("off") => ProctoringMode::Off,
+                Some(other) => {
+                    return Err(ConfigError::Invalid {
+                        name: "PROCTORING",
+                        reason: format!("expected optional or off, got {other}"),
+                    });
+                }
+            },
+            dir: var("PROCTORING_DIR")
+                .map_or_else(|| PathBuf::from("data/proctoring"), PathBuf::from),
+            retention_days: parsed("PROCTORING_RETENTION_DAYS", 90)?,
+        };
+
         Ok(Self {
             bind: parsed("API_BIND", SocketAddr::from(([0, 0, 0, 0], 8000)))?,
             database_url: var("DATABASE_URL").ok_or(ConfigError::Missing("DATABASE_URL"))?,
@@ -154,6 +181,7 @@ impl Config {
                 dev_link: flag("FSP_DEV_LINK", false),
             },
             grade_change_cooldown_days: parsed("GRADE_CHANGE_COOLDOWN_DAYS", 90)?,
+            proctoring,
             seed_demo: flag("SEED_DEMO", false),
             log_json: var("LOG_FORMAT").as_deref() == Some("json"),
             public_url,

@@ -13,7 +13,7 @@ use argon2::{
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD as B64URL};
 use chacha20poly1305::{
     XChaCha20Poly1305, XNonce,
-    aead::{Aead, KeyInit},
+    aead::{Aead, KeyInit, Payload},
 };
 use hmac::{Hmac, Mac};
 use rand::RngCore;
@@ -68,8 +68,18 @@ impl PasswordHasher for Argon2id {
 }
 
 pub trait FieldCipher: Send + Sync {
-    fn encrypt(&self, plaintext: &[u8]) -> Vec<u8>;
-    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError>;
+    fn encrypt(&self, plaintext: &[u8]) -> Vec<u8> {
+        self.encrypt_bound(plaintext, &[])
+    }
+
+    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+        self.decrypt_bound(ciphertext, &[])
+    }
+
+    /// `context` is authenticated but not stored: the ciphertext only decrypts with the same
+    /// context, so a blob moved to another record or position fails instead of being accepted.
+    fn encrypt_bound(&self, plaintext: &[u8], context: &[u8]) -> Vec<u8>;
+    fn decrypt_bound(&self, ciphertext: &[u8], context: &[u8]) -> Result<Vec<u8>, CryptoError>;
 }
 
 /// XChaCha20-Poly1305; 192-bit random nonces make collisions negligible without a counter.
@@ -86,12 +96,18 @@ impl XChaChaV1 {
 }
 
 impl FieldCipher for XChaChaV1 {
-    fn encrypt(&self, plaintext: &[u8]) -> Vec<u8> {
+    fn encrypt_bound(&self, plaintext: &[u8], context: &[u8]) -> Vec<u8> {
         let mut nonce = [0u8; NONCE_LEN];
         rand::rng().fill_bytes(&mut nonce);
         let ct = self
             .0
-            .encrypt(XNonce::from_slice(&nonce), plaintext)
+            .encrypt(
+                XNonce::from_slice(&nonce),
+                Payload {
+                    msg: plaintext,
+                    aad: context,
+                },
+            )
             .expect("in-memory AEAD encryption cannot fail");
         let mut out = Vec::with_capacity(V1.len() + NONCE_LEN + ct.len());
         out.extend_from_slice(V1);
@@ -100,14 +116,20 @@ impl FieldCipher for XChaChaV1 {
         out
     }
 
-    fn decrypt(&self, data: &[u8]) -> Result<Vec<u8>, CryptoError> {
+    fn decrypt_bound(&self, data: &[u8], context: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let rest = data.strip_prefix(V1).ok_or(CryptoError::UnknownVersion)?;
         if rest.len() < NONCE_LEN {
             return Err(CryptoError::Truncated);
         }
         let (nonce, ct) = rest.split_at(NONCE_LEN);
         self.0
-            .decrypt(XNonce::from_slice(nonce), ct)
+            .decrypt(
+                XNonce::from_slice(nonce),
+                Payload {
+                    msg: ct,
+                    aad: context,
+                },
+            )
             .map_err(|_| CryptoError::Authentication)
     }
 }
@@ -216,6 +238,19 @@ mod tests {
             c.decrypt(b"v2xxx"),
             Err(CryptoError::UnknownVersion)
         ));
+    }
+
+    #[test]
+    fn bound_ciphertext_needs_its_context() {
+        let c = XChaChaV1::new(&[9u8; 32]);
+        let ct = c.encrypt_bound(b"chunk", b"session-a:0");
+        assert_eq!(c.decrypt_bound(&ct, b"session-a:0").unwrap(), b"chunk");
+        assert!(matches!(
+            c.decrypt_bound(&ct, b"session-a:1"),
+            Err(CryptoError::Authentication)
+        ));
+        assert!(matches!(c.decrypt(&ct), Err(CryptoError::Authentication)));
+        assert_eq!(c.decrypt_bound(&c.encrypt(b"x"), b"").unwrap(), b"x");
     }
 
     #[test]

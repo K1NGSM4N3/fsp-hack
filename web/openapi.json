@@ -10,6 +10,128 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/admin/proctoring/{session_id}": {
+      "get": {
+        "tags": [
+          "proctoring"
+        ],
+        "summary": "Proctoring of any session with its event log, for a dispute (admin)",
+        "operationId": "admin_session",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminProctoringView"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/proctoring/{session_id}/recording": {
+      "get": {
+        "tags": [
+          "proctoring"
+        ],
+        "summary": "Play any session's recording for a dispute (admin); every access is logged",
+        "operationId": "admin_recording",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "video/webm": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`, `recording_unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/auth/login": {
       "post": {
         "tags": [
@@ -369,6 +491,16 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "`validation_failed`: `proctoring.consent_document_id` missing or not the current version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -526,6 +658,243 @@
             }
           },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/candidate/assessments/{id}/proctoring/chunks/{seq}": {
+      "put": {
+        "tags": [
+          "proctoring"
+        ],
+        "summary": "Upload the next ~10-second chunk of the running test's video (raw MediaRecorder output)",
+        "operationId": "put_chunk",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "assessment session",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "seq",
+            "in": "path",
+            "description": "0-based, strictly in order; a repeated seq is acknowledged without rewriting",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "requestBody": {
+          "description": "Chunk up to 1 MiB; the first chunk's Content-Type fixes the container",
+          "content": {
+            "video/webm": {
+              "schema": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int32",
+                  "minimum": 0
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Stored or already stored"
+          },
+          "400": {
+            "description": "`empty_chunk`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not the caller's session or proctoring was not set up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`proctoring_off`, `proctoring_not_recording`, `assessment_finished`, `chunk_out_of_order`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`chunk_too_large`, `recording_too_large`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/candidate/assessments/{id}/proctoring/events": {
+      "post": {
+        "tags": [
+          "proctoring"
+        ],
+        "summary": "Log integrity events of the running test: tab hidden, window blur, fullscreen exit, paste, camera lost, recording failed",
+        "operationId": "post_events",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "assessment session",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventBatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`proctoring_off`, `assessment_finished`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: more than 50 events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/candidate/assessments/{id}/proctoring/recording": {
+      "get": {
+        "tags": [
+          "proctoring"
+        ],
+        "summary": "Play the candidate's own recording: chunks decrypted and streamed in order",
+        "operationId": "own_recording",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "assessment session",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "video/webm": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: employers never get the video",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`not_found`, `recording_unavailable`",
             "content": {
               "application/json": {
                 "schema": {
@@ -847,6 +1216,52 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Privacy"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/candidate/proctoring": {
+      "get": {
+        "tags": [
+          "proctoring"
+        ],
+        "summary": "What the proctoring step shows before a test: mode, consent text, retention",
+        "operationId": "options",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProctoringOptions"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3398,13 +3813,13 @@
         "tags": [
           "account"
         ],
-        "summary": "Revoke a consent. Revoking publication or processing hides the candidate from search.",
+        "summary": "Revoke a consent. Revoking publication or processing hides the candidate from search;\nrevoking the video consent deletes the candidate's recordings right away.",
         "operationId": "revoke_consent",
         "parameters": [
           {
             "name": "id",
             "in": "path",
-            "description": "user consent id",
+            "description": "user consent id or consent document id",
             "required": true,
             "schema": {
               "type": "string",
@@ -3819,6 +4234,53 @@
           }
         }
       },
+      "AdminProctoringView": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "candidate_id",
+          "summary",
+          "needs_confirmation",
+          "events"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ProctoringSummary"
+          },
+          "aberrant": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Person-fit flag of the answers (`l_z` below −2)."
+          },
+          "person_fit_lz": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "needs_confirmation": {
+            "type": "boolean",
+            "description": "«Требует подтверждения»: the person-fit flag and integrity events together."
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventView"
+            }
+          }
+        }
+      },
       "Answer": {
         "oneOf": [
           {
@@ -3982,7 +4444,7 @@
           },
           "needs_review": {
             "type": "boolean",
-            "description": "`aberrant`: inconsistent answer pattern, the result is flagged for review."
+            "description": "«Требует подтверждения»: an aberrant answer pattern (person-fit) together with integrity\nevents — leaving the test or pasting. Sessions without proctoring data fall back to the\nperson-fit flag alone."
           },
           "topics": {
             "type": "array",
@@ -4071,6 +4533,17 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/AssessmentResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "proctoring": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProctoringSummary",
+                "description": "`None` when the session ran with proctoring off."
               },
               {
                 "type": "null"
@@ -4293,6 +4766,17 @@
           "tasks_done": {
             "type": "integer",
             "format": "int64"
+          },
+          "proctoring": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProctoringBadge",
+                "description": "How the test behind the current category was proctored; `None` for tests taken without\nproctoring. Never carries the video."
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "relation": {
             "$ref": "#/components/schemas/Relation"
@@ -5129,6 +5613,99 @@
           }
         }
       },
+      "EventBatch": {
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventInput"
+            },
+            "description": "Up to 50 events; the session keeps the first 500."
+          }
+        }
+      },
+      "EventCountsView": {
+        "type": "object",
+        "required": [
+          "tab_hidden",
+          "window_blur",
+          "fullscreen_exit",
+          "paste",
+          "camera_lost",
+          "recording_failed"
+        ],
+        "properties": {
+          "tab_hidden": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "window_blur": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "fullscreen_exit": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "paste": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "camera_lost": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "recording_failed": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "EventInput": {
+        "type": "object",
+        "required": [
+          "kind",
+          "at"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/IntegrityEvent"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Browser time of the event; clamped to the session's lifetime."
+          },
+          "item_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "`current.seq` of the item on screen.",
+            "minimum": 0
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "How long the candidate was away (`tab_hidden`, `window_blur`).",
+            "minimum": 0
+          }
+        }
+      },
       "EventLevel": {
         "type": "string",
         "enum": [
@@ -5137,6 +5714,36 @@
           "national",
           "international"
         ]
+      },
+      "EventView": {
+        "type": "object",
+        "required": [
+          "kind",
+          "at"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/IntegrityEvent"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "item_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          }
+        }
       },
       "ExperienceEntry": {
         "type": "object",
@@ -5514,6 +6121,18 @@
           "manufacturing",
           "logistics",
           "outsourcing"
+        ]
+      },
+      "IntegrityEvent": {
+        "type": "string",
+        "description": "What the browser reports while the test is running.",
+        "enum": [
+          "tab_hidden",
+          "window_blur",
+          "fullscreen_exit",
+          "paste",
+          "camera_lost",
+          "recording_failed"
         ]
       },
       "InvitationStats": {
@@ -6565,6 +7184,163 @@
               "object",
               "null"
             ]
+          }
+        }
+      },
+      "ProctoringBadge": {
+        "type": "object",
+        "description": "Employer-facing proctoring mark of the test behind the current category. No session id and\nno link: the video stays out of reach until and after «Принять», like the contacts (V-2).",
+        "required": [
+          "status",
+          "left_test",
+          "pastes",
+          "fullscreen_exits"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ProctoringStatus"
+          },
+          "left_test": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Times the candidate left the test tab or window.",
+            "minimum": 0
+          },
+          "pastes": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "fullscreen_exits": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ProctoringChoice": {
+        "type": "object",
+        "required": [
+          "camera"
+        ],
+        "properties": {
+          "camera": {
+            "type": "boolean"
+          },
+          "consent_document_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "`consent.id` from `GET /candidate/proctoring`; required with `camera = true`."
+          }
+        }
+      },
+      "ProctoringMode": {
+        "type": "string",
+        "enum": [
+          "optional",
+          "off"
+        ]
+      },
+      "ProctoringOptions": {
+        "type": "object",
+        "required": [
+          "mode",
+          "consent_granted",
+          "retention_days",
+          "max_chunk_bytes",
+          "max_events_per_batch"
+        ],
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/ProctoringMode"
+          },
+          "consent": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ConsentDocument",
+                "description": "Consent text for the checkbox of the proctoring step; `None` when `mode = off`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "consent_granted": {
+            "type": "boolean",
+            "description": "The candidate already holds an unrevoked grant of this version."
+          },
+          "retention_days": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "max_chunk_bytes": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "max_events_per_batch": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "ProctoringStatus": {
+        "type": "string",
+        "enum": [
+          "recording",
+          "recorded",
+          "declined",
+          "interrupted"
+        ]
+      },
+      "ProctoringSummary": {
+        "type": "object",
+        "description": "The candidate's own view of a session's proctoring.",
+        "required": [
+          "status",
+          "events",
+          "chunks",
+          "bytes",
+          "playable",
+          "purged"
+        ],
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ProctoringStatus"
+          },
+          "events": {
+            "$ref": "#/components/schemas/EventCountsView"
+          },
+          "chunks": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Video chunks received, about 10 seconds each.",
+            "minimum": 0
+          },
+          "bytes": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "playable": {
+            "type": "boolean",
+            "description": "`GET /candidate/assessments/{id}/proctoring/recording` will play it."
+          },
+          "delete_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "The video is deleted after this moment."
+          },
+          "purged": {
+            "type": "boolean",
+            "description": "Already deleted: retention passed or the consent was revoked."
           }
         }
       },
@@ -7744,6 +8520,17 @@
           },
           "grade": {
             "$ref": "#/components/schemas/Grade"
+          },
+          "proctoring": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProctoringChoice",
+                "description": "Choice made on the proctoring step. Omitted while proctoring is optional, the test runs\nwithout video and is marked so."
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         }
       },
@@ -8395,6 +9182,10 @@
     {
       "name": "assessment",
       "description": "Адаптивный тест на грейд, категория, план теста под вакансию"
+    },
+    {
+      "name": "proctoring",
+      "description": "Видеозапись теста и журнал событий: согласие, фрагменты записи, просмотр. Работодателю видео недоступно"
     },
     {
       "name": "matching",

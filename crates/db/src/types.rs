@@ -61,3 +61,14 @@ pub enum TaskAssignmentStatus {
     Skipped,
     Expired,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "integrity_event", rename_all = "snake_case")]
+pub enum IntegrityEvent {
+    TabHidden,
+    WindowBlur,
+    FullscreenExit,
+    Paste,
+    CameraLost,
+    RecordingFailed,
+}

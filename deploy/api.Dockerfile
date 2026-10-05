@@ -37,6 +37,8 @@ ENTRYPOINT ["/usr/local/bin/fsp-mock"]
 
 FROM runtime AS api
 COPY --from=builder /app/target/release/api /usr/local/bin/api
+# A fresh named volume copies this directory's ownership, so the non-root API can write chunks.
+RUN mkdir -p /var/lib/fsp/proctoring && chown -R 10001:10001 /var/lib/fsp && chmod 700 /var/lib/fsp/proctoring
 USER 10001:10001
 ENV API_BIND=0.0.0.0:8000
 EXPOSE 8000

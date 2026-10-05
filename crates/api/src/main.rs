@@ -7,6 +7,7 @@ use api::{
     db::DbSetupError,
     kv::{Kv, KvError},
     mail::{MailError, Mailer},
+    proctoring::{ProctoringMode, RecordingStore},
     state::AppState,
 };
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
@@ -29,6 +30,8 @@ enum StartupError {
     Http(#[from] reqwest::Error),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error("PROCTORING_DIR: {0}")]
+    Proctoring(std::io::Error),
     #[error(transparent)]
     Json(#[from] serde_json::Error),
 }
@@ -66,6 +69,19 @@ async fn main() -> Result<(), StartupError> {
         }
     }
 
+    let recordings = Arc::new(RecordingStore::new(config.proctoring.dir.clone()));
+    match recordings.init().await {
+        Ok(()) => api::proctoring::spawn_sweeper(
+            pool.clone(),
+            recordings.clone(),
+            config.proctoring.retention_days,
+        ),
+        Err(e) if config.proctoring.mode == ProctoringMode::Off => {
+            tracing::warn!(error = %e, dir = %config.proctoring.dir.display(), "proctoring directory unavailable");
+        }
+        Err(e) => return Err(StartupError::Proctoring(e)),
+    }
+
     let state = AppState {
         crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
         jwt: Arc::new(JwtKeys::new(config.jwt_seed)?),
@@ -75,6 +91,7 @@ async fn main() -> Result<(), StartupError> {
             .timeout(std::time::Duration::from_secs(10))
             .build()?,
         metrics: Some(api::metrics::install()?),
+        recordings,
         pool,
         config: Arc::new(config),
     };

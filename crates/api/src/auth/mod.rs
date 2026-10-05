@@ -165,6 +165,7 @@ role_extractor!(
     Role::Employer,
     "Доступно только работодателям"
 );
+role_extractor!(AdminUser, Role::Admin, "Доступно только администраторам");
 
 /// Cookies are sent cross-site on top-level navigations (SameSite=Lax), so state-changing
 /// cookie-authenticated requests must also prove they come from our origin.

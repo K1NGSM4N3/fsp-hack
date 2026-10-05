@@ -2,7 +2,7 @@
  * With NEXT_PUBLIC_USE_MOCKS=1 calls go to src/mocks/handlers.ts (same names and
  * signatures). The import is lazy so mock code stays out of real-API bundles.
  */
-import { http, USE_MOCKS } from "./client";
+import { API_BASE, http, USE_MOCKS } from "./client";
 import type * as T from "./types";
 
 const mocks = () => import("@/mocks/handlers");
@@ -138,6 +138,30 @@ export async function getCurrentItem(id: T.Uuid): Promise<T.AssessmentSession> {
 export async function answerItem(id: T.Uuid, body: T.AnswerInput): Promise<T.AssessmentSession> {
   if (USE_MOCKS) return (await mocks()).answerItem(id, body);
   return http("POST", `/candidate/assessments/${id}/answer`, { body });
+}
+
+/** Mock mode has no camera backend: the proctoring step is skipped as with `PROCTORING=off`. */
+export async function getProctoringOptions(): Promise<T.ProctoringOptions> {
+  if (USE_MOCKS) return { mode: "off", consent_granted: false, retention_days: 90, max_chunk_bytes: 1 << 20, max_events_per_batch: 50 };
+  return http("GET", "/candidate/proctoring");
+}
+
+export async function uploadProctoringChunk(id: T.Uuid, seq: number, chunk: Blob): Promise<void> {
+  if (USE_MOCKS) return;
+  return http("PUT", `/candidate/assessments/${id}/proctoring/chunks/${seq}`, {
+    body: chunk,
+    headers: { "Content-Type": chunk.type || "video/webm" },
+  });
+}
+
+export async function postProctoringEvents(id: T.Uuid, events: T.IntegrityEventInput[], keepalive = false): Promise<void> {
+  if (USE_MOCKS) return;
+  return http("POST", `/candidate/assessments/${id}/proctoring/events`, { body: { events }, keepalive });
+}
+
+/** Played by <video src>, which sends the session cookie itself. */
+export function proctoringRecordingUrl(id: T.Uuid): string {
+  return `${API_BASE}/candidate/assessments/${id}/proctoring/recording`;
 }
 
 export async function listReceivedInvitations(): Promise<T.ReceivedInvitation[]> {

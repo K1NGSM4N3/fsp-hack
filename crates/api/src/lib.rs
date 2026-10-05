@@ -12,6 +12,7 @@ pub mod mail;
 pub mod metrics;
 pub mod pdf;
 pub mod pool;
+pub mod proctoring;
 pub mod resume;
 pub mod routes;
 pub mod seed;
@@ -60,6 +61,7 @@ use crate::state::AppState;
         (name = "employer", description = "Кабинет работодателя: компания"),
         (name = "fsp", description = "Привязка ФСП ID (OIDC + PKCE) и достижения из реестра ФСП"),
         (name = "assessment", description = "Адаптивный тест на грейд, категория, план теста под вакансию"),
+        (name = "proctoring", description = "Видеозапись теста и журнал событий: согласие, фрагменты записи, просмотр. Работодателю видео недоступно"),
         (name = "matching", description = "Категории, подборки, поиск по банку кандидатов"),
         (name = "tasks", description = "Регулярные короткие задания от работодателей"),
         (name = "vacancies", description = "Вакансии и отклики — дополнительный путь, инициатива кандидата"),
@@ -101,7 +103,8 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
                 .merge(routes::vacancies::candidate_router())
                 .merge(routes::tasks::candidate_router())
                 .merge(routes::market::candidate_router())
-                .merge(routes::assessment::candidate_router()),
+                .merge(routes::assessment::candidate_router())
+                .merge(routes::proctoring::candidate_router()),
         )
         .nest(
             "/employer",
@@ -115,6 +118,7 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
                 .merge(routes::assessment::employer_router()),
         )
         .nest("/fsp", routes::fsp::router())
+        .nest("/admin", routes::proctoring::admin_router())
         .merge(routes::vacancies::public_router())
         .merge(routes::reports::router())
         .merge(routes::catalog::router())

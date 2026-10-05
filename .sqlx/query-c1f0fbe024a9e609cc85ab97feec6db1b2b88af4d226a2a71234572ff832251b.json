@@ -1,0 +1,54 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT kind AS \"kind: IntegrityEvent\", occurred_at, item_seq, duration_ms\n           FROM proctoring_events\n           WHERE session_id = $1\n           ORDER BY occurred_at, received_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind: IntegrityEvent",
+        "type_info": {
+          "Custom": {
+            "name": "integrity_event",
+            "kind": {
+              "Enum": [
+                "tab_hidden",
+                "window_blur",
+                "fullscreen_exit",
+                "paste",
+                "camera_lost",
+                "recording_failed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "occurred_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 2,
+        "name": "item_seq",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 3,
+        "name": "duration_ms",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "c1f0fbe024a9e609cc85ab97feec6db1b2b88af4d226a2a71234572ff832251b"
+}

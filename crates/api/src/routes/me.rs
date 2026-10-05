@@ -14,6 +14,7 @@ use crate::{
     auth::{AuthUser, Role, clear_session_cookies},
     crypto::sha256,
     error::{ApiError, ApiResult, Problem},
+    proctoring,
     state::AppState,
 };
 
@@ -134,6 +135,11 @@ async fn delete_me(
     db::users::anonymize_user(&mut *tx, &tombstone, user.id).await?;
     db::users::revoke_user_refresh_tokens(&mut *tx, user.id).await?;
     tx.commit().await?;
+    if user.role == Role::Candidate
+        && let Err(e) = state.recordings.remove_candidate(user.id).await
+    {
+        tracing::warn!(error = %e, user = %user.id, "proctoring files left for the retention sweep");
+    }
     user.revoke(&state).await?;
     Ok((clear_session_cookies(jar), StatusCode::NO_CONTENT))
 }
@@ -173,9 +179,10 @@ async fn my_consents(
     ))
 }
 
-/// Revoke a consent. Revoking publication or processing hides the candidate from search.
+/// Revoke a consent. Revoking publication or processing hides the candidate from search;
+/// revoking the video consent deletes the candidate's recordings right away.
 #[utoipa::path(post, path = "/consents/{id}/revoke", tag = "account",
-    params(("id" = Uuid, Path, description = "user consent id")),
+    params(("id" = Uuid, Path, description = "user consent id or consent document id")),
     responses((status = 204), (status = 404, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn revoke_consent(
@@ -188,6 +195,10 @@ async fn revoke_consent(
         .ok_or_else(ApiError::not_found)?;
     if user.role == Role::Candidate && matches!(kind.as_str(), "pd_publication" | "pd_processing") {
         db::me::hide_candidate(&state.pool, user.id).await?;
+    }
+    if user.role == Role::Candidate && kind == proctoring::CONSENT_KIND {
+        let recordings = db::proctoring::candidate_recordings(&state.pool, user.id).await?;
+        proctoring::purge(&state.pool, &state.recordings, &recordings).await?;
     }
     Ok(StatusCode::NO_CONTENT)
 }

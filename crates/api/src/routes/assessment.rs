@@ -10,7 +10,7 @@ use assessment::{
 use axum::{
     Json,
     extract::{Path, Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
 };
 use catalog::{Category, Grade, Specialization};
 use chrono::{DateTime, Duration, TimeZone, Utc};
@@ -22,9 +22,10 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 use crate::{
-    auth::{CandidateUser, EmployerUser},
+    auth::{CandidateUser, EmployerUser, client_ip, user_agent},
     dto::AssessmentStatus,
     error::{ApiError, ApiResult, InternalError, Problem},
+    proctoring::{self, ProctoringMode, ProctoringSummary},
     skills,
     state::AppState,
 };
@@ -233,7 +234,9 @@ pub struct AssessmentResult {
     /// Position of θ inside the measured grade band, 0..1.
     pub test_strength: Option<f32>,
     pub assigned_grade: Option<Grade>,
-    /// `aberrant`: inconsistent answer pattern, the result is flagged for review.
+    /// «Требует подтверждения»: an aberrant answer pattern (person-fit) together with integrity
+    /// events — leaving the test or pasting. Sessions without proctoring data fall back to the
+    /// person-fit flag alone.
     pub needs_review: bool,
     pub topics: Vec<TopicResult>,
     /// What the candidate may do next right away (step down after a fail, upgrade after a confident pass).
@@ -254,6 +257,8 @@ pub struct AssessmentSession {
     pub finished_at: Option<DateTime<Utc>>,
     pub current: Option<CurrentItem>,
     pub result: Option<AssessmentResult>,
+    /// `None` when the session ran with proctoring off.
+    pub proctoring: Option<ProctoringSummary>,
 }
 
 fn load_state(v: serde_json::Value) -> ApiResult<SessionState> {
@@ -296,6 +301,17 @@ fn deadline_for(item: &ItemRef, now: DateTime<Utc>) -> ApiResult<DateTime<Utc>> 
 pub struct StartInput {
     pub specialization: Specialization,
     pub grade: Grade,
+    /// Choice made on the proctoring step. Omitted while proctoring is optional, the test runs
+    /// without video and is marked so.
+    #[serde(default)]
+    pub proctoring: Option<ProctoringChoice>,
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct ProctoringChoice {
+    pub camera: bool,
+    /// `consent.id` from `GET /candidate/proctoring`; required with `camera = true`.
+    pub consent_document_id: Option<Uuid>,
 }
 
 /// Start a test for the claimed grade. The policy decides whether it is a placement, a step down,
@@ -305,11 +321,13 @@ pub struct StartInput {
     responses(
         (status = 201, body = AssessmentSession),
         (status = 409, description = "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked`, `attempt_not_allowed`, `already_assigned`", body = Problem),
+        (status = 422, description = "`validation_failed`: `proctoring.consent_document_id` missing or not the current version", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn start_session(
     State(state): State<AppState>,
     user: CandidateUser,
+    headers: HeaderMap,
     Json(input): Json<StartInput>,
 ) -> ApiResult<(StatusCode, Json<AssessmentSession>)> {
     db::assessment::expire_abandoned_sessions(&state.pool, user.id).await?;
@@ -373,6 +391,27 @@ async fn start_session(
     }
     let allowed = allowed.ok_or_else(|| policy_problem(last_error))?;
 
+    let camera = input.proctoring.as_ref().is_some_and(|p| p.camera);
+    let consent_doc = match state.config.proctoring.mode {
+        ProctoringMode::Optional if camera => {
+            let doc = db::consents::current_document(&state.pool, proctoring::CONSENT_KIND)
+                .await?
+                .ok_or_else(|| corrupt("proctoring consent document is missing"))?;
+            let confirmed = input
+                .proctoring
+                .as_ref()
+                .and_then(|p| p.consent_document_id);
+            if confirmed != Some(doc.id) {
+                return Err(ApiError::field(
+                    "proctoring.consent_document_id",
+                    "Подтвердите согласие на видеозапись",
+                ));
+            }
+            Some(doc.id)
+        }
+        _ => None,
+    };
+
     let focus: Vec<String> = survey
         .map(|s| s.skills)
         .unwrap_or_default()
@@ -400,25 +439,40 @@ async fn start_session(
         },
     )
     .await?;
-    tx.commit().await?;
-    let cfg = session_state.config;
-    Ok((
-        StatusCode::CREATED,
-        Json(AssessmentSession {
+    if state.config.proctoring.mode == ProctoringMode::Optional {
+        let consent_id = match consent_doc {
+            Some(doc) => Some(
+                match db::consents::active_grant(&mut *tx, user.id, doc).await? {
+                    Some(grant) => grant,
+                    None => {
+                        let grant = Uuid::now_v7();
+                        db::consents::insert_user_consent(
+                            &mut *tx,
+                            grant,
+                            user.id,
+                            doc,
+                            client_ip(&headers).as_deref(),
+                            user_agent(&headers).as_deref(),
+                        )
+                        .await?;
+                        grant
+                    }
+                },
+            ),
+            None => None,
+        };
+        db::proctoring::insert_proctoring(
+            &mut *tx,
             id,
-            specialization: input.specialization,
-            claimed_grade: input.grade,
-            attempt_kind: allowed.kind,
-            status: AssessmentStatus::InProgress,
-            answered: 0,
-            min_items: cfg.min_items,
-            max_items: cfg.max_items,
-            started_at: Some(now),
-            finished_at: None,
-            current: Some(render_current(&first, 0, deadline)?),
-            result: None,
-        }),
-    ))
+            user.id,
+            consent_id.is_some(),
+            consent_id,
+            now,
+        )
+        .await?;
+    }
+    tx.commit().await?;
+    Ok((StatusCode::CREATED, Json(view(&state, user.id, id).await?)))
 }
 
 /// Records one outcome and either schedules the next item or finishes the session
@@ -562,6 +616,16 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
         }
         _ => None,
     };
+    let proctoring = match db::proctoring::summary(&state.pool, id, Some(candidate)).await? {
+        Some(p) => {
+            let facts = proctoring::facts(&p, status == AssessmentStatus::InProgress);
+            Some((
+                proctoring::summary_view(&p, &facts, state.config.proctoring.retention_days),
+                facts.counts,
+            ))
+        }
+        None => None,
+    };
     let result = match (status, r.theta, r.se) {
         (AssessmentStatus::Passed | AssessmentStatus::Failed, Some(theta), Some(se)) => {
             let grade_measured = r.measured_grade.as_deref().and_then(Grade::from_slug);
@@ -579,7 +643,12 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
             Some(AssessmentResult {
                 test_strength: Some(matching::test_strength(claimed, theta as f32)),
                 assigned_grade: r.assigned.then_some(claimed),
-                needs_review: decision.aberrant,
+                needs_review: match &proctoring {
+                    Some((_, counts)) => {
+                        assessment::proctoring::needs_confirmation(decision.aberrant, counts)
+                    }
+                    None => decision.aberrant,
+                },
                 topics: topic_results(&s),
                 offers: offers(state, spec, &history, Utc::now().timestamp()),
                 decision,
@@ -600,6 +669,7 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
         finished_at: r.finished_at,
         current,
         result,
+        proctoring: proctoring.map(|(summary, _)| summary),
     })
 }
 

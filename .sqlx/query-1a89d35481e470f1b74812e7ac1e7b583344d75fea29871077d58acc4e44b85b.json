@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.candidate_id, p.camera,\n                  (SELECT count(*) FROM proctoring_chunks c WHERE c.session_id = p.session_id) AS \"chunks!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'tab_hidden') AS \"tab_hidden!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'window_blur') AS \"window_blur!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'fullscreen_exit') AS \"fullscreen_exit!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'paste') AS \"paste!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'camera_lost') AS \"camera_lost!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'recording_failed') AS \"recording_failed!\"\n           FROM (SELECT DISTINCT ON (g.candidate_id) g.session_id\n                 FROM grade_assignments g\n                 WHERE g.candidate_id = ANY ($1)\n                 ORDER BY g.candidate_id, g.assigned_at DESC) latest\n           JOIN proctoring_sessions p ON p.session_id = latest.session_id\n           LEFT JOIN proctoring_events e ON e.session_id = p.session_id\n           GROUP BY p.session_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "camera",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "chunks!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "tab_hidden!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "window_blur!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "fullscreen_exit!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "paste!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "camera_lost!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "recording_failed!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1a89d35481e470f1b74812e7ac1e7b583344d75fea29871077d58acc4e44b85b"
+}

@@ -10,7 +10,7 @@
 - **Формат:** JSON, `snake_case`, даты — RFC 3339 UTC, деньги — целые рубли (`i64`), id — UUID v7.
 - **Аутентификация:** httpOnly cookie `fsp_at` (access JWT, 15 мин) и `fsp_rt` (refresh, путь `/api/v1/auth`). Альтернатива для API-клиентов и Swagger — `Authorization: Bearer <jwt>`.
 - **CSRF:** изменяющие запросы с cookie должны иметь `Origin`, совпадающий с `PUBLIC_URL`.
-- **Роли:** 🅰 анонимно · 🅲 candidate · 🅴 employer · 🅼 любой залогиненный.
+- **Роли:** 🅰 анонимно · 🅲 candidate · 🅴 employer · 🅼 любой залогиненный · admin — администратор (создаётся только в базе, регистрацией не выдаётся).
 - **Пагинация:** `?limit=20&offset=0` → `{ "items": [...], "total": 123 }`. Максимум `limit` — 100.
 - **Ошибки:** RFC 9457 `application/problem+json`:
   ```json
@@ -54,7 +54,7 @@
 | GET | `/api/v1/me` | 🅼 | Пользователь, роль, статус онбординга | ✅ |
 | DELETE | `/api/v1/me` | 🅼 | Удаление аккаунта и ПДн | ✅ |
 | GET | `/api/v1/me/consents` | 🅼 | Выданные согласия | ✅ |
-| POST | `/api/v1/me/consents/{document_id}/revoke` | 🅼 | Отзыв согласия | ✅ |
+| POST | `/api/v1/me/consents/{document_id}/revoke` | 🅼 | Отзыв согласия (принимает id документа или id выдачи). Отзыв `proctoring_video` сразу удаляет видеозаписи кандидата | ✅ |
 
 ## Кандидат
 
@@ -68,9 +68,9 @@
 | POST | `/api/v1/candidate/survey` | 🅲 | Опрос: направление, специализация, стек, отрасли, самооценка тем | ✅ |
 | GET | `/api/v1/candidate/survey/history` | 🅲 | История опросов | ✅ |
 | GET | `/api/v1/candidate/category` | 🅲 | Текущая категория, история присвоений, когда доступна смена грейда | ✅ |
-| POST | `/api/v1/candidate/assessments` | 🅲 | `{specialization, grade}` → новая сессия (проверка политики, 409 `grade_change_cooldown`) | ✅ |
+| POST | `/api/v1/candidate/assessments` | 🅲 | `{specialization, grade, proctoring?: {camera, consent_document_id}}` → новая сессия (проверка политики, 409 `grade_change_cooldown`). С `camera: true` нужен id текущего документа `proctoring_video`, иначе 422; без поля `proctoring` — тест без видеозаписи | ✅ |
 | GET | `/api/v1/candidate/assessments` | 🅲 | История сессий | ✅ |
-| GET | `/api/v1/candidate/assessments/{id}` | 🅲 | Состояние или результат сессии | ✅ |
+| GET | `/api/v1/candidate/assessments/{id}` | 🅲 | Состояние или результат сессии; `proctoring` — сводка видеозаписи, `result.needs_review` — «требует подтверждения» | ✅ |
 | GET | `/api/v1/candidate/assessments/{id}/current-item` | 🅲 | Текущее задание (без правильного ответа), дедлайн | ✅ |
 | POST | `/api/v1/candidate/assessments/{id}/answer` | 🅲 | `{seq, answer}` → следующее задание или результат | ✅ |
 | GET | `/api/v1/candidate/invitations` | 🅲 | Входящие приглашения | ✅ |
@@ -83,6 +83,19 @@
 | GET | `/api/v1/candidate/tasks` | 🅲 | Регулярные задания | ✅ |
 | POST | `/api/v1/candidate/tasks/{id}/submit` | 🅲 | Решение или подход | ✅ |
 | POST | `/api/v1/candidate/tasks/{id}/skip` | 🅲 | Пропустить задание | ✅ |
+
+## Прокторинг теста
+
+Видеозапись и журнал событий теста (`architecture.md` §5.6). При `PROCTORING=off` загрузка и события отвечают 409 `proctoring_off`. Работодателю ни один из этих путей не доступен (403 `wrong_role`); в его DTO есть только `CandidateCard.proctoring` — отметка без id сессии и ссылок.
+
+| Метод | Путь | Роль | Описание | Статус |
+|---|---|---|---|---|
+| GET | `/api/v1/candidate/proctoring` | 🅲 | Шаг перед тестом: режим, текст согласия `proctoring_video`, выдано ли оно, срок хранения, лимиты | ✅ |
+| PUT | `/api/v1/candidate/assessments/{id}/proctoring/chunks/{seq}` | 🅲 | Очередной фрагмент видео (сырое тело `video/webm` или `video/mp4`, ≤ 1 МиБ). Строго по порядку с 0; повтор того же `seq` → 204 без перезаписи. Только своя сессия с выбранной камерой и действующим согласием, пока тест идёт и 60 с после. 400 `empty_chunk`; 404; 409 `proctoring_not_recording`, `assessment_finished`, `chunk_out_of_order`; 413 `chunk_too_large`, `recording_too_large` (64 МиБ / 720 фрагментов) | ✅ |
+| POST | `/api/v1/candidate/assessments/{id}/proctoring/events` | 🅲 | `{events: [{kind, at, item_seq?, duration_ms?}]}` — до 50 за запрос, до 500 на сессию (лишние отбрасываются); `kind`: `tab_hidden`, `window_blur`, `fullscreen_exit`, `paste`, `camera_lost`, `recording_failed`. Пишутся и без камеры. 404; 409 `assessment_finished`; 422 | ✅ |
+| GET | `/api/v1/candidate/assessments/{id}/proctoring/recording` | 🅲 | Своя запись: фрагменты расшифровываются и отдаются потоком по порядку, `Content-Length` известен. 404 `recording_unavailable` — без камеры, не началась или удалена | ✅ |
+| GET | `/api/v1/admin/proctoring/{session_id}` | admin | Сводка, флаг person-fit, «требует подтверждения» и журнал событий любой сессии — для разбора спора | ✅ |
+| GET | `/api/v1/admin/proctoring/{session_id}/recording` | admin | Запись любой сессии; доступ пишется в лог | ✅ |
 
 ## ФСП
 
@@ -141,6 +154,8 @@
 **Отклик:** `sent` → `viewed` → `accepted` | `rejected`; кандидат может `withdrawn` до решения.
 
 **Сессия теста:** `in_progress` → `passed` | `failed` | `expired` (брошена > 1 часа).
+
+**Видеозапись теста** (`proctoring.status`): `recording` пока тест идёт → `recorded` | `interrupted`; без камеры — `declined`. После удаления файлов (срок хранения, отзыв согласия) статус сохраняется, `purged: true`.
 
 ## Заглушка реестра ФСП (`fsp-mock`)
 

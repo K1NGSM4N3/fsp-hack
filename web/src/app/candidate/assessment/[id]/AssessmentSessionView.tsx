@@ -14,10 +14,12 @@ import { qk } from "@/features/keys";
 import { cn } from "@/lib/cn";
 import { formatDate, formatDuration } from "@/lib/format";
 import { ATTEMPT_KIND_HINT, ATTEMPT_KIND_LABEL, GRADE_LABEL, TOPIC_LABEL } from "@/lib/labels";
+import { proctor } from "../_proctoring/proctor";
+import { ProctoringResultCard } from "../_proctoring/ResultCard";
+import { FullscreenButton, RecordingIndicator, useProctoringOptions } from "../_proctoring/ui";
 
 /** The API advances a timed-out item on the next read after this grace period. */
 const GRACE_MS = 5500;
-
 
 const SCALE_MIN = -2.5;
 const SCALE_MAX = 2.5;
@@ -134,7 +136,7 @@ function ItemForm({ current, sessionId }: { current: CurrentItem; sessionId: str
   };
 
   return (
-    <form noValidate onSubmit={onSubmit}>
+    <form noValidate onSubmit={onSubmit} data-answer>
       <Card padding="lg">
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -222,8 +224,12 @@ function ItemForm({ current, sessionId }: { current: CurrentItem; sessionId: str
 }
 
 function Runner({ session, refreshing }: { session: AssessmentSession; refreshing: boolean }) {
+  const seq = session.current?.seq ?? null;
+  useEffect(() => proctor.setItem(seq), [seq]);
+  const recorded = session.proctoring?.status === "recording";
   return (
     <div className="mx-auto max-w-3xl">
+      {session.proctoring && <RecordingIndicator />}
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
           <p className="flex flex-wrap items-center gap-2 text-sm text-ink-muted">
@@ -232,10 +238,13 @@ function Runner({ session, refreshing }: { session: AssessmentSession; refreshin
           </p>
           <h1 className="mt-2 text-[28px] leading-tight font-semibold tracking-[-0.03em] text-ink">Задание {session.answered + 1}</h1>
         </div>
-        <Link href="/candidate/assessment" className="inline-flex items-center gap-1.5 rounded text-sm text-ink-muted hover:text-ink">
-          <LogOut className="size-4" aria-hidden />
-          Выйти
-        </Link>
+        <div className="flex items-center gap-4">
+          <FullscreenButton />
+          <Link href="/candidate/assessment" className="inline-flex items-center gap-1.5 rounded text-sm text-ink-muted hover:text-ink">
+            <LogOut className="size-4" aria-hidden />
+            Выйти
+          </Link>
+        </div>
       </div>
       <div className="mb-6">
         <ProgressBar value={session.answered} max={session.max_items} label="Прогресс теста" caption={`Отвечено: ${session.answered}`} />
@@ -253,9 +262,11 @@ function Runner({ session, refreshing }: { session: AssessmentSession; refreshin
           </div>
         </Card>
       )}
-      <p className="mt-6 flex items-center gap-2 text-xs text-ink-subtle">
-        <Clock className="size-3.5" aria-hidden />
-        Можно выйти и вернуться: незавершённый тест закрывается через час без активности.
+      <p className="mt-6 flex items-start gap-2 text-xs text-ink-subtle">
+        <Clock className="mt-px size-3.5 shrink-0" aria-hidden />
+        {recorded
+          ? "Можно выйти и вернуться, но видеозапись при этом остановится и результат получит отметку «запись прервалась». Тест закрывается через час без активности."
+          : "Можно выйти и вернуться: незавершённый тест закрывается через час без активности."}
       </p>
     </div>
   );
@@ -264,8 +275,10 @@ function Runner({ session, refreshing }: { session: AssessmentSession; refreshin
 function OfferCard({ offer, session }: { offer: Offer; session: AssessmentSession }) {
   const router = useRouter();
   const start = useStartAssessment();
+  const options = useProctoringOptions();
   const toast = useToast();
   const up = offer.kind === "placement_upgrade" || offer.kind === "upgrade";
+  const direct = options.data?.mode === "off";
   return (
     <Card className={up ? "border-primary-200 bg-primary-50/40" : ""}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -280,13 +293,15 @@ function OfferCard({ offer, session }: { offer: Offer; session: AssessmentSessio
           loading={start.isPending}
           variant={up ? "primary" : "secondary"}
           onClick={() =>
-            start.mutate(
-              { specialization: session.specialization, grade: offer.grade },
-              {
-                onSuccess: (s) => router.push(`/candidate/assessment/${s.id}`),
-                onError: (e) => toast.error(isApiError(e) ? e.title : "Не удалось начать тест", isApiError(e) ? (e.detail ?? undefined) : undefined),
-              },
-            )
+            direct
+              ? start.mutate(
+                  { specialization: session.specialization, grade: offer.grade },
+                  {
+                    onSuccess: (s) => router.push(`/candidate/assessment/${s.id}`),
+                    onError: (e) => toast.error(isApiError(e) ? e.title : "Не удалось начать тест", isApiError(e) ? (e.detail ?? undefined) : undefined),
+                  },
+                )
+              : router.push(`/candidate/assessment/start?grade=${offer.grade}`)
           }
         >
           Начать: {GRADE_LABEL[offer.grade]}
@@ -355,10 +370,14 @@ function Result({ session }: { session: AssessmentSession }) {
       </Card>
 
       {r.needs_review && (
-        <Alert tone="warning" title="Результат отправлен на перепроверку" icon={<ShieldAlert className="size-5 text-warning" aria-hidden />}>
-          Ответы выглядят нетипично: верные на сложных заданиях и неверные на простых. Мы можем попросить подтвердить результат.
+        <Alert tone="warning" title="Результат требует подтверждения" icon={<ShieldAlert className="size-5 text-warning" aria-hidden />}>
+          {session.proctoring
+            ? "Ответы выглядят нетипично — верные на сложных заданиях и неверные на простых, — и во время теста были уходы со вкладки или вставка текста. Администратор может попросить подтвердить результат."
+            : "Ответы выглядят нетипично: верные на сложных заданиях и неверные на простых. Мы можем попросить подтвердить результат."}
         </Alert>
       )}
+
+      <ProctoringResultCard session={session} />
 
       {offers.map((o) => (
         <OfferCard key={`${o.kind}-${o.grade}`} offer={o} session={session} />
@@ -391,8 +410,27 @@ function Result({ session }: { session: AssessmentSession }) {
   );
 }
 
+/** Keeps the recorder in step with the session: adopt after a reload, stop on the result or on leaving. */
+function useProctorLifecycle(session: AssessmentSession | undefined) {
+  const id = session?.id;
+  const proctored = Boolean(session?.proctoring);
+  const running = session?.status === "in_progress";
+  const cameraRecording = session?.proctoring?.status === "recording";
+  useEffect(() => {
+    if (!id || !proctored) return;
+    if (!running) {
+      proctor.finish(id);
+      return;
+    }
+    proctor.adopt(id, cameraRecording);
+    proctor.attach(id);
+    return () => proctor.detach(id);
+  }, [id, proctored, running, cameraRecording]);
+}
+
 export function AssessmentSessionView({ id }: { id: string }) {
   const session = useAssessment(id);
+  useProctorLifecycle(session.data);
   if (session.isPending) return <PageSkeleton cards={1} />;
   if (session.isError) {
     return (

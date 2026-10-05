@@ -11,6 +11,7 @@ import { SkillInput } from "@/components/domain/Skills";
 import { Button, Card, CardHeader, EmptyState, ErrorAlert, Field, Input, MoneyInput, PageHeader, PageSkeleton, Select, SkeletonCard, Switch } from "@/components/ui";
 import { useCandidateSearch, useCategoryStats, useNeeds } from "@/features/employer/hooks";
 import { InviteDialog, type InviteTarget } from "@/features/employer/components/InviteDialog";
+import { ProctoringBadge } from "@/features/employer/components/ProctoringBadge";
 import { cn } from "@/lib/cn";
 import { formatRubShort, pluralize } from "@/lib/format";
 import { GRADE_LABEL, GRADES, SPEC_LABEL, SPEC_LONG_LABEL, SPECIALIZATIONS, WORK_FORMAT_LABEL, WORK_FORMATS } from "@/lib/labels";
@@ -219,6 +220,7 @@ function SearchView() {
                       candidate={c}
                       href={`/employer/candidates/${c.id}${needId ? `?need=${needId}` : ""}`}
                       highlightSkills={skills}
+                      badges={<ProctoringBadge badge={c.proctoring} />}
                       aside={
                         typeof score === "number" ? (
                           <ScoreRing score={score} />

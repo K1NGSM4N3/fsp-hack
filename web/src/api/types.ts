@@ -68,6 +68,16 @@ export type CodeBlock = S["CodeBlock"];
 export type Answer = S["Answer"];
 export type AnswerInput = S["AnswerInput"];
 export type MarketStats = S["MarketStats"];
+
+export type ProctoringMode = S["ProctoringMode"];
+export type ProctoringOptions = S["ProctoringOptions"];
+export type ProctoringChoice = S["ProctoringChoice"];
+export type ProctoringStatus = S["ProctoringStatus"];
+export type ProctoringSummary = S["ProctoringSummary"];
+export type ProctoringBadge = S["ProctoringBadge"];
+export type IntegrityEvent = S["IntegrityEvent"];
+export type IntegrityEventInput = S["EventInput"];
+export type EventCounts = S["EventCountsView"];
 export type TestPlanDemo = S["TestPlanDemo"];
 export type TestPlan = S["TestPlan"];
 

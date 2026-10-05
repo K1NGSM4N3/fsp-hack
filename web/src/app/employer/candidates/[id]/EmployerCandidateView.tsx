@@ -10,6 +10,7 @@ import { ExplanationPanel, ScoreRing } from "@/components/domain/Explanation";
 import { FspEmpty } from "@/components/domain/Fsp";
 import { SkillLegend, SkillList } from "@/components/domain/Skills";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
+import { ProctoringBadge } from "@/features/employer/components/ProctoringBadge";
 import { Badge, Button, Card, CardHeader, ErrorAlert, PageHeader, PageSkeleton, ProgressBar } from "@/components/ui";
 import { useCandidateContacts, useEmployerCandidate, useNeed } from "@/features/employer/hooks";
 import { InviteDialog } from "@/features/employer/components/InviteDialog";
@@ -124,6 +125,7 @@ export function EmployerCandidateView({ id, needId }: { id: string; needId: stri
             {c.category && <CategoryBadge category={c.category} long />}
             {c.search_status === "active" && <Badge tone="success">{SEARCH_STATUS_LABEL.active}</Badge>}
             {status && <InvitationStatusBadge status={status} />}
+            <ProctoringBadge badge={c.proctoring} />
           </span>
         }
         title={candidateTitle(c)}

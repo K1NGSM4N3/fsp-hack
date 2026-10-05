@@ -4,6 +4,40 @@
  */
 
 export interface paths {
+    "/api/v1/admin/proctoring/{session_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proctoring of any session with its event log, for a dispute (admin) */
+        get: operations["admin_session"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/proctoring/{session_id}/recording": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Play any session's recording for a dispute (admin); every access is logged */
+        get: operations["admin_recording"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -212,6 +246,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/candidate/assessments/{id}/proctoring/chunks/{seq}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Upload the next ~10-second chunk of the running test's video (raw MediaRecorder output) */
+        put: operations["put_chunk"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/candidate/assessments/{id}/proctoring/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Log integrity events of the running test: tab hidden, window blur, fullscreen exit, paste, camera lost, recording failed */
+        post: operations["post_events"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/candidate/assessments/{id}/proctoring/recording": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Play the candidate's own recording: chunks decrypted and streamed in order */
+        get: operations["own_recording"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/candidate/category": {
         parameters: {
             query?: never;
@@ -325,6 +410,23 @@ export interface paths {
         get: operations["get_privacy"];
         /** Update privacy settings */
         put: operations["put_privacy"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/candidate/proctoring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What the proctoring step shows before a test: mode, consent text, retention */
+        get: operations["options"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -1103,7 +1205,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revoke a consent. Revoking publication or processing hides the candidate from search. */
+        /**
+         * Revoke a consent. Revoking publication or processing hides the candidate from search;
+         *     revoking the video consent deletes the candidate's recordings right away.
+         */
         post: operations["revoke_consent"];
         delete?: never;
         options?: never;
@@ -1205,6 +1310,20 @@ export interface components {
         ActiveInput: {
             active: boolean;
         };
+        AdminProctoringView: {
+            /** Format: uuid */
+            session_id: string;
+            /** Format: uuid */
+            candidate_id: string;
+            summary: components["schemas"]["ProctoringSummary"];
+            /** @description Person-fit flag of the answers (`l_z` below −2). */
+            aberrant?: boolean | null;
+            /** Format: double */
+            person_fit_lz?: number | null;
+            /** @description «Требует подтверждения»: the person-fit flag and integrity events together. */
+            needs_confirmation: boolean;
+            events: components["schemas"]["EventView"][];
+        };
         Answer: {
             /** @description Index into `ItemView::options`. */
             value: number;
@@ -1248,7 +1367,11 @@ export interface components {
              */
             test_strength?: number | null;
             assigned_grade?: components["schemas"]["Grade"] | null;
-            /** @description `aberrant`: inconsistent answer pattern, the result is flagged for review. */
+            /**
+             * @description «Требует подтверждения»: an aberrant answer pattern (person-fit) together with integrity
+             *     events — leaving the test or pasting. Sessions without proctoring data fall back to the
+             *     person-fit flag alone.
+             */
             needs_review: boolean;
             topics: components["schemas"]["TopicResult"][];
             /** @description What the candidate may do next right away (step down after a fail, upgrade after a confident pass). */
@@ -1273,6 +1396,7 @@ export interface components {
             finished_at?: string | null;
             current?: components["schemas"]["CurrentItem"] | null;
             result?: components["schemas"]["AssessmentResult"] | null;
+            proctoring?: components["schemas"]["ProctoringSummary"] | null;
         };
         /** @enum {string} */
         AssessmentStatus: "in_progress" | "passed" | "failed" | "expired";
@@ -1332,6 +1456,7 @@ export interface components {
             task_rating?: number | null;
             /** Format: int64 */
             tasks_done: number;
+            proctoring?: components["schemas"]["ProctoringBadge"] | null;
             relation: components["schemas"]["Relation"];
         };
         CandidateContacts: components["schemas"]["Contacts"] & {
@@ -1554,8 +1679,53 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        EventBatch: {
+            /** @description Up to 50 events; the session keeps the first 500. */
+            events: components["schemas"]["EventInput"][];
+        };
+        EventCountsView: {
+            /** Format: int32 */
+            tab_hidden: number;
+            /** Format: int32 */
+            window_blur: number;
+            /** Format: int32 */
+            fullscreen_exit: number;
+            /** Format: int32 */
+            paste: number;
+            /** Format: int32 */
+            camera_lost: number;
+            /** Format: int32 */
+            recording_failed: number;
+        };
+        EventInput: {
+            kind: components["schemas"]["IntegrityEvent"];
+            /**
+             * Format: date-time
+             * @description Browser time of the event; clamped to the session's lifetime.
+             */
+            at: string;
+            /**
+             * Format: int32
+             * @description `current.seq` of the item on screen.
+             */
+            item_seq?: number | null;
+            /**
+             * Format: int32
+             * @description How long the candidate was away (`tab_hidden`, `window_blur`).
+             */
+            duration_ms?: number | null;
+        };
         /** @enum {string} */
         EventLevel: "regional" | "interregional" | "national" | "international";
+        EventView: {
+            kind: components["schemas"]["IntegrityEvent"];
+            /** Format: date-time */
+            at: string;
+            /** Format: int32 */
+            item_seq?: number | null;
+            /** Format: int32 */
+            duration_ms?: number | null;
+        };
         ExperienceEntry: {
             company: string;
             position: string;
@@ -1671,6 +1841,11 @@ export interface components {
          * @enum {string}
          */
         Industry: "fintech" | "ecommerce" | "gamedev" | "govtech" | "telecom" | "edtech" | "healthtech" | "media" | "manufacturing" | "logistics" | "outsourcing";
+        /**
+         * @description What the browser reports while the test is running.
+         * @enum {string}
+         */
+        IntegrityEvent: "tab_hidden" | "window_blur" | "fullscreen_exit" | "paste" | "camera_lost" | "recording_failed";
         InvitationStats: {
             /** Format: int64 */
             quota_limit: number;
@@ -1942,6 +2117,67 @@ export interface components {
             code: string;
             detail?: string | null;
             errors?: Record<string, never> | null;
+        };
+        /**
+         * @description Employer-facing proctoring mark of the test behind the current category. No session id and
+         *     no link: the video stays out of reach until and after «Принять», like the contacts (V-2).
+         */
+        ProctoringBadge: {
+            status: components["schemas"]["ProctoringStatus"];
+            /**
+             * Format: int32
+             * @description Times the candidate left the test tab or window.
+             */
+            left_test: number;
+            /** Format: int32 */
+            pastes: number;
+            /** Format: int32 */
+            fullscreen_exits: number;
+        };
+        ProctoringChoice: {
+            camera: boolean;
+            /**
+             * Format: uuid
+             * @description `consent.id` from `GET /candidate/proctoring`; required with `camera = true`.
+             */
+            consent_document_id?: string | null;
+        };
+        /** @enum {string} */
+        ProctoringMode: "optional" | "off";
+        ProctoringOptions: {
+            mode: components["schemas"]["ProctoringMode"];
+            consent?: components["schemas"]["ConsentDocument"] | null;
+            /** @description The candidate already holds an unrevoked grant of this version. */
+            consent_granted: boolean;
+            /** Format: int64 */
+            retention_days: number;
+            /** Format: int32 */
+            max_chunk_bytes: number;
+            /** Format: int32 */
+            max_events_per_batch: number;
+        };
+        /** @enum {string} */
+        ProctoringStatus: "recording" | "recorded" | "declined" | "interrupted";
+        /** @description The candidate's own view of a session's proctoring. */
+        ProctoringSummary: {
+            status: components["schemas"]["ProctoringStatus"];
+            events: components["schemas"]["EventCountsView"];
+            /**
+             * Format: int32
+             * @description Video chunks received, about 10 seconds each.
+             */
+            chunks: number;
+            /** Format: int64 */
+            bytes: number;
+            /** @description `GET /candidate/assessments/{id}/proctoring/recording` will play it. */
+            playable: boolean;
+            /**
+             * Format: date-time
+             * @description The video is deleted after this moment.
+             */
+            delete_after?: string | null;
+            /** @description Already deleted: retention passed or the consent was revoked. */
+            purged: boolean;
         };
         ProfileInput: {
             full_name: string;
@@ -2252,6 +2488,7 @@ export interface components {
         StartInput: {
             specialization: components["schemas"]["Specialization"];
             grade: components["schemas"]["Grade"];
+            proctoring?: components["schemas"]["ProctoringChoice"] | null;
         };
         StatusCount: {
             status: components["schemas"]["InvitationStatus"];
@@ -2426,6 +2663,83 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    admin_session: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminProctoringView"];
+                };
+            };
+            /** @description `wrong_role` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    admin_recording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/webm": number[];
+                };
+            };
+            /** @description `wrong_role` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_found`, `recording_unavailable` */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     login: {
         parameters: {
             query?: never;
@@ -2723,6 +3037,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `validation_failed`: `proctoring.consent_document_id` missing or not the current version */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_session: {
@@ -2815,6 +3138,160 @@ export interface operations {
                     "application/json": components["schemas"]["AssessmentSession"];
                 };
             };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_chunk: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description assessment session */
+                id: string;
+                /** @description 0-based, strictly in order; a repeated seq is acknowledged without rewriting */
+                seq: number;
+            };
+            cookie?: never;
+        };
+        /** @description Chunk up to 1 MiB; the first chunk's Content-Type fixes the container */
+        requestBody: {
+            content: {
+                "video/webm": number[];
+            };
+        };
+        responses: {
+            /** @description Stored or already stored */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `empty_chunk` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not the caller's session or proctoring was not set up */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `proctoring_off`, `proctoring_not_recording`, `assessment_finished`, `chunk_out_of_order` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `chunk_too_large`, `recording_too_large` */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    post_events: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description assessment session */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EventBatch"];
+            };
+        };
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `proctoring_off`, `assessment_finished` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: more than 50 events */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    own_recording: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description assessment session */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "video/webm": number[];
+                };
+            };
+            /** @description `wrong_role`: employers never get the video */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_found`, `recording_unavailable` */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -3022,6 +3499,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Privacy"];
+                };
+            };
+        };
+    };
+    options: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProctoringOptions"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -4574,7 +5086,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description user consent id */
+                /** @description user consent id or consent document id */
                 id: string;
             };
             cookie?: never;

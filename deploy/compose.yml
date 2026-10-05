@@ -61,6 +61,10 @@ services:
     env_file: ../.env
     environment:
       API_BIND: 0.0.0.0:8000
+      # Encrypted proctoring video chunks; Postgres keeps only their metadata.
+      PROCTORING_DIR: /var/lib/fsp/proctoring
+    volumes:
+      - proctoring-data:/var/lib/fsp/proctoring
     depends_on:
       postgres:
         condition: service_healthy
@@ -280,6 +284,7 @@ services:
 
 volumes:
   pgdata:
+  proctoring-data:
   caddy-data:
   prometheus-data:
   loki-data:

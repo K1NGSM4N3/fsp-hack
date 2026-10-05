@@ -14,6 +14,7 @@ use crate::{
     dto::{InvitationStatus, SearchStatus, parse_slugs},
     error::ApiResult,
     pool,
+    proctoring::{self, ProctoringBadge},
     routes::candidate_profile::ExperienceEntry,
     skills,
 };
@@ -86,6 +87,9 @@ pub struct CandidateCard {
     pub last_activity_at: DateTime<Utc>,
     pub task_rating: Option<f32>,
     pub tasks_done: i64,
+    /// How the test behind the current category was proctored; `None` for tests taken without
+    /// proctoring. Never carries the video.
+    pub proctoring: Option<ProctoringBadge>,
     pub relation: Relation,
 }
 
@@ -98,6 +102,7 @@ pub async fn load(
 ) -> ApiResult<Vec<CandidateCard>> {
     let rows = db::pool::candidate_cards(pg, ids).await?;
     let relations = db::pool::company_relations(pg, company_id, ids).await?;
+    let badges = db::proctoring::card_badges(pg, ids).await?;
     let mut cards = Vec::with_capacity(rows.len());
     for r in rows {
         let category = match (r.specialization.as_deref(), r.grade.as_deref()) {
@@ -190,6 +195,10 @@ pub async fn load(
             last_activity_at: r.last_activity_at,
             task_rating: r.task_rating,
             tasks_done: r.tasks_done,
+            proctoring: badges
+                .iter()
+                .find(|b| b.candidate_id == r.user_id)
+                .map(proctoring::badge),
             relation: Relation {
                 contacts_available: applied
                     || invitation_status == Some(InvitationStatus::Accepted),
