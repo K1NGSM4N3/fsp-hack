@@ -1085,7 +1085,7 @@ fn nginx_location(level: u8, rng: &mut Rng) -> Draft {
                 format!("/media/photo.{}", images[1]),
                 format!("/media/photo.{}", images[1].to_uppercase()),
                 format!("/admin/logo.{}", images[2]),
-                format!("/ADMIN/users"),
+                "/ADMIN/users".into(),
                 "/media/".into(),
                 "/media/docs/report.pdf".into(),
             ],
