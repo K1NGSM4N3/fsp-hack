@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO company_webhooks (company_id, url, secret_enc, secret_hint)\n         VALUES ($1, $2, $3, $4)\n         ON CONFLICT (company_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "81e19c533ac44496b1414f75621208f6033327cf887678cc8a08567ce1b92d9e"
+}

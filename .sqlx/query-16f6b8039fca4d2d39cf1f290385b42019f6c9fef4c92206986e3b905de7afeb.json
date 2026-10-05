@@ -1,0 +1,113 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, v.company_id, co.owner_user_id, a.candidate_id, c.public_code,\n                  c.specialization, c.grade, a.vacancy_id, v.title AS vacancy_title,\n                  a.status AS \"status: ApplicationStatus\", a.cover_letter, a.created_at,\n                  a.updated_at,\n                  EXISTS (SELECT 1 FROM company_webhooks w WHERE w.company_id = v.company_id)\n                      AS \"webhook_on!\"\n           FROM applications a\n           JOIN vacancies v ON v.id = a.vacancy_id\n           JOIN companies co ON co.id = v.company_id\n           JOIN candidates c ON c.user_id = a.candidate_id\n           WHERE a.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner_user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "vacancy_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "vacancy_title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "status: ApplicationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "application_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "rejected",
+                "withdrawn"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "cover_letter",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "webhook_on!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "16f6b8039fca4d2d39cf1f290385b42019f6c9fef4c92206986e3b905de7afeb"
+}

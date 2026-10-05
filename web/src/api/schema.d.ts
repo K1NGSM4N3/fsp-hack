@@ -768,6 +768,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/employer/integrations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Webhook, delivery counters and API key count */
+        get: operations["integrations_overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employer/integrations/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Recent integration events with the per-attempt delivery log */
+        get: operations["list_deliveries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employer/integrations/deliveries/{id}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** «Отправить ещё раз»: queue the event again now, with a fresh 24-hour retry window */
+        post: operations["retry_delivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employer/integrations/keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Company API keys, active first */
+        get: operations["list_api_keys"];
+        put?: never;
+        /** Create an API key with the chosen scopes; the key is returned once */
+        post: operations["create_api_key"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employer/integrations/keys/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Revoke an API key: it stops working immediately */
+        delete: operations["revoke_api_key"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employer/integrations/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the webhook URL. The first save creates the signing secret and returns it once (201);
+         *     later saves only change the URL (200)
+         */
+        put: operations["put_webhook"];
+        post?: never;
+        /** Revoke the webhook: the URL and secret are erased, queued events are cancelled */
+        delete: operations["delete_webhook"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employer/integrations/webhook/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * New signing secret, shown once. For 24 hours deliveries carry signatures with both the new
+         *     and the previous secret, so the ATS can switch without losing events
+         */
+        post: operations["rotate_webhook_secret"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employer/integrations/webhook/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Send an `integration.test` event right now and report how the endpoint answered */
+        post: operations["send_test_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employer/invitations": {
         parameters: {
             query?: never;
@@ -1184,6 +1328,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/integrations/candidates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Candidate profile with contacts — only if this company holds a basis: an accepted invitation
+         *     or the candidate's own application. Otherwise 404. Every call is written to the access log
+         */
+        get: operations["ats_candidate"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/candidates/{id}/profile.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Standardized PDF profile of the candidate, on the same terms as the profile */
+        get: operations["ats_candidate_pdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/invitations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Polling alternative to webhooks: invitations whose status changed after `since`, oldest first */
+        get: operations["ats_invitations"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/needs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import a vacancy from the ATS: the text is parsed into a hiring need; the shortlist is built
+         *     when the need is opened in the cabinet
+         */
+        post: operations["ats_import_need"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/outcomes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Report a hiring stage: interview, offer, hired or rejected. The candidate sees it in the
+         *     invitation or application timeline; repeating the same stage updates it (safe to retry)
+         */
+        post: operations["ats_outcome"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/integrations/whoami": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Check the key: which company it belongs to and what it may do */
+        get: operations["ats_whoami"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/me": {
         parameters: {
             query?: never;
@@ -1336,6 +1591,12 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * @description How the contacts left the platform: the employer's cabinet, the company's ATS over the API,
+         *     or a webhook payload sent to the ATS right after acceptance.
+         * @enum {string}
+         */
+        AccessChannel: "cabinet" | "api" | "webhook";
         AccountRecord: {
             /** Format: uuid */
             id: string;
@@ -1410,6 +1671,34 @@ export interface components {
              */
             seq: number;
             answer: components["schemas"]["Answer"];
+        };
+        ApiKeyCreated: {
+            key: components["schemas"]["ApiKeyView"];
+            /** @description The key itself, shown once: `Authorization: Bearer fsp_live_…`. */
+            secret: string;
+        };
+        ApiKeyInput: {
+            /** @description What the key is for, e.g. «Huntflow». */
+            name: string;
+            scopes: components["schemas"]["Scope"][];
+        };
+        ApiKeyView: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description Beginning of the key, e.g. `fsp_live_ab12cd34`. */
+            prefix: string;
+            scopes: components["schemas"]["Scope"][];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            last_used_at?: string | null;
+            /** Format: date-time */
+            revoked_at?: string | null;
+        };
+        ApplicationEventData: {
+            application: components["schemas"]["AtsApplication"];
+            candidate: components["schemas"]["AtsCandidate"];
         };
         /** @enum {string} */
         ApplicationStatus: "sent" | "viewed" | "accepted" | "rejected" | "withdrawn";
@@ -1489,11 +1778,128 @@ export interface components {
         };
         /** @enum {string} */
         AssessmentStatus: "in_progress" | "passed" | "failed" | "expired";
+        AtsApplication: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            vacancy_id: string;
+            vacancy_title: string;
+            status: components["schemas"]["ApplicationStatus"];
+            cover_letter: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        /** @description Who the event is about. Before acceptance: the anonymous code and category only. */
+        AtsCandidate: {
+            /** @description Anonymous code shown to employers, e.g. `K-7F3A2C`. */
+            code: string;
+            category?: components["schemas"]["Category"] | null;
+            /**
+             * Format: uuid
+             * @description Platform id for `GET /integrations/candidates/{id}`; after acceptance or application.
+             */
+            id?: string | null;
+            disclosed?: components["schemas"]["Disclosure"] | null;
+        };
+        /** @description Full profile after the candidate accepted an invitation or applied to the company. */
+        AtsCandidateProfile: components["schemas"]["Contacts"] & {
+            /** Format: uuid */
+            id: string;
+            code: string;
+            category?: components["schemas"]["Category"] | null;
+            /** Format: date-time */
+            category_assigned_at?: string | null;
+            full_name?: string | null;
+            basis: components["schemas"]["ContactBasis"];
+            /** Format: uuid */
+            basis_id: string;
+            city?: string | null;
+            relocation: boolean;
+            work_formats: components["schemas"]["WorkFormat"][];
+            /** Format: int64 */
+            salary_expectation_min?: number | null;
+            /** Format: float */
+            experience_years?: number | null;
+            skills: components["schemas"]["AtsSkill"][];
+            roles: string[];
+            industries: components["schemas"]["Industry"][];
+            about: string;
+            experience: components["schemas"]["ExperienceEntry"][];
+            profile_pdf_url: string;
+        };
+        AtsInvitation: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["InvitationStatus"];
+            title: string;
+            message: string;
+            salary: components["schemas"]["SalaryRange"];
+            work_format?: components["schemas"]["WorkFormat"] | null;
+            /** Format: uuid */
+            need_id?: string | null;
+            /** Format: uuid */
+            vacancy_id?: string | null;
+            decline_reason?: components["schemas"]["DeclineReason"] | null;
+            decline_comment?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            viewed_at?: string | null;
+            /** Format: date-time */
+            responded_at?: string | null;
+            /** Format: date-time */
+            expires_at: string;
+            /**
+             * Format: date-time
+             * @description Latest status change; the polling cursor.
+             */
+            updated_at: string;
+        };
+        AtsInvitationItem: {
+            invitation: components["schemas"]["AtsInvitation"];
+            /** @description Before acceptance — anonymous code and category; after — also `id`. */
+            candidate: components["schemas"]["AtsCandidate"];
+            /** @description The candidate accepted: `GET /integrations/candidates/{candidate.id}` returns contacts. */
+            contacts_available: boolean;
+            outcomes: components["schemas"]["HiringOutcome"][];
+        };
+        AtsInvitationPage: {
+            items: components["schemas"]["AtsInvitationItem"][];
+            /**
+             * Format: date-time
+             * @description Cursor for the next call; `null` when the page is empty.
+             */
+            next_since?: string | null;
+        };
+        AtsSkill: {
+            slug: string;
+            name: string;
+            /** @description Confirmed by the test or FSP achievements, not only declared. */
+            verified: boolean;
+        };
+        AtsWhoami: {
+            /** Format: uuid */
+            company_id: string;
+            company_name: string;
+            scopes: components["schemas"]["Scope"][];
+        };
         /**
          * @description The intent behind an attempt, which drives the next allowed action.
          * @enum {string}
          */
         AttemptKind: "placement" | "placement_step_down" | "placement_upgrade" | "upgrade" | "downgrade" | "retry";
+        AttemptView: {
+            /** Format: date-time */
+            at: string;
+            url: string;
+            /** Format: int32 */
+            status_code?: number | null;
+            /** Format: int32 */
+            latency_ms: number;
+            error?: string | null;
+        };
         BankItem: {
             candidate: components["schemas"]["CandidateCard"];
             /**
@@ -1730,6 +2136,7 @@ export interface components {
             /** @description `None` when the company has since deleted its account. */
             company_name?: string | null;
             basis: components["schemas"]["ContactBasis"];
+            channel: components["schemas"]["AccessChannel"];
             /** Format: date-time */
             accessed_at: string;
         };
@@ -1739,6 +2146,14 @@ export interface components {
             phone?: string | null;
             telegram?: string | null;
             email?: string | null;
+        };
+        ContactsOpenedData: {
+            candidate: components["schemas"]["AtsCandidate"];
+            basis: components["schemas"]["ContactBasis"];
+            /** Format: uuid */
+            basis_id: string;
+            /** Format: date-time */
+            opened_at: string;
         };
         Contribution: {
             /**
@@ -1794,6 +2209,34 @@ export interface components {
             reason: components["schemas"]["DeclineReason"];
             comment?: string | null;
         };
+        DeliveryCounts: {
+            /** Format: int64 */
+            pending: number;
+            /** Format: int64 */
+            delivered: number;
+            /** Format: int64 */
+            failed: number;
+        };
+        /** @enum {string} */
+        DeliveryStatus: "pending" | "delivered" | "failed";
+        DeliveryView: {
+            /** Format: uuid */
+            event_id: string;
+            event_type: components["schemas"]["EventType"];
+            status: components["schemas"]["DeliveryStatus"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description For `pending`: when the next attempt is due.
+             */
+            next_attempt_at?: string | null;
+            /** Format: date-time */
+            delivered_at?: string | null;
+            last_error?: string | null;
+            /** @description Every HTTP attempt, oldest first. */
+            attempts: components["schemas"]["AttemptView"][];
+        };
         DevLinkInput: {
             fsp_id: string;
         };
@@ -1809,6 +2252,18 @@ export interface components {
         };
         /** @enum {string} */
         Discipline: "algorithmic" | "product" | "security" | "ai" | "robotics" | "uav";
+        /**
+         * @description Name, contacts and links to the full profile. Present only after the candidate accepted the
+         *     invitation or applied to the company's vacancy.
+         */
+        Disclosure: components["schemas"]["Contacts"] & {
+            full_name?: string | null;
+            basis: components["schemas"]["ContactBasis"];
+            /** @description `GET` with the same API key (`candidates:read`). */
+            profile_url: string;
+            /** @description Standardized PDF profile, same key. */
+            profile_pdf_url: string;
+        };
         EmployerData: {
             company?: components["schemas"]["CompanyResponse"] | null;
             needs: components["schemas"]["HiringNeed"][];
@@ -1851,6 +2306,7 @@ export interface components {
             /** Format: int32 */
             recording_failed: number;
         };
+        EventData: components["schemas"]["InvitationEventData"] | components["schemas"]["ApplicationEventData"] | components["schemas"]["ContactsOpenedData"] | components["schemas"]["TestEventData"];
         EventInput: {
             kind: components["schemas"]["IntegrityEvent"];
             /**
@@ -1871,6 +2327,8 @@ export interface components {
         };
         /** @enum {string} */
         EventLevel: "regional" | "interregional" | "national" | "international";
+        /** @enum {string} */
+        EventType: "invitation.sent" | "invitation.viewed" | "invitation.accepted" | "invitation.declined" | "invitation.expired" | "invitation.withdrawn" | "application.created" | "application.status_changed" | "contacts.opened" | "integration.test";
         EventView: {
             kind: components["schemas"]["IntegrityEvent"];
             /** Format: date-time */
@@ -1983,6 +2441,32 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
+        /** @description «Компания отметила: собеседование» — a stage the company's hiring system reported. */
+        HiringOutcome: {
+            stage: components["schemas"]["HiringStage"];
+            /** @description Reason the company gave; visible to the candidate. */
+            reason?: string | null;
+            /** Format: date-time */
+            at: string;
+        };
+        /** @enum {string} */
+        HiringStage: "interview" | "offer" | "hired" | "rejected";
+        ImportedNeed: {
+            /** Format: uuid */
+            need_id: string;
+            /** @description Page of the need with the shortlist in the employer cabinet. */
+            shortlist_url: string;
+            title: string;
+            specialization: components["schemas"]["Specialization"];
+            grades: components["schemas"]["Grade"][];
+            must_skills: string[];
+            nice_skills: string[];
+            salary: components["schemas"]["SalaryRange"];
+            work_formats: components["schemas"]["WorkFormat"][];
+            city?: string | null;
+            /** @description What was assumed because the text did not say it. */
+            notes: string[];
+        };
         IncomingApplication: {
             /** Format: uuid */
             id: string;
@@ -2002,11 +2486,25 @@ export interface components {
          * @enum {string}
          */
         Industry: "fintech" | "ecommerce" | "gamedev" | "govtech" | "telecom" | "edtech" | "healthtech" | "media" | "manufacturing" | "logistics" | "outsourcing";
+        IntegrationsOverview: {
+            webhook?: components["schemas"]["WebhookView"] | null;
+            deliveries: components["schemas"]["DeliveryCounts"];
+            /** Format: int64 */
+            active_keys: number;
+            /** @description Base URL of the inbound API for the ATS, e.g. `https://…/api/v1/integrations`. */
+            api_base_url: string;
+            event_types: components["schemas"]["EventType"][];
+            scopes: components["schemas"]["Scope"][];
+        };
         /**
          * @description What the browser reports while the test is running.
          * @enum {string}
          */
         IntegrityEvent: "tab_hidden" | "window_blur" | "fullscreen_exit" | "paste" | "camera_lost" | "recording_failed";
+        InvitationEventData: {
+            invitation: components["schemas"]["AtsInvitation"];
+            candidate: components["schemas"]["AtsCandidate"];
+        };
         InvitationStats: {
             /** Format: int64 */
             quota_limit: number;
@@ -2021,6 +2519,11 @@ export interface components {
              */
             response_rate: number;
             decline_reasons: components["schemas"]["ReasonCount"][];
+            /**
+             * @description Hiring stages reported by the company's ATS (`POST /integrations/outcomes`): how many
+             *     invitations and applications reached each one.
+             */
+            hiring: components["schemas"]["StageCount"][];
         };
         /** @enum {string} */
         InvitationStatus: "sent" | "viewed" | "accepted" | "declined" | "expired" | "withdrawn";
@@ -2092,6 +2595,8 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Stages the company's hiring system reported. */
+            outcomes: components["schemas"]["HiringOutcome"][];
         };
         MyTask: {
             /** Format: uuid */
@@ -2146,6 +2651,13 @@ export interface components {
             slug: "office" | "hybrid" | "remote";
             name: string;
         };
+        NeedImport: {
+            /** @description Vacancy title in the ATS; the first line of `text` if absent. */
+            title?: string | null;
+            /** @description Vacancy text as is: the parser finds specialization, grade, stack, salary and format. */
+            text: string;
+            salary?: components["schemas"]["SalaryRange"] | null;
+        };
         NeedInput: {
             title: string;
             /** @description What the team does and whom it needs; also used for text relevance. */
@@ -2170,6 +2682,35 @@ export interface components {
         };
         /** @enum {string} */
         OnboardingStep: "profile" | "survey" | "assessment" | "done";
+        OutcomeInput: {
+            /**
+             * Format: uuid
+             * @description Exactly one of `invitation_id` and `application_id`.
+             */
+            invitation_id?: string | null;
+            /** Format: uuid */
+            application_id?: string | null;
+            stage: components["schemas"]["HiringStage"];
+            /** @description Shown to the candidate. Up to 500 characters. */
+            reason?: string | null;
+            /**
+             * Format: date-time
+             * @description When it happened in the ATS.
+             */
+            at: string;
+        };
+        OutcomeRecorded: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            invitation_id?: string | null;
+            /** Format: uuid */
+            application_id?: string | null;
+            stage: components["schemas"]["HiringStage"];
+            reason?: string | null;
+            /** Format: date-time */
+            at: string;
+        };
         Page_BankItem: {
             items: {
                 candidate: components["schemas"]["CandidateCard"];
@@ -2433,6 +2974,8 @@ export interface components {
             responded_at?: string | null;
             /** Format: date-time */
             expires_at: string;
+            /** @description Stages the company's hiring system reported after acceptance. */
+            outcomes: components["schemas"]["HiringOutcome"][];
         };
         RefreshResponse: {
             access_token: string;
@@ -2520,6 +3063,8 @@ export interface components {
             label: string;
             items: components["schemas"]["ItemView"][];
         };
+        /** @enum {string} */
+        Scope: "invitations:read" | "candidates:read" | "outcomes:write" | "needs:write";
         ScoreBreakdown: {
             /**
              * Format: float
@@ -2662,6 +3207,11 @@ export interface components {
              */
             confidence: number;
         };
+        StageCount: {
+            stage: components["schemas"]["HiringStage"];
+            /** Format: int64 */
+            count: number;
+        };
         StartInput: {
             specialization: components["schemas"]["Specialization"];
             grade: components["schemas"]["Grade"];
@@ -2740,6 +3290,19 @@ export interface components {
         TaskKind: "solution" | "approach";
         /** @enum {string} */
         TaskStatus: "assigned" | "submitted" | "reviewed" | "skipped" | "expired";
+        TestDelivery: {
+            /** Format: uuid */
+            event_id: string;
+            delivered: boolean;
+            /** Format: int32 */
+            status_code?: number | null;
+            /** Format: int32 */
+            latency_ms: number;
+            error?: string | null;
+        };
+        TestEventData: {
+            message: string;
+        };
         /** @description Which topics and templates a test for `(spec, grade)` would emphasise, for the T-4 demo. */
         TestPlan: {
             specialization: components["schemas"]["Specialization"];
@@ -2828,6 +3391,48 @@ export interface components {
         VacancyStatus: "draft" | "published" | "closed";
         VerifyEmailRequest: {
             token: string;
+        };
+        /**
+         * @description Body of every webhook delivery. `id` repeats the `FSP-Event-Id` header: deliveries are
+         *     at-least-once, so the receiver deduplicates by it.
+         */
+        WebhookEvent: {
+            /** Format: uuid */
+            id: string;
+            type: components["schemas"]["EventType"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: uuid */
+            company_id: string;
+            data: components["schemas"]["EventData"];
+        };
+        WebhookInput: {
+            /** @description `https://` address of the ATS endpoint. */
+            url: string;
+        };
+        WebhookSaved: {
+            webhook: components["schemas"]["WebhookView"];
+            /**
+             * @description Signing secret, present only right after creation or rotation. Store it in the ATS:
+             *     it is not shown again.
+             */
+            secret?: string | null;
+        };
+        WebhookView: {
+            url: string;
+            /** @description The secret itself is shown once; afterwards only its beginning. */
+            secret_hint: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** Format: date-time */
+            secret_rotated_at: string;
+            /**
+             * Format: date-time
+             * @description After a rotation the previous secret also signs deliveries until this moment.
+             */
+            previous_secret_valid_until?: string | null;
         };
         /** @enum {string} */
         WorkFormat: "office" | "hybrid" | "remote";
@@ -4312,6 +4917,388 @@ export interface operations {
             };
         };
     };
+    integrations_overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationsOverview"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_deliveries: {
+        parameters: {
+            query?: {
+                /** @description Default 50, at most 200. */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryView"][];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    retry_delivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Event id (`FSP-Event-Id`) */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `webhook_missing`, `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_api_keys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyView"][];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    create_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeyInput"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyCreated"];
+                };
+            };
+            /** @description `api_key_limit` — не больше 10 действующих ключей, `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    revoke_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    put_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookInput"];
+            };
+        };
+        responses: {
+            /** @description Адрес изменён, секрет прежний */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSaved"];
+                };
+            };
+            /** @description Создан, `secret` показан один раз */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSaved"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Адрес не https, ведёт во внутреннюю сеть или не находится в DNS */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    delete_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    rotate_webhook_secret: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookSaved"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    send_test_event: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TestDelivery"];
+                };
+            };
+            /** @description Вебхук не настроен */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_sent: {
         parameters: {
             query?: never;
@@ -5222,6 +6209,349 @@ export interface operations {
                 };
             };
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ats_candidate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description `candidate.id` from an event or the invitations feed */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtsCandidateProfile"];
+                };
+            };
+            /** @description `api_key_required`, `api_key_invalid` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `insufficient_scope` — нужно `candidates:read` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Нет принятого приглашения или отклика */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ats_candidate_pdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": number[];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `insufficient_scope` — нужно `candidates:read` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Нет принятого приглашения или отклика */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ats_invitations: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["InvitationStatus"] | null;
+                /**
+                 * @description RFC 3339; only invitations whose status changed after this moment. Pass `next_since` from
+                 *     the previous page.
+                 */
+                since?: string | null;
+                /** @description Default 50, at most 200. */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtsInvitationPage"];
+                };
+            };
+            /** @description `api_key_required`, `api_key_invalid` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `insufficient_scope` — нужно `invitations:read` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ats_import_need: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NeedImport"];
+            };
+        };
+        responses: {
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedNeed"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `insufficient_scope` — нужно `needs:write` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Нет текста, не распознана специализация или вилка */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ats_outcome: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OutcomeInput"];
+            };
+        };
+        responses: {
+            /** @description Этап уже был — обновлены причина и время */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeRecorded"];
+                };
+            };
+            /** @description Этап записан */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutcomeRecorded"];
+                };
+            };
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `insufficient_scope` — нужно `outcomes:write` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Приглашение или отклик не найдены у этой компании */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `outcome_not_allowed` — кандидат не принял приглашение или отозвал отклик */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    ats_whoami: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtsWhoami"];
+                };
+            };
+            /** @description `api_key_required`, `api_key_invalid` */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            429: {
                 headers: {
                     [name: string]: unknown;
                 };

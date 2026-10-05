@@ -1,4 +1,5 @@
 pub mod assessment;
+pub mod ats;
 pub mod candidate_profile;
 pub mod candidates;
 pub mod catalog;
@@ -6,6 +7,7 @@ pub mod company;
 pub mod export;
 pub mod fsp;
 pub mod health;
+pub mod integrations;
 pub mod invitations;
 pub mod market;
 pub mod me;

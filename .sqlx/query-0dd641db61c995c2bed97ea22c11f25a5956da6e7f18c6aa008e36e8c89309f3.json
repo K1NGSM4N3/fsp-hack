@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.candidate_id, a.status <> 'withdrawn' AS \"open!\"\n           FROM applications a\n           JOIN vacancies v ON v.id = a.vacancy_id\n           WHERE v.company_id = $1 AND a.id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "open!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "0dd641db61c995c2bed97ea22c11f25a5956da6e7f18c6aa008e36e8c89309f3"
+}

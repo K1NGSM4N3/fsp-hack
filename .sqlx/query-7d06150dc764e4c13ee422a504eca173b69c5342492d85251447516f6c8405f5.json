@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE integration_events SET status = 'failed', last_error = $2\n         WHERE company_id = $1 AND status = 'pending'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7d06150dc764e4c13ee422a504eca173b69c5342492d85251447516f6c8405f5"
+}

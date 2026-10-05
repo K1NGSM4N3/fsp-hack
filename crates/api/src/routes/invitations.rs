@@ -17,9 +17,13 @@ use uuid::Uuid;
 use super::company::company_id;
 use crate::{
     auth::{CandidateUser, EmployerUser, client_ip, user_agent},
-    contacts::{AccessContext, CandidateContacts, ContactGrant},
-    dto::{DeclineReason, InvitationStatus, SalaryRange},
+    contacts::{AccessChannel, AccessContext, CandidateContacts, ContactGrant},
+    dto::{DeclineReason, HiringStage, InvitationStatus, SalaryRange},
     error::{ApiError, ApiResult, Problem, Validator},
+    integrations::{
+        events::{EventType, Outbox, expire_invitations},
+        outcomes::{HiringOutcome, OutcomeIndex},
+    },
     state::AppState,
 };
 
@@ -223,8 +227,9 @@ async fn send(
     }
 
     let id = Uuid::now_v7();
+    let mut tx = state.pool.begin().await?;
     let inserted = db::invitations::insert_invitation(
-        &state.pool,
+        &mut *tx,
         &db::invitations::NewInvitation {
             id,
             company_id: company,
@@ -252,13 +257,17 @@ async fn send(
         return Err(e.into());
     }
     db::invitations::insert_invitation_event(
-        &state.pool,
+        &mut *tx,
         Uuid::now_v7(),
         id,
         db::types::InvitationStatus::Sent,
         Some(user.id),
     )
     .await?;
+    Outbox::new(&state)
+        .invitation(&mut tx, EventType::InvitationSent, id)
+        .await?;
+    tx.commit().await?;
     let row = db::invitations::employer_invitation(&state.pool, company, id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
@@ -274,7 +283,7 @@ async fn list_sent(
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<SentInvitation>>> {
     let company = company_id(&state.pool, user.id).await?;
-    db::invitations::expire_stale_invitations(&state.pool).await?;
+    expire_invitations(&state).await?;
     Ok(Json(sent_views(&state.pool, company).await?))
 }
 
@@ -298,7 +307,7 @@ async fn get_sent(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<SentInvitation>> {
     let company = company_id(&state.pool, user.id).await?;
-    db::invitations::expire_stale_invitations(&state.pool).await?;
+    expire_invitations(&state).await?;
     let row = db::invitations::employer_invitation(&state.pool, company, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
@@ -329,20 +338,25 @@ async fn withdraw(
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
     let company = company_id(&state.pool, user.id).await?;
-    if db::invitations::withdraw_invitation(&state.pool, id, company).await? == 0 {
+    let mut tx = state.pool.begin().await?;
+    if db::invitations::withdraw_invitation(&mut *tx, id, company).await? == 0 {
         return Err(ApiError::conflict(
             "invitation_closed",
             "Приглашение уже закрыто",
         ));
     }
     db::invitations::insert_invitation_event(
-        &state.pool,
+        &mut *tx,
         Uuid::now_v7(),
         id,
         db::types::InvitationStatus::Withdrawn,
         Some(user.id),
     )
     .await?;
+    Outbox::new(&state)
+        .invitation(&mut tx, EventType::InvitationWithdrawn, id)
+        .await?;
+    tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -367,6 +381,15 @@ pub struct InvitationStats {
     /// Share of answered (accepted or declined) among non-withdrawn invitations.
     pub response_rate: f64,
     pub decline_reasons: Vec<ReasonCount>,
+    /// Hiring stages reported by the company's ATS (`POST /integrations/outcomes`): how many
+    /// invitations and applications reached each one.
+    pub hiring: Vec<StageCount>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct StageCount {
+    pub stage: HiringStage,
+    pub count: i64,
 }
 
 /// Quota, funnel and aggregated decline reasons
@@ -378,7 +401,7 @@ async fn invitation_stats(
     user: EmployerUser,
 ) -> ApiResult<Json<InvitationStats>> {
     let company = company_id(&state.pool, user.id).await?;
-    db::invitations::expire_stale_invitations(&state.pool).await?;
+    expire_invitations(&state).await?;
     let used = db::invitations::company_invitations_since(
         &state.pool,
         company,
@@ -411,6 +434,14 @@ async fn invitation_stats(
                 count: r.count,
             })
             .collect(),
+        hiring: db::integrations::company_stage_counts(&state.pool, company)
+            .await?
+            .into_iter()
+            .map(|r| StageCount {
+                stage: r.stage.into(),
+                count: r.count,
+            })
+            .collect(),
     }))
 }
 
@@ -434,8 +465,11 @@ async fn candidate_contacts(
         company_id: company,
         ip: ip.as_deref(),
         user_agent: ua.as_deref(),
+        channel: AccessChannel::Cabinet,
+        api_key_id: None,
     };
-    let grant = ContactGrant::obtain(&state.pool, &ctx, candidate_id)
+    let mut tx = state.pool.begin().await?;
+    let grant = ContactGrant::obtain(&mut tx, &ctx, candidate_id)
         .await?
         .ok_or_else(|| {
             ApiError::forbidden(
@@ -443,9 +477,12 @@ async fn candidate_contacts(
                 "Контакты откроются, когда кандидат примет приглашение или откликнется сам",
             )
         })?;
-    Ok(Json(
-        CandidateContacts::reveal(&state.pool, &state.crypto, grant).await?,
-    ))
+    Outbox::new(&state)
+        .contacts_opened(&mut tx, company, &grant)
+        .await?;
+    let contacts = CandidateContacts::reveal(&mut *tx, &state.crypto, grant).await?;
+    tx.commit().await?;
+    Ok(Json(contacts))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -469,6 +506,8 @@ pub struct ReceivedInvitation {
     pub viewed_at: Option<DateTime<Utc>>,
     pub responded_at: Option<DateTime<Utc>>,
     pub expires_at: DateTime<Utc>,
+    /// Stages the company's hiring system reported after acceptance.
+    pub outcomes: Vec<HiringOutcome>,
 }
 
 macro_rules! received_from_row {
@@ -500,8 +539,21 @@ macro_rules! received_from_row {
             viewed_at: r.viewed_at,
             responded_at: r.responded_at,
             expires_at: r.expires_at,
+            outcomes: Vec::new(),
         }
     }};
+}
+
+async fn received_view(
+    pool: &PgPool,
+    candidate: Uuid,
+    row: db::invitations::CandidateInvitation,
+) -> ApiResult<ReceivedInvitation> {
+    let mut inv = received_from_row!(row);
+    inv.outcomes = OutcomeIndex::for_candidate(pool, candidate)
+        .await?
+        .of(inv.id);
+    Ok(inv)
 }
 
 /// Incoming invitations
@@ -512,7 +564,7 @@ async fn list_received(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<ReceivedInvitation>>> {
-    db::invitations::expire_stale_invitations(&state.pool).await?;
+    expire_invitations(&state).await?;
     Ok(Json(received_views(&state.pool, user.id).await?))
 }
 
@@ -521,7 +573,15 @@ pub(crate) async fn received_views(
     candidate: Uuid,
 ) -> ApiResult<Vec<ReceivedInvitation>> {
     let rows = db::invitations::candidate_invitations(pool, candidate).await?;
-    Ok(rows.into_iter().map(|r| received_from_row!(r)).collect())
+    let outcomes = OutcomeIndex::for_candidate(pool, candidate).await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            let mut inv = received_from_row!(r);
+            inv.outcomes = outcomes.of(inv.id);
+            inv
+        })
+        .collect())
 }
 
 /// One invitation; the first open marks it as viewed
@@ -534,21 +594,26 @@ async fn get_received(
     user: CandidateUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<ReceivedInvitation>> {
-    db::invitations::expire_stale_invitations(&state.pool).await?;
-    if db::invitations::mark_invitation_viewed(&state.pool, id, user.id).await? > 0 {
+    expire_invitations(&state).await?;
+    let mut tx = state.pool.begin().await?;
+    if db::invitations::mark_invitation_viewed(&mut *tx, id, user.id).await? > 0 {
         db::invitations::insert_invitation_event(
-            &state.pool,
+            &mut *tx,
             Uuid::now_v7(),
             id,
             db::types::InvitationStatus::Viewed,
             Some(user.id),
         )
         .await?;
+        Outbox::new(&state)
+            .invitation(&mut tx, EventType::InvitationViewed, id)
+            .await?;
     }
+    tx.commit().await?;
     let row = db::invitations::candidate_invitation(&state.pool, user.id, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    Ok(Json(received_from_row!(row)))
+    Ok(Json(received_view(&state.pool, user.id, row).await?))
 }
 
 async fn respond(
@@ -559,8 +624,9 @@ async fn respond(
     reason: Option<DeclineReason>,
     comment: Option<String>,
 ) -> ApiResult<Json<ReceivedInvitation>> {
+    let mut tx = state.pool.begin().await?;
     let updated = db::invitations::respond_invitation(
-        &state.pool,
+        &mut *tx,
         status,
         reason.map(DeclineReason::slug),
         comment.as_deref(),
@@ -569,6 +635,7 @@ async fn respond(
     )
     .await?;
     if updated == 0 {
+        drop(tx);
         return match db::invitations::candidate_invitation(&state.pool, user.id, id).await? {
             None => Err(ApiError::not_found()),
             Some(_) => Err(ApiError::conflict(
@@ -577,19 +644,20 @@ async fn respond(
             )),
         };
     }
-    db::invitations::insert_invitation_event(
-        &state.pool,
-        Uuid::now_v7(),
-        id,
-        status,
-        Some(user.id),
-    )
-    .await?;
-    db::candidates::touch_candidate_activity(&state.pool, user.id).await?;
+    db::invitations::insert_invitation_event(&mut *tx, Uuid::now_v7(), id, status, Some(user.id))
+        .await?;
+    db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
+    let kind = if status == db::types::InvitationStatus::Accepted {
+        EventType::InvitationAccepted
+    } else {
+        EventType::InvitationDeclined
+    };
+    Outbox::new(state).invitation(&mut tx, kind, id).await?;
+    tx.commit().await?;
     let row = db::invitations::candidate_invitation(&state.pool, user.id, id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
-    Ok(Json(received_from_row!(row)))
+    Ok(Json(received_view(&state.pool, user.id, row).await?))
 }
 
 /// Accept: the company gets access to your contacts

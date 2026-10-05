@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM company_webhooks WHERE company_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9eec6bb6cd009e909a0a1fbdec58f78f4e62a0d69fbf6910c89de9248ae7877c"
+}

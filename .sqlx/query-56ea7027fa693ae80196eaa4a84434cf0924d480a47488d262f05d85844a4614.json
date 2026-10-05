@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT invitation_id, application_id, stage AS \"stage: HiringStage\", reason, occurred_at\n           FROM hiring_outcomes\n           WHERE candidate_id = $1\n           ORDER BY occurred_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invitation_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "application_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "stage: HiringStage",
+        "type_info": {
+          "Custom": {
+            "name": "hiring_stage",
+            "kind": {
+              "Enum": [
+                "interview",
+                "offer",
+                "hired",
+                "rejected"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "occurred_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "56ea7027fa693ae80196eaa4a84434cf0924d480a47488d262f05d85844a4614"
+}

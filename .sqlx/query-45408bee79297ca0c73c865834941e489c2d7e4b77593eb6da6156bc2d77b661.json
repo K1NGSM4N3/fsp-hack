@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE invitations SET status = 'expired'\n         WHERE status IN ('sent', 'viewed') AND expires_at < now()\n         RETURNING id, company_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "45408bee79297ca0c73c865834941e489c2d7e4b77593eb6da6156bc2d77b661"
+}

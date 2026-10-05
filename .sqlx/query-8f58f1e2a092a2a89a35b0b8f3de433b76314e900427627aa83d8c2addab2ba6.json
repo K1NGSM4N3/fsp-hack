@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE integration_events\n         SET status = 'pending', attempts = 0, next_attempt_at = now(), deadline_at = $3,\n             delivered_at = NULL, last_error = NULL\n         WHERE company_id = $1 AND id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8f58f1e2a092a2a89a35b0b8f3de433b76314e900427627aa83d8c2addab2ba6"
+}

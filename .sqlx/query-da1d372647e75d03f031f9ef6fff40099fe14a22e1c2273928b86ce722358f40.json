@@ -1,0 +1,77 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH due AS (\n               SELECT ie.id, w.url, w.secret_enc, w.prev_secret_enc, w.prev_expires_at\n               FROM integration_events ie\n               LEFT JOIN company_webhooks w ON w.company_id = ie.company_id\n               WHERE ie.status = 'pending' AND ie.next_attempt_at <= now()\n               ORDER BY ie.next_attempt_at\n               LIMIT $1\n               FOR UPDATE OF ie SKIP LOCKED\n           )\n           UPDATE integration_events e\n           SET next_attempt_at = now() + make_interval(secs => $2)\n           FROM due\n           WHERE e.id = due.id\n           RETURNING e.id, e.company_id, e.event_type, e.payload_enc, e.attempts, e.deadline_at,\n                     due.url AS \"url?\", due.secret_enc AS \"secret_enc?\",\n                     due.prev_secret_enc AS \"prev_secret_enc?\",\n                     due.prev_expires_at AS \"prev_expires_at?\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "payload_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "attempts",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 5,
+        "name": "deadline_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "url?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "secret_enc?",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 8,
+        "name": "prev_secret_enc?",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 9,
+        "name": "prev_expires_at?",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "da1d372647e75d03f031f9ef6fff40099fe14a22e1c2273928b86ce722358f40"
+}

@@ -2316,6 +2316,525 @@
         ]
       }
     },
+    "/api/v1/employer/integrations": {
+      "get": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Webhook, delivery counters and API key count",
+        "operationId": "integrations_overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationsOverview"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/employer/integrations/deliveries": {
+      "get": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Recent integration events with the per-attempt delivery log",
+        "operationId": "list_deliveries",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Default 50, at most 200.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryView"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/employer/integrations/deliveries/{id}/retry": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "«Отправить ещё раз»: queue the event again now, with a fresh 24-hour retry window",
+        "operationId": "retry_delivery",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "Event id (`FSP-Event-Id`)",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "202": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`webhook_missing`, `company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/employer/integrations/keys": {
+      "get": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Company API keys, active first",
+        "operationId": "list_api_keys",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyView"
+                  }
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Create an API key with the chosen scopes; the key is returned once",
+        "operationId": "create_api_key",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApiKeyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreated"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`api_key_limit` — не больше 10 действующих ключей, `company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/employer/integrations/keys/{id}": {
+      "delete": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Revoke an API key: it stops working immediately",
+        "operationId": "revoke_api_key",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/employer/integrations/webhook": {
+      "put": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Set the webhook URL. The first save creates the signing secret and returns it once (201);\nlater saves only change the URL (200)",
+        "operationId": "put_webhook",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Адрес изменён, секрет прежний",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSaved"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Создан, `secret` показан один раз",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSaved"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Адрес не https, ведёт во внутреннюю сеть или не находится в DNS",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Revoke the webhook: the URL and secret are erased, queued events are cancelled",
+        "operationId": "delete_webhook",
+        "responses": {
+          "204": {},
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/employer/integrations/webhook/rotate": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "New signing secret, shown once. For 24 hours deliveries carry signatures with both the new\nand the previous secret, so the ATS can switch without losing events",
+        "operationId": "rotate_webhook_secret",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookSaved"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/employer/integrations/webhook/test": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Send an `integration.test` event right now and report how the endpoint answered",
+        "operationId": "send_test_event",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TestDelivery"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Вебхук не настроен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/employer/invitations": {
       "get": {
         "tags": [
@@ -3772,6 +4291,478 @@
         ]
       }
     },
+    "/api/v1/integrations/candidates/{id}": {
+      "get": {
+        "tags": [
+          "Интеграции ATS"
+        ],
+        "summary": "Candidate profile with contacts — only if this company holds a basis: an accepted invitation\nor the candidate's own application. Otherwise 404. Every call is written to the access log",
+        "operationId": "ats_candidate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "description": "`candidate.id` from an event or the invitations feed",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtsCandidateProfile"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`api_key_required`, `api_key_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` — нужно `candidates:read`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Нет принятого приглашения или отклика",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/api/v1/integrations/candidates/{id}/profile.pdf": {
+      "get": {
+        "tags": [
+          "Интеграции ATS"
+        ],
+        "summary": "Standardized PDF profile of the candidate, on the same terms as the profile",
+        "operationId": "ats_candidate_pdf",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "format": "int32",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` — нужно `candidates:read`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Нет принятого приглашения или отклика",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/api/v1/integrations/invitations": {
+      "get": {
+        "tags": [
+          "Интеграции ATS"
+        ],
+        "summary": "Polling alternative to webhooks: invitations whose status changed after `since`, oldest first",
+        "operationId": "ats_invitations",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InvitationStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "description": "RFC 3339; only invitations whose status changed after this moment. Pass `next_since` from\nthe previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Default 50, at most 200.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtsInvitationPage"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`api_key_required`, `api_key_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` — нужно `invitations:read`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/api/v1/integrations/needs": {
+      "post": {
+        "tags": [
+          "Интеграции ATS"
+        ],
+        "summary": "Import a vacancy from the ATS: the text is parsed into a hiring need; the shortlist is built\nwhen the need is opened in the cabinet",
+        "operationId": "ats_import_need",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NeedImport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedNeed"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` — нужно `needs:write`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Нет текста, не распознана специализация или вилка",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/api/v1/integrations/outcomes": {
+      "post": {
+        "tags": [
+          "Интеграции ATS"
+        ],
+        "summary": "Report a hiring stage: interview, offer, hired or rejected. The candidate sees it in the\ninvitation or application timeline; repeating the same stage updates it (safe to retry)",
+        "operationId": "ats_outcome",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OutcomeInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Этап уже был — обновлены причина и время",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeRecorded"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Этап записан",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OutcomeRecorded"
+                }
+              }
+            }
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`insufficient_scope` — нужно `outcomes:write`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Приглашение или отклик не найдены у этой компании",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`outcome_not_allowed` — кандидат не принял приглашение или отозвал отклик",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
+    "/api/v1/integrations/whoami": {
+      "get": {
+        "tags": [
+          "Интеграции ATS"
+        ],
+        "summary": "Check the key: which company it belongs to and what it may do",
+        "operationId": "ats_whoami",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtsWhoami"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`api_key_required`, `api_key_invalid`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "api_key": []
+          }
+        ]
+      }
+    },
     "/api/v1/me": {
       "get": {
         "tags": [
@@ -4294,6 +5285,15 @@
   },
   "components": {
     "schemas": {
+      "AccessChannel": {
+        "type": "string",
+        "description": "How the contacts left the platform: the employer's cabinet, the company's ATS over the API,\nor a webhook payload sent to the ATS right after acceptance.",
+        "enum": [
+          "cabinet",
+          "api",
+          "webhook"
+        ]
+      },
       "AccountRecord": {
         "type": "object",
         "required": [
@@ -4593,6 +5593,103 @@
           }
         }
       },
+      "ApiKeyCreated": {
+        "type": "object",
+        "required": [
+          "key",
+          "secret"
+        ],
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/ApiKeyView"
+          },
+          "secret": {
+            "type": "string",
+            "description": "The key itself, shown once: `Authorization: Bearer fsp_live_…`."
+          }
+        }
+      },
+      "ApiKeyInput": {
+        "type": "object",
+        "required": [
+          "name",
+          "scopes"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "What the key is for, e.g. «Huntflow»."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            }
+          }
+        }
+      },
+      "ApiKeyView": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "scopes",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string",
+            "description": "Beginning of the key, e.g. `fsp_live_ab12cd34`."
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            }
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "last_used_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "revoked_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "ApplicationEventData": {
+        "type": "object",
+        "required": [
+          "application",
+          "candidate"
+        ],
+        "properties": {
+          "application": {
+            "$ref": "#/components/schemas/AtsApplication"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AtsCandidate"
+          }
+        }
+      },
       "ApplicationStatus": {
         "type": "string",
         "enum": [
@@ -4871,6 +5968,401 @@
           "expired"
         ]
       },
+      "AtsApplication": {
+        "type": "object",
+        "required": [
+          "id",
+          "vacancy_id",
+          "vacancy_title",
+          "status",
+          "cover_letter",
+          "created_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vacancy_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "vacancy_title": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApplicationStatus"
+          },
+          "cover_letter": {
+            "type": "string"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AtsCandidate": {
+        "type": "object",
+        "description": "Who the event is about. Before acceptance: the anonymous code and category only.",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Anonymous code shown to employers, e.g. `K-7F3A2C`."
+          },
+          "category": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Category"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Platform id for `GET /integrations/candidates/{id}`; after acceptance or application."
+          },
+          "disclosed": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Disclosure"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "AtsCandidateProfile": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Contacts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "id",
+              "code",
+              "basis",
+              "basis_id",
+              "relocation",
+              "work_formats",
+              "skills",
+              "roles",
+              "industries",
+              "about",
+              "experience",
+              "profile_pdf_url"
+            ],
+            "properties": {
+              "id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "code": {
+                "type": "string"
+              },
+              "category": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Category"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "category_assigned_at": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "format": "date-time"
+              },
+              "full_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "basis": {
+                "$ref": "#/components/schemas/ContactBasis"
+              },
+              "basis_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "city": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "relocation": {
+                "type": "boolean"
+              },
+              "work_formats": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/WorkFormat"
+                }
+              },
+              "salary_expectation_min": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "format": "int64"
+              },
+              "experience_years": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "format": "float"
+              },
+              "skills": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AtsSkill"
+                }
+              },
+              "roles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "industries": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Industry"
+                }
+              },
+              "about": {
+                "type": "string"
+              },
+              "experience": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ExperienceEntry"
+                }
+              },
+              "profile_pdf_url": {
+                "type": "string"
+              }
+            }
+          }
+        ],
+        "description": "Full profile after the candidate accepted an invitation or applied to the company."
+      },
+      "AtsInvitation": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "title",
+          "message",
+          "salary",
+          "created_at",
+          "expires_at",
+          "updated_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/InvitationStatus"
+          },
+          "title": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "salary": {
+            "$ref": "#/components/schemas/SalaryRange"
+          },
+          "work_format": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WorkFormat"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "need_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "vacancy_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "decline_reason": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DeclineReason",
+                "description": "Only for `declined`."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decline_comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "viewed_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "responded_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Latest status change; the polling cursor."
+          }
+        }
+      },
+      "AtsInvitationItem": {
+        "type": "object",
+        "required": [
+          "invitation",
+          "candidate",
+          "contacts_available",
+          "outcomes"
+        ],
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/AtsInvitation"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AtsCandidate",
+            "description": "Before acceptance — anonymous code and category; after — also `id`."
+          },
+          "contacts_available": {
+            "type": "boolean",
+            "description": "The candidate accepted: `GET /integrations/candidates/{candidate.id}` returns contacts."
+          },
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HiringOutcome"
+            }
+          }
+        }
+      },
+      "AtsInvitationPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AtsInvitationItem"
+            }
+          },
+          "next_since": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Cursor for the next call; `null` when the page is empty."
+          }
+        }
+      },
+      "AtsSkill": {
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "verified"
+        ],
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Confirmed by the test or FSP achievements, not only declared."
+          }
+        }
+      },
+      "AtsWhoami": {
+        "type": "object",
+        "required": [
+          "company_id",
+          "company_name",
+          "scopes"
+        ],
+        "properties": {
+          "company_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company_name": {
+            "type": "string"
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            }
+          }
+        }
+      },
       "AttemptKind": {
         "type": "string",
         "description": "The intent behind an attempt, which drives the next allowed action.",
@@ -4882,6 +6374,40 @@
           "downgrade",
           "retry"
         ]
+      },
+      "AttemptView": {
+        "type": "object",
+        "required": [
+          "at",
+          "url",
+          "latency_ms"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "url": {
+            "type": "string"
+          },
+          "status_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "latency_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "BankItem": {
         "type": "object",
@@ -5795,6 +7321,7 @@
         "required": [
           "company_id",
           "basis",
+          "channel",
           "accessed_at"
         ],
         "properties": {
@@ -5811,6 +7338,9 @@
           },
           "basis": {
             "$ref": "#/components/schemas/ContactBasis"
+          },
+          "channel": {
+            "$ref": "#/components/schemas/AccessChannel"
           },
           "accessed_at": {
             "type": "string",
@@ -5845,6 +7375,31 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ContactsOpenedData": {
+        "type": "object",
+        "required": [
+          "candidate",
+          "basis",
+          "basis_id",
+          "opened_at"
+        ],
+        "properties": {
+          "candidate": {
+            "$ref": "#/components/schemas/AtsCandidate"
+          },
+          "basis": {
+            "$ref": "#/components/schemas/ContactBasis"
+          },
+          "basis_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "opened_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -6025,6 +7580,90 @@
           }
         }
       },
+      "DeliveryCounts": {
+        "type": "object",
+        "required": [
+          "pending",
+          "delivered",
+          "failed"
+        ],
+        "properties": {
+          "pending": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "delivered": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "failed": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "DeliveryStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "delivered",
+          "failed"
+        ]
+      },
+      "DeliveryView": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "event_type",
+          "status",
+          "created_at",
+          "attempts"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "event_type": {
+            "$ref": "#/components/schemas/EventType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/DeliveryStatus"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "next_attempt_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "For `pending`: when the next attempt is due."
+          },
+          "delivered_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "last_error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "attempts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AttemptView"
+            },
+            "description": "Every HTTP attempt, oldest first."
+          }
+        }
+      },
       "DevLinkInput": {
         "type": "object",
         "required": [
@@ -6079,6 +7718,41 @@
           "robotics",
           "uav"
         ]
+      },
+      "Disclosure": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Contacts"
+          },
+          {
+            "type": "object",
+            "required": [
+              "basis",
+              "profile_url",
+              "profile_pdf_url"
+            ],
+            "properties": {
+              "full_name": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "basis": {
+                "$ref": "#/components/schemas/ContactBasis"
+              },
+              "profile_url": {
+                "type": "string",
+                "description": "`GET` with the same API key (`candidates:read`)."
+              },
+              "profile_pdf_url": {
+                "type": "string",
+                "description": "Standardized PDF profile, same key."
+              }
+            }
+          }
+        ],
+        "description": "Name, contacts and links to the full profile. Present only after the candidate accepted the\ninvitation or applied to the company's vacancy."
       },
       "EmployerData": {
         "type": "object",
@@ -6244,6 +7918,22 @@
           }
         }
       },
+      "EventData": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/InvitationEventData"
+          },
+          {
+            "$ref": "#/components/schemas/ApplicationEventData"
+          },
+          {
+            "$ref": "#/components/schemas/ContactsOpenedData"
+          },
+          {
+            "$ref": "#/components/schemas/TestEventData"
+          }
+        ]
+      },
       "EventInput": {
         "type": "object",
         "required": [
@@ -6286,6 +7976,21 @@
           "interregional",
           "national",
           "international"
+        ]
+      },
+      "EventType": {
+        "type": "string",
+        "enum": [
+          "invitation.sent",
+          "invitation.viewed",
+          "invitation.accepted",
+          "invitation.declined",
+          "invitation.expired",
+          "invitation.withdrawn",
+          "application.created",
+          "application.status_changed",
+          "contacts.opened",
+          "integration.test"
         ]
       },
       "EventView": {
@@ -6643,6 +8348,110 @@
           }
         }
       },
+      "HiringOutcome": {
+        "type": "object",
+        "description": "«Компания отметила: собеседование» — a stage the company's hiring system reported.",
+        "required": [
+          "stage",
+          "at"
+        ],
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/HiringStage"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Reason the company gave; visible to the candidate."
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "HiringStage": {
+        "type": "string",
+        "enum": [
+          "interview",
+          "offer",
+          "hired",
+          "rejected"
+        ]
+      },
+      "ImportedNeed": {
+        "type": "object",
+        "required": [
+          "need_id",
+          "shortlist_url",
+          "title",
+          "specialization",
+          "grades",
+          "must_skills",
+          "nice_skills",
+          "salary",
+          "work_formats",
+          "notes"
+        ],
+        "properties": {
+          "need_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "shortlist_url": {
+            "type": "string",
+            "description": "Page of the need with the shortlist in the employer cabinet."
+          },
+          "title": {
+            "type": "string"
+          },
+          "specialization": {
+            "$ref": "#/components/schemas/Specialization"
+          },
+          "grades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Grade"
+            }
+          },
+          "must_skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "nice_skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "salary": {
+            "$ref": "#/components/schemas/SalaryRange"
+          },
+          "work_formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkFormat"
+            }
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "What was assumed because the text did not say it."
+          }
+        }
+      },
       "IncomingApplication": {
         "type": "object",
         "required": [
@@ -6709,6 +8518,51 @@
           "outsourcing"
         ]
       },
+      "IntegrationsOverview": {
+        "type": "object",
+        "required": [
+          "deliveries",
+          "active_keys",
+          "api_base_url",
+          "event_types",
+          "scopes"
+        ],
+        "properties": {
+          "webhook": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/WebhookView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "deliveries": {
+            "$ref": "#/components/schemas/DeliveryCounts"
+          },
+          "active_keys": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "api_base_url": {
+            "type": "string",
+            "description": "Base URL of the inbound API for the ATS, e.g. `https://…/api/v1/integrations`."
+          },
+          "event_types": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EventType"
+            }
+          },
+          "scopes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Scope"
+            }
+          }
+        }
+      },
       "IntegrityEvent": {
         "type": "string",
         "description": "What the browser reports while the test is running.",
@@ -6721,6 +8575,21 @@
           "recording_failed"
         ]
       },
+      "InvitationEventData": {
+        "type": "object",
+        "required": [
+          "invitation",
+          "candidate"
+        ],
+        "properties": {
+          "invitation": {
+            "$ref": "#/components/schemas/AtsInvitation"
+          },
+          "candidate": {
+            "$ref": "#/components/schemas/AtsCandidate"
+          }
+        }
+      },
       "InvitationStats": {
         "type": "object",
         "required": [
@@ -6729,7 +8598,8 @@
           "quota_resets_in_days",
           "by_status",
           "response_rate",
-          "decline_reasons"
+          "decline_reasons",
+          "hiring"
         ],
         "properties": {
           "quota_limit": {
@@ -6760,6 +8630,13 @@
             "items": {
               "$ref": "#/components/schemas/ReasonCount"
             }
+          },
+          "hiring": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StageCount"
+            },
+            "description": "Hiring stages reported by the company's ATS (`POST /integrations/outcomes`): how many\ninvitations and applications reached each one."
           }
         }
       },
@@ -6984,7 +8861,8 @@
           "cover_letter",
           "status",
           "created_at",
-          "updated_at"
+          "updated_at",
+          "outcomes"
         ],
         "properties": {
           "id": {
@@ -7017,6 +8895,13 @@
           "updated_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HiringOutcome"
+            },
+            "description": "Stages the company's hiring system reported."
           }
         }
       },
@@ -7220,6 +9105,36 @@
           }
         }
       },
+      "NeedImport": {
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "properties": {
+          "title": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Vacancy title in the ATS; the first line of `text` if absent."
+          },
+          "text": {
+            "type": "string",
+            "description": "Vacancy text as is: the parser finds specialization, grade, stack, salary and format."
+          },
+          "salary": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SalaryRange",
+                "description": "Overrides the salary range found in the text."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
       "NeedInput": {
         "type": "object",
         "required": [
@@ -7327,6 +9242,86 @@
           "assessment",
           "done"
         ]
+      },
+      "OutcomeInput": {
+        "type": "object",
+        "required": [
+          "stage",
+          "at"
+        ],
+        "properties": {
+          "invitation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Exactly one of `invitation_id` and `application_id`."
+          },
+          "application_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/HiringStage"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Shown to the candidate. Up to 500 characters."
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it happened in the ATS."
+          }
+        }
+      },
+      "OutcomeRecorded": {
+        "type": "object",
+        "required": [
+          "id",
+          "stage",
+          "at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "invitation_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "application_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "stage": {
+            "$ref": "#/components/schemas/HiringStage"
+          },
+          "reason": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
       },
       "Page_BankItem": {
         "type": "object",
@@ -8215,7 +10210,8 @@
           "contact",
           "status",
           "created_at",
-          "expires_at"
+          "expires_at",
+          "outcomes"
         ],
         "properties": {
           "id": {
@@ -8313,6 +10309,13 @@
           "expires_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "outcomes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HiringOutcome"
+            },
+            "description": "Stages the company's hiring system reported after acceptance."
           }
         }
       },
@@ -8597,6 +10600,15 @@
             }
           }
         }
+      },
+      "Scope": {
+        "type": "string",
+        "enum": [
+          "invitations:read",
+          "candidates:read",
+          "outcomes:write",
+          "needs:write"
+        ]
       },
       "ScoreBreakdown": {
         "type": "object",
@@ -9137,6 +11149,22 @@
           }
         }
       },
+      "StageCount": {
+        "type": "object",
+        "required": [
+          "stage",
+          "count"
+        ],
+        "properties": {
+          "stage": {
+            "$ref": "#/components/schemas/HiringStage"
+          },
+          "count": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
       "StartInput": {
         "type": "object",
         "required": [
@@ -9432,6 +11460,52 @@
           "skipped",
           "expired"
         ]
+      },
+      "TestDelivery": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "delivered",
+          "latency_ms"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "delivered": {
+            "type": "boolean"
+          },
+          "status_code": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "latency_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TestEventData": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
       },
       "TestPlan": {
         "type": "object",
@@ -9761,6 +11835,106 @@
           }
         }
       },
+      "WebhookEvent": {
+        "type": "object",
+        "description": "Body of every webhook delivery. `id` repeats the `FSP-Event-Id` header: deliveries are\nat-least-once, so the receiver deduplicates by it.",
+        "required": [
+          "id",
+          "type",
+          "created_at",
+          "company_id",
+          "data"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "type": {
+            "$ref": "#/components/schemas/EventType"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "company_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "data": {
+            "$ref": "#/components/schemas/EventData"
+          }
+        }
+      },
+      "WebhookInput": {
+        "type": "object",
+        "required": [
+          "url"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "`https://` address of the ATS endpoint."
+          }
+        }
+      },
+      "WebhookSaved": {
+        "type": "object",
+        "required": [
+          "webhook"
+        ],
+        "properties": {
+          "webhook": {
+            "$ref": "#/components/schemas/WebhookView"
+          },
+          "secret": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Signing secret, present only right after creation or rotation. Store it in the ATS:\nit is not shown again."
+          }
+        }
+      },
+      "WebhookView": {
+        "type": "object",
+        "required": [
+          "url",
+          "secret_hint",
+          "created_at",
+          "updated_at",
+          "secret_rotated_at"
+        ],
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "secret_hint": {
+            "type": "string",
+            "description": "The secret itself is shown once; afterwards only its beginning."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "secret_rotated_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "previous_secret_valid_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "After a rotation the previous secret also signs deliveries until this moment."
+          }
+        }
+      },
       "WorkFormat": {
         "type": "string",
         "enum": [
@@ -9771,6 +11945,12 @@
       }
     },
     "securitySchemes": {
+      "api_key": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "fsp_live_…",
+        "description": "API-ключ компании из кабинета «Интеграции»"
+      },
       "bearer": {
         "type": "http",
         "scheme": "bearer",
@@ -9831,6 +12011,14 @@
     {
       "name": "invitations",
       "description": "Приглашения — выход работодателя на кандидата, раскрытие контактов"
+    },
+    {
+      "name": "integrations",
+      "description": "Кабинет работодателя: вебхук в ATS компании, журнал доставок, API-ключи"
+    },
+    {
+      "name": "Интеграции ATS",
+      "description": "API для ATS работодателя. Доступ — только API-ключом компании: `Authorization: Bearer fsp_live_…`, cookie и JWT здесь не принимаются. Лимит — 120 запросов в минуту на ключ. События приходят вебхуком (тело — схема `WebhookEvent`, подпись — заголовок `FSP-Signature: t=…,v1=HMAC-SHA256(secret, t + \".\" + body)`), здесь — опрос, профиль кандидата после согласия, этапы найма и импорт вакансий"
     }
   ]
 }

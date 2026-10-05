@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# Builds both Rust services; pick one with --target api | fsp-mock.
+# Builds the Rust services; pick one with --target api | fsp-mock | ats-mock.
 # Context: repo root (docker compose -f deploy/compose.yml build).
 
 # Builder and runtime must share a Debian release: a binary linked against a newer glibc
@@ -18,7 +18,7 @@ FROM chef AS builder
 COPY --from=planner /app/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 COPY . .
-RUN cargo build --release --bin api --bin fsp-mock
+RUN cargo build --release --bin api --bin fsp-mock --bin ats-mock
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
@@ -34,6 +34,13 @@ USER 10001:10001
 ENV FSP_MOCK_BIND=0.0.0.0:8090
 EXPOSE 8090
 ENTRYPOINT ["/usr/local/bin/fsp-mock"]
+
+FROM runtime AS ats-mock
+COPY --from=builder /app/target/release/ats-mock /usr/local/bin/ats-mock
+USER 10001:10001
+ENV ATS_MOCK_BIND=0.0.0.0:8082
+EXPOSE 8082
+ENTRYPOINT ["/usr/local/bin/ats-mock"]
 
 FROM runtime AS api
 COPY --from=builder /app/target/release/api /usr/local/bin/api

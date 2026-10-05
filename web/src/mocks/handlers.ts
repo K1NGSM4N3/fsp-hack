@@ -368,6 +368,7 @@ export async function getContactAccess(): Promise<T.ContactAccessEntry[]> {
       company_id: i.company_id,
       company_name: db.companies.find((c) => c.id === i.company_id)?.name ?? null,
       basis: "invitation" as const,
+      channel: "cabinet" as const,
       accessed_at: i.responded_at ?? i.created_at,
     }));
 }
@@ -898,6 +899,7 @@ function receivedDto(inv: MockInvitation): T.ReceivedInvitation {
     viewed_at: inv.viewed_at,
     responded_at: inv.responded_at,
     expires_at: inv.expires_at,
+    outcomes: [],
   };
 }
 
@@ -1013,6 +1015,7 @@ function myApplicationDto(a: MockApplication): T.MyApplication | null {
     status: a.status,
     created_at: a.created_at,
     updated_at: a.updated_at,
+    outcomes: [],
   };
 }
 
@@ -1776,6 +1779,7 @@ export async function getInvitationStats(): Promise<T.InvitationStats> {
     by_status: statuses.map((status) => ({ status, count: count(status) })),
     response_rate: considered ? Math.round((answered / considered) * 100) / 100 : 0,
     decline_reasons: [...reasons.entries()].sort((a, b) => b[1] - a[1]).map(([reason, n]) => ({ reason, count: n })),
+    hiring: [],
   };
 }
 
@@ -2038,3 +2042,4 @@ export async function createReport(body: T.ReportInput): Promise<void> {
   persist();
 }
 
+export * from "./integrations";

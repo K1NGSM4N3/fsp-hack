@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { isApiError } from "@/api/client";
 import { SalaryRange } from "@/components/domain/Category";
+import { HiringOutcomes } from "@/components/domain/HiringOutcomes";
 import { ApplicationStatusBadge } from "@/components/domain/StatusBadges";
 import { VacancyBrowser } from "@/components/domain/VacancyBrowser";
 import { Button, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, useToast } from "@/components/ui";
@@ -47,6 +48,7 @@ function Applications({ onBrowse }: { onBrowse: () => void }) {
               <ApplicationStatusBadge status={a.status} />
             </div>
           </div>
+          <HiringOutcomes outcomes={a.outcomes} className="mt-4 border-t border-line pt-3" />
           {(a.status === "sent" || a.status === "viewed") && (
             <div className="mt-4 flex justify-end border-t border-line pt-3">
               <Button

@@ -16,6 +16,7 @@ pub struct AccessRecord {
     /// `None` once the company deleted its account; the log outlives it.
     pub company_name: Option<String>,
     pub basis: String,
+    pub channel: String,
     pub accessed_at: DateTime<Utc>,
 }
 
@@ -28,6 +29,9 @@ pub struct ContactAccess<'a> {
     pub basis_id: Uuid,
     pub ip: Option<&'a str>,
     pub user_agent: Option<&'a str>,
+    /// `cabinet`, `api` or `webhook`.
+    pub channel: &'a str,
+    pub api_key_id: Option<Uuid>,
 }
 
 pub async fn accepted_invitation_basis(
@@ -84,8 +88,8 @@ pub async fn insert_contact_access(
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
         "INSERT INTO contact_access_log (id, employer_user_id, company_id, candidate_id, basis, basis_id,
-                                         ip, user_agent)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
+                                         ip, user_agent, channel, api_key_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)",
         a.id,
         a.employer_user_id,
         a.company_id,
@@ -94,6 +98,8 @@ pub async fn insert_contact_access(
         a.basis_id,
         a.ip,
         a.user_agent,
+        a.channel,
+        a.api_key_id,
     )
     .execute(db)
     .await
@@ -107,7 +113,7 @@ pub async fn candidate_access_log(
 ) -> Result<Vec<AccessRecord>, sqlx::Error> {
     sqlx::query_as!(
         AccessRecord,
-        r#"SELECT l.company_id, co.name AS "company_name?", l.basis, l.accessed_at
+        r#"SELECT l.company_id, co.name AS "company_name?", l.basis, l.channel, l.accessed_at
            FROM contact_access_log l
            LEFT JOIN companies co ON co.id = l.company_id
            WHERE l.candidate_id = $1

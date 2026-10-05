@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM integration_events WHERE status <> 'pending' AND created_at < $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "03921538ea3bf3c5a536080c3b8a502ea686e653356594c0b7100a6c0ea62810"
+}

@@ -215,6 +215,8 @@ async fn access_log_names_the_company(pool: PgPool) {
                 basis_id: Uuid::now_v7(),
                 ip: Some("10.0.0.2"),
                 user_agent: Some("test"),
+                channel: "cabinet",
+                api_key_id: None,
             },
         )
         .await

@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::CandidateUser,
-    contacts::{ContactAccessEntry, ContactBasis, Contacts},
+    contacts::{AccessChannel, ContactAccessEntry, ContactBasis, Contacts},
     dto::{SearchStatus, parse_slugs, slugs},
     error::{ApiError, ApiResult, Problem, Validator},
     pdf, pool,
@@ -115,10 +115,18 @@ pub(crate) async fn load_profile(
     state: &AppState,
     user: &CandidateUser,
 ) -> ApiResult<ProfileResponse> {
-    let c = db::candidates::candidate_profile(&state.pool, user.id)
+    load_profile_of(state, user.id).await
+}
+
+/// Callers other than the candidate must hold a `ContactGrant` for `candidate_id`.
+pub(crate) async fn load_profile_of(
+    state: &AppState,
+    candidate_id: Uuid,
+) -> ApiResult<ProfileResponse> {
+    let c = db::candidates::candidate_profile(&state.pool, candidate_id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
-    let skill_rows = db::candidates::candidate_skills(&state.pool, user.id).await?;
+    let skill_rows = db::candidates::candidate_skills(&state.pool, candidate_id).await?;
 
     let mut skill_details: Vec<ProfileSkill> = Vec::new();
     for row in skill_rows {
@@ -379,6 +387,7 @@ pub(crate) async fn access_log(
                     company_id: r.company_id,
                     company_name: r.company_name,
                     basis: ContactBasis::from_slug(&r.basis)?,
+                    channel: AccessChannel::from_slug(&r.channel)?,
                     accessed_at: r.accessed_at,
                 })
             })
@@ -527,8 +536,31 @@ async fn profile_pdf(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<impl IntoResponse> {
+    let (code, bytes) = profile_pdf_bytes(&state, user.id).await?;
+    Ok(pdf_response(&code, bytes))
+}
+
+pub(crate) fn pdf_response(public_code: &str, bytes: Vec<u8>) -> impl IntoResponse + use<> {
+    (
+        [
+            (header::CONTENT_TYPE, "application/pdf".to_owned()),
+            (
+                header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"profile-{public_code}.pdf\""),
+            ),
+        ],
+        bytes,
+    )
+}
+
+/// The standardized profile of `candidate_id`; callers other than the candidate must hold a
+/// `ContactGrant` for them. Returns the anonymous code (for the file name) and the PDF.
+pub(crate) async fn profile_pdf_bytes(
+    state: &AppState,
+    candidate_id: Uuid,
+) -> ApiResult<(String, Vec<u8>)> {
     use pdf::{Line, Section};
-    let p = load_profile(&state, &user).await?;
+    let p = load_profile_of(state, candidate_id).await?;
     let now = Utc::now();
     let mut sections = Vec::new();
 
@@ -637,7 +669,7 @@ async fn profile_pdf(
         });
     }
 
-    let fsp_lines = match db::fsp::fsp_link(&state.pool, user.id).await? {
+    let fsp_lines = match db::fsp::fsp_link(&state.pool, candidate_id).await? {
         Some(link) => {
             let list = pool::achievements(Some(&link.achievements));
             let mut lines = vec![Line::KeyValue("ФСП ID".into(), link.fsp_id)];
@@ -701,14 +733,5 @@ async fn profile_pdf(
         ),
     };
     let bytes = tokio::task::spawn_blocking(move || pdf::render(&doc)).await??;
-    Ok((
-        [
-            (header::CONTENT_TYPE, "application/pdf".to_owned()),
-            (
-                header::CONTENT_DISPOSITION,
-                format!("attachment; filename=\"profile-{}.pdf\"", p.public_code),
-            ),
-        ],
-        bytes,
-    ))
+    Ok((p.public_code, bytes))
 }

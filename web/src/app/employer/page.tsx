@@ -3,7 +3,7 @@
 import { ArrowRight, CheckCheck, Lightbulb, MessageSquareReply, Plus, Search, Send, Target } from "lucide-react";
 import type { ReactNode } from "react";
 import Link from "next/link";
-import type { InvitationStats, InvitationStatus } from "@/api/types";
+import type { HiringStage, InvitationStats, InvitationStatus } from "@/api/types";
 import { SalaryRange } from "@/components/domain/Category";
 import { AnimatedNumber, ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, PageHeader, ProgressBar, SkeletonCard, Stat } from "@/components/ui";
 import { useMe } from "@/features/auth/hooks";
@@ -20,6 +20,48 @@ const FUNNEL: { status: InvitationStatus; tone: string }[] = [
   { status: "expired", tone: "bg-ink-faint" },
   { status: "withdrawn", tone: "bg-line-strong" },
 ];
+
+const HIRING: { stage: HiringStage; label: string; tone: string }[] = [
+  { stage: "interview", label: "Собеседование", tone: "bg-primary" },
+  { stage: "offer", label: "Оффер", tone: "bg-warning" },
+  { stage: "hired", label: "Наняты", tone: "bg-success" },
+  { stage: "rejected", label: "Отказ", tone: "bg-accent" },
+];
+
+function HiringFunnel({ s }: { s: InvitationStats }) {
+  if (s.hiring.length === 0) {
+    return (
+      <p className="mt-5 border-t border-line pt-4 text-sm text-ink-subtle">
+        Что было после контакта — собеседование, оффер, найм — появится здесь, когда вы{" "}
+        <Link href="/employer/integrations" className="font-medium text-primary hover:underline">
+          подключите ATS
+        </Link>
+        .
+      </p>
+    );
+  }
+  const counts = Object.fromEntries(s.hiring.map((x) => [x.stage, x.count])) as Partial<Record<HiringStage, number>>;
+  const max = Math.max(1, ...s.hiring.map((x) => x.count));
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <p className="mb-3 text-sm font-medium text-ink">После контакта — по данным вашей ATS</p>
+      <ul className="space-y-2.5">
+        {HIRING.map((h) => {
+          const n = counts[h.stage] ?? 0;
+          return (
+            <li key={h.stage} className="grid grid-cols-[7rem_1fr_2.5rem] items-center gap-3 text-sm">
+              <span className="text-ink-muted">{h.label}</span>
+              <span className="h-2.5 overflow-hidden rounded-full bg-surface" aria-hidden>
+                <span className={cn("block h-full origin-left animate-grow-x rounded-full", h.tone)} style={{ width: `${(n / max) * 100}%` }} />
+              </span>
+              <span className="tabular text-right font-mono text-ink">{n}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 function Kpi({ icon, label, value, suffix, hint, accent = false }: { icon: ReactNode; label: string; value: number; suffix?: string; hint: string; accent?: boolean }) {
   return (
@@ -103,6 +145,7 @@ function FunnelCard({ s }: { s: InvitationStats }) {
           );
         })}
       </ul>
+      <HiringFunnel s={s} />
     </Card>
   );
 }

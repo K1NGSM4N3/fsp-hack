@@ -154,3 +154,21 @@ export type ReportReason = S["ReportReason"];
 
 export type CandidateSearchParams = NonNullable<operations["search"]["parameters"]["query"]>;
 export type VacancyQuery = NonNullable<operations["list_published"]["parameters"]["query"]>;
+
+export type AccessChannel = S["AccessChannel"];
+export type HiringStage = S["HiringStage"];
+export type HiringOutcome = S["HiringOutcome"];
+export type StageCount = S["StageCount"];
+export type IntegrationsOverview = S["IntegrationsOverview"];
+export type WebhookView = S["WebhookView"];
+export type WebhookInput = S["WebhookInput"];
+export type WebhookSaved = S["WebhookSaved"];
+export type TestDelivery = S["TestDelivery"];
+export type DeliveryView = S["DeliveryView"];
+export type DeliveryStatus = S["DeliveryStatus"];
+export type DeliveryAttempt = S["AttemptView"];
+export type IntegrationEventType = S["EventType"];
+export type ApiScope = S["Scope"];
+export type ApiKeyView = S["ApiKeyView"];
+export type ApiKeyInput = S["ApiKeyInput"];
+export type ApiKeyCreated = S["ApiKeyCreated"];

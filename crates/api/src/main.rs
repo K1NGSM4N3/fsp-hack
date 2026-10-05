@@ -5,6 +5,7 @@ use api::{
     config::{Config, ConfigError},
     crypto::{Crypto, CryptoError},
     db::DbSetupError,
+    integrations::{dispatcher::Dispatcher, webhook::WebhookSender},
     kv::{Kv, KvError},
     mail::{MailError, Mailer},
     proctoring::{ProctoringMode, RecordingStore},
@@ -85,8 +86,23 @@ async fn main() -> Result<(), StartupError> {
         Err(e) => return Err(StartupError::Proctoring(e)),
     }
 
+    let crypto = Arc::new(Crypto::new(&config.field_key, &config.bidx_key));
+    let webhooks = WebhookSender::new(config.integrations.webhook_dev_hosts.clone())?;
+    if let Some(demo) = &config.integrations.demo
+        && let Err(e) = api::integrations::provision_demo(&pool, &crypto, &webhooks, demo).await
+    {
+        tracing::error!(error = %e, "demo ATS provisioning failed");
+    }
+    Dispatcher::new(
+        pool.clone(),
+        crypto.clone(),
+        webhooks.clone(),
+        config.integrations.dispatch_interval,
+    )
+    .spawn();
+
     let state = AppState {
-        crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
+        crypto,
         jwt: Arc::new(JwtKeys::new(config.jwt_seed)?),
         mailer: Arc::new(Mailer::new(&config.mail)?),
         kv: Kv::connect(config.valkey_url.as_deref()).await?,
@@ -95,6 +111,7 @@ async fn main() -> Result<(), StartupError> {
             .build()?,
         metrics: Some(api::metrics::install()?),
         recordings,
+        webhooks,
         pool,
         config: Arc::new(config),
     };

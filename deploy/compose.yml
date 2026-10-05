@@ -204,6 +204,41 @@ services:
     mem_limit: 32m
     logging: *logging
 
+  # Demo ATS of the employer: receives signed webhooks, sends hiring stages back (http://localhost:8082).
+  ats-mock:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+      target: ats-mock
+    image: fsp-hack/ats-mock:local
+    profiles: [ats, full]
+    restart: unless-stopped
+    # Shares ATS_DEMO_API_KEY and ATS_DEMO_WEBHOOK_SECRET with the api, which provisions them
+    # for the demo company at startup.
+    env_file: ../.env
+    environment:
+      ATS_MOCK_BIND: 0.0.0.0:8082
+      ATS_API_URL: http://api:8000
+    ports:
+      - "8082:8082"
+    depends_on:
+      - api
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8082 &&
+          printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          IFS= read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    mem_limit: 32m
+    logging: *logging
+
   prometheus:
     image: prom/prometheus:v3.5.5
     profiles: [obs, full]
