@@ -30,6 +30,7 @@ docker compose -f deploy/compose.yml --profile full up -d --build
 | Роль | Вход |
 |---|---|
 | Работодатель | `employer@demo.fsp` |
+| Работодатели с подтверждённым доменом | `hr@pixel-manufactura.example`, `hr@oblakostroy.example`, `hr@medsignal.example`, `it-hr@logplus.example`, `career@shield-key.example` |
 | Кандидат | `candidate@demo.fsp`, `cand1@demo.fsp` … `cand239@demo.fsp` |
 | Участник ФСП (вход в ФСП ID) | `fsp-000001` … `fsp-000010` |
 

@@ -1800,12 +1800,57 @@ export async function getInvitationStats(): Promise<T.InvitationStats> {
   const quota = quotaInfo(company.id);
   return {
     quota_limit: INVITATION_QUOTA,
+    quota_max: INVITATION_QUOTA,
+    trust_level: "high",
     quota_used: quota.used,
     quota_resets_in_days: quota.resetsInDays,
     by_status: statuses.map((status) => ({ status, count: count(status) })),
     response_rate: considered ? Math.round((answered / considered) * 100) / 100 : 0,
     decline_reasons: [...reasons.entries()].sort((a, b) => b[1] - a[1]).map(([reason, n]) => ({ reason, count: n })),
   };
+}
+
+export async function getTrustStatus(): Promise<T.TrustStatus> {
+  await delay();
+  const { company } = requireEmployer();
+  const quota = quotaInfo(company.id);
+  return {
+    level: "high",
+    quota_limit: INVITATION_QUOTA,
+    quota_used: quota.used,
+    quota_base: 10,
+    quota_min: 5,
+    quota_max: INVITATION_QUOTA,
+    bonus: 20,
+    penalty: 0,
+    reasons: [
+      { kind: "account_age", points: 10, text: "На платформе 120 дней" },
+      { kind: "accepted", points: 10, text: "Кандидаты приняли 4 приглашения за полгода" },
+    ],
+    advice: [],
+    domain: { domain: null, check: { status: "no_website", email_domain: "demo.fsp" }, hint: "Укажите сайт компании в профиле." },
+    rule: ["Новая компания начинает с 10 приглашений в неделю."],
+  };
+}
+
+export async function checkSalary(query: T.SalaryCheckQuery): Promise<T.SalaryCheck> {
+  await delay(80, 160);
+  requireEmployer();
+  const wide = query.max >= query.min * 3;
+  return {
+    category: { specialization: query.specialization, grade: query.grade },
+    market: null,
+    warnings: wide ? [{ kind: "salary_wide_range", text: "Вилка очень широкая: так обычно описывают сразу несколько грейдов." }] : [],
+  };
+}
+
+export async function findSimilarVacancies(body: T.SimilarInput): Promise<T.SimilarVacancy[]> {
+  await delay(80, 160);
+  const { company } = requireEmployer();
+  const title = body.title.trim().toLowerCase();
+  return getDb()
+    .vacancies.filter((v) => v.company_id === company.id && v.id !== body.exclude_id && v.status !== "closed" && v.title.trim().toLowerCase() === title)
+    .map((v) => ({ id: v.id, title: v.title, status: v.status, similarity: 1 }));
 }
 
 function vacancyDto(v: MockVacancy): T.Vacancy {

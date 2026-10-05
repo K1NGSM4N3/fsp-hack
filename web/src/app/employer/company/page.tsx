@@ -1,5 +1,7 @@
 "use client";
 
+import { ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { isApiError } from "@/api/client";
 import type { Company, CompanyProfile } from "@/api/types";
@@ -75,7 +77,23 @@ function CompanyForm({ company }: { company: Company }) {
           <Field label="Город" optional>
             <Input {...field("city")} />
           </Field>
-          <Field label="Сайт" optional error={serverErr("website")}>
+          <Field
+            label="Сайт"
+            optional
+            error={serverErr("website")}
+            hint={
+              company.verified_domain ? (
+                <span className="inline-flex items-center gap-1 text-success">
+                  <ShieldCheck className="size-3.5" aria-hidden />
+                  Домен {company.verified_domain} подтверждён
+                </span>
+              ) : (
+                <Link href="/employer/trust" className="text-primary hover:underline">
+                  Сайт на домене вашей почты подтверждает компанию
+                </Link>
+              )
+            }
+          >
             <Input {...field("website")} type="url" placeholder="https://" />
           </Field>
           <Field label="Описание" optional className="sm:col-span-2" hint="Чем занимаетесь, продукт, команда. 2–4 предложения">

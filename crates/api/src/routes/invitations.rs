@@ -8,6 +8,7 @@ use axum::{
 };
 use catalog::{Category, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
+use matching::trust::{MAX_QUOTA, TrustLevel, display_domain};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::ToSchema;
@@ -21,9 +22,9 @@ use crate::{
     dto::{DeclineReason, InvitationStatus, SalaryRange},
     error::{ApiError, ApiResult, Problem, Validator},
     state::AppState,
+    trust,
 };
 
-pub const QUOTA_PER_WEEK: i64 = 30;
 pub const TTL_DAYS: i64 = 14;
 
 pub fn employer_router() -> OpenApiRouter<AppState> {
@@ -204,21 +205,31 @@ async fn send(
     if !candidate.published {
         return Err(ApiError::not_found());
     }
-    if candidate.search_status == db::types::SearchStatus::Closed
-        || candidate.specialization.is_none()
-    {
-        return Err(ApiError::conflict(
-            "candidate_not_available",
-            "Кандидат сейчас не принимает приглашения",
-        ));
-    }
+    let category = match (
+        candidate.specialization.as_deref(),
+        candidate.grade.as_deref(),
+    ) {
+        (Some(s), Some(g)) if candidate.search_status != db::types::SearchStatus::Closed => {
+            Category::new(s.parse()?, g.parse()?)
+        }
+        _ => {
+            return Err(ApiError::conflict(
+                "candidate_not_available",
+                "Кандидат сейчас не принимает приглашения",
+            ));
+        }
+    };
 
+    let quota = trust::weekly_quota(&state.pool, company).await?;
     let since = Utc::now() - Duration::days(7);
     let sent = db::invitations::company_invitations_since(&state.pool, company, since).await?;
-    if sent >= QUOTA_PER_WEEK {
+    if sent >= quota {
         return Err(ApiError::conflict(
             "invitation_quota_exceeded",
-            format!("Лимит {QUOTA_PER_WEEK} приглашений за 7 дней исчерпан"),
+            format!("Лимит {quota} приглашений за 7 дней исчерпан"),
+        )
+        .with_detail(
+            "Квота зависит от уровня доверия к компании — как её поднять, видно в разделе «Доверие и квота»",
         ));
     }
 
@@ -259,6 +270,7 @@ async fn send(
         Some(user.id),
     )
     .await?;
+    trust::flag_invitation(&state.pool, id, category, (req.salary.min, req.salary.max)).await?;
     let row = db::invitations::employer_invitation(&state.pool, company, id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
@@ -360,7 +372,11 @@ pub struct ReasonCount {
 
 #[derive(Serialize, ToSchema)]
 pub struct InvitationStats {
+    /// Weekly quota set by the company's trust level (`GET /employer/trust`).
     pub quota_limit: i64,
+    /// The quota a trusted company gets.
+    pub quota_max: i64,
+    pub trust_level: TrustLevel,
     pub quota_used: i64,
     pub quota_resets_in_days: i64,
     pub by_status: Vec<StatusCount>,
@@ -386,8 +402,11 @@ async fn invitation_stats(
     )
     .await?;
     let rate = db::invitations::company_response_rate(&state.pool, company).await?;
+    let (trust, _) = trust::company_assessment(&state.pool, company).await?;
     Ok(Json(InvitationStats {
-        quota_limit: QUOTA_PER_WEEK,
+        quota_limit: i64::from(trust.quota),
+        quota_max: i64::from(MAX_QUOTA),
+        trust_level: trust.level,
         quota_used: used,
         quota_resets_in_days: 7,
         by_status: db::invitations::company_invitation_status_counts(&state.pool, company)
@@ -457,6 +476,8 @@ pub struct ReceivedInvitation {
     pub company_industry: Option<String>,
     pub company_city: Option<String>,
     pub company_website: Option<String>,
+    /// «Домен подтверждён»: the company's login email and website share this domain.
+    pub company_verified_domain: Option<String>,
     pub vacancy_id: Option<Uuid>,
     pub title: String,
     pub message: String,
@@ -482,6 +503,7 @@ macro_rules! received_from_row {
             company_industry: r.company_industry,
             company_city: r.company_city,
             company_website: r.company_website,
+            company_verified_domain: r.company_verified_domain.as_deref().map(display_domain),
             vacancy_id: r.vacancy_id,
             title: r.title,
             message: r.message,

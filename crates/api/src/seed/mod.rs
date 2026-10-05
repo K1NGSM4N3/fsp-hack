@@ -3,6 +3,7 @@
 //! empty database.
 
 mod corpus;
+mod demo;
 
 use catalog::{Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
@@ -537,17 +538,12 @@ pub async fn seed(
     let mut tx = pool.begin().await?;
 
     let mut companies = Vec::with_capacity(corpus::COMPANIES.len());
-    for (i, c) in corpus::COMPANIES.iter().enumerate() {
-        let email = if i == 0 {
-            "employer@demo.fsp".to_owned()
-        } else {
-            format!("hr{i}@demo.fsp")
-        };
+    for c in corpus::COMPANIES {
         let owner = account(
             &mut tx,
             crypto,
             &hash,
-            &email,
+            c.owner,
             db::types::UserRole::Employer,
             now - Duration::days(120),
         )
@@ -559,6 +555,7 @@ pub async fn seed(
                 id,
                 owner_user_id: owner.id,
                 name: c.name,
+                website: c.website,
                 description: c.description,
                 industry: c.industry,
                 city: c.city,
@@ -593,6 +590,9 @@ pub async fn seed(
             },
         )
         .await?;
+        if v.company == demo::DEMO_COMPANY {
+            continue;
+        }
         let split = skills.len().min(3);
         db::needs::insert_need(
             &mut *tx,
@@ -615,6 +615,9 @@ pub async fn seed(
         )
         .await?;
     }
+
+    demo::verify_domains(&mut tx, &companies).await?;
+    demo::seed_demo_needs(&mut tx, companies[demo::DEMO_COMPANY], now).await?;
 
     let participants: Vec<Participant> =
         serde_json::from_str(include_str!("../../../fsp-mock/data/participants.json"))?;

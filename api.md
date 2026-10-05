@@ -118,7 +118,7 @@
 
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
-| GET / PUT | `/api/v1/employer/company` | 🅴 | Профиль компании | ✅ |
+| GET / PUT | `/api/v1/employer/company` | 🅴 | Профиль компании; `verified_domain` — общий домен почты входа и сайта, пересчитывается при сохранении | ✅ |
 | GET / POST | `/api/v1/employer/needs` | 🅴 | Потребности: список / создать | ✅ |
 | GET / PUT / DELETE | `/api/v1/employer/needs/{id}` | 🅴 | Потребность | ✅ |
 | POST | `/api/v1/employer/needs/parse` | 🅴 | Свободный текст → специализация, грейд, навыки (черновик) | ✅ |
@@ -131,12 +131,12 @@
 | GET | `/api/v1/employer/candidates` | 🅴 | Поиск по банку: `specialization, grade, skills, fsp_only, adults_only, work_format, city, salary_max, q, sort`. `adults_only` («Только 18+») отсекает кандидатов 14–17 лет — фильтр, не штраф | ✅ |
 | GET | `/api/v1/employer/candidates/{id}` | 🅴 | Анонимный профиль; `?need_id=` → объяснение под потребность. `candidate.minor` — отметка «14–17 лет», даты рождения нет | ✅ |
 | GET | `/api/v1/employer/candidates/{id}/contacts` | 🅴 | Контакты — только при принятом приглашении или отклике (иначе 403 `contacts_not_granted`); пишет журнал | ✅ |
-| GET / POST | `/api/v1/employer/invitations` | 🅴 | Список / отправить `{candidate_id, need_id?, vacancy_id?, title, message, salary: {min, max}, work_format?, contact}`; 409 `invitation_quota_exceeded`, `invitation_already_active` | ✅ |
+| GET / POST | `/api/v1/employer/invitations` | 🅴 | Список / отправить `{candidate_id, need_id?, vacancy_id?, title, message, salary: {min, max}, work_format?, contact}`; 409 `invitation_quota_exceeded` (лимит — по уровню доверия, 5–30 за 7 дней), `invitation_already_active`. Вилка сверяется с рынком категории кандидата, отметка пишется в приглашение (не блокирует) | ✅ |
 | GET | `/api/v1/employer/invitations/{id}` | 🅴 | Приглашение со статусом и историей событий | ✅ |
 | POST | `/api/v1/employer/invitations/{id}/withdraw` | 🅴 | Отозвать | ✅ |
-| GET | `/api/v1/employer/invitations/stats` | 🅴 | Квота, отклик кандидатов, причины отказов | ✅ |
+| GET | `/api/v1/employer/invitations/stats` | 🅴 | Квота (`quota_limit` по уровню доверия, `quota_max`, `trust_level`), отклик кандидатов, причины отказов | ✅ |
 | GET / POST | `/api/v1/employer/vacancies` | 🅴 | Вакансии | ✅ |
-| GET / PUT | `/api/v1/employer/vacancies/{id}` | 🅴 | Вакансия; статус `draft` / `published` / `closed` | ✅ |
+| GET / PUT | `/api/v1/employer/vacancies/{id}` | 🅴 | Вакансия; статус `draft` / `published` / `closed`. Каждое сохранение подписывает текст; публикация пишет отметки антифейка (вилка, дубль своей, копия чужой) — не блокирует | ✅ |
 | GET | `/api/v1/employer/vacancies/{id}/applications` | 🅴 | Отклики (с контактами — кандидат откликнулся сам) | ✅ |
 | POST | `/api/v1/employer/applications/{id}/status` | 🅴 | `viewed` / `accepted` / `rejected` | ✅ |
 | GET / POST | `/api/v1/employer/tasks` | 🅴 | Регулярные задания | ✅ |
@@ -144,11 +144,22 @@
 | GET | `/api/v1/employer/tasks/{id}/submissions` | 🅴 | Решения | ✅ |
 | POST | `/api/v1/employer/tasks/{id}/submissions/{sid}/review` | 🅴 | Оценка решения | ✅ |
 
+## Доверие и антифейк
+
+Сигналы не блокируют действия: предупреждают работодателя, меняют уровень доверия и квоту, попадают в модерацию (`architecture.md` §11.1).
+
+| Метод | Путь | Роль | Описание | Статус |
+|---|---|---|---|---|
+| GET | `/api/v1/employer/trust` | 🅴 | Уровень доверия (`low` / `new` / `standard` / `high`), квота за 7 дней = база + бонусы + штрафы, причины с вкладом, советы, статус домена с подсказкой, правило словами. Перепроверяет домен | ✅ |
+| GET | `/api/v1/employer/salary-check?specialization&grade&min&max` | 🅴 | Рынок категории (медиана и 90-й перцентиль ожиданий, при ≥ 5) и мягкие предупреждения `salary_above_market`, `salary_wide_range`; 422 при неверной вилке | ✅ |
+| POST | `/api/v1/employer/vacancies/similar` | 🅴 | `{title, description, exclude_id?}` → свои черновики и опубликованные вакансии со сходством ≥ 0,6 (чужие не показываются) | ✅ |
+| GET | `/api/v1/admin/trust` | admin | Очередь модерации: компании с отрицательными сигналами (от низкой квоты), отмеченные вакансии и приглашения с причинами словами | ✅ |
+
 ## Публичное
 
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
-| GET | `/api/v1/vacancies` | 🅰 | Опубликованные вакансии с фильтрами | ✅ |
+| GET | `/api/v1/vacancies` | 🅰 | Опубликованные вакансии с фильтрами; `company_verified_domain` → отметка «Домен подтверждён» (также в `GET /candidate/invitations`) | ✅ |
 | GET | `/api/v1/vacancies/{id}` | 🅰 | Вакансия | ✅ |
 | POST | `/api/v1/vacancies/{id}/applications` | 🅲 | Откликнуться `{cover_letter?}`. До 18 лет — только с действующим согласием представителя, иначе 409 `guardian_consent_required`: отклик открывает компании контакты | ✅ |
 | POST | `/api/v1/reports` | 🅼 | Жалоба на вакансию, приглашение или компанию (до 20 в сутки) | ✅ |

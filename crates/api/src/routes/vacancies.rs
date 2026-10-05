@@ -8,6 +8,7 @@ use axum::{
 };
 use catalog::{Category, Grade, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
+use matching::trust::display_domain;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::{IntoParams, ToSchema};
@@ -21,6 +22,7 @@ use crate::{
     error::{ApiError, ApiResult, Problem, Validator},
     skills,
     state::AppState,
+    trust,
 };
 
 pub fn public_router() -> OpenApiRouter<AppState> {
@@ -163,6 +165,24 @@ fn fields(v: &VacancyInput) -> db::vacancies::VacancyFields<'_> {
     }
 }
 
+/// Every save re-signs the text; a published vacancy also gets its trust flags (never blocking).
+async fn check_trust(state: &AppState, company: Uuid, id: Uuid, v: &VacancyInput) -> ApiResult<()> {
+    let signature =
+        trust::sign_vacancy(&state.pool, id, v.title.trim(), v.description.trim()).await?;
+    if v.status == VacancyStatus::Published {
+        trust::flag_published_vacancy(
+            &state.pool,
+            company,
+            id,
+            Category::new(v.specialization, v.grade),
+            (v.salary.min, v.salary.max),
+            signature.as_ref(),
+        )
+        .await?;
+    }
+    Ok(())
+}
+
 /// Create a vacancy (salary range is mandatory)
 #[utoipa::path(post, path = "/vacancies", tag = "vacancies",
     request_body = VacancyInput,
@@ -180,6 +200,7 @@ async fn create(
     let published_at = (v.status == VacancyStatus::Published).then(Utc::now);
     db::vacancies::insert_vacancy(&state.pool, id, company, status, published_at, &fields(&v))
         .await?;
+    check_trust(&state, company, id, &v).await?;
     let row = db::vacancies::company_vacancy(&state.pool, company, id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
@@ -223,6 +244,7 @@ async fn update(
     if updated == 0 {
         return Err(ApiError::not_found());
     }
+    check_trust(&state, company, id, &v).await?;
     let row = db::vacancies::company_vacancy(&state.pool, company, id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
@@ -325,6 +347,8 @@ pub struct PublicVacancy {
     pub company_id: Uuid,
     pub company_name: String,
     pub company_city: Option<String>,
+    /// «Домен подтверждён»: the company's login email and website share this domain.
+    pub company_verified_domain: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub company_description: Option<String>,
     pub title: String,
@@ -370,6 +394,7 @@ async fn list_published(
             company_id: r.company_id,
             company_name: r.company_name,
             company_city: r.company_city,
+            company_verified_domain: r.company_verified_domain.as_deref().map(display_domain),
             company_description: None,
             title: r.title,
             description: r.description,
@@ -404,6 +429,7 @@ async fn get_published(
         company_id: r.company_id,
         company_name: r.company_name,
         company_city: r.company_city,
+        company_verified_domain: r.company_verified_domain.as_deref().map(display_domain),
         company_description: Some(r.company_description),
         title: r.title,
         description: r.description,

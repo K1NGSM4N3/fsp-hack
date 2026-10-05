@@ -1,4 +1,4 @@
-import type { CandidateSearchParams, VacancyQuery } from "@/api/types";
+import type { CandidateSearchParams, SalaryCheckQuery, VacancyQuery } from "@/api/types";
 
 export const qk = {
   me: ["me"] as const,
@@ -40,6 +40,8 @@ export const qk = {
   ownVacancy: (id: string) => ["employer", "vacancies", id] as const,
   applications: (vacancyId: string) => ["employer", "vacancies", vacancyId, "applications"] as const,
   tasks: ["employer", "tasks"] as const,
+  trust: ["employer", "trust"] as const,
+  salaryCheck: (q: SalaryCheckQuery) => ["employer", "salary-check", q] as const,
   submissions: (taskId: string) => ["employer", "tasks", taskId, "submissions"] as const,
 
   vacancies: (p: VacancyQuery) => ["vacancies", p] as const,

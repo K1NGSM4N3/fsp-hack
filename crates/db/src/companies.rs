@@ -14,6 +14,7 @@ pub struct CompanyOfOwner {
     pub contact_email: Option<String>,
     pub contact_phone: Option<String>,
     pub contact_telegram: Option<String>,
+    pub verified_domain: Option<String>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -53,7 +54,7 @@ pub async fn company_of_owner(
     sqlx::query_as!(
         CompanyOfOwner,
         "SELECT id, name, description, industry, website, city, size, contact_email, contact_phone,
-                contact_telegram, updated_at
+                contact_telegram, verified_domain, updated_at
          FROM companies
          WHERE owner_user_id = $1",
         owner_user_id,

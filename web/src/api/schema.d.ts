@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/trust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Flagged companies, vacancies and invitations with their reasons (moderation) */
+        get: operations["moderation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/login": {
         parameters: {
             query?: never;
@@ -1014,6 +1031,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/employer/salary-check": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compare a salary range with the category market before publishing or inviting */
+        get: operations["salary_check"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employer/tasks": {
         parameters: {
             query?: never;
@@ -1083,6 +1117,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/employer/trust": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The company's trust level, weekly invitation quota, the reasons behind it and how to raise it */
+        get: operations["trust_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/employer/vacancies": {
         parameters: {
             query?: never;
@@ -1095,6 +1146,23 @@ export interface paths {
         put?: never;
         /** Create a vacancy (salary range is mandatory) */
         post: operations["create"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/employer/vacancies/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Own drafts and published vacancies with nearly the same text — offer to edit one instead */
+        post: operations["similar_vacancies"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1825,6 +1893,8 @@ export interface components {
         CompanyResponse: components["schemas"]["CompanyProfile"] & {
             /** Format: uuid */
             id: string;
+            /** @description Website and login email share this domain; candidates see «Домен подтверждён». */
+            verified_domain?: string | null;
             /** Format: date-time */
             updated_at: string;
         };
@@ -1954,6 +2024,38 @@ export interface components {
         };
         /** @enum {string} */
         Discipline: "algorithmic" | "product" | "security" | "ai" | "robotics" | "uav";
+        DomainCheck: {
+            domain: string;
+            /** @enum {string} */
+            status: "verified";
+        } | {
+            /** @enum {string} */
+            status: "email_unverified";
+        } | {
+            email_domain: string;
+            /** @enum {string} */
+            status: "public_mail";
+        } | {
+            email_domain: string;
+            /** @enum {string} */
+            status: "no_website";
+        } | {
+            email_domain: string;
+            /** @enum {string} */
+            status: "bad_website";
+        } | {
+            email_domain: string;
+            site: string;
+            /** @enum {string} */
+            status: "mismatch";
+        };
+        DomainStatus: {
+            /** @description Shared domain of the login email and the website, in display form (Unicode for IDN). */
+            domain?: string | null;
+            check: components["schemas"]["DomainCheck"];
+            /** @description The result in words and, if it failed, how to fix it. */
+            hint: string;
+        };
         EmployerData: {
             company?: components["schemas"]["CompanyResponse"] | null;
             needs: components["schemas"]["HiringNeed"][];
@@ -2055,6 +2157,41 @@ export interface components {
              */
             contribution: number;
             explanation_ru: string;
+        };
+        FlaggedCompany: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            level: components["schemas"]["TrustLevel"];
+            /** Format: int64 */
+            quota: number;
+            verified_domain?: string | null;
+            reasons: components["schemas"]["TrustReason"][];
+        };
+        FlaggedInvitation: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            company_id: string;
+            company_name: string;
+            title: string;
+            salary: components["schemas"]["SalaryRange"];
+            reasons: string[];
+            /** Format: date-time */
+            created_at: string;
+        };
+        FlaggedVacancy: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            company_id: string;
+            company_name: string;
+            title: string;
+            status: components["schemas"]["VacancyStatus"];
+            salary: components["schemas"]["SalaryRange"];
+            reasons: string[];
+            /** Format: date-time */
+            flagged_at: string;
         };
         FspScore: {
             /**
@@ -2231,8 +2368,17 @@ export interface components {
          */
         IntegrityEvent: "tab_hidden" | "window_blur" | "fullscreen_exit" | "paste" | "camera_lost" | "recording_failed";
         InvitationStats: {
-            /** Format: int64 */
+            /**
+             * Format: int64
+             * @description Weekly quota set by the company's trust level (`GET /employer/trust`).
+             */
             quota_limit: number;
+            /**
+             * Format: int64
+             * @description The quota a trusted company gets.
+             */
+            quota_max: number;
+            trust_level: components["schemas"]["TrustLevel"];
             /** Format: int64 */
             quota_used: number;
             /** Format: int64 */
@@ -2292,6 +2438,15 @@ export interface components {
             /** Format: int64 */
             median_offer_max?: number | null;
         };
+        /** @description Stated expectations of the category's candidates. */
+        MarketView: {
+            /** Format: int64 */
+            samples: number;
+            /** Format: int64 */
+            median: number;
+            /** Format: int64 */
+            p90: number;
+        };
         MeResponse: {
             /** Format: uuid */
             id: string;
@@ -2309,6 +2464,12 @@ export interface components {
             birth_date: string;
             /** @description Gets a letter once you confirm your own email. */
             guardian: components["schemas"]["GuardianContact"];
+        };
+        ModerationQueue: {
+            /** @description Companies with at least one negative signal, lowest quota first. */
+            companies: components["schemas"]["FlaggedCompany"][];
+            vacancies: components["schemas"]["FlaggedVacancy"][];
+            invitations: components["schemas"]["FlaggedInvitation"][];
         };
         MyApplication: {
             /** Format: uuid */
@@ -2429,6 +2590,8 @@ export interface components {
                 company_id: string;
                 company_name: string;
                 company_city?: string | null;
+                /** @description «Домен подтверждён»: the company's login email and website share this domain. */
+                company_verified_domain?: string | null;
                 company_description?: string | null;
                 title: string;
                 description: string;
@@ -2863,6 +3026,8 @@ export interface components {
             company_id: string;
             company_name: string;
             company_city?: string | null;
+            /** @description «Домен подтверждён»: the company's login email and website share this domain. */
+            company_verified_domain?: string | null;
             company_description?: string | null;
             title: string;
             description: string;
@@ -2892,6 +3057,8 @@ export interface components {
             company_industry?: string | null;
             company_city?: string | null;
             company_website?: string | null;
+            /** @description «Домен подтверждён»: the company's login email and website share this domain. */
+            company_verified_domain?: string | null;
             /** Format: uuid */
             vacancy_id?: string | null;
             title: string;
@@ -2988,6 +3155,12 @@ export interface components {
         };
         /** @enum {string} */
         Role: "candidate" | "employer" | "admin";
+        SalaryCheck: {
+            category: components["schemas"]["Category"];
+            market?: components["schemas"]["MarketView"] | null;
+            /** @description Soft warnings: publishing and sending are never blocked. */
+            warnings: components["schemas"]["TrustWarning"][];
+        };
         SalaryRange: {
             /** Format: int64 */
             min: number;
@@ -3102,6 +3275,26 @@ export interface components {
         ShortlistPatch: {
             pinned?: boolean | null;
             dismissed?: boolean | null;
+        };
+        SimilarInput: {
+            title: string;
+            description?: string;
+            /**
+             * Format: uuid
+             * @description The vacancy being edited, so it does not match itself.
+             */
+            exclude_id?: string | null;
+        };
+        SimilarVacancy: {
+            /** Format: uuid */
+            id: string;
+            title: string;
+            status: components["schemas"]["VacancyStatus"];
+            /**
+             * Format: float
+             * @description Share of common word pairs, 0..1 (MinHash estimate); listed from 0.6.
+             */
+            similarity: number;
         };
         /** @enum {string} */
         SkillGroup: "language" | "database" | "messaging" | "api" | "backend" | "frontend" | "infrastructure" | "testing" | "data_ml" | "security" | "fundamentals";
@@ -3258,6 +3451,55 @@ export interface components {
             /** Format: int32 */
             correct: number;
         };
+        /** @enum {string} */
+        TrustLevel: "low" | "new" | "standard" | "high";
+        TrustReason: {
+            kind: components["schemas"]["TrustReasonKind"];
+            /**
+             * Format: int32
+             * @description Change of the weekly quota.
+             */
+            points: number;
+            text: string;
+        };
+        /** @enum {string} */
+        TrustReasonKind: "domain" | "account_age" | "accepted" | "complaints" | "bad_declines" | "withdrawals" | "no_answers" | "salary_flags" | "own_duplicates" | "copies";
+        TrustStatus: {
+            level: components["schemas"]["TrustLevel"];
+            /**
+             * Format: int64
+             * @description Invitations allowed per 7 days right now.
+             */
+            quota_limit: number;
+            /** Format: int64 */
+            quota_used: number;
+            /** Format: int64 */
+            quota_base: number;
+            /** Format: int64 */
+            quota_min: number;
+            /** Format: int64 */
+            quota_max: number;
+            /**
+             * Format: int64
+             * @description Sum of positive reasons, capped at `quota_max − quota_base`.
+             */
+            bonus: number;
+            /**
+             * Format: int64
+             * @description Sum of negative reasons (≤ 0).
+             */
+            penalty: number;
+            reasons: components["schemas"]["TrustReason"][];
+            /** @description What raises the quota, most effective first. */
+            advice: string[];
+            domain: components["schemas"]["DomainStatus"];
+            /** @description The quota rule in plain words. */
+            rule: string[];
+        };
+        TrustWarning: {
+            kind: components["schemas"]["WarningKind"];
+            text: string;
+        };
         UserConsent: {
             /** Format: uuid */
             id: string;
@@ -3309,6 +3551,8 @@ export interface components {
         VerifyEmailRequest: {
             token: string;
         };
+        /** @enum {string} */
+        WarningKind: "salary_above_market" | "salary_wide_range" | "duplicate_own" | "copy_of_other";
         /** @enum {string} */
         WorkFormat: "office" | "hybrid" | "remote";
     };
@@ -3388,6 +3632,34 @@ export interface operations {
             };
             /** @description `not_found`, `recording_unavailable` */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    moderation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationQueue"];
+                };
+            };
+            /** @description `wrong_role` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5393,6 +5665,47 @@ export interface operations {
             };
         };
     };
+    salary_check: {
+        parameters: {
+            query: {
+                specialization: components["schemas"]["Specialization"];
+                grade: components["schemas"]["Grade"];
+                min: number;
+                max: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SalaryCheck"];
+                };
+            };
+            /** @description `wrong_role` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_tasks: {
         parameters: {
             query?: never;
@@ -5535,6 +5848,43 @@ export interface operations {
             };
         };
     };
+    trust_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustStatus"];
+                };
+            };
+            /** @description `wrong_role` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     list_own: {
         parameters: {
             query?: never;
@@ -5573,6 +5923,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Vacancy"];
+                };
+            };
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    similar_vacancies: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SimilarInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SimilarVacancy"][];
+                };
+            };
+            /** @description `wrong_role` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             422: {

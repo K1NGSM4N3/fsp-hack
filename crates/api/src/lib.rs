@@ -20,6 +20,7 @@ pub mod routes;
 pub mod seed;
 pub mod skills;
 pub mod state;
+pub mod trust;
 
 use std::time::Duration;
 
@@ -70,6 +71,7 @@ use crate::state::AppState;
         (name = "invitations", description = "Приглашения — выход работодателя на кандидата, раскрытие контактов"),
         (name = "guardian", description = "Согласие законного представителя соискателя 14–17 лет: публичная страница по ссылке из письма"),
         (name = "Валидация", description = "Проверка подбора на своих данных: ваш набор «вакансия – кандидат» через рабочий подбор и базовую линию, метрики по разметке"),
+        (name = "trust", description = "Антифейк: уровень доверия и квота компании, проверка вилки и дублей вакансий, очередь модерации"),
     )
 )]
 struct ApiDoc;
@@ -120,10 +122,14 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
                 .merge(routes::market::employer_router())
                 .merge(routes::needs::router())
                 .merge(routes::candidates::router())
-                .merge(routes::assessment::employer_router()),
+                .merge(routes::assessment::employer_router())
+                .merge(routes::trust::employer_router()),
         )
         .nest("/fsp", routes::fsp::router())
-        .nest("/admin", routes::proctoring::admin_router())
+        .nest(
+            "/admin",
+            routes::proctoring::admin_router().merge(routes::trust::admin_router()),
+        )
         .merge(routes::vacancies::public_router())
         .merge(routes::guardian::public_router())
         .merge(routes::reports::router())

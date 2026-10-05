@@ -21,6 +21,7 @@ import type {
   Specialization,
   TaskKind,
   TaskStatus,
+  TrustLevel,
   VacancyStatus,
   WorkFormat,
 } from "@/api/types";
@@ -357,4 +358,18 @@ export const ATTEMPT_KIND_HINT: Record<AttemptKind, string> = {
   upgrade: "Повышение. Неудачная попытка не понизит текущий грейд",
   downgrade: "Смена на грейд ниже — только если вы сами этого хотите",
   retry: "Повторный тест после перерыва",
+};
+
+export const TRUST_LEVEL_LABEL: Record<TrustLevel, string> = {
+  high: "Высокий уровень доверия",
+  standard: "Обычный уровень доверия",
+  new: "Новая компания",
+  low: "Квота временно снижена",
+};
+
+export const TRUST_LEVEL_HINT: Record<TrustLevel, string> = {
+  high: "Полная квота. Кандидаты откликаются на ваши предложения — так и держим.",
+  standard: "Квота растёт с подтверждённым доменом, временем на платформе и принятыми приглашениями.",
+  new: "Так начинает любая компания: квота вырастет сама, по мере работы на платформе.",
+  low: "Есть замечания — они перестают учитываться через 90 дней. Ниже видно, какие именно и что с ними сделать.",
 };

@@ -12,6 +12,7 @@ import { formatDate } from "@/lib/format";
 import { GRADE_LABEL, SPEC_LONG_LABEL, WORK_FORMAT_LABEL } from "@/lib/labels";
 import { skillName } from "@/lib/skills";
 import { CategoryBadge, SalaryRange } from "./Category";
+import { DomainBadge } from "./DomainBadge";
 import { ApplicationStatusBadge } from "./StatusBadges";
 
 function ApplyBox({ vacancyId, loginNext }: { vacancyId: string; loginNext: string }) {
@@ -110,6 +111,7 @@ export function VacancyDetail({ id, backHref, backLabel }: { id: string; backHre
               <Building2 className="size-4" aria-hidden />
               {v.company_name}
             </span>
+            <DomainBadge domain={v.company_verified_domain} />
             <span className="inline-flex items-center gap-1.5">
               <MapPin className="size-4" aria-hidden />
               {WORK_FORMAT_LABEL[v.work_format]}
@@ -154,7 +156,7 @@ export function VacancyDetail({ id, backHref, backLabel }: { id: string; backHre
           </Card>
           {v.company_description && (
             <Card>
-              <CardHeader title={`О компании «${v.company_name}»`} />
+              <CardHeader title={`О компании «${v.company_name}»`} action={<DomainBadge domain={v.company_verified_domain} />} />
               <p className="text-sm leading-relaxed text-ink-muted">{v.company_description}</p>
             </Card>
           )}

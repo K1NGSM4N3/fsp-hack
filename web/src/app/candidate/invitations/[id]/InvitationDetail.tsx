@@ -6,6 +6,7 @@ import { useState } from "react";
 import { isApiError } from "@/api/client";
 import type { DeclineReason, ReceivedInvitation } from "@/api/types";
 import { SalaryRange } from "@/components/domain/Category";
+import { DomainBadge } from "@/components/domain/DomainBadge";
 import { ReportButton } from "@/components/domain/ReportButton";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
 import { Alert, Button, Card, CardHeader, ChipSelect, Dialog, ErrorAlert, Field, PageHeader, PageSkeleton, Textarea, useToast } from "@/components/ui";
@@ -160,10 +161,13 @@ export function InvitationDetail({ id }: { id: string }) {
         eyebrow={<InvitationStatusBadge status={inv.status} audience="candidate" />}
         title={inv.title}
         description={
-          <span className="inline-flex items-center gap-1.5">
-            <Building2 className="size-4" aria-hidden />
-            {inv.company_name}
-            {inv.company_industry ? ` · ${inv.company_industry}` : ""}
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+            <span className="inline-flex items-center gap-1.5">
+              <Building2 className="size-4" aria-hidden />
+              {inv.company_name}
+              {inv.company_industry ? ` · ${inv.company_industry}` : ""}
+            </span>
+            <DomainBadge domain={inv.company_verified_domain} />
           </span>
         }
       />
@@ -235,6 +239,7 @@ export function InvitationDetail({ id }: { id: string }) {
           <Card>
             <CardHeader title="О компании" />
             <p className="font-medium text-ink">{inv.company_name}</p>
+            <DomainBadge domain={inv.company_verified_domain} className="mt-2" />
             {inv.company_description && <p className="mt-2 text-sm leading-relaxed text-ink-muted">{inv.company_description}</p>}
             <ul className="mt-3 space-y-1.5 text-sm text-ink-muted">
               {inv.company_city && (

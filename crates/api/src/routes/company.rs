@@ -1,5 +1,6 @@
 use axum::{Json, extract::State};
 use chrono::{DateTime, Utc};
+use matching::trust::display_domain;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::ToSchema;
@@ -10,6 +11,7 @@ use crate::{
     auth::EmployerUser,
     error::{ApiError, ApiResult, Problem, Validator},
     state::AppState,
+    trust,
 };
 
 pub fn router() -> OpenApiRouter<AppState> {
@@ -34,6 +36,8 @@ pub struct CompanyResponse {
     pub id: Uuid,
     #[serde(flatten)]
     pub profile: CompanyProfile,
+    /// Website and login email share this domain; candidates see «Домен подтверждён».
+    pub verified_domain: Option<String>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -79,6 +83,7 @@ pub(crate) async fn company_view(pool: &PgPool, owner: Uuid) -> ApiResult<Option
                 contact_phone: c.contact_phone,
                 contact_telegram: c.contact_telegram,
             },
+            verified_domain: c.verified_domain.as_deref().map(display_domain),
             updated_at: c.updated_at,
         }))
 }
@@ -122,5 +127,6 @@ async fn put_company(
         },
     )
     .await?;
+    trust::refresh_domain(&state.pool, &state.crypto, user.id).await?;
     get_company(State(state), user).await
 }

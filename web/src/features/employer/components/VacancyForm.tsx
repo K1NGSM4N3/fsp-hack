@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { isApiError } from "@/api/client";
-import type { Grade, Specialization, Vacancy, VacancyInput, VacancyStatus, WorkFormat } from "@/api/types";
+import type { Grade, SimilarVacancy, Specialization, Vacancy, VacancyInput, VacancyStatus, WorkFormat } from "@/api/types";
 import { SkillInput } from "@/components/domain/Skills";
-import { Button, Card, CardHeader, Field, Input, MoneyInput, RadioCards, Select, Textarea, useToast } from "@/components/ui";
-import { useSaveVacancy } from "@/features/employer/hooks";
+import { Alert, Button, Card, CardHeader, Field, Input, MoneyInput, RadioCards, Select, Textarea, useToast } from "@/components/ui";
+import { SalaryHint } from "@/features/employer/components/SalaryHint";
+import { useSaveVacancy, useSimilarVacancies } from "@/features/employer/hooks";
 import { GRADE_LABEL, GRADES, SPEC_LONG_LABEL, SPECIALIZATIONS, VACANCY_STATUS_LABEL, WORK_FORMAT_LABEL, WORK_FORMATS } from "@/lib/labels";
 
 interface Draft {
@@ -47,9 +49,14 @@ const STATUS_HINT: Record<VacancyStatus, string> = {
 export function VacancyForm({ vacancy, onSaved }: { vacancy?: Vacancy; onSaved: (v: Vacancy) => void }) {
   const toast = useToast();
   const save = useSaveVacancy(vacancy?.id);
+  const similar = useSimilarVacancies();
   const [d, setD] = useState<Draft>(() => toDraft(vacancy));
   const [errors, setErrors] = useState<Errors>({});
-  const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }));
+  const [twins, setTwins] = useState<SimilarVacancy[] | null>(null);
+  const set = (patch: Partial<Draft>) => {
+    setD((x) => ({ ...x, ...patch }));
+    if ("title" in patch || "description" in patch) setTwins(null);
+  };
 
   const submit = () => {
     const e: Errors = {};
@@ -71,6 +78,23 @@ export function VacancyForm({ vacancy, onSaved }: { vacancy?: Vacancy; onSaved: 
       city: d.city.trim() || null,
       status: d.status,
     };
+    if (twins === null && input.status !== "closed") {
+      similar.mutate(
+        { title: input.title, description: input.description, exclude_id: vacancy?.id ?? null },
+        {
+          onSuccess: (found) => {
+            setTwins(found);
+            if (found.length === 0) persist(input);
+          },
+          onError: () => persist(input),
+        },
+      );
+      return;
+    }
+    persist(input);
+  };
+
+  const persist = (input: VacancyInput) => {
     save.mutate(input, {
       onSuccess: (v) => {
         toast.success(vacancy ? "Вакансия сохранена" : "Вакансия создана");
@@ -135,6 +159,7 @@ export function VacancyForm({ vacancy, onSaved }: { vacancy?: Vacancy; onSaved: 
           <Field label="Зарплата до, ₽" required error={errors.max}>
             <MoneyInput value={d.max} onChange={(max) => set({ max })} />
           </Field>
+          <SalaryHint category={{ specialization: d.specialization, grade: d.grade }} min={d.min} max={d.max} className="sm:col-span-2" />
           <Field label="Формат">
             <Select value={d.work_format} onChange={(e) => set({ work_format: e.target.value as WorkFormat })}>
               {WORK_FORMATS.map((f) => (
@@ -159,9 +184,27 @@ export function VacancyForm({ vacancy, onSaved }: { vacancy?: Vacancy; onSaved: 
           options={(["draft", "published", "closed"] as VacancyStatus[]).map((s) => ({ value: s, title: VACANCY_STATUS_LABEL[s], description: STATUS_HINT[s] }))}
         />
       </Card>
+      {twins && twins.length > 0 && (
+        <Alert tone="warning" title="Похожая вакансия уже есть">
+          <p>Текст почти совпадает с вашей вакансией. Возможно, удобнее обновить её — тогда отклики соберутся в одном месте, а кандидаты не увидят двух одинаковых предложений.</p>
+          <ul className="mt-2 space-y-1">
+            {twins.map((t) => (
+              <li key={t.id}>
+                <Link href={`/employer/vacancies/${t.id}`} className="font-medium text-primary hover:underline">
+                  «{t.title}»
+                </Link>
+                <span className="text-ink-subtle">
+                  {" "}
+                  · {VACANCY_STATUS_LABEL[t.status].toLowerCase()} · совпадение {Math.round(t.similarity * 100)} %
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
       <div className="flex justify-end">
-        <Button type="submit" size="lg" loading={save.isPending}>
-          {vacancy ? "Сохранить" : "Создать вакансию"}
+        <Button type="submit" size="lg" loading={save.isPending || similar.isPending}>
+          {twins && twins.length > 0 ? (vacancy ? "Всё равно сохранить" : "Всё равно создать") : vacancy ? "Сохранить" : "Создать вакансию"}
         </Button>
       </div>
     </form>

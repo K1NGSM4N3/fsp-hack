@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"samples!\",\n                  (percentile_cont(0.5) WITHIN GROUP (ORDER BY c.salary_expectation_min))::bigint AS median,\n                  (percentile_cont(0.9) WITHIN GROUP (ORDER BY c.salary_expectation_min))::bigint AS p90\n           FROM candidates c\n           WHERE c.specialization = $1 AND c.grade = $2 AND c.salary_expectation_min IS NOT NULL\n             AND c.visible AND c.search_status <> 'closed'\n             AND EXISTS (SELECT 1 FROM user_consents uc\n                          JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'\n                          WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "samples!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "median",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "p90",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "74fc918eff3e592ed3b2187be5eb7f67a3addf40b8e85d7275e5439b34b8f6ce"
+}

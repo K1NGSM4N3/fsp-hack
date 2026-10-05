@@ -16,4 +16,5 @@ pub mod proctoring;
 pub mod reports;
 pub mod survey;
 pub mod tasks;
+pub mod trust;
 pub mod vacancies;

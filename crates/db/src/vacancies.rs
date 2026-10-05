@@ -52,6 +52,7 @@ pub struct PublishedVacancyItem {
     pub company_id: Uuid,
     pub company_name: String,
     pub company_city: Option<String>,
+    pub company_verified_domain: Option<String>,
     pub title: String,
     pub description: String,
     pub specialization: String,
@@ -71,6 +72,7 @@ pub struct PublishedVacancy {
     pub company_id: Uuid,
     pub company_name: String,
     pub company_city: Option<String>,
+    pub company_verified_domain: Option<String>,
     pub company_description: String,
     pub title: String,
     pub description: String,
@@ -223,7 +225,8 @@ pub async fn published_vacancies(
 ) -> Result<Vec<PublishedVacancyItem>, sqlx::Error> {
     sqlx::query_as!(
         PublishedVacancyItem,
-        r#"SELECT v.id, v.company_id, co.name AS company_name, co.city AS company_city, v.title,
+        r#"SELECT v.id, v.company_id, co.name AS company_name, co.city AS company_city,
+                  co.verified_domain AS company_verified_domain, v.title,
                   v.description, v.specialization, v.grade, v.skills, v.salary_min, v.salary_max,
                   v.work_format, v.city, v.published_at, count(*) OVER () AS "total!"
            FROM vacancies v
@@ -255,6 +258,7 @@ pub async fn published_vacancy(
     sqlx::query_as!(
         PublishedVacancy,
         "SELECT v.id, v.company_id, co.name AS company_name, co.city AS company_city,
+                co.verified_domain AS company_verified_domain,
                 co.description AS company_description, v.title, v.description, v.specialization,
                 v.grade, v.skills, v.salary_min, v.salary_max, v.work_format, v.city, v.published_at
          FROM vacancies v

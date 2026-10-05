@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE companies SET verified_domain = $2\n         WHERE id = $1 AND verified_domain IS DISTINCT FROM $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bd2e7ec71a7cf93c71109c2e780d7eeeb3864fd82589301e52025687f57be727"
+}
