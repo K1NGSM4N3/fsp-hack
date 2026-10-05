@@ -115,7 +115,7 @@ fn every_template_level_generates_valid_items() {
 fn instances_rarely_repeat() {
     const VARIETY_SEEDS: u64 = 500;
     for t in bank().templates() {
-        let min = if t.is_pool() { 430 } else { 490 };
+        let min = 490;
         for level in t.levels {
             let rendered: Vec<String> = (0..VARIETY_SEEDS)
                 .map(|seed| {
