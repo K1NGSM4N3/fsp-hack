@@ -3,13 +3,14 @@
 import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
+import { Flip } from "gsap/Flip";
 import { ScrambleTextPlugin } from "gsap/ScrambleTextPlugin";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
 
-gsap.registerPlugin(useGSAP, ScrollTrigger, SplitText, DrawSVGPlugin, ScrambleTextPlugin);
+gsap.registerPlugin(useGSAP, ScrollTrigger, SplitText, DrawSVGPlugin, ScrambleTextPlugin, Flip);
 
-export { DrawSVGPlugin, ScrambleTextPlugin, ScrollTrigger, SplitText, gsap, useGSAP };
+export { DrawSVGPlugin, Flip, ScrambleTextPlugin, ScrollTrigger, SplitText, gsap, useGSAP };
 
 export const MOTION_OK = "(prefers-reduced-motion: no-preference)";
 export const MOTION_DESKTOP = "(prefers-reduced-motion: no-preference) and (min-width: 1024px)";

@@ -1,7 +1,7 @@
 # web — фронтенд «ФСП Таланты»
 
 Next.js 16 (App Router) + TypeScript strict, Tailwind CSS 4, TanStack Query, react-hook-form + zod, GSAP + Lenis.
-Публичный сайт (`/`, `/candidates`, `/employers`, `/how-it-works`, `/fsp`, `/security`, `/vacancies`),
+Публичный сайт (`/`, `/candidates`, `/employers`, `/fsp`, `/vacancies`),
 кабинет кандидата (`/candidate/*`) и кабинет работодателя (`/employer/*`).
 
 ## Скрипты
@@ -69,10 +69,12 @@ src/components/motion/SmoothScroll.tsx Lenis, синхронизированны
 src/components/site/*                  шапка, подвал и интерактивные блоки публичного сайта
 ```
 
-Серверная страница размечает элементы атрибутами — `data-split` (построчное появление заголовка), `data-reveal`,
-`data-stagger`, `data-counter`, `data-draw` (прорисовка линий), `data-grow` (полосы), `data-parallax`,
-`data-magnetic`, `data-tilt` — и оборачивается в `<MotionRoot>`. Разметка без JS полностью читаема: анимации
-стартуют только на клиенте внутри `gsap.matchMedia("(prefers-reduced-motion: no-preference)")`.
+Серверная страница размечает элементы атрибутами (`data-split`, `data-reveal`, `data-stagger`, `data-counter`,
+`data-scramble`, `data-draw`, `data-grow`, `data-parallax`, `data-skew`, `data-magnetic`, `data-tilt`) и оборачивается
+в `<MotionRoot variant=…>`. Вариант задаёт странице свой язык появления: `rise` (главная, строки снизу), `wipe`
+(кандидатам, слова и шторка), `center` (работодателям, буквы и раскрытие от центра), `blur` (ФСП, проявление из
+размытия и наклон от скорости прокрутки). Разметка без JS полностью читаема: анимации стартуют только на клиенте
+внутри `gsap.matchMedia("(prefers-reduced-motion: no-preference)")`.
 
 При `prefers-reduced-motion: reduce` не запускаются ни GSAP-анимации, ни Lenis, канвас-граф рисует один статичный
 кадр, горизонтальный «пин» превращается в обычную прокрутку карточек, а CSS-анимации кабинета обнуляются глобальным

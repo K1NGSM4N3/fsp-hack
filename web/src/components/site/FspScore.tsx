@@ -12,8 +12,9 @@ const ITEMS = [
 
 const steps = ITEMS.reduce<number[]>((acc, item) => [...acc, 1 - (1 - (acc.at(-1) ?? 0)) * (1 - item.v)], []);
 const FINAL = steps.at(-1) ?? 0;
+const gains = steps.map((v, i) => (v - (steps[i - 1] ?? 0)) * 10);
 
-/** Noisy-OR accumulation: every achievement adds, but the score saturates and never outweighs the test. */
+/** Each achievement adds less than the previous one, so the FSP part saturates at 10 of 100 points. */
 export function FspScore() {
   const root = useRef<HTMLDivElement>(null);
   useGSAP(
@@ -26,7 +27,7 @@ export function FspScore() {
         const bar = el.querySelector("[data-meter]");
         const num = el.querySelector<HTMLElement>("[data-meter-value]");
         const state = { v: 0 };
-        const render = () => num && (num.textContent = formatCounter(state.v, 2));
+        const render = () => num && (num.textContent = formatCounter(state.v * 10, 1));
         const tl = gsap.timeline({ scrollTrigger: { trigger: el, start: "top 75%", once: true }, onStart: render });
         gsap.set(bar, { scaleX: 0 });
         state.v = 0;
@@ -37,7 +38,7 @@ export function FspScore() {
           tl.to(state, { v: steps[i] ?? 0, duration: 0.6, ease: "power3.out", onUpdate: render }, i * 0.7 + 0.2);
         });
         return () => {
-          if (num) num.textContent = formatCounter(FINAL, 2);
+          if (num) num.textContent = formatCounter(FINAL * 10, 1);
         };
       });
     },
@@ -51,7 +52,7 @@ export function FspScore() {
         <span className="rounded-full bg-success-50 px-2.5 py-1 font-mono text-[11px] text-success">ФСП ID привязан</span>
       </div>
       <ul className="mt-5 space-y-3">
-        {ITEMS.map(({ icon: Icon, title, meta, v }) => (
+        {ITEMS.map(({ icon: Icon, title, meta }, i) => (
           <li key={title} data-ach className="flex items-center gap-4 rounded-2xl border border-line bg-canvas/60 p-3.5">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary-50 text-primary">
               <Icon className="size-5" aria-hidden />
@@ -60,21 +61,22 @@ export function FspScore() {
               <span className="block text-sm font-semibold text-ink">{title}</span>
               <span className="block truncate text-xs text-ink-subtle">{meta}</span>
             </span>
-            <span className="tabular shrink-0 font-mono text-xs text-ink-muted">+{formatCounter(v, 2)}</span>
+            <span className="tabular shrink-0 font-mono text-xs text-ink-muted">+{formatCounter(gains[i] ?? 0, 1)}</span>
           </li>
         ))}
       </ul>
       <div className="mt-6 border-t border-line pt-5">
         <div className="flex items-baseline justify-between">
-          <p className="text-sm font-medium text-ink">ФСП-скор</p>
+          <p className="text-sm font-medium text-ink">Баллы за ФСП в подборке</p>
           <p className="tabular font-display text-3xl font-semibold tracking-tight text-ink">
-            <span data-meter-value>{formatCounter(FINAL, 2)}</span>
+            <span data-meter-value>{formatCounter(FINAL * 10, 1)}</span>
+            <span className="ml-1 text-base font-medium text-ink-subtle">из 10</span>
           </p>
         </div>
         <div className="relative mt-3 h-2.5 overflow-hidden rounded-full bg-primary-50" aria-hidden>
           <span data-meter className="absolute inset-0 origin-left rounded-full bg-primary" style={{ transform: `scaleX(${FINAL})` }} />
         </div>
-        <p className="mt-3 font-mono text-xs text-ink-subtle">1 − Π(1 − vᵢ) · полураспад вклада — 2 года · вес в подборе ≤ 10 из 100</p>
+        <p className="mt-3 text-xs leading-relaxed text-ink-subtle">Каждое следующее достижение добавляет меньше предыдущего. Старые весят меньше свежих: вдвое за каждые два года.</p>
       </div>
     </div>
   );

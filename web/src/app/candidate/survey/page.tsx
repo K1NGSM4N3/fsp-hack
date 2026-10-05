@@ -260,7 +260,7 @@ function SurveyWizard({ initial, history }: { initial: Draft; history: SurveyRes
                   options={GRADES.map((g) => ({ value: g, title: GRADE_LABEL[g], description: GRADE_HINT[g] }))}
                 />
               </FieldSet>
-              <FieldSet legend="Оцените себя по темам теста" hint="1 — не знаком, 5 — эксперт. На категорию не влияет, помогает калибровке.">
+              <FieldSet legend="Оцените себя по темам теста" hint="1 — не знаком, 5 — эксперт. На категорию не влияет, помогает подобрать темы заданий.">
                 <div className="space-y-3">
                   {SPEC_TOPICS[draft.specialization].map((t) => (
                     <Scale key={t} topic={TOPIC_LABEL[t]} value={draft.self_assessment[t]} onChange={(v) => setDraft((d) => ({ ...d, self_assessment: { ...d.self_assessment, [t]: v } }))} />

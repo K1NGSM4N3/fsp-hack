@@ -3,42 +3,76 @@
 import { useRef, type ReactNode } from "react";
 import { FINE_POINTER, MOTION_OK, ScrollTrigger, SplitText, formatCounter, gsap, useGSAP } from "./gsap";
 
-const REVEAL_FROM: Record<string, gsap.TweenVars> = {
-  up: { y: 56 },
-  left: { x: -56 },
-  right: { x: 56 },
-  scale: { y: 32, scale: 0.94 },
-  fade: {},
-};
+export type MotionVariant = "rise" | "wipe" | "center" | "blur";
 
-function heroIntro(root: HTMLElement) {
-  const items = gsap.utils.toArray<HTMLElement>("[data-hero]:not([data-split])", root);
-  if (!items.length) return;
-  gsap.fromTo(
-    items,
-    { autoAlpha: 0, y: 28 },
-    { autoAlpha: 1, y: 0, duration: 1.2, ease: "expo.out", stagger: 0.09, delay: 0.35, clearProps: "transform" },
-  );
+interface Look {
+  split: { type: string; mask?: "lines" | "words" | "chars"; pick: (s: SplitText) => Element[]; from: gsap.TweenVars; stagger: gsap.TweenVars["stagger"]; duration: number; ease: string };
+  reveal: { from: gsap.TweenVars; to: gsap.TweenVars };
+  stagger: gsap.StaggerVars;
 }
 
-function splitHeadings(root: HTMLElement) {
+const SHOW: gsap.TweenVars = { autoAlpha: 1, x: 0, y: 0, scale: 1 };
+
+const REVEAL: Record<string, { from: gsap.TweenVars; to: gsap.TweenVars }> = {
+  up: { from: { autoAlpha: 0, y: 56 }, to: SHOW },
+  left: { from: { autoAlpha: 0, x: -56 }, to: SHOW },
+  right: { from: { autoAlpha: 0, x: 56 }, to: SHOW },
+  scale: { from: { autoAlpha: 0, y: 32, scale: 0.94 }, to: SHOW },
+  fade: { from: { autoAlpha: 0 }, to: SHOW },
+  wipe: { from: { clipPath: "inset(0% 100% 0% 0%)", x: -24 }, to: { clipPath: "inset(0% 0% 0% 0%)", x: 0, clearProps: "clipPath" } },
+  center: { from: { clipPath: "inset(50% 50% 50% 50% round 28px)", scale: 0.97 }, to: { clipPath: "inset(0% 0% 0% 0% round 28px)", scale: 1, clearProps: "clipPath" } },
+  blur: { from: { autoAlpha: 0, filter: "blur(18px)", scale: 0.97 }, to: { autoAlpha: 1, filter: "blur(0px)", scale: 1, clearProps: "filter" } },
+};
+
+const LOOKS: Record<MotionVariant, Look> = {
+  rise: {
+    split: { type: "lines,words", mask: "lines", pick: (s) => s.lines, from: { yPercent: 108, rotate: 2, transformOrigin: "0% 100%" }, stagger: 0.085, duration: 1.25, ease: "expo.out" },
+    reveal: REVEAL.up,
+    stagger: { each: 0.08, from: "start" },
+  },
+  wipe: {
+    split: { type: "words,lines", mask: "words", pick: (s) => s.words, from: { yPercent: 110 }, stagger: 0.035, duration: 0.95, ease: "power4.out" },
+    reveal: REVEAL.wipe,
+    stagger: { each: 0.09, from: "start" },
+  },
+  center: {
+    split: { type: "chars,words", pick: (s) => s.chars, from: { autoAlpha: 0, yPercent: 45, rotateX: -85, transformOrigin: "50% 100%" }, stagger: { each: 0.014, from: "center" }, duration: 0.85, ease: "back.out(1.8)" },
+    reveal: REVEAL.center,
+    stagger: { each: 0.07, from: "center" },
+  },
+  blur: {
+    split: { type: "lines", pick: (s) => s.lines, from: { autoAlpha: 0, filter: "blur(16px)", y: 28 }, stagger: 0.12, duration: 1.3, ease: "power3.out" },
+    reveal: REVEAL.blur,
+    stagger: { each: 0.09, from: "edges" },
+  },
+};
+
+function heroIntro(root: HTMLElement, look: Look) {
+  const items = gsap.utils.toArray<HTMLElement>("[data-hero]:not([data-split])", root);
+  if (!items.length) return;
+  const base = look === LOOKS.rise ? { from: { autoAlpha: 0, y: 28 }, to: { autoAlpha: 1, y: 0 } } : look.reveal;
+  gsap.fromTo(items, { ...base.from, autoAlpha: 0 }, { ...base.to, autoAlpha: 1, duration: 1.2, ease: "expo.out", stagger: 0.09, delay: 0.35, clearProps: "transform,clipPath,filter" });
+}
+
+function splitHeadings(root: HTMLElement, look: Look) {
+  const cfg = look.split;
   for (const el of gsap.utils.toArray<HTMLElement>("[data-split]", root)) {
     const onLoad = el.dataset.split === "hero";
     const delay = Number(el.dataset.delay ?? (onLoad ? 0.1 : 0));
     SplitText.create(el, {
-      type: "lines,words",
-      mask: "lines",
+      type: cfg.type,
+      mask: cfg.mask,
       linesClass: "split-line",
+      wordsClass: "split-word",
+      charsClass: "split-char",
       autoSplit: true,
       onSplit(self) {
-        gsap.set(el, { autoAlpha: 1 });
-        return gsap.from(self.lines, {
-          yPercent: 108,
-          rotate: 2,
-          transformOrigin: "0% 100%",
-          duration: 1.25,
-          ease: "expo.out",
-          stagger: 0.085,
+        gsap.set(el, { autoAlpha: 1, perspective: 700 });
+        return gsap.from(cfg.pick(self), {
+          ...cfg.from,
+          duration: cfg.duration,
+          ease: cfg.ease,
+          stagger: cfg.stagger,
           delay,
           scrollTrigger: onLoad ? undefined : { trigger: el, start: "top 88%", once: true },
         });
@@ -47,28 +81,63 @@ function splitHeadings(root: HTMLElement) {
   }
 }
 
-function reveals(root: HTMLElement) {
+function reveals(root: HTMLElement, look: Look) {
   const els = gsap.utils.toArray<HTMLElement>("[data-reveal]", root);
   if (!els.length) return;
-  for (const el of els) gsap.set(el, { autoAlpha: 0, ...(REVEAL_FROM[el.dataset.reveal || "up"] ?? REVEAL_FROM.up) });
+  const kindOf = (el: HTMLElement) => (el.dataset.reveal ? (REVEAL[el.dataset.reveal] ?? look.reveal) : look.reveal);
+  for (const el of els) gsap.set(el, kindOf(el).from);
   ScrollTrigger.batch(els, {
     start: "top 90%",
     once: true,
-    onEnter: (batch) => gsap.to(batch, { autoAlpha: 1, x: 0, y: 0, scale: 1, duration: 1.1, ease: "expo.out", stagger: 0.1, overwrite: true }),
+    onEnter: (batch) =>
+      batch.forEach((el, i) => gsap.to(el, { ...kindOf(el as HTMLElement).to, duration: 1.15, ease: "expo.out", delay: i * 0.1, overwrite: true })),
   });
 }
 
-function staggers(root: HTMLElement) {
+function staggers(root: HTMLElement, look: Look) {
   for (const box of gsap.utils.toArray<HTMLElement>("[data-stagger]", root)) {
-    gsap.from(box.children, {
-      autoAlpha: 0,
-      y: 40,
+    const kind = look.reveal;
+    gsap.fromTo(box.children, kind.from, {
+      ...kind.to,
       duration: 1,
       ease: "expo.out",
-      stagger: Number(box.dataset.stagger) || 0.08,
+      stagger: { ...look.stagger, each: Number(box.dataset.stagger) || look.stagger.each },
       scrollTrigger: { trigger: box, start: "top 88%", once: true },
     });
   }
+}
+
+function scrambles(root: HTMLElement): () => void {
+  const restore: Array<() => void> = [];
+  for (const el of gsap.utils.toArray<HTMLElement>("[data-scramble]", root)) {
+    const text = el.textContent ?? "";
+    restore.push(() => {
+      el.textContent = text;
+    });
+    gsap.to(el, {
+      duration: 1.4,
+      scrambleText: { text, chars: "0123456789", revealDelay: 0.3, speed: 0.4 },
+      scrollTrigger: { trigger: el, start: "top 92%", once: true },
+    });
+  }
+  return () => restore.forEach((f) => f());
+}
+
+function velocitySkew(root: HTMLElement) {
+  const els = gsap.utils.toArray<HTMLElement>("[data-skew]", root);
+  if (!els.length) return;
+  const skew = gsap.quickTo(els, "skewY", { duration: 0.5, ease: "power3.out" });
+  let settle: gsap.core.Tween | null = null;
+  ScrollTrigger.create({
+    trigger: root,
+    start: "top bottom",
+    end: "bottom top",
+    onUpdate: (self) => {
+      skew(gsap.utils.clamp(-6, 6, self.getVelocity() / -300));
+      settle?.kill();
+      settle = gsap.delayedCall(0.12, () => skew(0));
+    },
+  });
 }
 
 function counters(root: HTMLElement): () => void {
@@ -180,31 +249,38 @@ function pointerEffects(root: HTMLElement): () => void {
 
 /**
  * Declarative motion for server-rendered pages: children mark elements with data attributes
- * (data-split, data-reveal, data-stagger, data-counter, data-draw, data-grow, data-parallax, data-magnetic, data-tilt)
- * and everything is wired here once. With reduced motion nothing runs and the SSR markup stays as is.
+ * (data-split, data-reveal, data-stagger, data-counter, data-scramble, data-draw, data-grow, data-parallax, data-skew, data-magnetic, data-tilt)
+ * and everything is wired here once; `variant` gives each page its own entrance language.
+ * With reduced motion nothing runs and the SSR markup stays as is.
  */
-export function MotionRoot({ children, className }: { children: ReactNode; className?: string }) {
+export function MotionRoot({ children, className, variant = "rise" }: { children: ReactNode; className?: string; variant?: MotionVariant }) {
   const ref = useRef<HTMLDivElement>(null);
   useGSAP(
     () => {
       const root = ref.current;
       if (!root) return;
       const mm = gsap.matchMedia();
+      const look = LOOKS[variant];
       mm.add(MOTION_OK, () => {
-        heroIntro(root);
-        splitHeadings(root);
-        reveals(root);
-        staggers(root);
+        heroIntro(root, look);
+        splitHeadings(root, look);
+        reveals(root, look);
+        staggers(root, look);
         drawings(root);
         bars(root);
         parallax(root);
+        velocitySkew(root);
         const restoreCounters = counters(root);
-        return restoreCounters;
+        const restoreScrambles = scrambles(root);
+        return () => {
+          restoreCounters();
+          restoreScrambles();
+        };
       });
       mm.add(FINE_POINTER, () => pointerEffects(root));
       void document.fonts?.ready.then(() => ScrollTrigger.refresh());
     },
-    { scope: ref },
+    { scope: ref, dependencies: [variant] },
   );
   return (
     <div ref={ref} className={className}>

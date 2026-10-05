@@ -16,7 +16,7 @@ import { ATTEMPT_KIND_HINT, ATTEMPT_KIND_LABEL, GRADE_HINT, GRADE_LABEL, GRADES,
 
 function Rules() {
   const items = [
-    { icon: <Shuffle className="size-4" aria-hidden />, text: "Задания генерируются из шаблонов: у каждого свои, сложность сопоставима" },
+    { icon: <Shuffle className="size-4" aria-hidden />, text: "У каждого кандидата свой вариант заданий одинаковой сложности, слитые ответы не помогут" },
     { icon: <Clock className="size-4" aria-hidden />, text: "У каждого задания свой таймер; если время вышло — ответ не засчитывается" },
     { icon: <TrendingUp className="size-4" aria-hidden />, text: "Тест адаптивный: следующий вопрос подбирается под ваш уровень и заканчивается, как только уровень ясен" },
     { icon: <Lock className="size-4" aria-hidden />, text: "Правильность ответов во время теста не показывается" },

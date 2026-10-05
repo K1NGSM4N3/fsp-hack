@@ -15,7 +15,7 @@ export function SiteFooter() {
             <div data-reveal>
               <Image src="/brand/fsp-logo-full-dark.svg" alt="Федерация спортивного программирования России" width={320} height={40} unoptimized className="h-9 w-auto" />
               <p className="mt-6 max-w-sm leading-relaxed text-night-muted">
-                Платформа подбора ИТ-специалистов от ФСП. Уровень подтверждает адаптивный тест, а не резюме. Первым пишет работодатель — и сразу с зарплатной вилкой.
+                Подбор ИТ-специалистов от Федерации спортивного программирования. Кандидат один раз сдаёт тест, компании пишут ему сами и сразу называют зарплату.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <Link href="/register?role=candidate" className="inline-flex h-11 items-center rounded-full bg-white px-5 text-sm font-medium text-ink transition-colors hover:bg-primary-100">
@@ -54,10 +54,7 @@ export function SiteFooter() {
           <div className="mt-10 flex flex-col gap-4 border-t border-night-line pt-6 text-sm text-night-faint md:flex-row md:items-center md:justify-between">
             <p>© 2026 ФСП Таланты · Хакатон «Лидеры цифровой трансформации 2026», спецтрек ФСП</p>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <span>Данные хранятся на серверах в РФ · 152-ФЗ</span>
-              <a href="/api/docs" className="transition-colors hover:text-white">
-                API · Swagger
-              </a>
+              <span>Персональные данные обрабатываем по 152-ФЗ</span>
               <a href="https://fsp-russia.com" target="_blank" rel="noreferrer" className="transition-colors hover:text-white">
                 fsp-russia.com
               </a>

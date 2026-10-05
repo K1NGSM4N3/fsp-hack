@@ -18,6 +18,34 @@ import { ATTEMPT_KIND_HINT, ATTEMPT_KIND_LABEL, GRADE_LABEL, TOPIC_LABEL } from 
 /** The API advances a timed-out item on the next read after this grace period. */
 const GRACE_MS = 5500;
 
+
+const SCALE_MIN = -2.5;
+const SCALE_MAX = 2.5;
+const scalePos = (v: number) => ((Math.max(SCALE_MIN, Math.min(SCALE_MAX, v)) - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100;
+const SCALE_ZONES = [
+  { label: "ниже Junior", from: SCALE_MIN, to: -1 },
+  { label: "Junior", from: -1, to: 0 },
+  { label: "Middle", from: 0, to: 1 },
+  { label: "Senior", from: 1, to: SCALE_MAX },
+];
+
+/** Grade bands use the same thresholds as the assessment engine: Junior from −1, Middle from 0, Senior from +1. */
+function GradeScale({ level, spread }: { level: number; spread: number }) {
+  return (
+    <div className="relative mt-3 mb-1" role="img" aria-label="Положение результата на шкале грейдов">
+      <div className="flex h-9 overflow-hidden rounded-control border border-line text-[11px]">
+        {SCALE_ZONES.map((z) => (
+          <span key={z.label} className="flex items-end justify-center border-r border-line bg-canvas pb-1 text-ink-subtle last:border-r-0" style={{ width: `${scalePos(z.to) - scalePos(z.from)}%` }}>
+            {z.label}
+          </span>
+        ))}
+      </div>
+      <span className="absolute top-0 h-9 rounded-control bg-primary/15 ring-1 ring-primary/40" style={{ left: `${scalePos(level - spread)}%`, width: `${scalePos(level + spread) - scalePos(level - spread)}%` }} />
+      <span className="absolute -top-1 h-11 w-0.5 -translate-x-1/2 rounded-full bg-ink" style={{ left: `${scalePos(level)}%` }} />
+    </div>
+  );
+}
+
 function useNow(intervalMs = 250) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -314,11 +342,9 @@ function Result({ session }: { session: AssessmentSession }) {
         </div>
         <div className="mt-6 grid gap-5 sm:grid-cols-2">
           <div>
-            <p className="text-xs text-ink-subtle">Оценка уровня</p>
-            <p className="tabular font-mono text-2xl font-semibold text-ink">
-              θ = {d.theta.toFixed(2)} <span className="text-base text-ink-subtle">± {d.se.toFixed(2)}</span>
-            </p>
-            <p className="mt-2 text-xs text-ink-subtle">Шкала IRT специализации: Junior ≥ −1, Middle ≥ 0, Senior ≥ 1</p>
+            <p className="text-xs text-ink-subtle">Где вы на шкале грейдов</p>
+            <GradeScale level={d.theta} spread={1.96 * d.se} />
+            <p className="mt-2 text-xs text-ink-subtle">Отметка показывает ваш результат, полоса — диапазон, в котором он находится почти наверняка.</p>
           </div>
           <div>
             <p className="text-xs text-ink-subtle">Уровень по тесту</p>

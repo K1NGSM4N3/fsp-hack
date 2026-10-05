@@ -11,9 +11,10 @@ interface PageHeroProps {
   actions?: ReactNode;
   visual?: ReactNode;
   facts?: { value: string; label: string }[];
+  scramble?: boolean;
 }
 
-export function PageHero({ crumb, title, lead, actions, visual, facts }: PageHeroProps) {
+export function PageHero({ crumb, title, lead, actions, visual, facts, scramble = false }: PageHeroProps) {
   return (
     <section className="relative isolate overflow-hidden bg-white pt-32 pb-16 sm:pt-40 lg:pt-44 lg:pb-24">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
@@ -56,8 +57,10 @@ export function PageHero({ crumb, title, lead, actions, visual, facts }: PageHer
               <div key={f.value + f.label}>
                 <dt className="sr-only">{f.label}</dt>
                 <dd>
-                  <span className="tabular block font-display text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">{f.value}</span>
-                  <span className="mt-2 block max-w-[16rem] text-sm leading-relaxed text-ink-muted">{f.label}</span>
+                  <span data-scramble={scramble ? "" : undefined} className="tabular block font-display text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">
+                    {f.value}
+                  </span>
+                  <span aria-hidden className="mt-2 block max-w-[16rem] text-sm leading-relaxed text-ink-muted">{f.label}</span>
                 </dd>
               </div>
             ))}
@@ -71,7 +74,7 @@ export function PageHero({ crumb, title, lead, actions, visual, facts }: PageHer
 export function SplitHeading({ eyebrow, title, children, tone = "light", id }: { eyebrow: string; title: ReactNode; children?: ReactNode; tone?: "light" | "night"; id?: string }) {
   const night = tone === "night";
   return (
-    <div id={id} className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-16">
+    <div id={id} className={cn("grid grid-cols-1 gap-8", children && "lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-16")}>
       <div>
         <div data-reveal="fade">
           <Eyebrow tone={tone}>{eyebrow}</Eyebrow>

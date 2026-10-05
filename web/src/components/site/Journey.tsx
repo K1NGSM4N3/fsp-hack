@@ -26,7 +26,7 @@ const STEPS: Step[] = [
   {
     side: "candidate",
     title: "Регистрация и профиль",
-    text: "Email с подтверждением и согласия на обработку данных. Профиль — формой или из PDF-резюме: текст распознаётся, опыт и навыки подставляются сами.",
+    text: "Почта с подтверждением и согласия на обработку данных. Профиль можно заполнить вручную или загрузить PDF-резюме: опыт и навыки подставятся сами.",
     visual: (
       <div className="space-y-2 text-sm">
         <p className="flex items-center gap-2 text-white">
@@ -40,8 +40,8 @@ const STEPS: Step[] = [
   },
   {
     side: "candidate",
-    title: "Опрос: стек и грейд",
-    text: "Направление, специализация, стек и грейд, на который вы претендуете. Стек решает, какие темы попадут в тест, но шкала и пороги одинаковы для всех.",
+    title: "Опрос",
+    text: "Направление, специализация, стек и грейд, на который вы идёте. От стека зависят темы заданий, а планка для грейда у всех одна.",
     visual: (
       <div className="space-y-3">
         <div className="flex flex-wrap gap-1.5">
@@ -61,7 +61,7 @@ const STEPS: Step[] = [
   {
     side: "candidate",
     title: "Адаптивный тест",
-    text: "От 8 до 20 заданий, в среднем около 13. Каждое следующее подбирается под ваш текущий уровень, и тест останавливается, как только результат статистически ясен.",
+    text: "8–20 заданий, в среднем 13. После верного ответа следующее задание сложнее, после ошибки проще. Тест заканчивается, когда уровень понятен.",
     visual: (
       <div>
         <div className="flex gap-1" aria-hidden>
@@ -70,7 +70,7 @@ const STEPS: Step[] = [
           ))}
         </div>
         <p className="mt-3 flex items-center justify-between font-mono text-xs text-night-muted">
-          <span>задание 8 · go.defer_order</span>
+          <span>задание 8 · Go, порядок defer</span>
           <span className="inline-flex items-center gap-1 text-white">
             <Clock className="size-3.5" aria-hidden /> 01:24
           </span>
@@ -81,7 +81,7 @@ const STEPS: Step[] = [
   {
     side: "candidate",
     title: "Категория",
-    text: "Сдали — получаете категорию, например «Бэкенд · Middle». Навыки из решённых заданий отмечаются как «подтверждён тестом». Без категории профиль в поиске не участвует.",
+    text: "Сдали тест и получили категорию, например «Бэкенд · Middle». Навыки из решённых заданий отмечаются как подтверждённые. Без категории профиль в поиск не попадает.",
     visual: (
       <div className="space-y-3">
         <span className="inline-flex h-9 items-center overflow-hidden rounded-lg border border-primary-400 font-mono text-sm text-white">
@@ -90,15 +90,15 @@ const STEPS: Step[] = [
           <span className="px-3">Middle</span>
         </span>
         <p className="flex items-center gap-2 text-sm text-night-muted">
-          <Check className="size-4 text-success-300" aria-hidden /> Go, PostgreSQL — подтверждены тестом
+          <Check className="size-4 text-success-300" aria-hidden /> Go и PostgreSQL подтверждены тестом
         </p>
       </div>
     ),
   },
   {
     side: "employer",
-    title: "Потребность текстом",
-    text: "Компания описывает, кого ищет, — формой или просто вставляет текст вакансии. Система распознаёт специализацию, грейд, обязательные и желательные навыки, вилку и формат.",
+    title: "Описание вакансии",
+    text: "Компания заполняет форму или вставляет текст вакансии целиком. Специализацию, грейд, навыки, вилку и формат сервис разберёт сам.",
     visual: (
       <p className="rounded-xl border border-night-line bg-night/60 p-3 text-sm leading-relaxed text-night-muted">
         Ищем <mark className="rounded bg-primary/30 px-1 text-white">Middle</mark> <mark className="rounded bg-primary/30 px-1 text-white">Go</mark>-разработчика в платёжную команду:{" "}
@@ -108,8 +108,8 @@ const STEPS: Step[] = [
   },
   {
     side: "employer",
-    title: "Подборка с объяснением",
-    text: "Сначала — рекомендованные категории: сколько кандидатов, медианные ожидания, покрытие стека. Затем — анонимные карточки по баллу 0–100 с причинами и пробелами.",
+    title: "Подборка",
+    text: "Сначала подходящие категории с числом кандидатов и типичными ожиданиями. Потом анонимные карточки с баллом от 0 до 100, где видно, за что он начислен и чего не хватает.",
     visual: (
       <ul className="space-y-1.5 font-mono text-xs">
         {[
@@ -131,28 +131,28 @@ const STEPS: Step[] = [
   {
     side: "employer",
     title: "Приглашение с вилкой",
-    text: "Что предлагаете, сообщение, вилка «от–до», формат и способ связи. Не больше 30 приглашений за 7 дней и одно действующее на пару «компания–кандидат». Срок жизни — 14 дней.",
+    text: "Задача, сообщение, зарплата от и до, формат и контакт для связи. У компании 30 приглашений в неделю, у кандидата 14 дней на ответ.",
     visual: (
       <div>
         <p className="text-xs text-night-muted">Зарплата</p>
         <p className="tabular font-mono text-xl font-semibold text-white">280 000 – 350 000 ₽</p>
-        <p className="mt-2 font-mono text-xs text-night-muted">квота: 12 / 30 · истекает через 14 дней</p>
+        <p className="mt-2 font-mono text-xs text-night-muted">12 из 30 приглашений на этой неделе</p>
       </div>
     ),
   },
   {
     side: "candidate",
-    title: "Контакт после «Принять»",
-    text: "Кандидат видит условия до начала общения и принимает или отклоняет с причиной. Только после согласия компания получает контакты — и каждое обращение к ним попадает в журнал.",
+    title: "Ответ кандидата",
+    text: "Условия видны до разговора. Принял: компания получает контакты, просмотр записывается. Отклонил: причина попадает в общую статистику компании.",
     visual: (
       <div className="space-y-2 font-mono text-sm">
         <p className="flex items-center gap-2 text-night-faint">
           <Lock className="size-4" aria-hidden /> +7 ••• ••• •• ••
         </p>
         <p className="flex items-center gap-2 text-white">
-          <LockOpen className="size-4 text-success-300" aria-hidden /> +7 999 111-22-33
+          <LockOpen className="size-4 text-success-300" aria-hidden /> +7 900 000-00-00
         </p>
-        <p className="text-xs text-night-muted">доступ записан в журнал</p>
+        <p className="text-xs text-night-muted">просмотр контактов записан</p>
       </div>
     ),
   },
@@ -206,21 +206,21 @@ export function Journey() {
   );
 
   return (
-    <section ref={section} id="how" className="relative isolate overflow-hidden bg-night py-20 text-white lg:flex lg:min-h-svh lg:flex-col lg:justify-center lg:py-16">
+    <section ref={section} id="path" className="relative isolate overflow-hidden bg-night py-20 text-white lg:flex lg:min-h-svh lg:flex-col lg:justify-center lg:py-16">
       <div aria-hidden className="pointer-events-none absolute -top-48 left-1/3 size-[36rem] rounded-full bg-primary/30 blur-[140px]" />
       <div aria-hidden className="bg-grid-night mask-radial pointer-events-none absolute inset-0 opacity-60" />
       <div className="relative mx-auto w-full max-w-[1240px] px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <p data-reveal="fade" className="eyebrow mb-5 text-primary-300">
-              Путь от регистрации до контакта
+              От регистрации до контакта
             </p>
             <h2 data-split className="display-2 text-balance">
-              Восемь шагов. Ни одного слепого отклика.
+              Восемь шагов до первого созвона
             </h2>
           </div>
           <p data-reveal className="max-w-sm text-night-muted">
-            Кандидат подтверждает уровень один раз. Дальше инициатива у работодателя — а условия видны до начала разговора.
+            Первые четыре шага делает кандидат, следующие три компания. Последний снова за кандидатом: принять приглашение или нет.
           </p>
         </div>
       </div>

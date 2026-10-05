@@ -24,8 +24,8 @@ interface Pulse {
   red: boolean;
 }
 
-function mulberry32(seed: number) {
-  let a = seed;
+function mulberry32(start: number) {
+  let a = start;
   return () => {
     a |= 0;
     a = (a + 0x6d2b79f5) | 0;

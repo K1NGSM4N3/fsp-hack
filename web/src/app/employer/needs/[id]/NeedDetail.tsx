@@ -186,7 +186,7 @@ function TestPlanCard({ need }: { need: HiringNeed }) {
           <FlaskConical className="mt-0.5 size-5 shrink-0 text-primary" aria-hidden />
           <span>
             <span className="block text-base font-semibold text-ink">Как проверяется категория под эту потребность</span>
-            <span className="mt-1 block text-sm text-ink-muted">Темы адаптивного теста и примеры заданий: двум кандидатам выпадают разные экземпляры сопоставимой сложности</span>
+            <span className="mt-1 block text-sm text-ink-muted">Темы теста и примеры заданий: двум кандидатам выпадают разные варианты одинаковой сложности</span>
           </span>
         </span>
         <ChevronDown className={cn("mt-1 size-5 shrink-0 text-ink-subtle transition-transform", open && "rotate-180")} aria-hidden />
@@ -202,7 +202,7 @@ function TestPlanCard({ need }: { need: HiringNeed }) {
               <div className="flex flex-wrap items-center gap-2 text-sm">
                 <CategoryBadge category={{ specialization: q.data.plan.specialization, grade: q.data.plan.grade }} size="sm" />
                 <span className="text-ink-muted">
-                  {q.data.plan.min_items}–{q.data.plan.max_items} заданий · порог θ = {q.data.plan.target_theta.toFixed(1)}
+                  {q.data.plan.min_items}–{q.data.plan.max_items} заданий, тест подстраивается под ответы кандидата
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5">

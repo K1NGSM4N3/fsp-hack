@@ -1,17 +1,4 @@
-import {
-  ArrowDownRight,
-  Banknote,
-  BellOff,
-  Check,
-  EyeOff,
-  FileLock,
-  KeyRound,
-  LockKeyhole,
-  ScrollText,
-  Server,
-  Shuffle,
-  UserCheck,
-} from "lucide-react";
+import { ArrowDownRight, Check, EyeOff, LockKeyhole, ScrollText, ShieldAlert, Shuffle, Scale, UserX } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { MotionRoot } from "@/components/motion/MotionRoot";
@@ -21,6 +8,8 @@ import { FspScore } from "@/components/site/FspScore";
 import { HeroGraph } from "@/components/site/HeroGraph";
 import { Journey } from "@/components/site/Journey";
 import { LeakChart, LeakDemo } from "@/components/site/LeakDemo";
+import { LevelFinder } from "@/components/site/LevelFinder";
+import { ManifestoScrub } from "@/components/site/ManifestoScrub";
 import { Marquee } from "@/components/site/Marquee";
 import { BrandLine, Container, Cta, Eyebrow, Fact, Kicker, Section, SectionHead, TextLink } from "@/components/site/primitives";
 import { ScoreDemo } from "@/components/site/ScoreDemo";
@@ -52,13 +41,13 @@ function Hero() {
           <div>
             <p data-hero className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/5 py-1.5 pr-4 pl-1.5 text-sm text-night-muted backdrop-blur">
               <span className="rounded-full bg-primary px-2.5 py-0.5 font-mono text-[11px] tracking-[0.1em] text-white uppercase">ФСП</span>
-              Платформа подбора ИТ-специалистов
+              Подбор ИТ-специалистов
             </p>
             <h1 data-hero data-split="hero" className="display-1 max-w-[15ch] text-balance">
-              Найм наоборот: <span className="text-gradient-night">первым пишет работодатель</span>
+              Компании пишут первыми. <span className="text-gradient-night">Сразу с вилкой.</span>
             </h1>
             <p data-hero className="mt-8 max-w-xl text-lg leading-relaxed text-night-muted sm:text-xl">
-              Подтвердите уровень один раз — адаптивным тестом, а не резюме. Дальше компании приходят сами: с задачей, форматом и зарплатной вилкой «от–до» в первом же сообщении.
+              Вы один раз сдаёте адаптивный тест и получаете категорию, например «Бэкенд · Middle». Работодатели видят анонимную карточку и присылают приглашение, в котором уже есть задача, формат работы и зарплата от и до.
             </p>
             <div data-hero className="mt-10 flex flex-wrap items-center gap-3">
               <Cta href="/register?role=candidate">Я ищу работу</Cta>
@@ -69,7 +58,7 @@ function Hero() {
             <p data-hero className="mt-6 text-sm text-night-faint">
               Уже есть аккаунт?{" "}
               <Link href="/login" className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white">
-                Войти в кабинет
+                Войти
               </Link>
             </p>
           </div>
@@ -88,9 +77,9 @@ function Hero() {
                   <span className="font-mono text-night-faint">сегодня, 10:42</span>
                 </div>
                 <p className="mt-4 text-lg leading-snug font-semibold tracking-tight">Go-разработчик в команду платежей</p>
-                <p className="mt-1 text-sm text-night-muted">Финтех · гибрид, Москва · через платформу</p>
+                <p className="mt-1 text-sm text-night-muted">Финтех · гибрид, Москва</p>
                 <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
-                  <p className="text-xs text-night-muted">Зарплатная вилка</p>
+                  <p className="text-xs text-night-muted">Зарплата</p>
                   <p className="tabular mt-1 font-mono text-2xl font-semibold tracking-tight">280 000 – 350 000 ₽</p>
                 </div>
                 <ul className="mt-5 space-y-2 text-sm">
@@ -98,7 +87,7 @@ function Hero() {
                     <Check className="size-4 text-success-300" aria-hidden /> Категория Бэкенд · Middle подтверждена тестом
                   </li>
                   <li className="flex items-center gap-2.5">
-                    <Check className="size-4 text-success-300" aria-hidden /> Go и PostgreSQL — подтверждены тестом
+                    <Check className="size-4 text-success-300" aria-hidden /> Go и PostgreSQL подтверждены тестом
                   </li>
                 </ul>
                 <div className="mt-6 grid grid-cols-2 gap-2">
@@ -106,7 +95,7 @@ function Hero() {
                   <span className="inline-flex h-11 items-center justify-center rounded-xl border border-white/15 text-sm font-medium text-white">Отклонить</span>
                 </div>
                 <p className="mt-4 flex items-center gap-2 text-xs text-night-faint">
-                  <LockKeyhole className="size-3.5" aria-hidden /> Компания увидит контакты только после «Принять»
+                  <LockKeyhole className="size-3.5" aria-hidden /> Ваши контакты компания увидит после «Принять»
                 </p>
               </div>
               <div className="glass-night absolute -bottom-12 -left-8 hidden items-center gap-3 rounded-2xl border border-white/12 px-4 py-3 shadow-2xl sm:flex">
@@ -118,7 +107,7 @@ function Hero() {
                   <span className="font-mono text-sm font-semibold">88</span>
                 </span>
                 <span className="text-xs leading-tight text-night-muted">
-                  <span className="block text-sm font-medium text-white">Балл соответствия</span>с расшифровкой по 8 признакам
+                  <span className="block text-sm font-medium text-white">Балл соответствия</span>расписан по восьми признакам
                 </span>
               </div>
             </div>
@@ -127,23 +116,23 @@ function Hero() {
 
         <dl data-hero className="mt-20 grid grid-cols-2 gap-x-6 gap-y-8 border-t border-white/10 pt-8 lg:mt-24 lg:grid-cols-4">
           {[
-            ["0,94", "доля релевантных в топ-10 подборки — против 0,43 у поиска по ключевым словам резюме"],
-            ["87 %", "итоговый грейд совпадает с истинным в симуляции, κ при пересдаче — 0,74"],
-            ["~13", "заданий в среднем: тест адаптивный и заканчивается, когда уровень ясен"],
-            ["9–10 %", "слабых кандидатов проходят тест — даже когда ответы слиты"],
+            ["94 %", "подходящих кандидатов в первой десятке подборки. Поиск по словам из резюме даёт 43 %"],
+            ["87 %", "тестов определяют грейд верно. Промах бывает максимум на один грейд"],
+            ["~13", "заданий в среднем. Тест заканчивается, когда уровень понятен"],
+            ["9–10 %", "слабых кандидатов сдают тест. Со слитыми ответами столько же"],
           ].map(([v, l]) => (
             <div key={v}>
               <dt className="sr-only">{l}</dt>
               <dd>
                 <span className="tabular block font-display text-3xl font-semibold tracking-[-0.03em] sm:text-4xl">{v}</span>
-                <span className="mt-2 block max-w-[17rem] text-sm leading-relaxed text-night-muted">{l}</span>
+                <span aria-hidden className="mt-2 block max-w-[17rem] text-sm leading-relaxed text-night-muted">{l}</span>
               </dd>
             </div>
           ))}
         </dl>
       </Container>
       <a href="#problem" className="group absolute right-6 bottom-6 hidden items-center gap-2 font-mono text-xs tracking-[0.12em] text-night-faint uppercase transition-colors hover:text-white lg:inline-flex">
-        Листайте
+        Дальше
         <ArrowDownRight className="size-4 transition-transform group-hover:translate-y-0.5" aria-hidden />
       </a>
     </section>
@@ -151,85 +140,64 @@ function Hero() {
 }
 
 const PAINS = [
-  {
-    title: "Сотни откликов — ноль сигнала",
-    text: "Резюме пишут по одним шаблонам, рекрутер ищет по ключевым словам. В нашей симуляции поиск по ключевым словам резюме даёт лишь 43 % релевантных кандидатов в первой десятке.",
-  },
-  {
-    title: "Зарплата — на третьем этапе",
-    text: "Вилку часто узнают после пары собеседований. Отказ «не сошлись по деньгам» случается в самом конце, когда время обеих сторон уже потрачено.",
-  },
-  {
-    title: "Тесты сливаются за неделю",
-    text: "Фиксированный тест живёт до первой утечки: стоит слить половину ответов — и его проходят 99,9 % слабых кандидатов.",
-  },
-  {
-    title: "Рассылки вместо предложений",
-    text: "«Посмотрите нашу вакансию» без условий и без понимания, кто перед тобой. Сильные специалисты просто перестают отвечать.",
-  },
-];
-
-const TRUST = [
-  { icon: EyeOff, title: "Анонимно до вашего «да»", text: "Компания видит категорию, навыки и результат теста — без имени, телефона и почты. Названия прошлых работодателей — только если вы разрешили." },
-  { icon: FileLock, title: "Контакты закрыты в коде", text: "Карточка для работодателя физически не содержит полей контактов. Открыть их может одна функция — и только при принятом приглашении или вашем отклике." },
-  { icon: ScrollText, title: "Журнал каждого доступа", text: "Любое обращение к контактам записывается: кто, когда и на каком основании. Не «доверьтесь нам», а проверяемый след." },
-  { icon: KeyRound, title: "Шифрование персональных данных", text: "Email, ФИО и контакты хранятся зашифрованными (XChaCha20-Poly1305), поиск по email — через keyed-хеш, без открытого текста." },
-  { icon: UserCheck, title: "Согласия и удаление", text: "Версионированные согласия с фиксацией времени. Отзыв согласия на публикацию скрывает профиль, удаление аккаунта стирает персональные данные." },
-  { icon: Server, title: "Хранение в России", text: "Серверы в РФ, требования 152-ФЗ. Криптография вынесена за интерфейсы — переход на ГОСТ не потребует менять схему данных." },
+  { title: "Резюме похожи друг на друга", text: "У всех «уверенное знание» и одинаковые списки технологий. Поиск по ключевым словам ставит в первую десятку меньше половины подходящих людей: в нашей проверке 43 %." },
+  { title: "Про деньги говорят в конце", text: "Вилку часто называют после двух созвонов. Не сошлись, и время ушло у обеих сторон." },
+  { title: "Тесты живут до первой утечки", text: "Слейте половину ответов к тесту с одинаковыми вопросами, и его сдадут 99,9 % тех, кто до уровня не дотягивает." },
+  { title: "Письма без условий", text: "«Посмотрите нашу вакансию», и больше ничего. После десятка таких писем сильный кандидат перестаёт их открывать." },
 ];
 
 const SCENARIOS = [
   {
     tag: "Кандидат",
-    title: "Middle-бэкендер, который устал откликаться",
+    title: "Middle-бэкендер, которому надоело откликаться",
     steps: [
-      "Отмечает в опросе Go, PostgreSQL и Kafka, заявляет Middle",
-      "Проходит адаптивный тест; сдал уверенно — система сразу предлагает дотест на Senior",
-      "Получает приглашения с вилкой и форматом, неподходящие отклоняет в один клик — причина уходит компании анонимно",
-      "Принимает одно — и только эта компания видит его контакты",
+      "Отмечает в опросе Go, PostgreSQL и Kafka и выбирает Middle.",
+      "Сдаёт тест с запасом. Сервис сразу предлагает попробовать Senior.",
+      "Получает приглашения с вилкой. Два отклоняет с причиной «зарплата», компании это увидят.",
+      "Принимает третье. Контакты получает только эта компания.",
     ],
   },
   {
     tag: "Работодатель",
-    title: "Тимлид, которому нужен Go-разработчик к релизу",
+    title: "Тимлид ищет Go-разработчика к релизу",
     steps: [
-      "Вставляет текст вакансии — система распознаёт Middle, Go, PostgreSQL, Kafka и вилку",
-      "Смотрит рекомендованные категории: сколько кандидатов, медианные ожидания, покрытие стека",
-      "Уточняет фильтры — подборка не теряется, закреплённые кандидаты остаются на месте",
-      "Отправляет пять приглашений с вилкой и видит воронку и причины отказов",
+      "Вставляет текст вакансии. Сервис находит в нём Middle, Go, PostgreSQL, Kafka и вилку.",
+      "Смотрит категории: сколько там людей и сколько они просят.",
+      "Сужает фильтры. Закреплённые кандидаты остаются в подборке.",
+      "Отправляет пять приглашений и через пару дней видит, кто ответил и почему отказал.",
     ],
   },
   {
     tag: "Участник ФСП",
-    title: "Студент — призёр соревнований по программированию",
+    title: "Студент, призёр соревнований по программированию",
     steps: [
-      "Привязывает ФСП ID: разряд и призовые места подтягиваются из реестра Федерации",
-      "Сдаёт тест на Junior — навыки из решённых заданий отмечены «подтверждён тестом»",
-      "Внутри категории стоит выше сверстников с тем же результатом, но без достижений",
-      "Решает регулярные задания от компаний — профиль остаётся «свежим» в подборках",
+      "Привязывает ФСП ID. Разряд и призовые места появляются в профиле.",
+      "Сдаёт тест на Junior, навыки из решённых заданий помечены как подтверждённые.",
+      "В подборке стоит выше тех, у кого такой же результат теста, но нет достижений.",
+      "Решает короткие задания от компаний, чтобы профиль не выпадал из свежих.",
     ],
   },
 ];
 
 const FAQ: FaqItem[] = [
-  { q: "Почему категорию даёт тест, а не резюме?", a: "Резюме описывает, как человек себя видит; тест измеряет, что он умеет. Резюме и опрос влияют только на вторичные признаки — стек и ожидания, — но никогда не определяют категорию «специализация × грейд»." },
-  { q: "Сколько длится тест?", a: "От 8 до 20 заданий, в среднем около 13. На каждое задание — лимит от 60 до 180 секунд; просроченный ответ засчитывается как неверный. Тест останавливается, как только уровень определён с нужной уверенностью." },
-  { q: "Что будет, если я не сдам?", a: "Можно сразу пройти тест на грейд ниже. Повтор того же или более высокого грейда — через 30 дней, чтобы тест нельзя было перебирать. Не сдали Junior — пересдача через 30 дней." },
-  { q: "Как поднять грейд?", a: "Если сдали уверенно, система сразу один раз предложит дотест на грейд выше. После присвоения грейд меняется не чаще раза в 90 дней, а неудачная попытка повышения текущий грейд не понижает." },
-  { q: "А если задания утекут в интернет?", a: "Ничего не сломается: следующий кандидат получит другие числа, код и ответы. Слитый шаблон учит решать класс задач — то есть ровно тому навыку, который мы и измеряем." },
-  { q: "Кто увидит мои контакты?", a: "Только компания, чьё приглашение вы приняли, или та, на чью вакансию вы откликнулись сами. Каждый доступ к контактам записывается в журнал." },
-  { q: "У меня нет достижений ФСП. Это минус?", a: "Нет. Без истории ФСП скор равен нулю, а не штрафу: в карточке нейтральное «Нет данных ФСП», и это никогда не попадает в список пробелов." },
-  { q: "Почему компания не может написать всем сразу?", a: "Квота — не больше 30 приглашений за 7 дней и одно действующее приглашение на пару «компания–кандидат». Приглашение живёт 14 дней. Так предложения остаются точечными, а кандидаты не тонут в спаме." },
-  { q: "Классические вакансии остались?", a: "Да. Можно откликнуться на опубликованную вакансию — в этом случае контакты открываются по вашему отклику. Но основной путь — приглашения от работодателей." },
+  { q: "Почему категорию даёт тест, а резюме не учитывается?", a: "Резюме учитывается, но для другого: из него берутся стек и ожидания. Категорию «специализация × грейд» присваивает только сданный тест, потому что написать «Senior» в резюме может каждый." },
+  { q: "Сколько длится тест?", a: "8–20 заданий, обычно 10–25 минут. На одно задание отводится от одной до трёх минут. Если время вышло, ответ считается неверным." },
+  { q: "Что будет, если не сдать?", a: "Можно сразу пройти тест на грейд ниже. Тот же или более высокий грейд можно пересдать через 30 дней. Если не получился Junior, следующая попытка тоже через 30 дней." },
+  { q: "Как поднять грейд?", a: "Если сдали с запасом, сервис сразу предложит один дополнительный тест на грейд выше. Потом грейд меняется не чаще раза в 90 дней. Неудачная попытка повышения текущий грейд не снижает." },
+  { q: "Задания же утекут в интернет?", a: "Пусть. Следующий кандидат получит другие числа, другой код и другой правильный ответ. Если кто-то разобрался, как решать такой тип задач, значит, он стал сильнее." },
+  { q: "Кто увидит мои контакты?", a: "Компания, чьё приглашение вы приняли, или та, на чью вакансию вы откликнулись сами. Каждый просмотр контактов записывается." },
+  { q: "У меня нет достижений ФСП, я в минусе?", a: "Нет. Без истории ФСП вы получаете ноль баллов за этот признак, штрафа нет. В карточке будет нейтральное «Нет данных ФСП»." },
+  { q: "Почему компания не может написать всем сразу?", a: "У каждой компании 30 приглашений в неделю и только одно действующее приглашение одному человеку. Приходится выбирать, поэтому до вас доходят письма, которые кто-то действительно отобрал." },
+  { q: "Вакансии с откликами остались?", a: "Остались. На опубликованную вакансию можно откликнуться, тогда контакты откроются по вашему отклику. Но основная механика здесь — приглашения." },
 ];
 
 export default function HomePage() {
   return (
-    <MotionRoot>
+    <MotionRoot variant="rise">
       <Hero />
 
       <div className="border-b border-line bg-canvas py-10 sm:py-14">
-        <p className="eyebrow mb-7 text-center text-ink-subtle">6 специализаций · 83 навыка · 491 синоним — «кубер» и «постгрес» тоже понимаем</p>
+        <p className="eyebrow mb-7 px-4 text-center text-ink-subtle">6 специализаций, 83 навыка и 491 синоним. «Кубер» и «постгрес» тоже узнаём</p>
         <Marquee items={STACK_A.map((s) => <StackChip key={s}>{s}</StackChip>)} label="Технологии в тестах и подборе" />
         <Marquee items={STACK_B.map((s, i) => <StackChip key={s} accent={i === 5}>{s}</StackChip>)} reverse duration={52} className="mt-4" />
       </div>
@@ -237,13 +205,13 @@ export default function HomePage() {
       <Section id="problem">
         <Container>
           <SectionHead
-            eyebrow="Проблема"
+            eyebrow="Как обычно"
             title={
               <>
-                Обычный найм — лотерея <span className="text-gradient">с обеих сторон</span>
+                Сто откликов, два ответа и <span className="text-gradient">вилка на третьем собеседовании</span>
               </>
             }
-            lead="Кандидат отправляет отклики в пустоту, компания разбирает сотни одинаковых резюме, а самое важное — уровень и деньги — выясняется последним."
+            lead="Кандидат рассылает резюме, рекрутер листает похожие. Уровень и деньги обсуждают в самом конце, хотя именно из-за них разговор чаще всего и срывается."
           />
           <ol data-stagger className="mt-16 grid grid-cols-1 gap-px overflow-hidden rounded-panel border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
             {PAINS.map((p, i) => (
@@ -258,17 +226,17 @@ export default function HomePage() {
           <div className="mt-28 lg:mt-36">
             <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_1fr] lg:items-end lg:gap-16">
               <div>
-                <Kicker index="→">Решение</Kicker>
+                <Kicker index="→">У нас</Kicker>
                 <h2 data-split className="display-2c mt-5 text-balance text-ink">
-                  Мы перевернули схему. Буквально.
+                  Мы поменяли порядок шагов
                 </h2>
               </div>
               <div data-reveal>
                 <p className="text-lg leading-relaxed text-ink-muted">
-                  Уровень подтверждается до того, как кто-то кому-то напишет. Поэтому разговор начинается не с «расскажите о себе», а с конкретной задачи и конкретных денег.
+                  Сначала тест, потом знакомство. Компания пишет, когда уже знает ваш уровень, поэтому первое сообщение начинается с задачи и зарплаты.
                 </p>
                 <div className="mt-6">
-                  <TextLink href="/how-it-works">Как устроены тест и подбор</TextLink>
+                  <TextLink href="#how">Как устроен тест</TextLink>
                 </div>
               </div>
             </div>
@@ -279,26 +247,99 @@ export default function HomePage() {
         </Container>
       </Section>
 
+      <Section tone="canvas" className="overflow-hidden">
+        <Container>
+          <ManifestoScrub eyebrow="Зачем всё это">
+            Хороший разработчик не должен доказывать свой уровень в каждом отклике заново. Он <span className="text-primary">сдаёт один тест</span>, а дальше компании приходят сами, с задачей и суммой. Неподходящее предложение отклоняется одной кнопкой, и компания узнаёт причину.
+          </ManifestoScrub>
+        </Container>
+      </Section>
+
       <Journey />
+
+      <Section id="how" className="scroll-mt-20">
+        <Container>
+          <SectionHead
+            eyebrow="Как устроен тест"
+            title="Тест подстраивается под ответы"
+            lead="После верного ответа следующее задание сложнее, после ошибки проще. Поэтому хватает 8–20 заданий, обычно это 10–25 минут."
+          />
+          <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-[1.05fr_0.95fr] lg:items-center lg:gap-16">
+            <div data-reveal="scale">
+              <LevelFinder />
+            </div>
+            <ul data-stagger className="space-y-6">
+              {[
+                ["На задание от одной до трёх минут", "Загуглить ответ не успеете, подумать успеете."],
+                ["Стек влияет на темы", "Пишете на Go, значит, будет больше заданий про Go. Планка для Middle при этом у всех одинаковая."],
+                ["Грейд определяется верно в 87 % случаев", "Если тест ошибается, то максимум на один грейд, и обычно у самой границы."],
+                ["Результат повторяется", "Пересдача другими заданиями дала тот же грейд в 81 % случаев."],
+                ["Есть второй шанс", "Не сдали, сразу пробуйте грейд ниже. Сдали с запасом, предложим грейд выше."],
+              ].map(([t, d]) => (
+                <li key={t} className="border-t border-line pt-5">
+                  <p className="text-lg font-semibold tracking-tight text-ink">{t}</p>
+                  <p className="mt-1.5 text-[15px] leading-relaxed text-ink-muted">{d}</p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </Container>
+      </Section>
+
+      <Section id="leaks" tone="night" className="overflow-hidden">
+        <div aria-hidden className="pointer-events-none absolute top-1/4 -right-48 size-[40rem] rounded-full bg-primary/25 blur-[150px]" />
+        <Container className="relative">
+          <SectionHead
+            tone="night"
+            eyebrow="Утечки"
+            title="Слитые ответы здесь не помогут"
+            lead="Тема и сложность у всех одинаковые, а числа, код и данные у каждого свои. Правильный ответ считается отдельно для каждого варианта, так что выучить его заранее не выйдет."
+          />
+          <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
+            <div data-reveal>
+              <LeakDemo />
+            </div>
+            <div data-reveal="scale">
+              <LeakChart />
+              <p className="mt-4 text-sm leading-relaxed text-night-muted">
+                Моделирование: кандидаты слабее Middle сдают тест на Middle. У них на руках все варианты из 600 предыдущих попыток, около 42 тысяч. Совпадает примерно одно задание из двух-пяти тысяч.
+              </p>
+            </div>
+          </div>
+          <div data-stagger className="mt-16 grid grid-cols-1 gap-px overflow-hidden rounded-[24px] border border-night-line bg-night-line sm:grid-cols-3">
+            {[
+              { icon: Shuffle, title: "62 типа заданий", text: "В шести специализациях. Из 2000 случайных вариантов одного задания не меньше 1961 отличаются друг от друга." },
+              { icon: Scale, title: "Сложность выровнена", text: "Варианты одного задания одинаково трудные, поэтому результаты разных людей можно сравнивать." },
+              { icon: ShieldAlert, title: "Странные ответы видно", text: "Решил трудные и провалил лёгкие? Такой результат уходит на перепроверку." },
+            ].map(({ icon: Icon, title, text }) => (
+              <div key={title} className="bg-night-raised p-7">
+                <Icon className="size-6 text-primary-300" aria-hidden />
+                <p className="mt-6 text-xl font-semibold tracking-tight">{title}</p>
+                <p className="mt-2 text-[15px] leading-relaxed text-night-muted">{text}</p>
+              </div>
+            ))}
+          </div>
+        </Container>
+      </Section>
 
       <Section id="card" tone="canvas" className="overflow-hidden">
         <BrandLine className="pointer-events-none absolute top-16 left-0 w-full text-primary-200" variant={2} />
         <Container className="relative">
           <div className="grid grid-cols-1 items-start gap-14 lg:grid-cols-[0.85fr_1.15fr] lg:gap-16">
             <div className="lg:sticky lg:top-32">
-              <Eyebrow>Для работодателя</Eyebrow>
+              <Eyebrow>Что видит работодатель</Eyebrow>
               <h2 data-split className="display-2c mt-5 text-balance text-ink">
-                Карточка без имени. Балл — с расшифровкой.
+                Балл и то, из чего он сложился
               </h2>
               <p data-reveal className="mt-6 text-lg leading-relaxed text-ink-muted">
-                Компания видит то, что важно для решения: категорию, силу результата теста, навыки с источником подтверждения и достижения ФСП. Каждый балл 0–100 раскладывается на восемь признаков — веса подобраны на валидации.
+                Карточка без имени и контактов: категория, результат теста, навыки с пометкой, откуда о них известно, и достижения ФСП. Балл от 0 до 100 раскладывается на восемь признаков.
               </p>
               <ul data-stagger className="mt-8 space-y-4">
                 {[
-                  "Источник навыка имеет вес: тест и ФСП — 1,0, резюме — 0,7, «просто заявлен» — 0,5",
-                  "Пробелы показываются честно, близкие навыки тоже: «вместо PostgreSQL — MySQL»",
-                  "Отсутствие ФСП никогда не попадает в пробелы — это ноль, а не минус",
-                  "Подбор 10 000 кандидатов с объяснением топ-20 — около 0,3 мс",
+                  "Навык из теста или ФСП весит вдвое больше заявленного на словах. Навык из резюме где-то посередине.",
+                  "Пробелы видны сразу, вместе с близкими заменами вроде «вместо PostgreSQL есть MySQL».",
+                  "Нет истории ФСП? Ноль баллов за этот признак, и в пробелы он не попадает.",
+                  "Подборку можно уточнять, закреплённые кандидаты из неё не пропадут.",
                 ].map((t) => (
                   <li key={t} className="flex gap-3 text-ink">
                     <span className="mt-1 flex size-5 shrink-0 items-center justify-center rounded-full bg-primary text-white" aria-hidden>
@@ -316,62 +357,25 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      <Section id="test" tone="night" className="overflow-hidden">
-        <div aria-hidden className="pointer-events-none absolute top-1/4 -right-48 size-[40rem] rounded-full bg-primary/25 blur-[150px]" />
-        <Container className="relative">
-          <SectionHead
-            tone="night"
-            eyebrow="Тестирование"
-            title="Тест, который бесполезно сливать"
-            lead="Каждое задание — параметрический шаблон. Кандидаты получают одну тему и одну сложность, но разные числа, код и данные. Правильный ответ не хранится: его вычисляет генератор — мини-симулятор event loop, расчёт подсети, SQL на сгенерированной таблице."
-          />
-          <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start">
-            <div data-reveal>
-              <LeakDemo />
-            </div>
-            <div data-reveal="scale">
-              <LeakChart />
-              <p className="mt-4 text-sm leading-relaxed text-night-muted">
-                Симуляция: слабые кандидаты (θ от −0,9 до −0,1) сдают тест на Middle. Для нашего теста «утечка» — база из ~42 тыс. экземпляров, показанных в 600 предыдущих сессиях; совпадения случаются в 0,02–0,05 % заданий.
-              </p>
-            </div>
-          </div>
-          <div data-stagger className="mt-16 grid grid-cols-1 gap-px overflow-hidden rounded-[24px] border border-night-line bg-night-line sm:grid-cols-3">
-            {[
-              { icon: Shuffle, title: "62 шаблона", text: "52 вычислительных генератора и 10 вариативных пулов. Каждый уровень даёт ≥ 1961 различимый экземпляр на 2000 seed." },
-              { icon: Banknote, title: "Одна шкала", text: "Шаблоны откалиброваны по IRT (3PL), поэтому разные задания дают сравнимый результат у всех кандидатов." },
-              { icon: BellOff, title: "Защита от перебора", text: "Лимит времени на задание и контроль person-fit: «верно на трудных, неверно на лёгких» помечается для проверки." },
-            ].map(({ icon: Icon, title, text }) => (
-              <div key={title} className="bg-night-raised p-7">
-                <Icon className="size-6 text-primary-300" aria-hidden />
-                <p className="mt-6 text-xl font-semibold tracking-tight">{title}</p>
-                <p className="mt-2 text-[15px] leading-relaxed text-night-muted">{text}</p>
-              </div>
-            ))}
-          </div>
-        </Container>
-      </Section>
-
       <Section id="numbers">
         <Container>
           <SectionHead
-            eyebrow="Метрики"
-            title="Цифры, за которые мы отвечаем"
-            lead="Не «AI-подбор», а измеримое качество: собственная процедура валидации вызывает те же модули, что и боевой API, и пишет отчёты в репозиторий."
-            aside={<TextLink href="/how-it-works#validation">Методика валидации</TextLink>}
+            eyebrow="Проверка"
+            title="Что показала проверка на 2 400 профилях"
+            lead="Мы собрали профили, у которых заранее известен настоящий уровень, и прогнали их через те же тест и подбор, что работают в кабинетах."
           />
           <div data-stagger="0.06" className="mt-16 grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
-            <Fact value="62" counter={62} label="параметрических шаблона заданий в шести специализациях" />
-            <Fact value="0,94" counter={0.94} decimals={2} label="доля релевантных в топ-10 подборки против 0,43 у поиска по ключевым словам" />
-            <Fact value="87" counter={87} suffix="%" label="итоговый грейд совпадает с истинным в симуляции на 2 400 профилях" />
-            <Fact value="0,74" counter={0.74} decimals={2} label="κ Коэна при пересдаче другими заданиями — результат воспроизводим" />
-            <Fact value="13" counter={13} prefix="~" label="заданий в среднем; минимум 8, максимум 20" />
-            <Fact value="30" counter={30} suffix="/ нед" label="приглашений на компанию — потолок, чтобы предложения оставались точечными" />
-            <Fact value="14" counter={14} suffix="дней" label="живёт приглашение; одно действующее на пару «компания–кандидат»" />
-            <Fact value="0,3" counter={0.3} decimals={1} suffix="мс" label="на подбор по 10 000 кандидатов с объяснением топ-20" />
+            <Fact value="94" counter={94} suffix="%" label="подходящих кандидатов в первой десятке подборки. У поиска по словам из резюме 43 %" />
+            <Fact value="87" counter={87} suffix="%" label="тестов определили грейд верно. Остальные ошиблись не больше чем на один грейд" />
+            <Fact value="81" counter={81} suffix="%" label="пересдач другими заданиями дали тот же грейд" />
+            <Fact value="9–10" suffix="%" label="кандидатов слабее уровня сдают тест. Слитые ответы эту долю не меняют" />
+            <Fact value="13" counter={13} prefix="~" label="заданий в среднем, от 8 до 20" />
+            <Fact value="62" counter={62} label="типа заданий в шести специализациях" />
+            <Fact value="30" counter={30} suffix="в неделю" label="приглашений может отправить одна компания" />
+            <Fact value="14" counter={14} suffix="дней" label="есть у кандидата, чтобы ответить на приглашение" />
           </div>
           <p data-reveal className="mt-14 max-w-3xl text-sm leading-relaxed text-ink-subtle">
-            Метрики подбора и тестирования получены на синтетических данных со скрытой «истиной» — абсолютные значения описывают поведение системы в заданных предпосылках. Следующий шаг — экспертная разметка реальных вакансий партнёров ФСП и пилот на участниках соревнований.
+            Профили синтетические, поэтому цифры описывают поведение сервиса, а не рынок. Следующий шаг: проверить подборку на реальных вакансиях партнёров ФСП, а тест на участниках соревнований.
           </p>
         </Container>
       </Section>
@@ -382,17 +386,17 @@ export default function HomePage() {
             <div>
               <Eyebrow>Федерация спортивного программирования</Eyebrow>
               <h2 data-split className="display-2c mt-5 text-balance text-ink">
-                Разряд и призовые места — в плюс. Их отсутствие — не в минус.
+                Разряды и призовые места поднимают вас в подборке
               </h2>
               <p data-reveal className="mt-6 text-lg leading-relaxed text-ink-muted">
-                Привяжите ФСП ID — и достижения из реестра Федерации подтянутся в профиль сами. Они поднимают вас внутри категории, но не заменяют тест: вес ФСП в подборе — не больше 10 баллов из 100.
+                Привяжите ФСП ID, и достижения из реестра Федерации появятся в профиле. Тест они не заменяют: за ФСП можно получить до 10 баллов из 100. Если истории ФСП нет, это ноль баллов без штрафа.
               </p>
               <dl data-stagger className="mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2">
                 {[
-                  ["Вход через ФСП ID", "OpenID Connect с PKCE на Keycloak — пароль от ФСП мы не видим"],
-                  ["Шесть дисциплин", "алгоритмическое, продуктовое, ИБ, ИИ, робототехника, БАС"],
-                  ["Свежесть важна", "вклад достижения полураспадается за 2 года"],
-                  ["Под вашим контролем", "ФСП-данные можно скрыть — тогда они не участвуют и в ранжировании"],
+                  ["Вход через ФСП ID", "Пароль остаётся у ФСП, мы его не видим."],
+                  ["Шесть дисциплин", "Алгоритмы, продуктовое программирование, ИБ, ИИ, робототехника и БАС."],
+                  ["Свежие весят больше", "Вклад достижения уменьшается вдвое каждые два года."],
+                  ["Можно скрыть", "Скрытые достижения не видны компаниям и не влияют на подборку."],
                 ].map(([t, d]) => (
                   <div key={t} className="border-t border-line-strong pt-4">
                     <dt className="font-semibold text-ink">{t}</dt>
@@ -413,23 +417,19 @@ export default function HomePage() {
         </Container>
       </Section>
 
-      <Section id="trust">
-        <Container>
-          <SectionHead
-            eyebrow="Доверие и данные"
-            title="Контакты — только после вашего «да»"
-            lead="Приватность здесь — не галочка в настройках, а свойство системы: то, чего компания не должна видеть, отсутствует в её данных."
-            aside={<TextLink href="/security">Безопасность и 152-ФЗ</TextLink>}
-          />
-          <div data-stagger="0.07" className="mt-16 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {TRUST.map(({ icon: Icon, title, text }) => (
-              <div key={title} className="group relative overflow-hidden rounded-[22px] border border-line bg-white p-7 transition-colors hover:border-primary-200">
-                <div aria-hidden className="absolute -top-16 -right-16 size-40 rounded-full bg-primary-50 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
-                <span className="relative flex size-12 items-center justify-center rounded-2xl bg-ink text-white">
-                  <Icon className="size-5" aria-hidden />
-                </span>
-                <h3 className="relative mt-8 text-xl font-semibold tracking-tight text-ink">{title}</h3>
-                <p className="relative mt-2.5 text-[15px] leading-relaxed text-ink-muted">{text}</p>
+      <Section id="privacy" tone="night" className="overflow-hidden">
+        <div aria-hidden className="pointer-events-none absolute -bottom-40 left-1/4 size-[36rem] rounded-full bg-primary/25 blur-[150px]" />
+        <Container className="relative">
+          <SectionHead tone="night" eyebrow="Приватность" title="Контакты видны только после «Принять»" aside={<TextLink href="/candidates#privacy" tone="night">Подробнее о приватности</TextLink>} />
+          <div data-stagger className="mt-14 grid grid-cols-1 gap-4 md:grid-cols-3">
+            {[
+              { icon: EyeOff, text: "Компания не видит ваше имя и контакты, пока вы не приняли её приглашение." },
+              { icon: ScrollText, text: "Каждый просмотр ваших контактов записывается: какая компания и когда." },
+              { icon: UserX, text: "Удалите аккаунт, и персональные данные сотрутся." },
+            ].map(({ icon: Icon, text }) => (
+              <div key={text} className="rounded-[22px] border border-night-line bg-night-raised p-7">
+                <Icon className="size-6 text-primary-300" aria-hidden />
+                <p className="mt-8 text-lg leading-snug font-medium">{text}</p>
               </div>
             ))}
           </div>
@@ -438,7 +438,7 @@ export default function HomePage() {
 
       <Section id="scenarios" tone="canvas">
         <Container>
-          <SectionHead eyebrow="Сценарии" title="Как это выглядит в жизни" lead="Три типичных пути через платформу — без выдуманных отзывов, только то, что происходит на каждом шаге." />
+          <SectionHead eyebrow="Сценарии" title="Три типичных пути" lead="Люди собирательные, шаги настоящие." />
           <div data-stagger="0.1" className="mt-16 grid grid-cols-1 gap-5 lg:grid-cols-3">
             {SCENARIOS.map((s) => (
               <article key={s.title} className="flex flex-col rounded-[24px] border border-line bg-white p-7 sm:p-8">
@@ -463,10 +463,10 @@ export default function HomePage() {
           <div className="lg:sticky lg:top-32 lg:self-start">
             <Eyebrow>FAQ</Eyebrow>
             <h2 data-split className="display-2 mt-5 text-ink">
-              Частые вопросы
+              Вопросы и ответы
             </h2>
             <p data-reveal className="mt-6 text-lg leading-relaxed text-ink-muted">
-              Не нашли ответ? Подробности о тесте, подборе и данных — в разделах для кандидатов, работодателей и в описании устройства платформы.
+              Подробнее про тест, приглашения и контакты рассказываем в разделах для кандидатов и работодателей.
             </p>
           </div>
           <div data-reveal>
@@ -487,19 +487,19 @@ function FinalCta() {
       <BrandLine className="pointer-events-none absolute bottom-10 left-0 w-full text-primary-400/40" variant={3} />
       <Container className="relative">
         <h2 data-split className="display-1 mx-auto max-w-[16ch] text-center text-balance">
-          Хватит откликаться. <span className="text-gradient-night">Пусть откликаются на вас.</span>
+          Тест ждёт. <span className="text-gradient-night">Компании тоже.</span>
         </h2>
-        <div data-stagger="0.12" className="mx-auto mt-16 grid grid-cols-1 max-w-5xl gap-5 md:grid-cols-2">
+        <div data-stagger="0.12" className="mx-auto mt-16 grid max-w-5xl grid-cols-1 gap-5 md:grid-cols-2">
           {[
             {
               title: "Я ищу работу",
-              items: ["Тест один раз — категория на все приглашения", "Вилка видна до начала разговора", "Контакты — только после вашего согласия"],
+              items: ["Тест сдаётся один раз и работает на все приглашения", "Зарплату видно до разговора", "Контакты открываете только вы, кнопкой «Принять»"],
               href: "/register?role=candidate",
               cta: "Пройти тест",
             },
             {
               title: "Я нанимаю",
-              items: ["Потребность текстом — система распознает стек и вилку", "Подборка из подтверждённых категорий с объяснением", "Воронка и причины отказов по каждому приглашению"],
+              items: ["Вставьте текст вакансии, стек и вилку сервис найдёт сам", "В подборке только те, кто сдал тест", "Причины отказов видны по каждому приглашению"],
               href: "/register?role=employer",
               cta: "Начать подбор",
             },

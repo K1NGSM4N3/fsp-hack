@@ -81,7 +81,7 @@ const PROFILES: Profile[] = [
     fsp: null,
     features: [30.8, 15, 5.2, 0, 3.2, 7, 4.8, 1.8],
     reasons: ["Обязательные навыки Go и Kafka подтверждены тестом", "Ожидания внутри вилки", "Профиль актуален: активность вчера"],
-    gaps: ["Вместо PostgreSQL — близкий навык MySQL", "Навык Docker только заявлен"],
+    gaps: ["Вместо PostgreSQL близкий навык MySQL", "Навык Docker только заявлен"],
   },
   {
     tab: "Грейд выше запроса",
@@ -101,7 +101,7 @@ const PROFILES: Profile[] = [
     fsp: "Призёр всероссийских соревнований по алгоритмическому программированию, 2022",
     features: [36.6, 9, 9.4, 3.1, 8, 3, 4.1, 2.9],
     reasons: ["Все обязательные навыки, 2 подтверждены тестом", "Желательный Kubernetes подтверждён тестом", "Результат теста выше 94 % диапазона грейда Senior"],
-    gaps: ["Грейд Senior — на ступень выше запроса", "Ожидания выше вилки на 17 %"],
+    gaps: ["Грейд Senior, на ступень выше запроса", "Ожидания выше вилки на 17 %"],
   },
 ];
 
@@ -263,7 +263,7 @@ export function ScoreDemo() {
             ))}
             <li data-line className="flex items-start gap-2.5 pt-1 text-ink-muted">
               <Trophy className={cn("mt-0.5 size-4.5 shrink-0", p.fsp ? "text-primary" : "text-ink-faint")} aria-hidden />
-              <span>{p.fsp ?? "Нет данных ФСП — нейтрально, не штраф"}</span>
+              <span>{p.fsp ?? "Нет данных ФСП. Это не штраф"}</span>
             </li>
           </ul>
           <div>

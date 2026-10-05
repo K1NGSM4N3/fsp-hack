@@ -1,69 +1,71 @@
-import { CloudOff, EyeOff, Link2, Link2Off, Scale, Trophy, UserRound } from "lucide-react";
+import { CloudOff, Link2Off, Trophy, UserRound } from "lucide-react";
 import type { Metadata } from "next";
 import { MotionRoot } from "@/components/motion/MotionRoot";
-import { CtaBand, FeatureGrid, Note, PageHero, SpecList, SplitHeading } from "@/components/site/blocks";
+import { CtaBand, FeatureGrid, PageHero, SpecList, SplitHeading } from "@/components/site/blocks";
 import { Faq } from "@/components/site/Faq";
-import { FspScore } from "@/components/site/FspScore";
+import { AchievementPath } from "@/components/site/fsp/AchievementPath";
+import { DecayCurve } from "@/components/site/fsp/DecayCurve";
+import { MedalDrop } from "@/components/site/fsp/MedalDrop";
+import { RankClimb } from "@/components/site/fsp/RankClimb";
 import { PageTabs } from "@/components/site/PageTabs";
 import { Container, Cta, Section } from "@/components/site/primitives";
-import { FspFlow } from "@/components/site/visuals";
 
 export const metadata: Metadata = {
   title: "Участникам ФСП",
-  description: "Привязка ФСП ID, учёт разрядов и призовых мест в подборе и нейтральное отношение к кандидатам без истории ФСП.",
+  description: "Привяжите ФСП ID: разряды и призовые места из реестра Федерации появятся в профиле и поднимут вас в подборке.",
 };
 
-const DISCIPLINES = ["Алгоритмическое программирование", "Продуктовое программирование", "Программирование систем информационной безопасности", "Программирование систем ИИ", "Программирование робототехники", "Программирование БАС"];
+const DISCIPLINES = ["Алгоритмическое программирование", "Продуктовое программирование", "Программирование систем ИБ", "Программирование систем ИИ", "Программирование робототехники", "Программирование БАС"];
 
 export default function FspPage() {
   return (
-    <MotionRoot>
+    <MotionRoot variant="blur">
       <PageHero
         crumb="Участникам ФСП"
         title={
           <>
-            Ваши разряды <span className="text-gradient">наконец-то работают</span> на карьеру
+            Разряд ФСП теперь видят <span className="text-gradient">и работодатели</span>
           </>
         }
-        lead="Спортивное программирование — это дедлайны, команда и задачи без готового ответа. Привяжите ФСП ID, и достижения из реестра Федерации поднимут вас внутри категории. А если истории ФСП нет — вы ничего не теряете."
+        lead="Привяжите ФСП ID, и разряды, призовые места и командные результаты из реестра Федерации появятся в профиле. Они поднимают вас среди кандидатов с похожим результатом теста. Если истории ФСП нет, вы ничего не теряете."
         actions={
           <>
             <Cta href="/register?role=candidate">Создать профиль</Cta>
-            <Cta href="/login?next=/candidate/settings" variant="outline">
+            <Cta href="/candidate/settings" variant="outline">
               Привязать ФСП ID
             </Cta>
           </>
         }
-        visual={<FspFlow />}
+        visual={<MedalDrop />}
         facts={[
-          { value: "6", label: "дисциплин спортивного программирования учитываются" },
-          { value: "≤ 10", label: "баллов из 100 — вес ФСП в подборе, тест важнее" },
-          { value: "2 года", label: "период полураспада вклада достижения" },
-          { value: "0", label: "штрафа за отсутствие истории ФСП" },
+          { value: "6", label: "дисциплин спортивного программирования" },
+          { value: "до 10", label: "баллов из 100 в подборке дают достижения" },
+          { value: "2 года", label: "и вклад достижения уменьшается вдвое" },
+          { value: "0", label: "штрафа, если истории ФСП нет" },
         ]}
       />
       <PageTabs
         items={[
           { id: "link", label: "Привязка" },
-          { id: "data", label: "Какие данные" },
-          { id: "score", label: "ФСП-скор" },
+          { id: "data", label: "Что учитываем" },
+          { id: "rank", label: "Место в подборке" },
+          { id: "decay", label: "Свежесть" },
           { id: "neutral", label: "Без истории" },
-          { id: "control", label: "Контроль" },
           { id: "faq", label: "Вопросы" },
         ]}
       />
 
       <Section id="link" className="scroll-mt-16">
         <Container>
-          <SplitHeading eyebrow="Привязка" title="Вход через ФСП ID — и достижения уже в профиле">
-            Привязка работает по стандартному OpenID Connect: ваш пароль от ФСП ID остаётся у ФСП, мы получаем только подписанный идентификатор участника.
+          <SplitHeading eyebrow="Привязка" title="Войдите через ФСП ID, достижения подтянутся сами">
+            Кнопка в настройках кабинета открывает вход ФСП ID. Пароль вы вводите на стороне ФСП, мы его не видим.
           </SplitHeading>
           <FeatureGrid
             className="mt-14"
             items={[
-              { icon: Link2, title: "OIDC + PKCE", text: "Клиент с обязательным PKCE S256, проверкой state и nonce. Обмен кода на токен — по обратному каналу, подпись проверяется по JWKS." },
-              { icon: UserRound, title: "Один ФСП ID — один профиль", text: "Достижения нельзя «одолжить»: ФСП ID привязывается только к одному профилю кандидата." },
-              { icon: CloudOff, title: "Реестр недоступен?", text: "Привязка сохраняется, синхронизация достижений повторится позже автоматически." },
+              { icon: UserRound, title: "Один ФСП ID на профиль", text: "Одолжить достижения у друга не получится: ФСП ID привязывается только к одному кандидату." },
+              { icon: CloudOff, title: "Если реестр молчит", text: "Привязка всё равно сохранится, а достижения подтянутся, когда реестр ответит." },
+              { icon: Link2Off, title: "Отвязать можно в любой момент", text: "Вместе с отвязкой из профиля пропадают и достижения." },
             ]}
           />
         </Container>
@@ -71,22 +73,21 @@ export default function FspPage() {
 
       <Section id="data" tone="canvas" className="scroll-mt-16">
         <Container>
-          <SplitHeading eyebrow="Данные из реестра" title="Что именно мы получаем">
-            Только спортивные достижения — то, что относится к профессиональному уровню. Каждое попадает в снимок профиля со ссылкой на протокол.
+          <SplitHeading eyebrow="Что учитываем" title="В профиль попадают спортивные достижения">
+            Разряды и результаты соревнований, у каждого есть ссылка на протокол. Больше ничего из реестра мы не берём.
           </SplitHeading>
-          <div className="mt-14 grid grid-cols-1 gap-10 lg:grid-cols-[1.2fr_0.8fr] lg:gap-16">
-            <SpecList
-              rows={[
-                ["Тип", "Разряд или соревнование"],
-                ["Разряд", "Юношеский, III, II, I, КМС, МС — учитывается только высший в дисциплине"],
-                ["Уровень соревнования", "Региональное, межрегиональное, всероссийское, международное"],
-                ["Место", "1–3, финалист, участник"],
-                ["Команда и роль", "Название команды и ваша роль в ней"],
-                ["Дата и протокол", "Когда получено и ссылка на протокол соревнования"],
-              ]}
-            />
+          <div className="mt-14 grid grid-cols-1 gap-12 lg:grid-cols-[1fr_1fr] lg:gap-16">
+            <AchievementPath />
             <div>
-              <p data-reveal className="eyebrow text-ink-subtle">
+              <SpecList
+                rows={[
+                  ["Разряд", "Юношеский, III, II, I, КМС или МС. В каждой дисциплине считается только самый высокий"],
+                  ["Соревнования", "Региональные, межрегиональные, всероссийские, международные"],
+                  ["Место", "1–3, финалист или участник"],
+                  ["Команда", "Название команды и ваша роль в ней"],
+                ]}
+              />
+              <p data-reveal className="mt-10 eyebrow text-ink-subtle">
                 Дисциплины
               </p>
               <ul data-stagger="0.05" className="mt-5 flex flex-wrap gap-2">
@@ -97,25 +98,42 @@ export default function FspPage() {
                 ))}
               </ul>
               <p data-reveal className="mt-8 text-[15px] leading-relaxed text-ink-muted">
-                Релевантность дисциплины специализации учитывается: победа в программировании систем ИБ весит больше для кандидата в безопасность, чем для фронтенд-разработчика.
+                Важна связь дисциплины со специализацией. Победа в программировании систем ИБ поднимет кандидата в безопасность сильнее, чем фронтенд-разработчика.
               </p>
             </div>
           </div>
         </Container>
       </Section>
 
-      <Section id="score" className="scroll-mt-16">
+      <Section id="rank" className="scroll-mt-16">
         <Container>
           <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-2 lg:gap-20">
             <div>
-              <SplitHeading eyebrow="ФСП-скор" title="Растёт с каждым достижением, но не перевешивает тест" />
+              <SplitHeading eyebrow="Место в подборке" title="ФСП поднимает среди равных" />
               <div data-reveal className="mt-8 space-y-5 text-lg leading-relaxed text-ink-muted">
-                <p>Вклад достижения = вес уровня соревнования × вес места (или вес разряда) × релевантность дисциплины специализации × затухание с периодом полураспада 2 года.</p>
-                <p>Итог — «шумное ИЛИ»: 1 − Π(1 − vᵢ). Каждое новое достижение добавляет, но скор насыщается. В подборе его вес — 10 из 100, в силе профиля — 0,25 против 0,6 у теста.</p>
+                <p>Компания видит кандидатов одной категории, отсортированных по баллу. Достижения ФСП дают до 10 баллов из 100.</p>
+                <p>Этого хватает, чтобы обойти соседей с таким же результатом теста. Кандидата с заметно более сильным тестом достижения не обгонят.</p>
               </div>
             </div>
-            <div data-reveal="scale">
-              <FspScore />
+            <div data-reveal>
+              <RankClimb />
+            </div>
+          </div>
+        </Container>
+      </Section>
+
+      <Section id="decay" tone="canvas" className="scroll-mt-16">
+        <Container>
+          <div className="grid grid-cols-1 items-center gap-14 lg:grid-cols-[1.1fr_0.9fr] lg:gap-20">
+            <div data-reveal className="order-2 lg:order-1">
+              <DecayCurve />
+            </div>
+            <div className="order-1 lg:order-2">
+              <SplitHeading eyebrow="Свежесть" title="Вчерашняя победа весит больше давней" />
+              <div data-reveal className="mt-8 space-y-5 text-lg leading-relaxed text-ink-muted">
+                <p>Каждые два года вклад достижения уменьшается вдвое. Победа шестилетней давности ещё считается, но уже на восьмую часть.</p>
+                <p>Каждое следующее достижение тоже добавляет меньше предыдущего. Поэтому десять дипломов результат теста не перебьют.</p>
+              </div>
             </div>
           </div>
         </Container>
@@ -130,13 +148,13 @@ export default function FspPage() {
                 Без истории ФСП
               </p>
               <h2 data-split className="display-2 mt-5 text-balance">
-                Нет достижений — это ноль. Не минус.
+                Нет достижений? Ноль баллов, и всё.
               </h2>
               <p data-reveal className="mt-6 max-w-xl text-lg leading-relaxed text-night-muted">
-                Кандидат без истории ФСП получает нулевой ФСП-скор без штрафа. В карточке — нейтральное «Нет данных ФСП», и отсутствие ФСП никогда не попадает в список пробелов. Категорию по-прежнему определяет только тест.
+                Кандидат без истории ФСП получает ноль баллов за этот признак. В карточке будет нейтральное «Нет данных ФСП», а в список пробелов отсутствие ФСП не попадает никогда. Категорию по-прежнему определяет только тест.
               </p>
             </div>
-            <div data-reveal="scale" className="rounded-[24px] border border-night-line bg-night-raised p-6">
+            <div data-reveal className="rounded-[24px] border border-night-line bg-night-raised p-6">
               <p className="font-mono text-xs tracking-[0.1em] text-night-faint uppercase">Так это выглядит в карточке</p>
               <div className="mt-5 flex items-center gap-3 rounded-2xl border border-dashed border-night-line px-4 py-3 text-sm text-night-muted">
                 <Trophy className="size-4 text-night-faint" aria-hidden />
@@ -147,27 +165,10 @@ export default function FspPage() {
                   <span className="size-1.5 rounded-full bg-success-300" aria-hidden /> Причины: навыки, грейд, результат теста
                 </li>
                 <li className="flex items-center gap-2 text-night-muted">
-                  <span className="size-1.5 rounded-full bg-night-faint" aria-hidden /> Пробелы: только про навыки, грейд и зарплату
+                  <span className="size-1.5 rounded-full bg-night-faint" aria-hidden /> Пробелы: только навыки, грейд и зарплата
                 </li>
               </ul>
             </div>
-          </div>
-        </Container>
-      </Section>
-
-      <Section id="control" tone="canvas" className="scroll-mt-16">
-        <Container>
-          <SplitHeading eyebrow="Контроль" title="Ваши достижения — ваши правила" />
-          <FeatureGrid
-            className="mt-14"
-            items={[
-              { icon: EyeOff, title: "Скрыть ФСП-данные", text: "Скрытые достижения не показываются работодателям и не участвуют в ранжировании." },
-              { icon: Link2Off, title: "Отвязать ФСП ID", text: "Отвязка удаляет снимок достижений из профиля. Привязать снова можно в любой момент." },
-              { icon: Scale, title: "Только высший разряд", text: "В каждой дисциплине учитывается один — высший — разряд, а не все промежуточные." },
-            ]}
-          />
-          <div className="mt-8">
-            <Note>Для подключения к боевому реестру ФСП достаточно заменить адрес реестра и выдать платформе клиентские учётные данные Keycloak — схема привязки уже работает на Keycloak 26.</Note>
           </div>
         </Container>
       </Section>
@@ -178,11 +179,11 @@ export default function FspPage() {
           <div data-reveal>
             <Faq
               items={[
-                { q: "Достижения заменяют тест?", a: "Нет. Категорию даёт только тест. Достижения поднимают вас внутри категории и показываются работодателю в карточке." },
-                { q: "Старые победы тоже учитываются?", a: "Да, но с затуханием: вклад достижения уменьшается вдвое каждые 2 года. Свежие результаты важнее." },
-                { q: "Командная победа считается?", a: "Да. В снимке хранятся команда и ваша роль, а вклад определяется уровнем соревнования, местом и релевантностью дисциплины." },
-                { q: "Работодатель увидит мой ФСП ID?", a: "Работодатель видит достижения в карточке — например, «Мастер спорта по продуктовому программированию, 2023». Контакты по-прежнему закрыты до вашего согласия." },
-                { q: "Что если я не хочу показывать ФСП?", a: "Скройте ФСП-данные в настройках: они перестанут показываться и участвовать в ранжировании." },
+                { q: "Достижения заменяют тест?", a: "Нет. Категорию даёт только тест. Достижения поднимают вас внутри категории и видны компании в карточке." },
+                { q: "Старые победы считаются?", a: "Считаются, но их вклад уменьшается вдвое каждые два года." },
+                { q: "А командная победа?", a: "Тоже. В профиле сохраняются название команды и ваша роль." },
+                { q: "Компания увидит мой ФСП ID?", a: "Компания видит сами достижения, например «Мастер спорта по продуктовому программированию, 2023». Контакты закрыты до вашего согласия." },
+                { q: "Можно не показывать ФСП?", a: "Скройте достижения в настройках. Тогда они не видны компаниям и не влияют на подборку." },
               ]}
             />
           </div>
@@ -190,8 +191,8 @@ export default function FspPage() {
       </Section>
 
       <CtaBand
-        title="Соревнования — уже опыт. Пусть его увидят."
-        lead="Создайте профиль, пройдите тест и привяжите ФСП ID в настройках кабинета."
+        title="Привяжите ФСП ID после регистрации"
+        lead="Создайте профиль, сдайте тест и нажмите «Привязать ФСП ID» в настройках кабинета."
         primary={{ href: "/register?role=candidate", label: "Создать профиль" }}
         secondary={{ href: "/candidates", label: "Путь кандидата" }}
       />

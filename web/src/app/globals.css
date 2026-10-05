@@ -285,9 +285,24 @@ html.motion [data-hero] {
     -webkit-box-decoration-break: clone;
     box-decoration-break: clone;
   }
-  .split-line-mask {
+  .split-line-mask,
+  .split-word-mask {
     padding-bottom: 0.1em;
     margin-bottom: -0.1em;
+  }
+  .text-gradient .split-word,
+  .text-gradient .split-char {
+    background-image: linear-gradient(100deg, var(--color-primary) 0%, var(--color-primary-400) 60%, var(--color-primary) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .text-gradient-night .split-word,
+  .text-gradient-night .split-char {
+    background-image: linear-gradient(100deg, #ffffff 0%, var(--color-primary-300) 70%, #ffffff 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
   }
   .bg-grid {
     background-image:

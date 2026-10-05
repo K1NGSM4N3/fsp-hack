@@ -8,15 +8,15 @@ import { cn } from "@/lib/cn";
 const CITIES = ["Казань", "Пермь", "Томск", "Самара", "Омск", "Тверь", "Сочи", "Уфа"];
 
 interface Instance {
-  seed: string;
+  variant: string;
   threshold: number;
   minCount: number;
   rows: { id: number; city: string; amount: number }[];
   answer: number;
 }
 
-function rng(seed: number) {
-  let a = seed >>> 0;
+function rng(start: number) {
+  let a = start >>> 0;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
@@ -25,9 +25,9 @@ function rng(seed: number) {
   };
 }
 
-/** Same generator shape as the real `sql.group_by_having` template: the answer is computed, never stored. */
-function makeInstance(seed: number): Instance {
-  const r = rng(seed);
+/** Mirrors the real GROUP BY / HAVING task: the right answer is computed for each variant, never stored. */
+function makeInstance(n: number): Instance {
+  const r = rng(n);
   const threshold = 500 + Math.floor(r() * 9) * 50;
   const minCount = 2 + Math.floor(r() * 2);
   const pool = [...CITIES];
@@ -40,7 +40,7 @@ function makeInstance(seed: number): Instance {
   const counts = new Map<string, number>();
   for (const row of rows) if (row.amount > threshold) counts.set(row.city, (counts.get(row.city) ?? 0) + 1);
   const answer = [...counts.values()].filter((n) => n >= minCount).length;
-  return { seed: `0x${(seed >>> 0).toString(16).toUpperCase().padStart(8, "0")}`, threshold, minCount, rows, answer };
+  return { variant: String((n >>> 0) % 90000 + 10000), threshold, minCount, rows, answer };
 }
 
 const INITIAL: [Instance, Instance] = [makeInstance(0x5f3a91c2), makeInstance(0xa0417e6b)];
@@ -49,7 +49,7 @@ const plural = (n: number) => (n % 10 === 1 && n % 100 !== 11 ? "город" : n
 
 function valuesOf(inst: Instance): Record<string, string> {
   const out: Record<string, string> = {
-    seed: inst.seed,
+    variant: inst.variant,
     threshold: String(inst.threshold),
     min: String(inst.minCount),
     answer: `${inst.answer} ${plural(inst.answer)}`,
@@ -74,7 +74,7 @@ const Panel = memo(function Panel({ who, inst, index }: { who: string; inst: Ins
           <span className={cn("size-2 rounded-full", index === 0 ? "bg-primary-400" : "bg-white")} aria-hidden />
           {who}
         </span>
-        <span className="tabular truncate font-mono text-[11px] text-night-faint">seed {v("seed", inst.seed, "text-night-muted")}</span>
+        <span className="tabular truncate font-mono text-[11px] text-night-faint">вариант № {v("variant", inst.variant, "text-night-muted")}</span>
       </div>
       <pre className="scrollbar-thin overflow-x-auto px-4 py-4 font-mono text-[12.5px] leading-6 text-night-muted">
         <code>
@@ -115,7 +115,7 @@ const Panel = memo(function Panel({ who, inst, index }: { who: string; inst: Ins
         </table>
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-night-line bg-night/50 px-4 py-3 text-sm">
-        <span className="text-night-muted">Ответ генератора</span>
+        <span className="text-night-muted">Правильный ответ</span>
         <span className="font-mono font-semibold text-white">{v("answer", `${inst.answer} ${plural(inst.answer)}`)}</span>
       </div>
     </div>
@@ -137,7 +137,7 @@ export function LeakDemo() {
         if (!node) continue;
         if (!animate) node.textContent = text;
         else {
-          const chars = /^\d+$/.test(text) ? "0123456789" : k === "seed" ? "0123456789ABCDEF" : "абвгдежзиклмнопрстуф";
+          const chars = /^\d+$/.test(text) ? "0123456789" : "абвгдежзиклмнопрстуф";
           gsap.to(node, { duration: 0.9, delay: index * 0.12, scrambleText: { text, chars, speed: 0.6 }, overwrite: true });
         }
       }
@@ -177,7 +177,7 @@ export function LeakDemo() {
       </div>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-4">
         <p className="font-mono text-xs text-night-muted">
-          Шаблон <span className="text-white">sql.group_by_having</span> · одна тема, один уровень сложности · экземпляров показано: <span className="tabular text-white">{count}</span>
+          Тема и сложность одинаковые, числа и данные разные. Показано вариантов: <span className="tabular text-white">{count}</span>
         </p>
         <button
           type="button"
@@ -185,7 +185,7 @@ export function LeakDemo() {
           className="inline-flex h-11 items-center gap-2 rounded-full border border-white/25 px-5 text-sm font-medium text-white transition-colors hover:border-white hover:bg-white/5"
         >
           <RefreshCw className="size-4" aria-hidden />
-          Новый seed
+          Следующий кандидат
         </button>
       </div>
     </div>
@@ -207,14 +207,14 @@ const pct = (v: number) => `${v.toLocaleString("ru-RU", { maximumFractionDigits:
 export function LeakChart() {
   const [hover, setHover] = useState<number | null>(null);
   const series = [
-    { name: "Фиксированный тест", values: FIXED, color: "var(--color-accent)" },
-    { name: "Параметрический тест ФСП Таланты", values: OURS, color: "var(--color-primary)" },
+    { name: "Тест с одинаковыми вопросами", values: FIXED, color: "var(--color-accent)" },
+    { name: "Тест ФСП Таланты", values: OURS, color: "var(--color-primary)" },
   ];
   return (
     <figure className="rounded-[24px] border border-line bg-white p-5 sm:p-7">
       <figcaption>
-        <p className="text-lg font-semibold tracking-tight text-ink">Сколько слабых кандидатов проходит тест на Middle</p>
-        <p className="mt-1 text-sm text-ink-muted">Доля прошедших в зависимости от того, какая часть ответов утекла</p>
+        <p className="text-lg font-semibold tracking-tight text-ink">Кандидаты слабее Middle сдают тест на Middle</p>
+        <p className="mt-1 text-sm text-ink-muted">Сколько из них сдали, если заранее знали часть ответов</p>
         <ul className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm text-ink">
           {series.map((s) => (
             <li key={s.name} className="flex items-center gap-2">
@@ -225,7 +225,7 @@ export function LeakChart() {
         </ul>
       </figcaption>
       <div className="relative mt-4">
-        <svg data-draw viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full overflow-visible" role="img" aria-label="Фиксированный тест: 9,4 %, 65,2 %, 99,9 %, 100 % при утечке 0, 25, 50, 100 % ответов. Параметрический тест: 9,7 %, 9,6 %, 9,3 %, 10,4 %.">
+        <svg data-draw viewBox={`0 0 ${W} ${H}`} className="block h-auto w-full overflow-visible" role="img" aria-label="Тест с одинаковыми вопросами: 9,4 %, 65,2 %, 99,9 %, 100 % при утечке 0, 25, 50, 100 % ответов. Тест ФСП Таланты: 9,7 %, 9,6 %, 9,3 %, 10,4 %.">
           <g aria-hidden>
             {[0, 25, 50, 75, 100].map((t) => (
               <g key={t}>
@@ -282,7 +282,7 @@ export function LeakChart() {
               <p key={s.name} className="mt-1.5 flex items-center justify-between gap-3 text-ink">
                 <span className="flex items-center gap-1.5">
                   <span className="size-2 rounded-full" style={{ background: s.color }} aria-hidden />
-                  {s.name.startsWith("Фикс") ? "Фиксированный" : "Наш"}
+                  {s.name.startsWith("Тест с") ? "Одинаковые вопросы" : "ФСП Таланты"}
                 </span>
                 <span className="tabular font-mono font-semibold">{pct(s.values[hover] ?? 0)}</span>
               </p>
@@ -296,8 +296,8 @@ export function LeakChart() {
           <thead className="text-ink-subtle">
             <tr>
               <th className="py-1.5 font-normal">Утекло</th>
-              <th className="py-1.5 font-normal">Фиксированный тест</th>
-              <th className="py-1.5 font-normal">Наш тест</th>
+              <th className="py-1.5 font-normal">Одинаковые вопросы</th>
+              <th className="py-1.5 font-normal">ФСП Таланты</th>
             </tr>
           </thead>
           <tbody className="text-ink">
