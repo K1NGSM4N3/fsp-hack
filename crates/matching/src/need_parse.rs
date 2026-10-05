@@ -114,11 +114,24 @@ pub fn parse_need(text: &str) -> ParsedNeed {
     for line in &lines {
         let (header, content) = split_header(strip_bullet(line));
         if let Some(h) = header {
-            mode = if lexicon::NICE_MATCHER.contains(h) {
-                Mode::Nice
+            let named = skills::extract_ids(h);
+            if lexicon::NICE_MATCHER.contains(h) {
+                mode = Mode::Nice;
+            } else if named.is_empty() || lexicon::MUST_MATCHER.contains(h) {
+                mode = Mode::Must;
+            }
+            // "PostgreSQL: схемы, индексы" — the lead-in is the skill itself, inside whatever
+            // section it is listed in.
+            let target = if mode == Mode::Nice {
+                &mut nice
             } else {
-                Mode::Must
+                &mut must
             };
+            for id in named {
+                if !target.contains(&id) {
+                    target.push(id);
+                }
+            }
         } else if lexicon::NICE_MATCHER.contains(content)
             && content.split_whitespace().count() <= 3
             && skills::extract_ids(content).is_empty()
@@ -202,6 +215,18 @@ mod tests {
         let p = parse_need("Senior Go\nЗнание Kafka обязательно, ClickHouse желательно");
         assert_eq!(p.must_skills, vec!["go", "kafka"]);
         assert_eq!(p.nice_skills, vec!["clickhouse"]);
+    }
+
+    #[test]
+    fn skill_named_in_a_lead_in() {
+        let p = parse_need(
+            "Требования:\n- Go от 2 лет;\n- PostgreSQL: схемы, индексы;\n- Kafka: консьюмеры.\nБудет плюсом:\n- ClickHouse: аналитика;\n- gRPC",
+        );
+        assert_eq!(p.must_skills, vec!["go", "postgresql", "kafka"]);
+        assert_eq!(p.nice_skills, vec!["clickhouse", "grpc"]);
+        let p = parse_need("Будет плюсом: Redis\nОбязательно: Go, PostgreSQL");
+        assert_eq!(p.must_skills, vec!["go", "postgresql"]);
+        assert_eq!(p.nice_skills, vec!["redis"]);
     }
 
     #[test]

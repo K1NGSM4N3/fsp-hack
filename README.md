@@ -56,3 +56,4 @@ make test    # тесты; тесты БД создают временные б�
 - `architecture.md` — архитектура, механики тестирования и подбора, интеграция с ФСП
 - `api.md` — API; актуальная спецификация — `/api/v1/openapi.json`
 - `docs/validation/` — процедура валидации и результаты
+- `docs/validation/pairs-example/` — проверка подбора на своих данных: пример входа и отчёта; запуск — `cargo run -p validate --release -- pairs --input data.json --out report.md` или `POST /api/v1/eval/pairs` в Swagger (`docs/solution.md` §6.4)

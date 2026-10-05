@@ -321,6 +321,13 @@ impl CandidatePool {
             .unwrap_or(&[])
     }
 
+    /// Per-need text closeness computed outside the database (offline evaluation).
+    pub(crate) fn set_text_relevance(&mut self, index: usize, value: f32) {
+        if let Some(p) = self.profiles.get_mut(index) {
+            p.text_relevance = value.clamp(0.0, 1.0);
+        }
+    }
+
     pub(crate) fn fsp_summary(&self, index: usize) -> &str {
         self.cold
             .get(index)

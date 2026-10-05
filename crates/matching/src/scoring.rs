@@ -263,6 +263,15 @@ pub fn test_strength(grade: Grade, theta: f32) -> f32 {
     ((theta - lo) / (hi - lo)).clamp(0.0, 1.0)
 }
 
+/// Inverse of [`test_strength`]: θ at a 0..1 position inside the grade's band.
+pub fn theta_for_strength(grade: Grade, strength: f32) -> f32 {
+    let lo = grade.theta_cut() as f32;
+    let hi = grade
+        .next()
+        .map_or(SENIOR_THETA_CEIL, |g| g.theta_cut() as f32);
+    lo + (hi - lo) * strength.clamp(0.0, 1.0)
+}
+
 fn freshness(last_activity_unix: i64, now_unix: i64) -> f32 {
     if last_activity_unix <= 0 {
         return 0.0;
@@ -1260,6 +1269,13 @@ mod tests {
         assert_eq!(test_strength(Grade::Junior, -2.0), 0.0);
         assert!((test_strength(Grade::Senior, 1.75) - 0.5).abs() < 1e-6);
         assert_eq!(test_strength(Grade::Senior, 3.0), 1.0);
+        for g in Grade::ALL {
+            for s in [0.0, 0.25, 0.5, 0.9, 1.0] {
+                let back = test_strength(*g, theta_for_strength(*g, s));
+                assert!((back - s).abs() < 1e-6, "{g:?} {s}");
+            }
+        }
+        assert_eq!(theta_for_strength(Grade::Middle, 7.0), 1.0);
     }
 
     #[test]

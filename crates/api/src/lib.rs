@@ -66,6 +66,7 @@ use crate::state::AppState;
         (name = "tasks", description = "Регулярные короткие задания от работодателей"),
         (name = "vacancies", description = "Вакансии и отклики — дополнительный путь, инициатива кандидата"),
         (name = "invitations", description = "Приглашения — выход работодателя на кандидата, раскрытие контактов"),
+        (name = "Валидация", description = "Проверка подбора на своих данных: ваш набор «вакансия – кандидат» через рабочий подбор и базовую линию, метрики по разметке"),
     )
 )]
 struct ApiDoc;
@@ -123,6 +124,7 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
         .merge(routes::reports::router())
         .merge(routes::catalog::router())
         .merge(routes::assessment::catalog_router())
+        .merge(routes::eval::router())
 }
 
 pub fn openapi() -> utoipa::openapi::OpenApi {

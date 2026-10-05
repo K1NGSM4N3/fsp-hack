@@ -3547,6 +3547,165 @@
         ]
       }
     },
+    "/api/v1/eval/pairs": {
+      "post": {
+        "tags": [
+          "Валидация"
+        ],
+        "summary": "Evaluate the matching on your own vacancies, candidates and labels",
+        "description": "Прогоняет ваш набор «вакансия – кандидат» через тот же разбор текстов и тот же скоринг, что работают в подборе, и через базовую линию «ключевые слова резюме + заявленный стаж». Структурные поля необязательны: специализация, грейд, навыки, вилка, формат и город распознаются из текстов. Категория, распознанная из резюме, помечается «не подтверждена тестом»; без результата теста берётся нейтральное значение — середина диапазона грейда, об этом сказано в объяснении. С разметкой (`labels`, релевантность 0–3, релевантен ≥ 2) считаются Precision@5, Precision@k, nDCG@k, MAP и MRR по каждой вакансии и в среднем — для нашего ранжирования и для базовой линии. Лимиты: тело до 8 МиБ, до 200 вакансий, 5 000 кандидатов и 100 000 оценок, тексты до 20 000 символов, 10 запросов за 10 минут с одного IP. Данные не сохраняются. Большие наборы — CLI `validate pairs` (см. docs/solution.md §6.4).",
+        "operationId": "eval_pairs",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PairsInput"
+              },
+              "example": {
+                "candidates": [
+                  {
+                    "id": "c1",
+                    "resume_text": "Go-разработчик\nМосква, удалённо, 300 000 ₽\nОпыт работы — 4 года\nСервис платежей на Go: PostgreSQL, Kafka, Redis, Kubernetes."
+                  },
+                  {
+                    "grade": "middle",
+                    "id": "c2",
+                    "resume_text": "Backend-разработчик\nОпыт работы — 3 года\nGo, PostgreSQL, RabbitMQ, gRPC.",
+                    "salary_expectation": 280000,
+                    "specialization": "backend",
+                    "test_result": 78
+                  },
+                  {
+                    "id": "c3",
+                    "resume_text": "QA-инженер (тестирование API)\nОпыт работы — 2 года 6 месяцев\nPython, pytest, Postman, SQL, тест-дизайн.\nУдалённо, 180 000 ₽"
+                  },
+                  {
+                    "id": "c4",
+                    "resume_text": "Начинающий тестировщик\nБез опыта работы, курсы 2026.\nPython, pytest, Selenium, SQL, Postman, Go, Kafka."
+                  }
+                ],
+                "k": 3,
+                "labels": [
+                  {
+                    "candidate_id": "c1",
+                    "relevance": 3,
+                    "vacancy_id": "go-middle"
+                  },
+                  {
+                    "candidate_id": "c2",
+                    "relevance": 2,
+                    "vacancy_id": "go-middle"
+                  },
+                  {
+                    "candidate_id": "c4",
+                    "relevance": 0,
+                    "vacancy_id": "go-middle"
+                  },
+                  {
+                    "candidate_id": "c3",
+                    "relevance": 3,
+                    "vacancy_id": "qa-auto"
+                  },
+                  {
+                    "candidate_id": "c4",
+                    "relevance": 1,
+                    "vacancy_id": "qa-auto"
+                  }
+                ],
+                "now": "2026-10-01",
+                "vacancies": [
+                  {
+                    "id": "go-middle",
+                    "text": "Go-разработчик (Middle)\nПлатёжный сервис.\nТребования: Go, PostgreSQL, Kafka.\nБудет плюсом: Kubernetes.\nУдалённо, 250–330 тыс. ₽."
+                  },
+                  {
+                    "grades": [
+                      "junior",
+                      "middle"
+                    ],
+                    "id": "qa-auto",
+                    "must_skills": [
+                      "python",
+                      "pytest",
+                      "postman",
+                      "sql"
+                    ],
+                    "salary_max": 200000,
+                    "specialization": "qa",
+                    "text": "QA-инженер по автоматизации",
+                    "work_formats": [
+                      "remote"
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairsReport"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_json` — синтаксическая ошибка JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large` — тело больше 8 МиБ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json` — поля не по схеме; `validation_failed` — превышены лимиты или ошибка в данных (поле в `errors`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/fsp/achievements": {
       "get": {
         "tags": [
@@ -7476,6 +7635,834 @@
           }
         }
       },
+      "PairsBaselineRanked": {
+        "type": "object",
+        "required": [
+          "rank",
+          "candidate_id",
+          "keywords"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "candidate_id": {
+            "type": "string"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Vacancy skills (must + nice) found among the resume keywords."
+          },
+          "experience_years": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "relevance": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "PairsCandidate": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "resume_text": {
+            "type": "string",
+            "description": "Plain resume text."
+          },
+          "specialization": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Specialization",
+                "description": "Missing specialization or grade is taken from the resume and marked as not confirmed\nby a test; without a recognizable specialization the candidate gets no category."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grade": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Grade"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Declared skills on top of the ones found in the resume."
+          },
+          "salary_expectation": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Rubles per month."
+          },
+          "work_formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkFormat"
+            }
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "relocation": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "test_result": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "0..=100: position of the test result inside the grade's band (≈ percentile among\ncandidates of the same grade). Missing = neutral 50, stated in the explanation."
+          },
+          "fsp_achievements": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Achievement"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PairsCandidateSummary": {
+        "type": "object",
+        "description": "How a resume was read.",
+        "required": [
+          "id",
+          "specialization_origin",
+          "grade_origin",
+          "skills",
+          "has_fsp"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "category": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Category"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "specialization_origin": {
+            "$ref": "#/components/schemas/PairsOrigin"
+          },
+          "specialization_confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "grade_origin": {
+            "$ref": "#/components/schemas/PairsOrigin"
+          },
+          "test_result": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "experience_years": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Canonical slugs from the input and the resume."
+          },
+          "has_fsp": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PairsCoverage": {
+        "type": "object",
+        "required": [
+          "vacancies",
+          "vacancy_specialization",
+          "vacancy_grades",
+          "vacancy_skills",
+          "vacancies_low_confidence",
+          "candidates",
+          "candidate_specialization",
+          "candidate_grade",
+          "candidates_without_category",
+          "candidates_with_test",
+          "candidates_with_fsp",
+          "labels",
+          "labeled_vacancies"
+        ],
+        "properties": {
+          "vacancies": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "vacancy_specialization": {
+            "$ref": "#/components/schemas/PairsOriginCounts"
+          },
+          "vacancy_grades": {
+            "$ref": "#/components/schemas/PairsOriginCounts"
+          },
+          "vacancy_skills": {
+            "$ref": "#/components/schemas/PairsOriginCounts"
+          },
+          "vacancies_low_confidence": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Specialization guessed with confidence below 0.5 or not found, or no skills found."
+          },
+          "candidates": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "candidate_specialization": {
+            "$ref": "#/components/schemas/PairsOriginCounts"
+          },
+          "candidate_grade": {
+            "$ref": "#/components/schemas/PairsOriginCounts",
+            "description": "Among candidates with a category; `missing` = grade found nowhere, Middle assumed."
+          },
+          "candidates_without_category": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "No specialization anywhere: no category, so our ranking never shows them."
+          },
+          "candidates_with_test": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "candidates_with_fsp": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "labels": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "labeled_vacancies": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "PairsInput": {
+        "type": "object",
+        "description": "One evaluation run: vacancies, candidates and optional expert labels. Structured fields are\noptional overrides; whatever is missing is recognized from the texts by the same parsers the\nAPI uses.",
+        "required": [
+          "vacancies",
+          "candidates"
+        ],
+        "properties": {
+          "now": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Evaluation date `YYYY-MM-DD`: FSP result decay, \"till now\" in resumes. Default — today."
+          },
+          "k": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Top-list length and the cutoff of Precision@k and nDCG@k, 1..=20. Default — 10.",
+            "minimum": 0
+          },
+          "vacancies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairsVacancy"
+            }
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairsCandidate"
+            }
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairsLabel"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "PairsLabel": {
+        "type": "object",
+        "required": [
+          "vacancy_id",
+          "candidate_id",
+          "relevance"
+        ],
+        "properties": {
+          "vacancy_id": {
+            "type": "string"
+          },
+          "candidate_id": {
+            "type": "string"
+          },
+          "relevance": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0 — not relevant, 1 — partially, 2 — relevant, 3 — strong fit.",
+            "maximum": 3,
+            "minimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
+      "PairsMean": {
+        "type": "object",
+        "description": "Mean over vacancies and the half-width of its 95 % interval.",
+        "required": [
+          "mean",
+          "ci95"
+        ],
+        "properties": {
+          "mean": {
+            "type": "number",
+            "format": "double"
+          },
+          "ci95": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "PairsMeanMetrics": {
+        "type": "object",
+        "required": [
+          "precision_at_5",
+          "precision_at_k",
+          "ndcg_at_k",
+          "average_precision",
+          "reciprocal_rank",
+          "judged_at_k"
+        ],
+        "properties": {
+          "precision_at_5": {
+            "$ref": "#/components/schemas/PairsMean"
+          },
+          "precision_at_k": {
+            "$ref": "#/components/schemas/PairsMean"
+          },
+          "ndcg_at_k": {
+            "$ref": "#/components/schemas/PairsMean"
+          },
+          "average_precision": {
+            "$ref": "#/components/schemas/PairsMean",
+            "description": "MAP."
+          },
+          "reciprocal_rank": {
+            "$ref": "#/components/schemas/PairsMean",
+            "description": "MRR."
+          },
+          "judged_at_k": {
+            "$ref": "#/components/schemas/PairsMean"
+          }
+        }
+      },
+      "PairsMetrics": {
+        "type": "object",
+        "description": "Quality of one ranking of one vacancy against its labels. Unlabeled candidates count as not\nrelevant; relevant means relevance ≥ 2.",
+        "required": [
+          "precision_at_5",
+          "precision_at_k",
+          "ndcg_at_k",
+          "average_precision",
+          "reciprocal_rank",
+          "judged_at_k"
+        ],
+        "properties": {
+          "precision_at_5": {
+            "type": "number",
+            "format": "double"
+          },
+          "precision_at_k": {
+            "type": "number",
+            "format": "double",
+            "description": "Precision at the run's `k`."
+          },
+          "ndcg_at_k": {
+            "type": "number",
+            "format": "double"
+          },
+          "average_precision": {
+            "type": "number",
+            "format": "double"
+          },
+          "reciprocal_rank": {
+            "type": "number",
+            "format": "double"
+          },
+          "judged_at_k": {
+            "type": "number",
+            "format": "double",
+            "description": "Share of the shown top-k that carries a label."
+          }
+        }
+      },
+      "PairsMetricsSummary": {
+        "type": "object",
+        "required": [
+          "vacancies",
+          "ours",
+          "baseline"
+        ],
+        "properties": {
+          "vacancies": {
+            "type": "integer",
+            "description": "Vacancies with at least one relevant label; the macro averages are over them.",
+            "minimum": 0
+          },
+          "ours": {
+            "$ref": "#/components/schemas/PairsMeanMetrics"
+          },
+          "baseline": {
+            "$ref": "#/components/schemas/PairsMeanMetrics"
+          }
+        }
+      },
+      "PairsNeed": {
+        "type": "object",
+        "description": "The need the vacancy was matched as.",
+        "required": [
+          "specialization_origin",
+          "grades",
+          "grades_origin",
+          "allow_adjacent_grades",
+          "must_skills",
+          "nice_skills",
+          "skills_origin",
+          "work_formats",
+          "low_confidence"
+        ],
+        "properties": {
+          "specialization": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Specialization"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "specialization_origin": {
+            "$ref": "#/components/schemas/PairsOrigin"
+          },
+          "specialization_confidence": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "grades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Grade"
+            }
+          },
+          "grades_origin": {
+            "$ref": "#/components/schemas/PairsOrigin"
+          },
+          "allow_adjacent_grades": {
+            "type": "boolean"
+          },
+          "must_skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Display names."
+          },
+          "nice_skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skills_origin": {
+            "$ref": "#/components/schemas/PairsOrigin"
+          },
+          "salary_min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "salary_max": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "work_formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkFormat"
+            }
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "low_confidence": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PairsOrigin": {
+        "type": "string",
+        "description": "Where a value used for matching came from.",
+        "enum": [
+          "input",
+          "text",
+          "missing"
+        ]
+      },
+      "PairsOriginCounts": {
+        "type": "object",
+        "required": [
+          "input",
+          "text",
+          "missing"
+        ],
+        "properties": {
+          "input": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "text": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "missing": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "PairsRanked": {
+        "type": "object",
+        "required": [
+          "rank",
+          "candidate_id",
+          "score",
+          "category",
+          "notes",
+          "breakdown"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "candidate_id": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number",
+            "format": "float",
+            "description": "0..100"
+          },
+          "relevance": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "minimum": 0
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Where the category came from and what was assumed, in Russian."
+          },
+          "breakdown": {
+            "$ref": "#/components/schemas/ScoreBreakdown"
+          }
+        }
+      },
+      "PairsReport": {
+        "type": "object",
+        "required": [
+          "now",
+          "k",
+          "relevant_from",
+          "neutral_test_strength",
+          "coverage",
+          "vacancies",
+          "candidates"
+        ],
+        "properties": {
+          "now": {
+            "type": "string",
+            "description": "`YYYY-MM-DD`"
+          },
+          "k": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "relevant_from": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Labels at or above this value count as relevant.",
+            "minimum": 0
+          },
+          "neutral_test_strength": {
+            "type": "number",
+            "format": "float",
+            "description": "Neutral 0..1 test strength used for candidates without a test result."
+          },
+          "coverage": {
+            "$ref": "#/components/schemas/PairsCoverage"
+          },
+          "metrics": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PairsMetricsSummary",
+                "description": "Present when at least one vacancy has a relevant label."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "vacancies": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairsVacancyReport"
+            }
+          },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairsCandidateSummary"
+            }
+          }
+        }
+      },
+      "PairsVacancy": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "text": {
+            "type": "string",
+            "description": "Vacancy text as published, title on the first line."
+          },
+          "specialization": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Specialization"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "grades": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Grade"
+            },
+            "description": "Empty = recognized from the text; none there = any grade."
+          },
+          "allow_adjacent_grades": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether a candidate one grade off still qualifies (with a lower grade score).\nDefault — yes: offline grades usually come from resumes, not from the test."
+          },
+          "must_skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Empty = recognized from the text. Slugs, aliases or free names."
+          },
+          "nice_skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "salary_min": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Rubles per month."
+          },
+          "salary_max": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
+          "work_formats": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/WorkFormat"
+            }
+          },
+          "city": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      },
+      "PairsVacancyReport": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "need",
+          "passed_filters",
+          "labels",
+          "relevant_labels",
+          "top",
+          "baseline_top",
+          "notes"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string",
+            "description": "First line of the text."
+          },
+          "need": {
+            "$ref": "#/components/schemas/PairsNeed"
+          },
+          "passed_filters": {
+            "type": "integer",
+            "description": "Candidates that passed the hard filters (specialization, grade, format, city).",
+            "minimum": 0
+          },
+          "labels": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "relevant_labels": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "ours": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PairsMetrics",
+                "description": "Present when the vacancy has at least one relevant label."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "baseline": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/PairsMetrics"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "top": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairsRanked"
+            }
+          },
+          "baseline_top": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PairsBaselineRanked"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
       "ParseInput": {
         "type": "object",
         "required": [
@@ -9831,6 +10818,10 @@
     {
       "name": "invitations",
       "description": "Приглашения — выход работодателя на кандидата, раскрытие контактов"
+    },
+    {
+      "name": "Валидация",
+      "description": "Проверка подбора на своих данных: ваш набор «вакансия – кандидат» через рабочий подбор и базовую линию, метрики по разметке"
     }
   ]
 }

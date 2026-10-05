@@ -1082,6 +1082,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/eval/pairs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Evaluate the matching on your own vacancies, candidates and labels
+         * @description Прогоняет ваш набор «вакансия – кандидат» через тот же разбор текстов и тот же скоринг, что работают в подборе, и через базовую линию «ключевые слова резюме + заявленный стаж». Структурные поля необязательны: специализация, грейд, навыки, вилка, формат и город распознаются из текстов. Категория, распознанная из резюме, помечается «не подтверждена тестом»; без результата теста берётся нейтральное значение — середина диапазона грейда, об этом сказано в объяснении. С разметкой (`labels`, релевантность 0–3, релевантен ≥ 2) считаются Precision@5, Precision@k, nDCG@k, MAP и MRR по каждой вакансии и в среднем — для нашего ранжирования и для базовой линии. Лимиты: тело до 8 МиБ, до 200 вакансий, 5 000 кандидатов и 100 000 оценок, тексты до 20 000 символов, 10 запросов за 10 минут с одного IP. Данные не сохраняются. Большие наборы — CLI `validate pairs` (см. docs/solution.md §6.4).
+         */
+        post: operations["eval_pairs"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fsp/achievements": {
         parameters: {
             query?: never;
@@ -2211,6 +2231,249 @@ export interface components {
             }[];
             /** Format: int64 */
             total: number;
+        };
+        PairsBaselineRanked: {
+            rank: number;
+            candidate_id: string;
+            /** @description Vacancy skills (must + nice) found among the resume keywords. */
+            keywords: string[];
+            /** Format: float */
+            experience_years?: number | null;
+            /** Format: int32 */
+            relevance?: number | null;
+        };
+        PairsCandidate: {
+            id: string;
+            /** @description Plain resume text. */
+            resume_text?: string;
+            specialization?: components["schemas"]["Specialization"] | null;
+            grade?: components["schemas"]["Grade"] | null;
+            /** @description Declared skills on top of the ones found in the resume. */
+            skills?: string[];
+            /**
+             * Format: int64
+             * @description Rubles per month.
+             */
+            salary_expectation?: number | null;
+            work_formats?: components["schemas"]["WorkFormat"][];
+            city?: string | null;
+            relocation?: boolean | null;
+            /**
+             * Format: float
+             * @description 0..=100: position of the test result inside the grade's band (≈ percentile among
+             *     candidates of the same grade). Missing = neutral 50, stated in the explanation.
+             */
+            test_result?: number | null;
+            fsp_achievements?: components["schemas"]["Achievement"][];
+        };
+        /** @description How a resume was read. */
+        PairsCandidateSummary: {
+            id: string;
+            category?: components["schemas"]["Category"] | null;
+            specialization_origin: components["schemas"]["PairsOrigin"];
+            /** Format: float */
+            specialization_confidence?: number | null;
+            grade_origin: components["schemas"]["PairsOrigin"];
+            /** Format: float */
+            test_result?: number | null;
+            /** Format: float */
+            experience_years?: number | null;
+            /** @description Canonical slugs from the input and the resume. */
+            skills: string[];
+            has_fsp: boolean;
+        };
+        PairsCoverage: {
+            vacancies: number;
+            vacancy_specialization: components["schemas"]["PairsOriginCounts"];
+            vacancy_grades: components["schemas"]["PairsOriginCounts"];
+            vacancy_skills: components["schemas"]["PairsOriginCounts"];
+            /** @description Specialization guessed with confidence below 0.5 or not found, or no skills found. */
+            vacancies_low_confidence: string[];
+            candidates: number;
+            candidate_specialization: components["schemas"]["PairsOriginCounts"];
+            /** @description Among candidates with a category; `missing` = grade found nowhere, Middle assumed. */
+            candidate_grade: components["schemas"]["PairsOriginCounts"];
+            /** @description No specialization anywhere: no category, so our ranking never shows them. */
+            candidates_without_category: string[];
+            candidates_with_test: number;
+            candidates_with_fsp: number;
+            labels: number;
+            labeled_vacancies: number;
+        };
+        /**
+         * @description One evaluation run: vacancies, candidates and optional expert labels. Structured fields are
+         *     optional overrides; whatever is missing is recognized from the texts by the same parsers the
+         *     API uses.
+         */
+        PairsInput: {
+            /** @description Evaluation date `YYYY-MM-DD`: FSP result decay, "till now" in resumes. Default — today. */
+            now?: string | null;
+            /** @description Top-list length and the cutoff of Precision@k and nDCG@k, 1..=20. Default — 10. */
+            k?: number | null;
+            vacancies: components["schemas"]["PairsVacancy"][];
+            candidates: components["schemas"]["PairsCandidate"][];
+            labels?: components["schemas"]["PairsLabel"][];
+        };
+        PairsLabel: {
+            vacancy_id: string;
+            candidate_id: string;
+            /**
+             * Format: int32
+             * @description 0 — not relevant, 1 — partially, 2 — relevant, 3 — strong fit.
+             */
+            relevance: number;
+        };
+        /** @description Mean over vacancies and the half-width of its 95 % interval. */
+        PairsMean: {
+            /** Format: double */
+            mean: number;
+            /** Format: double */
+            ci95: number;
+        };
+        PairsMeanMetrics: {
+            precision_at_5: components["schemas"]["PairsMean"];
+            precision_at_k: components["schemas"]["PairsMean"];
+            ndcg_at_k: components["schemas"]["PairsMean"];
+            /** @description MAP. */
+            average_precision: components["schemas"]["PairsMean"];
+            /** @description MRR. */
+            reciprocal_rank: components["schemas"]["PairsMean"];
+            judged_at_k: components["schemas"]["PairsMean"];
+        };
+        /**
+         * @description Quality of one ranking of one vacancy against its labels. Unlabeled candidates count as not
+         *     relevant; relevant means relevance ≥ 2.
+         */
+        PairsMetrics: {
+            /** Format: double */
+            precision_at_5: number;
+            /**
+             * Format: double
+             * @description Precision at the run's `k`.
+             */
+            precision_at_k: number;
+            /** Format: double */
+            ndcg_at_k: number;
+            /** Format: double */
+            average_precision: number;
+            /** Format: double */
+            reciprocal_rank: number;
+            /**
+             * Format: double
+             * @description Share of the shown top-k that carries a label.
+             */
+            judged_at_k: number;
+        };
+        PairsMetricsSummary: {
+            /** @description Vacancies with at least one relevant label; the macro averages are over them. */
+            vacancies: number;
+            ours: components["schemas"]["PairsMeanMetrics"];
+            baseline: components["schemas"]["PairsMeanMetrics"];
+        };
+        /** @description The need the vacancy was matched as. */
+        PairsNeed: {
+            specialization?: components["schemas"]["Specialization"] | null;
+            specialization_origin: components["schemas"]["PairsOrigin"];
+            /** Format: float */
+            specialization_confidence?: number | null;
+            grades: components["schemas"]["Grade"][];
+            grades_origin: components["schemas"]["PairsOrigin"];
+            allow_adjacent_grades: boolean;
+            /** @description Display names. */
+            must_skills: string[];
+            nice_skills: string[];
+            skills_origin: components["schemas"]["PairsOrigin"];
+            /** Format: int64 */
+            salary_min?: number | null;
+            /** Format: int64 */
+            salary_max?: number | null;
+            work_formats: components["schemas"]["WorkFormat"][];
+            city?: string | null;
+            low_confidence: boolean;
+        };
+        /**
+         * @description Where a value used for matching came from.
+         * @enum {string}
+         */
+        PairsOrigin: "input" | "text" | "missing";
+        PairsOriginCounts: {
+            input: number;
+            text: number;
+            missing: number;
+        };
+        PairsRanked: {
+            rank: number;
+            candidate_id: string;
+            /**
+             * Format: float
+             * @description 0..100
+             */
+            score: number;
+            /** Format: int32 */
+            relevance?: number | null;
+            category: components["schemas"]["Category"];
+            /** @description Where the category came from and what was assumed, in Russian. */
+            notes: string[];
+            breakdown: components["schemas"]["ScoreBreakdown"];
+        };
+        PairsReport: {
+            /** @description `YYYY-MM-DD` */
+            now: string;
+            k: number;
+            /**
+             * Format: int32
+             * @description Labels at or above this value count as relevant.
+             */
+            relevant_from: number;
+            /**
+             * Format: float
+             * @description Neutral 0..1 test strength used for candidates without a test result.
+             */
+            neutral_test_strength: number;
+            coverage: components["schemas"]["PairsCoverage"];
+            metrics?: components["schemas"]["PairsMetricsSummary"] | null;
+            vacancies: components["schemas"]["PairsVacancyReport"][];
+            candidates: components["schemas"]["PairsCandidateSummary"][];
+        };
+        PairsVacancy: {
+            id: string;
+            /** @description Vacancy text as published, title on the first line. */
+            text?: string;
+            specialization?: components["schemas"]["Specialization"] | null;
+            /** @description Empty = recognized from the text; none there = any grade. */
+            grades?: components["schemas"]["Grade"][];
+            /**
+             * @description Whether a candidate one grade off still qualifies (with a lower grade score).
+             *     Default — yes: offline grades usually come from resumes, not from the test.
+             */
+            allow_adjacent_grades?: boolean | null;
+            /** @description Empty = recognized from the text. Slugs, aliases or free names. */
+            must_skills?: string[];
+            nice_skills?: string[];
+            /**
+             * Format: int64
+             * @description Rubles per month.
+             */
+            salary_min?: number | null;
+            /** Format: int64 */
+            salary_max?: number | null;
+            work_formats?: components["schemas"]["WorkFormat"][];
+            city?: string | null;
+        };
+        PairsVacancyReport: {
+            id: string;
+            /** @description First line of the text. */
+            title: string;
+            need: components["schemas"]["PairsNeed"];
+            /** @description Candidates that passed the hard filters (specialization, grade, format, city). */
+            passed_filters: number;
+            labels: number;
+            relevant_labels: number;
+            ours?: components["schemas"]["PairsMetrics"] | null;
+            baseline?: components["schemas"]["PairsMetrics"] | null;
+            top: components["schemas"]["PairsRanked"][];
+            baseline_top: components["schemas"]["PairsBaselineRanked"][];
+            notes: string[];
         };
         ParseInput: {
             text: string;
@@ -5069,6 +5332,154 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncomingApplication"][];
+                };
+            };
+        };
+    };
+    eval_pairs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "candidates": [
+                 *         {
+                 *           "id": "c1",
+                 *           "resume_text": "Go-разработчик\nМосква, удалённо, 300 000 ₽\nОпыт работы — 4 года\nСервис платежей на Go: PostgreSQL, Kafka, Redis, Kubernetes."
+                 *         },
+                 *         {
+                 *           "grade": "middle",
+                 *           "id": "c2",
+                 *           "resume_text": "Backend-разработчик\nОпыт работы — 3 года\nGo, PostgreSQL, RabbitMQ, gRPC.",
+                 *           "salary_expectation": 280000,
+                 *           "specialization": "backend",
+                 *           "test_result": 78
+                 *         },
+                 *         {
+                 *           "id": "c3",
+                 *           "resume_text": "QA-инженер (тестирование API)\nОпыт работы — 2 года 6 месяцев\nPython, pytest, Postman, SQL, тест-дизайн.\nУдалённо, 180 000 ₽"
+                 *         },
+                 *         {
+                 *           "id": "c4",
+                 *           "resume_text": "Начинающий тестировщик\nБез опыта работы, курсы 2026.\nPython, pytest, Selenium, SQL, Postman, Go, Kafka."
+                 *         }
+                 *       ],
+                 *       "k": 3,
+                 *       "labels": [
+                 *         {
+                 *           "candidate_id": "c1",
+                 *           "relevance": 3,
+                 *           "vacancy_id": "go-middle"
+                 *         },
+                 *         {
+                 *           "candidate_id": "c2",
+                 *           "relevance": 2,
+                 *           "vacancy_id": "go-middle"
+                 *         },
+                 *         {
+                 *           "candidate_id": "c4",
+                 *           "relevance": 0,
+                 *           "vacancy_id": "go-middle"
+                 *         },
+                 *         {
+                 *           "candidate_id": "c3",
+                 *           "relevance": 3,
+                 *           "vacancy_id": "qa-auto"
+                 *         },
+                 *         {
+                 *           "candidate_id": "c4",
+                 *           "relevance": 1,
+                 *           "vacancy_id": "qa-auto"
+                 *         }
+                 *       ],
+                 *       "now": "2026-10-01",
+                 *       "vacancies": [
+                 *         {
+                 *           "id": "go-middle",
+                 *           "text": "Go-разработчик (Middle)\nПлатёжный сервис.\nТребования: Go, PostgreSQL, Kafka.\nБудет плюсом: Kubernetes.\nУдалённо, 250–330 тыс. ₽."
+                 *         },
+                 *         {
+                 *           "grades": [
+                 *             "junior",
+                 *             "middle"
+                 *           ],
+                 *           "id": "qa-auto",
+                 *           "must_skills": [
+                 *             "python",
+                 *             "pytest",
+                 *             "postman",
+                 *             "sql"
+                 *           ],
+                 *           "salary_max": 200000,
+                 *           "specialization": "qa",
+                 *           "text": "QA-инженер по автоматизации",
+                 *           "work_formats": [
+                 *             "remote"
+                 *           ]
+                 *         }
+                 *       ]
+                 *     }
+                 */
+                "application/json": components["schemas"]["PairsInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PairsReport"];
+                };
+            };
+            /** @description `invalid_json` — синтаксическая ошибка JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large` — тело больше 8 МиБ */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json` — поля не по схеме; `validation_failed` — превышены лимиты или ошибка в данных (поле в `errors`) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `rate_limited` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };

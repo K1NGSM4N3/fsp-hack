@@ -150,6 +150,14 @@
 | POST | `/api/v1/vacancies/{id}/applications` | 🅲 | Откликнуться `{cover_letter?}` | ✅ |
 | POST | `/api/v1/reports` | 🅼 | Жалоба на вакансию, приглашение или компанию (до 20 в сутки) | ✅ |
 
+## Валидация
+
+Проверка подбора на своём наборе «вакансия – кандидат» (`docs/solution.md` §6.4). Та же логика, что у `validate pairs`: `matching::pairs`. Базу и данные пользователей не трогает, ничего не сохраняет.
+
+| Метод | Путь | Роль | Описание | Статус |
+|---|---|---|---|---|
+| POST | `/api/v1/eval/pairs` | 🅰 | `{vacancies: [{id, text, …}], candidates: [{id, resume_text, …}], labels?: [{vacancy_id, candidate_id, relevance 0–3}], k?, now?}` → как распознана каждая вакансия, топ-k нашего подбора с объяснениями и топ-k базовой линии «ключевые слова + стаж», Precision@5/@k, nDCG@k, MAP, MRR по вакансиям и в среднем, покрытие. Тело ≤ 8 МиБ (413 `payload_too_large`), ≤ 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты ≤ 20 000 символов (422 `validation_failed`, поле в `errors`); JSON не по схеме — 400/422 `invalid_json`; 10 запросов за 10 минут с IP (429) | ✅ |
+
 ## Статусы
 
 **Приглашение:** `sent` → `viewed` → `accepted` | `declined`; из `sent`/`viewed` → `expired` (14 дней) | `withdrawn`.
