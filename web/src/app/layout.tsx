@@ -9,9 +9,9 @@ const onest = Onest({ subsets: ["latin", "cyrillic"], variable: "--font-onest", 
 const jetbrains = JetBrains_Mono({ subsets: ["latin", "cyrillic"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata: Metadata = {
-  title: { default: "ФСП Таланты — найм, в котором первым пишет работодатель", template: "%s · ФСП Таланты" },
+  title: { default: "ФСП Таланты: компании пишут первыми и сразу называют зарплату", template: "%s · ФСП Таланты" },
   description:
-    "Платформа подбора ИТ-специалистов Федерации спортивного программирования России. Уровень подтверждает адаптивный тест, работодатель приходит сам — с зарплатной вилкой в первом сообщении.",
+    "Платформа подбора ИТ-специалистов Федерации спортивного программирования России. Вы один раз подтверждаете уровень тестом, а компании пишут вам сами и сразу называют зарплату.",
 };
 
 export const viewport: Viewport = {
