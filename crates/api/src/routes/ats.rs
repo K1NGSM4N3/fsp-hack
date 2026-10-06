@@ -58,6 +58,7 @@ pub struct AtsWhoami {
     responses(
         (status = 200, body = AtsWhoami),
         (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
+        (status = 404, description = "The key's company no longer exists", body = Problem),
         (status = 429, body = Problem),
     ),
     security(("api_key" = [])))]
@@ -268,7 +269,7 @@ async fn ats_candidate(
     params(("id" = Uuid, Path)),
     responses(
         (status = 200, content_type = "application/pdf", body = Vec<u8>),
-        (status = 401, body = Problem),
+        (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
         (status = 403, description = "`insufficient_scope` — нужно `candidates:read`", body = Problem),
         (status = 404, description = "Нет принятого приглашения или отклика", body = Problem),
         (status = 429, body = Problem),
@@ -286,6 +287,7 @@ async fn ats_candidate_pdf(
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({"invitation_id": "019a8d12-77e0-7c3a-b5f1-4d2e9a6c0b18", "application_id": null, "stage": "interview", "reason": null, "at": "2026-10-06T11:30:00Z"}))]
 pub struct OutcomeInput {
     /// Exactly one of `invitation_id` and `application_id`.
     pub invitation_id: Option<Uuid>,
@@ -314,7 +316,7 @@ pub struct OutcomeRecorded {
     responses(
         (status = 201, description = "Этап записан", body = OutcomeRecorded),
         (status = 200, description = "Этап уже был — обновлены причина и время", body = OutcomeRecorded),
-        (status = 401, body = Problem),
+        (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
         (status = 403, description = "`insufficient_scope` — нужно `outcomes:write`", body = Problem),
         (status = 404, description = "Приглашение или отклик не найдены у этой компании", body = Problem),
         (status = 409, description = "`outcome_not_allowed` — кандидат не принял приглашение или отозвал отклик", body = Problem),
@@ -425,6 +427,11 @@ async fn ats_outcome(
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({
+    "title": "Senior Python-разработчик (ML-платформа)",
+    "text": "Senior Python-разработчик в команду ML-платформы\nМосква, гибрид, от 350 000 до 450 000 ₽\nСтек: Python, FastAPI, PostgreSQL, Kafka, Docker, Kubernetes.\nБудет плюсом: Airflow, ClickHouse. Опыт от 5 лет.",
+    "salary": {"min": 350000, "max": 450000}
+}))]
 pub struct NeedImport {
     /// Vacancy title in the ATS; the first line of `text` if absent.
     pub title: Option<String>,
@@ -461,7 +468,7 @@ fn truncate(s: &str, max_chars: usize) -> &str {
     request_body = NeedImport,
     responses(
         (status = 201, body = ImportedNeed),
-        (status = 401, body = Problem),
+        (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
         (status = 403, description = "`insufficient_scope` — нужно `needs:write`", body = Problem),
         (status = 422, description = "Нет текста, не распознана специализация или вилка", body = Problem),
         (status = 429, body = Problem),
@@ -479,7 +486,7 @@ async fn ats_import_need(
         .as_deref()
         .map(str::trim)
         .filter(|t| !t.is_empty());
-    if text.is_empty() || text.len() > MAX_IMPORT_TEXT {
+    if text.is_empty() || text.chars().count() > MAX_IMPORT_TEXT {
         return Err(ApiError::field(
             "text",
             "Текст вакансии — от 1 до 20 000 символов",

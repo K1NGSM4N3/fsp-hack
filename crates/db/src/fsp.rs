@@ -163,3 +163,71 @@ pub async fn delete_fsp_link(
     .await
     .map(|r| r.rows_affected())
 }
+
+/// The stored snapshot, locked until the transaction ends: two syncs of one candidate apply in
+/// turn, each against what the other wrote.
+pub async fn lock_fsp_snapshot(
+    db: impl PgExecutor<'_>,
+    candidate_id: Uuid,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT achievements FROM fsp_links WHERE candidate_id = $1 FOR UPDATE",
+        candidate_id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
+pub async fn registry_event_seen(
+    db: impl PgExecutor<'_>,
+    event_id: &str,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT EXISTS (SELECT 1 FROM fsp_registry_events WHERE event_id = $1) AS "seen!""#,
+        event_id,
+    )
+    .fetch_one(db)
+    .await
+}
+
+/// Claims the event for this transaction; `false` — it was applied before (a concurrent
+/// redelivery waits here for the first one to commit, then gets `false`).
+pub async fn insert_registry_event(
+    db: impl PgExecutor<'_>,
+    event_id: &str,
+    candidate_id: Uuid,
+    occurred_at: DateTime<Utc>,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO fsp_registry_events (event_id, candidate_id, occurred_at, changed)
+         VALUES ($1, $2, $3, false)
+         ON CONFLICT (event_id) DO NOTHING",
+        event_id,
+        candidate_id,
+        occurred_at,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected() > 0)
+}
+
+pub async fn mark_registry_event_changed(
+    db: impl PgExecutor<'_>,
+    event_id: &str,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "UPDATE fsp_registry_events SET changed = true WHERE event_id = $1",
+        event_id,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+/// A redelivery comes within the registry's retry window — hours, not weeks.
+pub async fn purge_registry_events(db: impl PgExecutor<'_>) -> Result<u64, sqlx::Error> {
+    sqlx::query!("DELETE FROM fsp_registry_events WHERE received_at < now() - interval '30 days'")
+        .execute(db)
+        .await
+        .map(|r| r.rows_affected())
+}

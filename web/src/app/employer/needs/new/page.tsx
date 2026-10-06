@@ -20,9 +20,11 @@ const EXAMPLE = `Backend-разработчик в команду платеже
 
 function fromParse(p: ParsedNeed, raw: string): NeedDraft {
   const firstLine = raw.split("\n").map((l) => l.trim()).find(Boolean) ?? "";
+  const grades = p.grades.length ? p.grades : p.grade ? [p.grade] : [];
+  const fallback = p.specialization ? [SPEC_LONG_LABEL[p.specialization.specialization], grades.map((g) => GRADE_LABEL[g]).join(", ")].filter(Boolean).join(", ") : "";
   return {
     ...EMPTY_NEED,
-    title: firstLine.length <= 80 ? firstLine.replace(/[.:]$/, "") : "",
+    title: firstLine.length <= 80 ? firstLine.replace(/[.:]$/, "") : fallback,
     specialization: p.specialization?.specialization ?? "",
     grades: p.grades.length ? p.grades : p.grade ? [p.grade] : [],
     must_skills: p.must_skills,

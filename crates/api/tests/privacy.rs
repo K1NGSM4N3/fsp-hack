@@ -59,6 +59,7 @@ impl Api {
                 oidc: None,
                 registry_url: None,
                 registry_token: "test".into(),
+                webhook_secret: None,
                 dev_link: false,
             },
             grade_change_cooldown_days: 90,
@@ -1450,7 +1451,7 @@ async fn warm_pool_cache_follows_consents_and_profile_edits(pool: PgPool) {
             Some(&ct),
             Some(json!({
                 "full_name": "Анна Петрова",
-                "contacts": { "telegram": "@anna" },
+                "contacts": { "telegram": "@anna_p" },
                 "salary_expectation_min": 280000,
                 "skills": ["kafka", "postgresql"],
             })),

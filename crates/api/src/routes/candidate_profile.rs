@@ -201,6 +201,26 @@ fn non_empty(v: Option<String>) -> Option<String> {
     v.map(|s| s.trim().to_owned()).filter(|s| !s.is_empty())
 }
 
+/// As people type it: an optional leading `+`, 10–15 digits, spaces, brackets and dashes.
+fn valid_phone(p: &str) -> bool {
+    let body = p.strip_prefix('+').unwrap_or(p);
+    let digits = body.chars().filter(char::is_ascii_digit).count();
+    (10..=15).contains(&digits)
+        && body
+            .chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, ' ' | '(' | ')' | '-'))
+}
+
+/// `@name`, `name` or a `t.me/name` link; Telegram names are 5–32 Latin letters, digits and `_`.
+fn valid_telegram(t: &str) -> bool {
+    let name = t
+        .trim_start_matches("https://")
+        .trim_start_matches("http://")
+        .trim_start_matches("t.me/")
+        .trim_start_matches('@');
+    (5..=32).contains(&name.len()) && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+}
+
 fn valid_month(s: &str) -> bool {
     let b = s.as_bytes();
     b.len() == 7
@@ -212,7 +232,7 @@ fn valid_month(s: &str) -> bool {
 /// Save the profile (form or confirmed resume recognition result)
 #[utoipa::path(put, path = "/profile", tag = "candidate",
     request_body = ProfileInput,
-    responses((status = 200, body = ProfileResponse), (status = 422, body = Problem)),
+    responses((status = 200, body = ProfileResponse), (status = 422, description = "`validation_failed`: `full_name`, `contacts` (none given), `contacts.phone` (10–15 digits), `contacts.telegram` (5–32 Latin letters, digits, `_`), `salary_expectation_min`, `experience_years`, `about`, `skills`, `experience`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn put_profile(
     State(state): State<AppState>,
@@ -233,11 +253,25 @@ async fn put_profile(
         });
     }
     v.check(!full_name.is_empty(), "full_name", "Укажите ФИО")
-        .check(full_name.len() <= 200, "full_name", "Слишком длинное ФИО")
+        .check(
+            full_name.chars().count() <= 200,
+            "full_name",
+            "Слишком длинное ФИО",
+        )
         .check(
             contacts.phone.is_some() || contacts.telegram.is_some() || contacts.email.is_some(),
             "contacts",
             "Нужен хотя бы один способ связи",
+        )
+        .check(
+            contacts.phone.as_deref().is_none_or(valid_phone),
+            "contacts.phone",
+            "Телефон — 10–15 цифр, например +7 999 555-44-33",
+        )
+        .check(
+            contacts.telegram.as_deref().is_none_or(valid_telegram),
+            "contacts.telegram",
+            "Ник в Telegram — 5–32 латинские буквы, цифры или _, например @anna_dev",
         )
         .check(
             p.salary_expectation_min
@@ -250,7 +284,11 @@ async fn put_profile(
             "experience_years",
             "От 0 до 60 лет",
         )
-        .check(p.about.len() <= 5000, "about", "Не длиннее 5000 символов")
+        .check(
+            p.about.chars().count() <= 5000,
+            "about",
+            "Не длиннее 5000 символов",
+        )
         .check(p.skills.len() <= 60, "skills", "Не больше 60 навыков")
         .check(
             p.experience
@@ -404,7 +442,7 @@ pub(crate) async fn access_log(
 }
 
 /// Who opened your contacts: company, time and basis — an accepted invitation or your own
-/// application (ст. 14 152-ФЗ). Newest first
+/// application (ст. 14 152-ФЗ). Newest first, the latest 500 entries
 #[utoipa::path(get, path = "/contact-access", tag = "candidate",
     responses((status = 200, body = Vec<ContactAccessEntry>), (status = 401, body = Problem), (status = 403, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
@@ -746,4 +784,35 @@ pub(crate) async fn profile_pdf_bytes(
     };
     let bytes = tokio::task::spawn_blocking(move || pdf::render(&doc)).await??;
     Ok((p.public_code, bytes))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn contacts_look_like_contacts() {
+        for ok in ["+7 999 555-44-33", "8 (999) 555-44-33", "+79995554433"] {
+            assert!(valid_phone(ok), "{ok}");
+        }
+        for bad in [
+            "+79995554433+79995554433",
+            "555-44-33",
+            "+7 999 abc",
+            "7+9995554433",
+        ] {
+            assert!(!valid_phone(bad), "{bad}");
+        }
+        for ok in [
+            "@anna_dev",
+            "anna_dev",
+            "https://t.me/anna_dev",
+            "t.me/anna_dev",
+        ] {
+            assert!(valid_telegram(ok), "{ok}");
+        }
+        for bad in ["@ann", "@анна_dev", "@anna dev", "@anna-dev"] {
+            assert!(!valid_telegram(bad), "{bad}");
+        }
+    }
 }

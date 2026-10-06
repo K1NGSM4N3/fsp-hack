@@ -236,7 +236,7 @@ function InviteForm({ target, need, onClose, onSent }: { target: InviteTarget; n
         </Select>
       </Field>
 
-      <div className="flex flex-wrap justify-end gap-2 border-t border-line pt-4">
+      <div className="sticky bottom-0 z-10 -mx-5 -mb-5 flex flex-wrap justify-end gap-2 border-t border-line bg-white px-5 py-3 sm:-mx-6 sm:px-6">
         <Button variant="ghost" onClick={onClose}>
           Отмена
         </Button>

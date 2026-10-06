@@ -53,3 +53,4 @@ pdf-extract = "0.12"
 
 [dev-dependencies]
 ats-mock = { path = "../ats-mock" }
+fsp-mock = { path = "../fsp-mock" }

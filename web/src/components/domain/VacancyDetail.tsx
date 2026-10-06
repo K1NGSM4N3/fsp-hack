@@ -59,6 +59,17 @@ function ApplyBox({ vacancyId, loginNext }: { vacancyId: string; loginNext: stri
       </Card>
     );
   }
+  const age = me.data.candidate?.age;
+  if (age?.bracket === "minor" && age.guardian !== "granted") {
+    return (
+      <Card>
+        <CardHeader title="Откликнуться" />
+        <Alert tone="info" title="Отклик откроется после согласия представителя">
+          Отклик передаёт компании ваши контакты, поэтому до 18 лет нужен ответ законного представителя. Отправить письмо ещё раз или указать другой адрес можно в плашке вверху страницы.
+        </Alert>
+      </Card>
+    );
+  }
   return (
     <Card>
       <CardHeader title="Откликнуться" description="Компания увидит вашу категорию и контакты — вы откликаетесь сами." />

@@ -181,6 +181,7 @@ async fn build_view(
 /// What a link from the representative's letter is about: the consent text, who asked, the
 /// current answer and what this link can do now. Anonymous: the token is the credential
 #[utoipa::path(get, path = "/guardian/consent", tag = "guardian",
+    operation_id = "guardian_consent",
     params(TokenQuery),
     responses(
         (status = 200, body = GuardianConsentView),
@@ -199,6 +200,7 @@ async fn view(
 /// `guardian_consent` grant on the minor's behalf with the representative's IP, User-Agent and
 /// time; declining or revoking hides the profile
 #[utoipa::path(post, path = "/guardian/consent", tag = "guardian",
+    operation_id = "answer_guardian_consent",
     request_body = GuardianAnswer,
     responses(
         (status = 200, body = GuardianConsentView),

@@ -270,12 +270,16 @@ async fn similar_vacancies(
     Json(input): Json<SimilarInput>,
 ) -> ApiResult<Json<Vec<SimilarVacancy>>> {
     let mut v = Validator::default();
-    v.check(input.title.len() <= 200, "title", "Не длиннее 200 символов")
-        .check(
-            input.description.len() <= 10_000,
-            "description",
-            "Не длиннее 10 000 символов",
-        );
+    v.check(
+        input.title.chars().count() <= 200,
+        "title",
+        "Не длиннее 200 символов",
+    )
+    .check(
+        input.description.chars().count() <= 10_000,
+        "description",
+        "Не длиннее 10 000 символов",
+    );
     v.finish()?;
     let company = company_id(&state, user.id).await?;
     let similar = trust::similar_own(

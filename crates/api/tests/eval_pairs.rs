@@ -32,6 +32,7 @@ async fn start() -> String {
             oidc: None,
             registry_url: None,
             registry_token: "test".into(),
+            webhook_secret: None,
             dev_link: false,
         },
         grade_change_cooldown_days: 90,

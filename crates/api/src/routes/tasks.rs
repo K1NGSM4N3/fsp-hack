@@ -145,12 +145,12 @@ async fn create_task(
         .collect();
     let mut v = Validator::default();
     v.check(
-        !t.title.trim().is_empty() && t.title.len() <= 200,
+        !t.title.trim().is_empty() && t.title.chars().count() <= 200,
         "title",
         "Название до 200 символов",
     )
     .check(
-        !t.body.trim().is_empty() && t.body.len() <= 5000,
+        !t.body.trim().is_empty() && t.body.chars().count() <= 5000,
         "body",
         "Условие до 5000 символов",
     )
@@ -238,7 +238,7 @@ pub struct Submission {
 /// Anonymous submissions to a task (a strong one is a reason to send an invitation)
 #[utoipa::path(get, path = "/tasks/{id}/submissions", tag = "tasks",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vec<Submission>), (status = 409, description = "`company_profile_required`", body = Problem)),
+    responses((status = 200, body = Vec<Submission>), (status = 404, description = "No such task of this company", body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn submissions(
     State(state): State<AppState>,
@@ -246,6 +246,13 @@ async fn submissions(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<Submission>>> {
     let company = company_id(&state, user.id).await?;
+    if !db::tasks::company_tasks(&state.pool, company)
+        .await?
+        .iter()
+        .any(|t| t.id == id)
+    {
+        return Err(ApiError::not_found());
+    }
     let rows = db::tasks::task_submissions(&state.pool, id, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
@@ -385,11 +392,21 @@ pub struct SubmitInput {
     pub answer: String,
 }
 
+/// 404 unless the assignment is the candidate's: a closed one of theirs is a 409.
+async fn own_task(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<()> {
+    let own = db::tasks::candidate_assignments(&state.pool, candidate).await?;
+    if own.iter().any(|a| a.id == id) {
+        Ok(())
+    } else {
+        Err(ApiError::not_found())
+    }
+}
+
 /// Submit a solution or an approach (refreshes the profile)
 #[utoipa::path(post, path = "/tasks/{id}/submit", tag = "tasks",
     params(("id" = Uuid, Path)),
     request_body = SubmitInput,
-    responses((status = 200, body = Vec<MyTask>), (status = 409, description = "`task_closed`", body = Problem), (status = 422, description = "`validation_failed`: `answer`", body = Problem)),
+    responses((status = 200, body = Vec<MyTask>), (status = 404, description = "Not the caller's task", body = Problem), (status = 409, description = "`task_closed`", body = Problem), (status = 422, description = "`validation_failed`: `answer`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn submit(
     State(state): State<AppState>,
@@ -398,10 +415,11 @@ async fn submit(
     Json(input): Json<SubmitInput>,
 ) -> ApiResult<Json<Vec<MyTask>>> {
     let answer = input.answer.trim();
-    if answer.is_empty() || answer.len() > 20_000 {
+    if answer.is_empty() || answer.chars().count() > 20_000 {
         return Err(ApiError::field("answer", "Ответ от 1 до 20 000 символов"));
     }
     if db::tasks::submit_assignment(&state.pool, answer, id, user.id).await? == 0 {
+        own_task(&state, user.id, id).await?;
         return Err(ApiError::conflict(
             "task_closed",
             "Задание уже закрыто или просрочено",
@@ -416,7 +434,7 @@ async fn submit(
 /// Skip the current task
 #[utoipa::path(post, path = "/tasks/{id}/skip", tag = "tasks",
     params(("id" = Uuid, Path)),
-    responses((status = 204), (status = 409, description = "`task_closed`", body = Problem)),
+    responses((status = 204), (status = 404, description = "Not the caller's task", body = Problem), (status = 409, description = "`task_closed`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn skip(
     State(state): State<AppState>,
@@ -424,6 +442,7 @@ async fn skip(
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
     if db::tasks::skip_assignment(&state.pool, id, user.id).await? == 0 {
+        own_task(&state, user.id, id).await?;
         return Err(ApiError::conflict("task_closed", "Задание уже закрыто"));
     }
     Ok(StatusCode::NO_CONTENT)

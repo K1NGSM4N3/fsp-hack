@@ -68,6 +68,7 @@ impl Api {
                 oidc: None,
                 registry_url: None,
                 registry_token: "test".into(),
+                webhook_secret: None,
                 dev_link: false,
             },
             grade_change_cooldown_days: 90,
@@ -690,7 +691,7 @@ async fn settings_decide_what_goes_by_email(pool: PgPool) {
         .call(Method::GET, "/me/notification-settings", Some(&ct), None)
         .await;
     let items = r.body["items"].as_array().unwrap();
-    assert_eq!(items.len(), 7, "the candidate's kinds only");
+    assert_eq!(items.len(), 11, "the candidate's kinds only");
     assert!(
         items
             .iter()
@@ -996,7 +997,7 @@ async fn feed_pages_marks_read_exports_and_goes_with_the_account(pool: PgPool) {
             .as_array()
             .unwrap()
             .len(),
-        7
+        11
     );
 
     let r = api.call(Method::DELETE, "/me", Some(&ct), None).await;

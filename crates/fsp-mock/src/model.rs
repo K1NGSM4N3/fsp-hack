@@ -282,7 +282,7 @@ impl Achievement {
 }
 
 /// A participant together with its response bodies, rendered once at load time.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Entry {
     participant: Participant,
     card_json: Box<str>,
@@ -303,9 +303,9 @@ impl Entry {
     }
 }
 
-/// Immutable after construction. Lookups touch only the small `index`; the bulky entries are
-/// read once a participant is found.
-#[derive(Debug)]
+/// Immutable after construction: an admin edit builds a new one (see [`Registry::edited`]).
+/// Lookups touch only the small `index`; the bulky entries are read once a participant is found.
+#[derive(Debug, Clone)]
 pub struct Registry {
     index: FxHashMap<Box<str>, usize>,
     entries: Box<[Entry]>,
@@ -323,6 +323,10 @@ impl Registry {
     pub fn from_json(json: &str) -> Result<Self, DataError> {
         let list: Vec<Participant> =
             serde_json::from_str(json).map_err(|e| DataError::Json(e.to_string()))?;
+        Self::from_participants(list)
+    }
+
+    pub fn from_participants(list: Vec<Participant>) -> Result<Self, DataError> {
         let mut index = FxHashMap::with_capacity_and_hasher(list.len(), Default::default());
         let mut entries = Vec::with_capacity(list.len());
         let mut achievement_ids = FxHashSet::default();
@@ -378,6 +382,67 @@ impl Registry {
 
     pub fn participants(&self) -> impl Iterator<Item = &Participant> {
         self.entries.iter().map(Entry::participant)
+    }
+
+    /// A copy where `edit` changed one participant's achievements, validated like the embedded
+    /// data. Returns the participant's canonical id with it.
+    pub fn edited(
+        &self,
+        fsp_id: &str,
+        edit: impl FnOnce(&mut Vec<Achievement>) -> Result<(), EditError>,
+    ) -> Result<(Registry, String), EditError> {
+        let canonical = self
+            .get(fsp_id)
+            .ok_or(EditError::UnknownParticipant)?
+            .participant()
+            .fsp_id
+            .clone();
+        let mut list: Vec<Participant> = self.participants().cloned().collect();
+        let participant = list
+            .iter_mut()
+            .find(|p| p.fsp_id == canonical)
+            .ok_or(EditError::UnknownParticipant)?;
+        edit(&mut participant.achievements)?;
+        let next = Registry::from_participants(list).map_err(|e| match e {
+            DataError::InvalidAchievement { reason, .. } => EditError::Invalid(reason),
+            DataError::DuplicateAchievementId(id) => EditError::DuplicateId(id),
+            other => EditError::Data(other),
+        })?;
+        Ok((next, canonical))
+    }
+
+    /// An achievement id no participant uses yet, in the registry's `ACH-NNNNNN-NN` style.
+    pub fn next_achievement_id(&self, fsp_id: &str) -> Option<String> {
+        let participant = self.get(fsp_id)?.participant();
+        let digits = participant.fsp_id.strip_prefix("FSP-")?;
+        let taken = |id: &str| {
+            self.participants()
+                .flat_map(|p| p.achievements.iter())
+                .any(|a| a.id == id)
+        };
+        (participant.achievements.len() + 1..)
+            .map(|n| format!("ACH-{digits}-{n:02}"))
+            .find(|id| !taken(id))
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum EditError {
+    #[error("participant not found")]
+    UnknownParticipant,
+    #[error("achievement not found")]
+    UnknownAchievement,
+    #[error("achievement id {0} is taken")]
+    DuplicateId(String),
+    #[error("invalid achievement: {0}")]
+    Invalid(AchievementError),
+    #[error(transparent)]
+    Data(DataError),
+}
+
+impl Achievement {
+    pub fn check(&self) -> Result<(), AchievementError> {
+        self.validate()
     }
 }
 
@@ -547,6 +612,74 @@ mod tests {
         assert!(matches!(
             Registry::from_json(&format!("[{one},{one}]")),
             Err(DataError::DuplicateAchievementId(_))
+        ));
+    }
+
+    #[test]
+    fn edits_build_a_new_validated_registry() {
+        let r = registry();
+        let before = r
+            .get("FSP-000011")
+            .unwrap()
+            .participant()
+            .achievements
+            .len();
+        let id = r.next_achievement_id("fsp-000011").unwrap();
+        assert!(id.starts_with("ACH-000011-"));
+        let added = Achievement {
+            id: id.clone(),
+            kind: AchievementKind::Competition,
+            discipline: Discipline::Algorithmic,
+            rank: None,
+            event_name: Some("Кубок России".into()),
+            event_level: Some(EventLevel::National),
+            place: Some(Place::Second),
+            team: None,
+            role: None,
+            date: "2026-10-01".into(),
+            protocol_url: None,
+        };
+        let (next, canonical) = r
+            .edited("fsp-000011", |list| {
+                list.push(added.clone());
+                Ok(())
+            })
+            .unwrap();
+        assert_eq!(canonical, "FSP-000011");
+        let entry = next.get("FSP-000011").unwrap();
+        assert_eq!(entry.participant().achievements.len(), before + 1);
+        assert_eq!(entry.participant().achievements[0].id, id, "newest first");
+        assert!(entry.achievements_json().contains("Кубок России"));
+        assert_eq!(
+            r.get("FSP-000011")
+                .unwrap()
+                .participant()
+                .achievements
+                .len(),
+            before,
+            "the original stays as it was"
+        );
+
+        let clash = r.get("FSP-000001").unwrap().participant().achievements[0].clone();
+        assert!(matches!(
+            r.edited("FSP-000011", |list| {
+                list.push(clash.clone());
+                Ok(())
+            }),
+            Err(EditError::DuplicateId(_))
+        ));
+        let mut bad = added.clone();
+        bad.rank = Some(Rank::First);
+        assert!(matches!(
+            r.edited("FSP-000011", |list| {
+                list.push(bad.clone());
+                Ok(())
+            }),
+            Err(EditError::Invalid(AchievementError::CompetitionWithRank))
+        ));
+        assert!(matches!(
+            r.edited("FSP-999999", |_| Ok(())),
+            Err(EditError::UnknownParticipant)
         ));
     }
 

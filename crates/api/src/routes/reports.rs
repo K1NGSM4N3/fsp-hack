@@ -42,6 +42,12 @@ pub enum ReportReason {
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({
+    "target_kind": "vacancy",
+    "target_id": "019a8b10-3c4d-7a5b-8e9f-0a1b2c3d4e5f",
+    "reason": "salary_mismatch",
+    "comment": "В вакансии 250–300 тыс. ₽, а на созвоне назвали 120 тыс. и «остальное премией»."
+}))]
 pub struct ReportInput {
     pub target_kind: ReportTarget,
     pub target_id: Uuid,
@@ -69,7 +75,7 @@ async fn create_report(
         .as_deref()
         .map(str::trim)
         .filter(|c| !c.is_empty());
-    if comment.is_some_and(|c| c.len() > 2000) {
+    if comment.is_some_and(|c| c.chars().count() > 2000) {
         return Err(ApiError::field("comment", "Не длиннее 2000 символов"));
     }
     let recent = db::reports::recent_reports_by(&state.pool, user.id).await?;

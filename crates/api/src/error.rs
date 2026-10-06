@@ -22,7 +22,7 @@ pub struct Problem {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub detail: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(value_type = Option<Object>, example = json!({"salary.min": ["Зарплата «от» обязательна"]}))]
+    #[schema(value_type = Option<std::collections::HashMap<String, Vec<String>>>, example = json!({"salary.min": ["Зарплата «от» обязательна"]}))]
     pub errors: Option<FieldErrors>,
     /// `consent_required`: the current version of the consent document to grant first
     /// (`POST /api/v1/me/consents`); `guardian_consent_required`: the document the legal

@@ -130,7 +130,7 @@ export default function CompanyPage() {
   const q = useCompany();
   return (
     <div>
-      <PageHeader title="Профиль компании" description="Верификация компаний в MVP не требуется. Квота приглашений защищает кандидатов от спама." />
+      <PageHeader title="Профиль компании" description="Укажите сайт на домене почты, с которой входите: домен подтвердится, и квота приглашений вырастет на 10. Квота защищает соискателей от спама." />
       {q.isPending ? <PageSkeleton cards={2} /> : q.isError ? <ErrorAlert error={q.error} onRetry={() => void q.refetch()} /> : <CompanyForm company={q.data} />}
       <div className="mt-10 max-w-3xl space-y-6">
         <NotificationSettingsCard />

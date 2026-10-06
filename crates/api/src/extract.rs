@@ -8,10 +8,10 @@
 use axum::{
     body::Bytes,
     extract::{FromRequest, FromRequestParts, Request, multipart::MultipartRejection},
-    http::StatusCode,
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
-use serde::Serialize;
+use serde::{Serialize, de::DeserializeOwned};
 
 use crate::error::ApiError;
 
@@ -19,6 +19,16 @@ use crate::error::ApiError;
 #[derive(Debug, Clone, Copy, Default, FromRequest)]
 #[from_request(via(axum::Json), rejection(ApiError))]
 pub struct Json<T>(pub T);
+
+impl<T: DeserializeOwned> Json<T> {
+    /// A body already read as bytes — a signed push is verified before it is parsed — with the
+    /// extractor's rejections.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, ApiError> {
+        axum::Json::<T>::from_bytes(bytes)
+            .map(|axum::Json(v)| Json(v))
+            .map_err(ApiError::from)
+    }
+}
 
 impl<T: Serialize> IntoResponse for Json<T> {
     fn into_response(self) -> Response {
@@ -33,6 +43,20 @@ pub struct Path<T>(pub T);
 #[derive(Debug, Clone, Copy, Default, FromRequestParts)]
 #[from_request(via(axum::extract::Query), rejection(ApiError))]
 pub struct Query<T>(pub T);
+
+/// 201 Created with `Location`: the path the new resource is read back from.
+pub struct Created<T>(pub String, pub T);
+
+impl<T: Serialize> IntoResponse for Created<T> {
+    fn into_response(self) -> Response {
+        (
+            StatusCode::CREATED,
+            [(header::LOCATION, self.0)],
+            axum::Json(self.1),
+        )
+            .into_response()
+    }
+}
 
 /// A raw body (a video chunk), buffered up to the route's `DefaultBodyLimit`.
 pub struct RawBody(pub Bytes);

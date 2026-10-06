@@ -97,6 +97,12 @@ function ItemForm({ current, sessionId }: { current: CurrentItem; sessionId: str
     }
   }, [expired, now, deadline, qc, sessionId, toast]);
 
+  const answerRef = useRef<HTMLInputElement>(null);
+  // A phone would scroll the question and the timer away to the field and raise the keyboard.
+  useEffect(() => {
+    if (window.matchMedia("(pointer: fine)").matches) answerRef.current?.focus({ preventScroll: true });
+  }, [current.seq]);
+
   useEffect(() => {
     if (item.kind !== "single_choice") return;
     const onKey = (e: KeyboardEvent) => {
@@ -138,7 +144,7 @@ function ItemForm({ current, sessionId }: { current: CurrentItem; sessionId: str
   return (
     <form noValidate onSubmit={onSubmit} data-answer>
       <Card padding="lg">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <div className="sticky top-14 z-10 -mx-2 mb-5 flex flex-wrap items-center justify-between gap-3 rounded-control bg-white/95 px-2 py-2 backdrop-blur sm:static sm:mx-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="primary">{TOPIC_LABEL[item.topic]}</Badge>
             <span className="text-sm text-ink-subtle">{item.title}</span>
@@ -198,7 +204,7 @@ function ItemForm({ current, sessionId }: { current: CurrentItem; sessionId: str
               </label>
               <Input
                 id={`ans-${current.seq}`}
-                autoFocus
+                ref={answerRef}
                 autoComplete="off"
                 inputMode={item.kind === "number" ? "decimal" : "text"}
                 value={text}
@@ -321,7 +327,7 @@ function ModeratorDecision({ review, grade }: { review: NonNullable<AssessmentSe
   const v = DECISION_VIEW[review.decision];
   const effect =
     review.decision === "confirm"
-      ? "Отметка «требует подтверждения» снята. Работодатели видят у вашей категории «Результат подтверждён»."
+      ? "Отметка «требует подтверждения» снята. Компании видят у вашей категории «Результат подтверждён»."
       : review.decision === "annul"
         ? `Категория из этого теста снята, вернулась прежняя — если она была. Тест на ${GRADE_LABEL[grade]} снова доступен через 30 дней после решения.`
         : `Пройти тест на ${GRADE_LABEL[grade]} можно сразу, но только с включённой камерой. До этого категория из этого теста снята.`;
@@ -384,7 +390,7 @@ function Result({ session }: { session: AssessmentSession }) {
               {voided
                 ? "Категория, которую дал этот тест, снята. Подробности — в решении модератора ниже."
                 : r.assigned_grade
-                ? "Категория присвоена — работодатели уже могут найти вас в поиске."
+                ? "Категория присвоена — компании уже могут найти вас в поиске."
                 : d.grade_measured
                   ? `По результату уровень соответствует ${GRADE_LABEL[d.grade_measured]}. Неудачная попытка не понижает уже присвоенный грейд.`
                   : "Попробуйте пройти тест позже — история попыток сохранена."}

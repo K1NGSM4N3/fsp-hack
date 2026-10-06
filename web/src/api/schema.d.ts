@@ -453,7 +453,7 @@ export interface paths {
         };
         /**
          * Who opened your contacts: company, time and basis — an accepted invitation or your own
-         *     application (ст. 14 152-ФЗ). Newest first
+         *     application (ст. 14 152-ФЗ). Newest first, the latest 500 entries
          */
         get: operations["contact_access"];
         put?: never;
@@ -1563,6 +1563,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/fsp/registry/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * The ФСП registry reports that a participant's achievements changed
+         * @description Вебхук реестра ФСП: вместо ожидания ручной синхронизации реестр сам сообщает, что достижения участника изменились. Подпись — как у вебхуков ATS: `FSP-Signature: t=<unix>,v1=hex(HMAC-SHA256(FSP_REGISTRY_WEBHOOK_SECRET, t + "." + тело))`; метка `t` дальше 5 минут от часов сервера — 401 `signature_expired`, повтор перехваченного запроса не пройдёт. Для привязанного участника платформа забирает достижения из реестра (как `POST /fsp/sync`), обновляет навыки, подтверждённые ФСП, и, если что-то изменилось, присылает соискателю уведомление «Новые достижения ФСП в профиле». Ответ одинаков — 202 без тела — для применённого, не изменившего ничего, повторного (`event_id` уже был) события и для `fsp_id`, который на платформе не привязан: о таком событии ничего не сохраняется. Лимит — 300 запросов в минуту с одного адреса.
+         */
+        post: operations["registry_event"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/fsp/sync": {
         parameters: {
             query?: never;
@@ -1591,7 +1611,7 @@ export interface paths {
          * What a link from the representative's letter is about: the consent text, who asked, the
          *     current answer and what this link can do now. Anonymous: the token is the credential
          */
-        get: operations["view"];
+        get: operations["guardian_consent"];
         put?: never;
         /**
          * The representative's answer. The answer link grants or declines once while it is valid; the
@@ -1599,7 +1619,7 @@ export interface paths {
          *     `guardian_consent` grant on the minor's behalf with the representative's IP, User-Agent and
          *     time; declining or revoking hides the profile
          */
-        post: operations["answer"];
+        post: operations["answer_guardian_consent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2103,6 +2123,11 @@ export interface components {
         ApplicationStatusInput: {
             status: components["schemas"]["ApplicationStatus"];
         };
+        /**
+         * @example {
+         *       "cover_letter": "Здравствуйте! Три года пишу на Go сервисы платежей (PostgreSQL, Kafka), на платформе подтверждён Middle. Готов выйти через две недели."
+         *     }
+         */
         ApplyInput: {
             cover_letter?: string;
         };
@@ -2697,6 +2722,12 @@ export interface components {
             /** Format: int32 */
             items_administered: number;
         };
+        /**
+         * @example {
+         *       "comment": "Запись просмотрена: соискатель отвечал самостоятельно, уходы со вкладки — по 2–3 секунды на заданиях с кодом.",
+         *       "decision": "confirm"
+         *     }
+         */
         DecisionInput: {
             decision: components["schemas"]["ReviewDecision"];
             /** @description Up to 2000 characters. The candidate reads it in the test history. */
@@ -2710,6 +2741,12 @@ export interface components {
         };
         /** @enum {string} */
         DeclineReason: "salary" | "stack" | "format" | "company" | "not_looking" | "other";
+        /**
+         * @example {
+         *       "comment": "Рассматриваю предложения от 350 000 ₽",
+         *       "reason": "salary"
+         *     }
+         */
         DeclineRequest: {
             reason: components["schemas"]["DeclineReason"];
             comment?: string | null;
@@ -3250,6 +3287,12 @@ export interface components {
             /** Format: int64 */
             recording_views_week: number;
         };
+        /**
+         * @example {
+         *       "email": "candidate@demo.fsp",
+         *       "password": "demo12345"
+         *     }
+         */
         LoginRequest: {
             email: string;
             password: string;
@@ -3404,6 +3447,16 @@ export interface components {
             slug: "office" | "hybrid" | "remote";
             name: string;
         };
+        /**
+         * @example {
+         *       "salary": {
+         *         "max": 450000,
+         *         "min": 350000
+         *       },
+         *       "text": "Senior Python-разработчик в команду ML-платформы\nМосква, гибрид, от 350 000 до 450 000 ₽\nСтек: Python, FastAPI, PostgreSQL, Kafka, Docker, Kubernetes.\nБудет плюсом: Airflow, ClickHouse. Опыт от 5 лет.",
+         *       "title": "Senior Python-разработчик (ML-платформа)"
+         *     }
+         */
         NeedImport: {
             /** @description Vacancy title in the ATS; the first line of `text` if absent. */
             title?: string | null;
@@ -3411,6 +3464,40 @@ export interface components {
             text: string;
             salary?: components["schemas"]["SalaryRange"] | null;
         };
+        /**
+         * @example {
+         *       "allow_adjacent_grades": false,
+         *       "city": "Москва",
+         *       "description": "Процессинг платежей: идемпотентные API, outbox, шардирование PostgreSQL. Команда из 6 человек, релизы каждый день.",
+         *       "grades": [
+         *         "middle",
+         *         "senior"
+         *       ],
+         *       "industries": [
+         *         "fintech"
+         *       ],
+         *       "must_skills": [
+         *         "go",
+         *         "postgresql",
+         *         "kafka"
+         *       ],
+         *       "nice_skills": [
+         *         "grpc",
+         *         "docker"
+         *       ],
+         *       "salary": {
+         *         "max": 360000,
+         *         "min": 280000
+         *       },
+         *       "specialization": "backend",
+         *       "status": "active",
+         *       "title": "Go-разработчик в команду платежей",
+         *       "work_formats": [
+         *         "remote",
+         *         "hybrid"
+         *       ]
+         *     }
+         */
         NeedInput: {
             title: string;
             /** @description What the team does and whom it needs; also used for text relevance. */
@@ -3435,7 +3522,7 @@ export interface components {
             emails: components["schemas"]["EmailRecord"][];
         };
         /** @enum {string} */
-        NotificationKind: "invitation_received" | "invitation_expiring" | "invitation_withdrawn" | "hiring_stage" | "application_status" | "assessment_result" | "guardian_decision" | "invitation_accepted" | "invitation_declined" | "application_received" | "webhook_failing" | "trust_changed";
+        NotificationKind: "invitation_received" | "invitation_expiring" | "invitation_withdrawn" | "hiring_stage" | "application_status" | "assessment_result" | "guardian_decision" | "invitation_accepted" | "invitation_declined" | "application_received" | "webhook_failing" | "trust_changed" | "result_confirmed" | "result_annulled" | "retest_ordered" | "vacancy_unpublished" | "invitations_frozen" | "sanction_lifted" | "complaint_resolved" | "fsp_achievements";
         NotificationPage: {
             items: components["schemas"]["NotificationView"][];
             /**
@@ -3473,6 +3560,15 @@ export interface components {
         };
         /** @enum {string} */
         OnboardingStep: "profile" | "survey" | "assessment" | "done";
+        /**
+         * @example {
+         *       "application_id": null,
+         *       "at": "2026-10-06T11:30:00Z",
+         *       "invitation_id": "019a8d12-77e0-7c3a-b5f1-4d2e9a6c0b18",
+         *       "reason": null,
+         *       "stage": "interview"
+         *     }
+         */
         OutcomeInput: {
             /**
              * Format: uuid
@@ -3877,7 +3973,16 @@ export interface components {
             status: number;
             code: string;
             detail?: string | null;
-            errors?: Record<string, never> | null;
+            /**
+             * @example {
+             *       "salary.min": [
+             *         "Зарплата «от» обязательна"
+             *       ]
+             *     }
+             */
+            errors?: {
+                [key: string]: string[];
+            } | null;
             /**
              * Format: uuid
              * @description `consent_required`: the current version of the consent document to grant first
@@ -4121,6 +4226,22 @@ export interface components {
             user_id: string;
             verification_required: boolean;
         };
+        RegistryEvent: {
+            /**
+             * @description Unique per event; a redelivery carries the same id. Up to 128 characters.
+             * @example evt_01JAB3K9Q7T2
+             */
+            event_id: string;
+            /**
+             * @description `achievements.changed`; other types are accepted and ignored.
+             * @example achievements.changed
+             */
+            type: string;
+            /** @example FSP-000011 */
+            fsp_id: string;
+            /** Format: date-time */
+            occurred_at: string;
+        };
         Relation: {
             invitation_status?: components["schemas"]["InvitationStatus"] | null;
             applied: boolean;
@@ -4144,6 +4265,14 @@ export interface components {
             /** Format: uuid */
             id: string;
         };
+        /**
+         * @example {
+         *       "comment": "В вакансии 250–300 тыс. ₽, а на созвоне назвали 120 тыс. и «остальное премией».",
+         *       "reason": "salary_mismatch",
+         *       "target_id": "019a8b10-3c4d-7a5b-8e9f-0a1b2c3d4e5f",
+         *       "target_kind": "vacancy"
+         *     }
+         */
         ReportInput: {
             target_kind: components["schemas"]["ReportTarget"];
             /** Format: uuid */
@@ -4286,6 +4415,21 @@ export interface components {
         };
         /** @enum {string} */
         SearchStatus: "active" | "open" | "closed";
+        /**
+         * @example {
+         *       "candidate_id": "019a7c3e-5b2d-7f10-9c41-2e8d6a0b7f13",
+         *       "contact": "Telegram @severny_hr, +7 495 123-45-67",
+         *       "message": "Здравствуйте! У вас подтверждённый Middle по бэкенду и опыт с Kafka. Предлагаем обсудить роль в процессинге: удалённо, оформление по ТК, ДМС с первого месяца.",
+         *       "need_id": "01a112db-8cba-72d5-a97b-b8c44094881f",
+         *       "salary": {
+         *         "max": 360000,
+         *         "min": 280000
+         *       },
+         *       "title": "Middle Go-разработчик, команда платежей",
+         *       "vacancy_id": null,
+         *       "work_format": "remote"
+         *     }
+         */
         SendInvitation: {
             /** Format: uuid */
             candidate_id: string;
@@ -4377,6 +4521,27 @@ export interface components {
             need: components["schemas"]["HiringNeed"];
             items: components["schemas"]["ShortlistItem"][];
         };
+        /**
+         * @example {
+         *       "adults_only": true,
+         *       "fsp_only": false,
+         *       "grades": [
+         *         "middle"
+         *       ],
+         *       "limit": 30,
+         *       "max_expectation": 350000,
+         *       "must_skills": [
+         *         "go",
+         *         "postgresql"
+         *       ],
+         *       "nice_skills": [
+         *         "kafka"
+         *       ],
+         *       "work_formats": [
+         *         "remote"
+         *       ]
+         *     }
+         */
         ShortlistFilters: {
             grades?: components["schemas"]["Grade"][] | null;
             allow_adjacent_grades?: boolean | null;
@@ -4478,6 +4643,16 @@ export interface components {
             /** Format: int64 */
             count: number;
         };
+        /**
+         * @example {
+         *       "grade": "middle",
+         *       "proctoring": {
+         *         "camera": true,
+         *         "consent_document_id": "0191f000-0000-7000-8000-000000000004"
+         *       },
+         *       "specialization": "backend"
+         *     }
+         */
         StartInput: {
             specialization: components["schemas"]["Specialization"];
             grade: components["schemas"]["Grade"];
@@ -4612,6 +4787,15 @@ export interface components {
          * @enum {string}
          */
         TrustAction: "dismiss" | "unpublish" | "freeze" | "restore";
+        /**
+         * @example {
+         *       "action": "freeze",
+         *       "comment": "Три подтверждённые жалобы: после приглашения вилку занижают вдвое. Приглашения приостановлены до проверки.",
+         *       "days": 14,
+         *       "id": "019a6f00-1111-7222-8333-444455556666",
+         *       "kind": "company"
+         *     }
+         */
         TrustActionInput: {
             kind: components["schemas"]["TrustItemKind"];
             /** Format: uuid */
@@ -4973,7 +5157,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `wrong_role`: moderators only */
+            /** @description `wrong_role`: moderators only; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5274,7 +5458,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `wrong_role`: moderators only */
+            /** @description `wrong_role`: moderators only; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5776,6 +5960,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     withdraw_application: {
@@ -5806,6 +5999,24 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not the caller's application */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5850,6 +6061,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     start_session: {
@@ -5867,6 +6087,8 @@ export interface operations {
         responses: {
             201: {
                 headers: {
+                    /** @description `/api/v1/candidate/assessments/{id}` */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -5884,6 +6106,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5918,7 +6149,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `validation_failed`: `proctoring.consent_document_id` missing or not the current version; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            /** @description `validation_failed`: `specialization` is not the one from the survey or the current category; `proctoring.consent_document_id` missing or not the current version; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5959,6 +6190,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6010,6 +6250,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6100,6 +6349,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6147,6 +6405,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6216,6 +6483,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6353,6 +6629,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     contact_access: {
@@ -6381,6 +6666,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6417,6 +6703,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6459,6 +6746,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6538,6 +6834,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `guardian_not_needed`: you are 18 or older; `guardian_already_confirmed`; `guardian_missing`, `guardian_already_answered` */
             409: {
                 headers: {
@@ -6584,6 +6889,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_received: {
@@ -6616,6 +6930,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6663,6 +6986,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6731,6 +7063,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Not the caller's invitation */
             404: {
                 headers: {
@@ -6767,7 +7108,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            /** @description `validation_failed`: `comment` longer than 1000 characters; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6797,6 +7138,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6841,6 +7191,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     put_privacy: {
@@ -6875,6 +7234,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6946,6 +7314,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -6982,6 +7351,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7031,6 +7401,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `payload_too_large`: the body is over the route's limit */
             413: {
                 headers: {
@@ -7049,7 +7428,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            /** @description `validation_failed`: `full_name`, `contacts` (none given), `contacts.phone` (10–15 digits), `contacts.telegram` (5–32 Latin letters, digits, `_`), `salary_expectation_min`, `experience_years`, `about`, `skills`, `experience`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7086,6 +7465,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     upload_resume: {
@@ -7111,6 +7499,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7186,6 +7583,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `payload_too_large`: the body is over the route's limit */
             413: {
                 headers: {
@@ -7241,6 +7647,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     my_tasks: {
@@ -7262,6 +7677,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7299,6 +7723,24 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not the caller's task */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7351,6 +7793,24 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not the caller's task */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7547,6 +8007,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7610,6 +8079,7 @@ export interface operations {
                 q?: string | null;
                 /** @description Rank by fit to this need instead of profile strength. */
                 need_id?: string | null;
+                /** @description 1–100, 20 by default; out-of-range values are clamped. */
                 limit?: number | null;
                 offset?: number | null;
             };
@@ -7638,6 +8108,24 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `need_id` is not a need of this company */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7704,6 +8192,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7760,7 +8257,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `contacts_not_granted` */
+            /** @description `contacts_not_granted`; `wrong_role`: the method belongs to another role */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7806,6 +8303,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_company: {
@@ -7834,6 +8340,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7876,6 +8383,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7938,6 +8454,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -7995,6 +8512,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -8035,6 +8561,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8087,6 +8622,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -8130,6 +8674,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8210,6 +8763,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8271,6 +8833,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8340,6 +8911,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8385,6 +8965,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8423,6 +9012,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8484,6 +9082,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -8499,7 +9106,10 @@ export interface operations {
         parameters: {
             query?: never;
             header?: {
-                /** @description Повтор с тем же ключом вернёт уже созданное приглашение */
+                /**
+                 * @description До 100 символов. Повтор с тем же ключом вернёт уже созданное приглашение — и при одновременной отправке
+                 * @example inv-2026-10-06-0001
+                 */
                 "Idempotency-Key"?: string | null;
             };
             path?: never;
@@ -8522,6 +9132,8 @@ export interface operations {
             };
             201: {
                 headers: {
+                    /** @description `/api/v1/employer/invitations/{id}` */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8539,6 +9151,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8582,7 +9203,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            /** @description `validation_failed`; `idempotency_key`: longer than 100 characters, or already used for an invitation to another candidate; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -8612,6 +9233,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8660,6 +9290,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8721,6 +9360,24 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such invitation of this company */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `invitation_closed`; `company_profile_required` */
             409: {
                 headers: {
@@ -8758,6 +9415,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -8784,6 +9450,8 @@ export interface operations {
         responses: {
             201: {
                 headers: {
+                    /** @description `/api/v1/employer/needs/{id}` */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -8801,6 +9469,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -8885,6 +9562,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `payload_too_large`: the body is over the route's limit */
             413: {
                 headers: {
@@ -8951,6 +9637,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9004,6 +9699,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9092,6 +9796,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9148,6 +9861,24 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such need or not this company's */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -9189,6 +9920,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9249,6 +9989,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9342,6 +10091,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -9418,6 +10176,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9529,6 +10296,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -9572,6 +10348,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9649,6 +10434,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9739,6 +10533,24 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such task of this company */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -9783,6 +10595,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -9908,6 +10729,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -9934,6 +10764,8 @@ export interface operations {
         responses: {
             201: {
                 headers: {
+                    /** @description `/api/v1/employer/vacancies/{id}` */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -9951,6 +10783,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10035,7 +10876,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `wrong_role` */
+            /** @description `wrong_role`; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -10119,6 +10960,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -10172,6 +11022,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10255,6 +11114,24 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such vacancy of this company */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10447,6 +11324,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     unlink: {
@@ -10466,6 +11352,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10545,12 +11440,23 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Disabled */
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_found`: `FSP_DEV_LINK` is off */
             404: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
             /** @description `fsp_already_linked` */
             409: {
@@ -10615,7 +11521,130 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `fsp_unavailable`: the FSP ID provider did not answer */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `fsp_oidc_disabled` */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    registry_event: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description `t=<unix seconds>,v1=<hex HMAC-SHA256>` */
+                "FSP-Signature": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                /**
+                 * @example {
+                 *       "event_id": "evt_01JAB3K9Q7T2",
+                 *       "fsp_id": "FSP-000011",
+                 *       "occurred_at": "2026-10-06T09:30:00Z",
+                 *       "type": "achievements.changed"
+                 *     }
+                 */
+                "application/json": components["schemas"]["RegistryEvent"];
+            };
+        };
+        responses: {
+            /** @description Принято (в том числе повтор и неизвестный `fsp_id`) */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `invalid_json` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `signature_invalid` — подписи нет, она повреждена или не совпала; `signature_expired` — метка старше 5 минут */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large` — тело больше 16 КиБ */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json` — поля не по схеме; `validation_failed`: `event_id`, `fsp_id` */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `rate_limited` */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `fsp_unavailable` — реестр не отдал достижения; доставьте событие позже */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `fsp_webhook_disabled` — секрет вебхука не задан; `fsp_registry_disabled` — реестр не настроен */
             503: {
                 headers: {
                     [name: string]: unknown;
@@ -10652,6 +11681,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -10680,7 +11718,7 @@ export interface operations {
             };
         };
     };
-    view: {
+    guardian_consent: {
         parameters: {
             query: {
                 /** @description Token from either link of the letter. */
@@ -10711,7 +11749,7 @@ export interface operations {
             };
         };
     };
-    answer: {
+    answer_guardian_consent: {
         parameters: {
             query?: never;
             header?: never;
@@ -10873,6 +11911,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `api_key_required`, `api_key_invalid` */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11002,6 +12041,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `api_key_required`, `api_key_invalid` */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11096,6 +12136,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `api_key_required`, `api_key_invalid` */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -11194,6 +12235,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description The key's company no longer exists */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -11249,6 +12299,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11335,6 +12394,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `payload_too_large`: the body is over the route's limit */
             413: {
                 headers: {
@@ -11393,6 +12461,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11508,6 +12585,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `payload_too_large`: the body is over the route's limit */
             413: {
                 headers: {
@@ -11613,6 +12699,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -11778,6 +12873,15 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `payload_too_large`: the body is over the route's limit */
             413: {
                 headers: {
@@ -11825,6 +12929,7 @@ export interface operations {
                 q?: string | null;
                 /** @description Vacancies whose upper salary bound reaches this value. */
                 salary_from?: number | null;
+                /** @description 1–100, 20 by default; out-of-range values are clamped. */
                 limit?: number | null;
                 offset?: number | null;
             };
@@ -11925,6 +13030,15 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer` */
+            403: {
                 headers: {
                     [name: string]: unknown;
                 };

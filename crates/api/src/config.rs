@@ -47,6 +47,9 @@ pub struct FspConfig {
     pub oidc: Option<OidcConfig>,
     pub registry_url: Option<String>,
     pub registry_token: String,
+    /// Shared secret of the registry's signed pushes (`FSP_REGISTRY_WEBHOOK_SECRET`); unset —
+    /// the push endpoint answers 503 and only pull works.
+    pub webhook_secret: Option<String>,
     pub dev_link: bool,
 }
 
@@ -273,6 +276,7 @@ impl Config {
                 registry_url: var("FSP_REGISTRY_URL"),
                 registry_token: var("FSP_REGISTRY_TOKEN")
                     .unwrap_or_else(|| "dev-registry-token".into()),
+                webhook_secret: var("FSP_REGISTRY_WEBHOOK_SECRET"),
                 dev_link: flag("FSP_DEV_LINK", false),
             },
             grade_change_cooldown_days: parsed("GRADE_CHANGE_COOLDOWN_DAYS", 90)?,

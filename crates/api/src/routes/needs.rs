@@ -18,7 +18,7 @@ use crate::{
     cards::{self, CandidateCard},
     dto::{SalaryRange, parse_slugs, slugs},
     error::{ApiError, ApiResult, Problem, Validator},
-    extract::{Json, Path},
+    extract::{Created, Json, Path},
     pool::{self, PoolFilter},
     skills,
     state::AppState,
@@ -45,6 +45,20 @@ pub enum NeedStatus {
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({
+    "title": "Go-разработчик в команду платежей",
+    "description": "Процессинг платежей: идемпотентные API, outbox, шардирование PostgreSQL. Команда из 6 человек, релизы каждый день.",
+    "specialization": "backend",
+    "grades": ["middle", "senior"],
+    "allow_adjacent_grades": false,
+    "must_skills": ["go", "postgresql", "kafka"],
+    "nice_skills": ["grpc", "docker"],
+    "salary": {"min": 280000, "max": 360000},
+    "work_formats": ["remote", "hybrid"],
+    "city": "Москва",
+    "industries": ["fintech"],
+    "status": "active"
+}))]
 pub struct NeedInput {
     pub title: String,
     /// What the team does and whom it needs; also used for text relevance.
@@ -68,6 +82,16 @@ pub struct NeedInput {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
+#[schema(example = json!({
+    "grades": ["middle"],
+    "must_skills": ["go", "postgresql"],
+    "nice_skills": ["kafka"],
+    "work_formats": ["remote"],
+    "fsp_only": false,
+    "adults_only": true,
+    "max_expectation": 350000,
+    "limit": 30
+}))]
 pub struct ShortlistFilters {
     pub grades: Option<Vec<Grade>>,
     pub allow_adjacent_grades: Option<bool>,
@@ -207,12 +231,12 @@ fn validate(n: &NeedInput) -> ApiResult<CleanNeed> {
     let nice = skills::canonicalize(&n.nice_skills);
     let mut v = Validator::default();
     v.check(
-        !n.title.trim().is_empty() && n.title.len() <= 200,
+        !n.title.trim().is_empty() && n.title.chars().count() <= 200,
         "title",
         "Название до 200 символов",
     )
     .check(
-        n.description.len() <= 10_000,
+        n.description.chars().count() <= 10_000,
         "description",
         "Описание до 10 000 символов",
     )
@@ -228,8 +252,13 @@ fn validate(n: &NeedInput) -> ApiResult<CleanNeed> {
         "«До» не меньше «от»",
     )
     .check(
-        n.must_skills.len() <= 20 && n.nice_skills.len() <= 20,
+        n.must_skills.len() <= 20,
         "must_skills",
+        "Не больше 20 навыков",
+    )
+    .check(
+        n.nice_skills.len() <= 20,
+        "nice_skills",
         "Не больше 20 навыков",
     );
     if let Err(unknown) = &must {
@@ -294,20 +323,20 @@ pub(crate) async fn company_need_views(pool: &PgPool, company: Uuid) -> ApiResul
 /// Describe a need: specialization, grades, stack, salary range
 #[utoipa::path(post, path = "/needs", tag = "matching",
     request_body = NeedInput,
-    responses((status = 201, body = HiringNeed), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
+    responses((status = 201, body = HiringNeed, headers(("Location" = String, description = "`/api/v1/employer/needs/{id}`"))), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn create_need(
     State(state): State<AppState>,
     user: EmployerUser,
     Json(n): Json<NeedInput>,
-) -> ApiResult<(StatusCode, Json<HiringNeed>)> {
+) -> ApiResult<Created<HiringNeed>> {
     let clean = validate(&n)?;
     let company = company_id(&state, user.id).await?;
     let id = Uuid::now_v7();
     db::needs::insert_need(&state.pool, id, company, &clean.fields(&n)).await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(load_need(&state.pool, company, id).await?),
+    Ok(Created(
+        format!("/api/v1/employer/needs/{id}"),
+        load_need(&state.pool, company, id).await?,
     ))
 }
 
@@ -325,7 +354,7 @@ async fn parse_need(
     _user: EmployerUser,
     Json(input): Json<ParseInput>,
 ) -> ApiResult<Json<ParsedNeed>> {
-    if input.text.len() > 20_000 {
+    if input.text.chars().count() > 20_000 {
         return Err(ApiError::field("text", "Не длиннее 20 000 символов"));
     }
     Ok(Json(matching::parse_need(&input.text)))
@@ -391,7 +420,7 @@ async fn delete_need(
 /// Recommended categories for the need: every grade of its specialization with supply and stack fit
 #[utoipa::path(get, path = "/needs/{id}/categories", tag = "matching",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vec<CategoryStats>), (status = 409, description = "`company_profile_required`", body = Problem)),
+    responses((status = 200, body = Vec<CategoryStats>), (status = 404, description = "No such need or not this company's", body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn need_categories(
     State(state): State<AppState>,
@@ -495,12 +524,14 @@ async fn build_shortlist(
     Path(id): Path<Uuid>,
     Json(mut filters): Json<ShortlistFilters>,
 ) -> ApiResult<Json<Shortlist>> {
-    for list in [&mut filters.must_skills, &mut filters.nice_skills]
-        .into_iter()
-        .flatten()
-    {
-        *list = skills::canonicalize(list)
-            .map_err(|unknown| ApiError::field("skills", skills::unknown_message(&unknown)))?;
+    for (field, list) in [
+        ("must_skills", &mut filters.must_skills),
+        ("nice_skills", &mut filters.nice_skills),
+    ] {
+        if let Some(list) = list {
+            *list = skills::canonicalize(list)
+                .map_err(|unknown| ApiError::field(field, skills::unknown_message(&unknown)))?;
+        }
     }
     let limit = filters
         .limit

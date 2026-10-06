@@ -78,6 +78,7 @@ dependencies = [
  "chrono",
  "db",
  "ed25519-dalek",
+ "fsp-mock",
  "futures-util",
  "hmac",
  "jsonwebtoken",
@@ -1091,14 +1092,20 @@ checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 name = "fsp-mock"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "axum",
+ "chrono",
+ "hmac",
+ "reqwest",
  "rustc-hash",
  "serde",
  "serde_json",
+ "sha2",
  "thiserror",
  "tokio",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

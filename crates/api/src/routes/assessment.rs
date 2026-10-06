@@ -7,10 +7,7 @@ use assessment::{
     PolicyError, SessionState, TestPlan, Topic,
     policy::{AllowedAttempt, Attempt, CameraOrder, CameraTest, PolicyConfig},
 };
-use axum::{
-    extract::State,
-    http::{HeaderMap, StatusCode},
-};
+use axum::{extract::State, http::HeaderMap};
 use catalog::{Category, Grade, Specialization};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use rand::RngCore;
@@ -24,7 +21,7 @@ use crate::{
     auth::{CandidateUser, EmployerUser, client_ip, user_agent},
     dto::AssessmentStatus,
     error::{ApiError, ApiResult, InternalError, Problem},
-    extract::{Json, Path, Query},
+    extract::{Created, Json, Path, Query},
     moderation::ReviewDecision,
     notify::Notifier,
     proctoring::{self, ProctoringMode, ProctoringSummary},
@@ -467,6 +464,7 @@ fn deadline_for(item: &ItemRef, now: DateTime<Utc>) -> ApiResult<DateTime<Utc>> 
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({"specialization": "backend", "grade": "middle", "proctoring": {"camera": true, "consent_document_id": "0191f000-0000-7000-8000-000000000004"}}))]
 pub struct StartInput {
     pub specialization: Specialization,
     pub grade: Grade,
@@ -489,9 +487,9 @@ pub struct ProctoringChoice {
 #[utoipa::path(post, path = "/assessments", tag = "assessment",
     request_body = StartInput,
     responses(
-        (status = 201, body = AssessmentSession),
+        (status = 201, body = AssessmentSession, headers(("Location" = String, description = "`/api/v1/candidate/assessments/{id}`"))),
         (status = 409, description = "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade, or after a moderator annulled a result at it), `attempt_not_allowed`, `already_assigned`, `camera_required` (a moderator ordered a retest with the camera: a test at that grade or above starts only with `proctoring.camera = true`)", body = Problem),
-        (status = 422, description = "`validation_failed`: `proctoring.consent_document_id` missing or not the current version", body = Problem),
+        (status = 422, description = "`validation_failed`: `specialization` is not the one from the survey or the current category; `proctoring.consent_document_id` missing or not the current version", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn start_session(
@@ -499,7 +497,7 @@ async fn start_session(
     user: CandidateUser,
     headers: HeaderMap,
     Json(input): Json<StartInput>,
-) -> ApiResult<(StatusCode, Json<AssessmentSession>)> {
+) -> ApiResult<Created<AssessmentSession>> {
     expire_abandoned(&state.pool, user.id).await?;
     if let Some(active) = db::assessment::active_session(&state.pool, user.id).await? {
         return Err(
@@ -605,7 +603,15 @@ async fn start_session(
             shown_at: now,
         },
     )
-    .await?;
+    .await
+    .map_err(|e| {
+        // A double click races past the check above; the one-active-session index decides.
+        if db::is_unique_violation(&e) {
+            ApiError::conflict("assessment_in_progress", "Сначала завершите начатый тест")
+        } else {
+            e.into()
+        }
+    })?;
     if state.config.proctoring.mode == ProctoringMode::Optional {
         let consent_id = match consent_doc {
             Some(doc) => Some(
@@ -639,7 +645,10 @@ async fn start_session(
         .await?;
     }
     tx.commit().await?;
-    Ok((StatusCode::CREATED, Json(view(&state, user.id, id).await?)))
+    Ok(Created(
+        format!("/api/v1/candidate/assessments/{id}"),
+        view(&state, user.id, id).await?,
+    ))
 }
 
 /// Records one outcome and either schedules the next item or finishes the session

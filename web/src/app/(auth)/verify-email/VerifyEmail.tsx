@@ -1,6 +1,7 @@
 "use client";
 
 import { CheckCircle2, XCircle } from "lucide-react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Button, ButtonLink, Field, Input, Spinner, useToast } from "@/components/ui";
@@ -72,6 +73,12 @@ export function VerifyEmail() {
         <XCircle className="size-10 text-accent-strong" aria-hidden />
         <h1 className="mt-4 text-[28px] leading-tight font-semibold tracking-[-0.03em]">{title}</h1>
         {detail && <p className="mt-2 text-ink-muted">{detail}</p>}
+        <p className="mt-4 text-sm text-ink-muted">
+          Уже подтверждали почту по этой ссылке?{" "}
+          <Link href="/login" className="link-inline font-medium">
+            Войти
+          </Link>
+        </p>
         <Resend />
       </div>
     );

@@ -1,22 +1,38 @@
 //! FSP ID linking (architecture.md §7.1): OIDC Authorization Code + PKCE against the FSP
-//! Keycloak realm, then a snapshot of achievements from the registry.
+//! Keycloak realm, then a snapshot of achievements from the registry — pulled on link and on
+//! request, pushed by the registry's signed webhook when a participant's achievements change.
 
-use axum::{extract::State, http::StatusCode, response::Redirect};
+use std::time::Duration as StdDuration;
+
+use axum::{
+    extract::{DefaultBodyLimit, State},
+    http::{HeaderMap, StatusCode},
+    response::Redirect,
+};
 use chrono::{DateTime, Duration, Utc};
 use matching::{Achievement, FspScore};
 use serde::{Deserialize, Serialize};
-use sqlx::PgPool;
+use serde_json::{Value, json};
+use sqlx::{PgConnection, PgPool};
 use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
-    auth::CandidateUser,
+    auth::{CandidateUser, client_ip},
     error::{ApiError, ApiResult, Problem},
-    extract::{Json, Query},
+    extract::{Json, Query, RawBody},
     fsp_client::{self, FspError},
+    integrations::signature::{self, SIGNATURE_HEADER, SignatureError},
+    notify::{Event, FspNote, Notifier},
     skills,
     state::AppState,
 };
+
+/// The one event type the registry pushes today; others are accepted and ignored.
+pub const ACHIEVEMENTS_CHANGED: &str = "achievements.changed";
+const PUSH_BODY_LIMIT: usize = 16 * 1024;
+const PUSH_RATE_LIMIT: u64 = 300;
+const PUSH_RATE_WINDOW: StdDuration = StdDuration::from_secs(60);
 
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
@@ -26,6 +42,11 @@ pub fn router() -> OpenApiRouter<AppState> {
         .routes(routes!(achievements))
         .routes(routes!(sync))
         .routes(routes!(unlink))
+        .merge(
+            OpenApiRouter::new()
+                .routes(routes!(registry_event))
+                .layer(DefaultBodyLimit::max(PUSH_BODY_LIMIT)),
+        )
 }
 
 #[derive(Serialize, ToSchema)]
@@ -69,7 +90,7 @@ fn settings_url(state: &AppState, outcome: &str) -> String {
 
 /// Start linking: redirects to the FSP ID login page
 #[utoipa::path(get, path = "/link/start", tag = "fsp",
-    responses((status = 303, description = "Redirect to FSP ID"), (status = 503, description = "`fsp_oidc_disabled`", body = Problem)),
+    responses((status = 303, description = "Redirect to FSP ID"), (status = 502, description = "`fsp_unavailable`: the FSP ID provider did not answer", body = Problem), (status = 503, description = "`fsp_oidc_disabled`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn link_start(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Redirect> {
     let request = fsp_client::authorization_request(&state.http, &state.config.fsp)
@@ -172,19 +193,80 @@ async fn link(state: &AppState, candidate: uuid::Uuid, fsp_id: &str, via: &str) 
 }
 
 async fn sync_achievements(state: &AppState, candidate: uuid::Uuid, fsp_id: &str) -> ApiResult<()> {
-    let achievements =
-        match fsp_client::fetch_achievements(&state.http, &state.config.fsp, fsp_id).await {
-            Ok(a) => a,
-            Err(FspError::NotFound) => Vec::new(),
-            Err(e) => return Err(fsp_error(e)),
-        };
-    let snapshot = serde_json::Value::Array(achievements);
+    let snapshot = fetch_snapshot(state, fsp_id).await?;
     let mut tx = state.pool.begin().await?;
-    db::fsp::store_fsp_achievements(&mut *tx, &snapshot, candidate).await?;
-    skills::replace_fsp_skills(&mut tx, candidate, Some(&snapshot)).await?;
+    apply_snapshot(&mut tx, candidate, &snapshot).await?;
     db::candidates::touch_candidate_activity(&mut *tx, candidate).await?;
     tx.commit().await?;
     Ok(())
+}
+
+/// The participant's achievements as the registry has them now; an unknown participant has none.
+async fn fetch_snapshot(state: &AppState, fsp_id: &str) -> ApiResult<Value> {
+    match fsp_client::fetch_achievements(&state.http, &state.config.fsp, fsp_id).await {
+        Ok(a) => Ok(Value::Array(a)),
+        Err(FspError::NotFound) => Ok(Value::Array(Vec::new())),
+        Err(e) => Err(fsp_error(e)),
+    }
+}
+
+/// What a sync changed, achievements matched by their registry `id`.
+#[derive(Debug, Default, PartialEq)]
+struct SnapshotDiff {
+    added: Vec<Value>,
+    removed: usize,
+    changed: bool,
+}
+
+fn achievement_key(a: &Value) -> Value {
+    a.get("id").cloned().unwrap_or_else(|| a.clone())
+}
+
+fn diff(old: &Value, new: &Value) -> SnapshotDiff {
+    let empty = Vec::new();
+    let old_list = old.as_array().unwrap_or(&empty);
+    let new_list = new.as_array().unwrap_or(&empty);
+    let old_keys: Vec<Value> = old_list.iter().map(achievement_key).collect();
+    let new_keys: Vec<Value> = new_list.iter().map(achievement_key).collect();
+    SnapshotDiff {
+        added: new_list
+            .iter()
+            .zip(&new_keys)
+            .filter(|(_, k)| !old_keys.contains(k))
+            .map(|(a, _)| a.clone())
+            .collect(),
+        removed: old_keys.iter().filter(|k| !new_keys.contains(k)).count(),
+        changed: old_list != new_list,
+    }
+}
+
+/// Writes the snapshot and the skills it confirms (architecture.md §7.4) under the lock of the
+/// stored one.
+async fn apply_snapshot(
+    tx: &mut PgConnection,
+    candidate: uuid::Uuid,
+    snapshot: &Value,
+) -> ApiResult<SnapshotDiff> {
+    let Some(old) = db::fsp::lock_fsp_snapshot(&mut *tx, candidate).await? else {
+        return Ok(SnapshotDiff::default());
+    };
+    db::fsp::store_fsp_achievements(&mut *tx, snapshot, candidate).await?;
+    skills::replace_fsp_skills(tx, candidate, Some(snapshot)).await?;
+    Ok(diff(&old, snapshot))
+}
+
+fn fsp_note(d: &SnapshotDiff) -> FspNote {
+    let latest = d
+        .added
+        .iter()
+        .filter_map(|v| serde_json::from_value::<Achievement>(v.clone()).ok())
+        .max_by(|a, b| a.date.cmp(&b.date))
+        .map(|a| a.describe_ru());
+    FspNote {
+        added: u16::try_from(d.added.len()).unwrap_or(u16::MAX),
+        removed: u16::try_from(d.removed).unwrap_or(u16::MAX),
+        latest,
+    }
 }
 
 fn fsp_error(e: FspError) -> ApiError {
@@ -216,7 +298,7 @@ pub struct DevLinkInput {
 /// Development only (`FSP_DEV_LINK=true`): link an FSP ID without Keycloak
 #[utoipa::path(post, path = "/link/dev", tag = "fsp",
     request_body = DevLinkInput,
-    responses((status = 200, body = FspStatus), (status = 404, description = "Disabled"), (status = 409, description = "`fsp_already_linked`", body = Problem), (status = 422, description = "`validation_failed`: `fsp_id`", body = Problem)),
+    responses((status = 200, body = FspStatus), (status = 404, description = "`not_found`: `FSP_DEV_LINK` is off", body = Problem), (status = 409, description = "`fsp_already_linked`", body = Problem), (status = 422, description = "`validation_failed`: `fsp_id`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn link_dev(
     State(state): State<AppState>,
@@ -285,6 +367,152 @@ async fn sync(State(state): State<AppState>, user: CandidateUser) -> ApiResult<J
     load_status(&state.pool, user.id).await.map(Json)
 }
 
+#[derive(Deserialize, ToSchema)]
+pub struct RegistryEvent {
+    /// Unique per event; a redelivery carries the same id. Up to 128 characters.
+    #[schema(example = "evt_01JAB3K9Q7T2")]
+    pub event_id: String,
+    /// `achievements.changed`; other types are accepted and ignored.
+    #[serde(rename = "type")]
+    #[schema(example = "achievements.changed")]
+    pub kind: String,
+    #[schema(example = "FSP-000011")]
+    pub fsp_id: String,
+    pub occurred_at: DateTime<Utc>,
+}
+
+fn push_example() -> Value {
+    json!({
+        "event_id": "evt_01JAB3K9Q7T2",
+        "type": ACHIEVEMENTS_CHANGED,
+        "fsp_id": "FSP-000011",
+        "occurred_at": "2026-10-06T09:30:00Z"
+    })
+}
+
+fn signature_problem(e: Option<SignatureError>) -> ApiError {
+    match e {
+        Some(SignatureError::Stale) => ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "signature_expired",
+            "Метка времени подписи старше 5 минут",
+        ),
+        _ => ApiError::new(
+            StatusCode::UNAUTHORIZED,
+            "signature_invalid",
+            "Подпись реестра ФСП не прошла проверку",
+        ),
+    }
+}
+
+fn check_event(e: &RegistryEvent) -> ApiResult<()> {
+    let printable = |s: &str| s.bytes().all(|b| b.is_ascii_graphic());
+    if e.event_id.is_empty() || e.event_id.len() > 128 || !printable(&e.event_id) {
+        return Err(ApiError::field(
+            "event_id",
+            "От 1 до 128 видимых ASCII-символов",
+        ));
+    }
+    if e.fsp_id.trim().is_empty() || e.fsp_id.len() > 40 {
+        return Err(ApiError::field("fsp_id", "Укажите ФСП ID"));
+    }
+    Ok(())
+}
+
+/// The ФСП registry reports that a participant's achievements changed
+#[utoipa::path(post, path = "/registry/events", tag = "fsp",
+    description = "Вебхук реестра ФСП: вместо ожидания ручной синхронизации реестр сам сообщает, что достижения участника изменились. \
+        Подпись — как у вебхуков ATS: `FSP-Signature: t=<unix>,v1=hex(HMAC-SHA256(FSP_REGISTRY_WEBHOOK_SECRET, t + \".\" + тело))`; \
+        метка `t` дальше 5 минут от часов сервера — 401 `signature_expired`, повтор перехваченного запроса не пройдёт. \
+        Для привязанного участника платформа забирает достижения из реестра (как `POST /fsp/sync`), обновляет навыки, подтверждённые ФСП, \
+        и, если что-то изменилось, присылает соискателю уведомление «Новые достижения ФСП в профиле». \
+        Ответ одинаков — 202 без тела — для применённого, не изменившего ничего, повторного (`event_id` уже был) события и для `fsp_id`, \
+        который на платформе не привязан: о таком событии ничего не сохраняется. Лимит — 300 запросов в минуту с одного адреса.",
+    params(("FSP-Signature" = String, Header, description = "`t=<unix seconds>,v1=<hex HMAC-SHA256>`")),
+    request_body(content = RegistryEvent, example = push_example),
+    responses(
+        (status = 202, description = "Принято (в том числе повтор и неизвестный `fsp_id`)"),
+        (status = 400, description = "`invalid_json`", body = Problem),
+        (status = 401, description = "`signature_invalid` — подписи нет, она повреждена или не совпала; `signature_expired` — метка старше 5 минут", body = Problem),
+        (status = 413, description = "`payload_too_large` — тело больше 16 КиБ", body = Problem),
+        (status = 422, description = "`invalid_json` — поля не по схеме; `validation_failed`: `event_id`, `fsp_id`", body = Problem),
+        (status = 429, description = "`rate_limited`", body = Problem),
+        (status = 502, description = "`fsp_unavailable` — реестр не отдал достижения; доставьте событие позже", body = Problem),
+        (status = 503, description = "`fsp_webhook_disabled` — секрет вебхука не задан; `fsp_registry_disabled` — реестр не настроен", body = Problem),
+    ))]
+async fn registry_event(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: Result<RawBody, ApiError>,
+) -> ApiResult<StatusCode> {
+    let ip = client_ip(&headers).unwrap_or_default();
+    let hit = state
+        .kv
+        .hit(&format!("rl:fsp_push:{ip}"), PUSH_RATE_WINDOW)
+        .await?;
+    if hit.over(PUSH_RATE_LIMIT) {
+        return Err(ApiError::rate_limited("fsp_push", hit.retry_after));
+    }
+    let Some(secret) = state.config.fsp.webhook_secret.as_deref() else {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "fsp_webhook_disabled",
+            "Приём событий реестра ФСП не настроен",
+        ));
+    };
+    let RawBody(body) = body?;
+    let header = headers
+        .get(SIGNATURE_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .ok_or_else(|| signature_problem(None))?;
+    signature::verify(
+        secret.as_bytes(),
+        header,
+        &body,
+        Utc::now().timestamp(),
+        signature::TOLERANCE_SECS,
+    )
+    .map_err(|e| signature_problem(Some(e)))?;
+    let Json(event) = Json::<RegistryEvent>::from_bytes(&body)?;
+    check_event(&event)?;
+    if event.kind != ACHIEVEMENTS_CHANGED {
+        return Ok(StatusCode::ACCEPTED);
+    }
+    let Some(candidate) = db::fsp::fsp_link_owner(&state.pool, event.fsp_id.trim()).await? else {
+        return Ok(StatusCode::ACCEPTED);
+    };
+    if db::fsp::registry_event_seen(&state.pool, &event.event_id).await? {
+        return Ok(StatusCode::ACCEPTED);
+    }
+    let snapshot = fetch_snapshot(&state, event.fsp_id.trim()).await?;
+    let mut tx = state.pool.begin().await?;
+    if !db::fsp::insert_registry_event(&mut *tx, &event.event_id, candidate, event.occurred_at)
+        .await?
+    {
+        return Ok(StatusCode::ACCEPTED);
+    }
+    let d = apply_snapshot(&mut tx, candidate, &snapshot).await?;
+    if d.changed {
+        db::fsp::mark_registry_event_changed(&mut *tx, &event.event_id).await?;
+        Notifier::new(&state)
+            .to_candidate(&mut *tx, candidate, &Event::FspAchievements(fsp_note(&d)))
+            .await?;
+    }
+    db::fsp::purge_registry_events(&mut *tx).await?;
+    tx.commit().await?;
+    if d.changed {
+        state.candidates.invalidate().await;
+    }
+    tracing::info!(
+        event_id = %event.event_id,
+        changed = d.changed,
+        added = d.added.len(),
+        removed = d.removed,
+        "fsp registry event applied"
+    );
+    Ok(StatusCode::ACCEPTED)
+}
+
 /// Unlink FSP ID and drop the achievements snapshot and the skills it confirmed
 #[utoipa::path(delete, path = "/link", tag = "fsp",
     responses((status = 204)),
@@ -296,4 +524,44 @@ async fn unlink(State(state): State<AppState>, user: CandidateUser) -> ApiResult
     tx.commit().await?;
     state.candidates.invalidate().await;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn rank(id: &str, date: &str) -> Value {
+        json!({"id": id, "kind": "rank", "discipline": "algorithmic", "rank": "first", "date": date})
+    }
+
+    #[test]
+    fn diff_matches_achievements_by_registry_id() {
+        let old = json!([rank("A", "2024-01-01"), rank("B", "2025-01-01")]);
+        let new = json!([
+            rank("B", "2025-01-01"),
+            rank("C", "2026-05-01"),
+            rank("D", "2026-09-01")
+        ]);
+        let d = diff(&old, &new);
+        assert_eq!(d.added.len(), 2);
+        assert_eq!(d.removed, 1);
+        assert!(d.changed);
+        let note = fsp_note(&d);
+        assert_eq!((note.added, note.removed), (2, 1));
+        assert_eq!(
+            note.latest.as_deref(),
+            Some("I спортивный разряд по алгоритмическому программированию, 2026")
+        );
+        assert_eq!(diff(&new, &new), SnapshotDiff::default());
+        let edited = json!([
+            rank("B", "2025-02-01"),
+            rank("C", "2026-05-01"),
+            rank("D", "2026-09-01")
+        ]);
+        let d = diff(&new, &edited);
+        assert!(
+            d.changed && d.added.is_empty() && d.removed == 0,
+            "an edit in place"
+        );
+    }
 }

@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { EmployerApplicationStatus, IncomingApplication } from "@/api/types";
 import { CategoryBadge } from "@/components/domain/Category";
 import { ApplicationStatusBadge, VacancyStatusBadge } from "@/components/domain/StatusBadges";
-import { Alert, Button, EmptyState, ErrorAlert, PageHeader, PageSkeleton, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
+import { Alert, Button, Dialog, EmptyState, ErrorAlert, PageHeader, PageSkeleton, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
 import { useOwnVacancy, useSetApplicationStatus, useVacancyApplications } from "@/features/employer/hooks";
 import { VacancyForm } from "@/features/employer/components/VacancyForm";
 import { formatDate, formatRelative } from "@/lib/format";
@@ -16,14 +16,24 @@ type View = "applications" | "edit";
 function ApplicationRow({ a, vacancyId }: { a: IncomingApplication; vacancyId: string }) {
   const toast = useToast();
   const set = useSetApplicationStatus(vacancyId);
-  const act = (status: EmployerApplicationStatus, msg: string) => set.mutate({ id: a.id, status }, { onSuccess: () => toast.success(msg) });
+  const [confirmReject, setConfirmReject] = useState(false);
+  const act = (status: EmployerApplicationStatus, msg: string) =>
+    set.mutate(
+      { id: a.id, status },
+      {
+        onSuccess: () => {
+          setConfirmReject(false);
+          toast.success(msg);
+        },
+      },
+    );
   const open = a.status === "sent" || a.status === "viewed";
   return (
     <li className="rounded-card border border-line bg-white p-5 shadow-card">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <Link href={`/employer/candidates/${a.candidate_id}`} className="font-mono font-semibold text-ink hover:text-primary hover:underline">
+            <Link href={`/employer/candidates/${a.candidate_id}?vacancy=${vacancyId}`} className="font-mono font-semibold text-ink hover:text-primary hover:underline">
               Кандидат {a.candidate_code}
             </Link>
             {a.candidate_category ? <CategoryBadge category={a.candidate_category} size="sm" /> : <span className="text-xs text-ink-subtle">категория не подтверждена</span>}
@@ -43,11 +53,29 @@ function ApplicationRow({ a, vacancyId }: { a: IncomingApplication; vacancyId: s
           <Button size="sm" icon={<Check className="size-4" aria-hidden />} onClick={() => act("accepted", "Кандидат приглашён")} disabled={set.isPending}>
             Пригласить на интервью
           </Button>
-          <Button size="sm" variant="secondary" icon={<X className="size-4" aria-hidden />} onClick={() => act("rejected", "Отказ отправлен")} disabled={set.isPending}>
+          <Button size="sm" variant="secondary" icon={<X className="size-4" aria-hidden />} onClick={() => setConfirmReject(true)} disabled={set.isPending}>
             Отказать
           </Button>
         </div>
       )}
+      <Dialog
+        open={confirmReject}
+        onClose={() => setConfirmReject(false)}
+        size="sm"
+        title={`Отказать соискателю ${a.candidate_code}?`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmReject(false)}>
+              Отмена
+            </Button>
+            <Button variant="danger" loading={set.isPending} onClick={() => act("rejected", "Отказ отправлен")}>
+              Отказать
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm text-ink-muted">Соискатель сразу получит уведомление об отказе по этому отклику. Отменить отказ нельзя.</p>
+      </Dialog>
     </li>
   );
 }

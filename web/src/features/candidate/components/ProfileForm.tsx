@@ -19,8 +19,15 @@ const schema = z
   .object({
     full_name: z.string().trim().min(2, "Укажите имя и фамилию"),
     email: z.union([z.literal(""), z.string().trim().email("Некорректный email")]),
-    phone: z.string().trim(),
-    telegram: z.string().trim(),
+    phone: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || /^\+?[\d\s()-]+$/.test(v), "Только цифры, пробелы, скобки и дефис, например +7 999 555-44-33")
+      .refine((v) => v === "" || (v.replace(/\D/g, "").length >= 10 && v.replace(/\D/g, "").length <= 15), "В номере 10–15 цифр"),
+    telegram: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || /^[A-Za-z0-9_]{5,32}$/.test(v.replace(/^(https?:\/\/)?(t\.me\/)?@?/, "")), "Ник — 5–32 латинские буквы, цифры или _, например @anna_dev"),
     city: z.string().trim(),
     relocation: z.boolean(),
     work_formats: z.array(z.enum(["office", "hybrid", "remote"])).min(1, "Выберите хотя бы один формат"),
@@ -167,7 +174,7 @@ export function ProfileForm({ profile, accountEmail, onSaved, handleRef }: { pro
           description={
             <span className="inline-flex items-center gap-1.5">
               <Lock className="size-3.5" aria-hidden />
-              Работодатель увидит их только после вашего согласия
+              Компания увидит их только после вашего согласия
             </span>
           }
         />
@@ -196,7 +203,7 @@ export function ProfileForm({ profile, accountEmail, onSaved, handleRef }: { pro
               )}
             />
           </Field>
-          <Field label="Зарплата от" optional hint="На руки, в месяц. Помогает работодателям сразу предлагать подходящую вилку">
+          <Field label="Зарплата от" optional hint="На руки, в месяц. Помогает компаниям сразу предлагать подходящую вилку">
             <Controller control={control} name="salary" render={({ field }) => <MoneyInput value={field.value} onChange={field.onChange} placeholder="250 000" />} />
           </Field>
           <div className="flex items-end pb-2">
@@ -213,7 +220,7 @@ export function ProfileForm({ profile, accountEmail, onSaved, handleRef }: { pro
           </Field>
           {profile && profile.skill_details.length > 0 && (
             <div className="rounded-control bg-canvas p-4">
-              <p className="mb-2 text-sm font-medium text-ink">Как видят ваши навыки работодатели</p>
+              <p className="mb-2 text-sm font-medium text-ink">Как видят ваши навыки компании</p>
               <SkillList skills={profile.skill_details} />
               <div className="mt-3">
                 <SkillLegend />

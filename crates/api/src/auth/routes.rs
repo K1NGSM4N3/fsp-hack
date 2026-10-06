@@ -93,7 +93,30 @@ async fn rate_limit(
 
 /// Register a candidate or employer account
 #[utoipa::path(post, path = "/register", tag = "auth",
-    request_body = RegisterRequest,
+    request_body(content((RegisterRequest = "application/json", examples(
+        ("candidate" = (summary = "Соискатель 18+ (id согласий — из GET /consents/current)", value = json!({
+            "email": "anna.smirnova@example.ru",
+            "password": "Sever-2026!",
+            "role": "candidate",
+            "age": "adult",
+            "consents": ["0191f000-0000-7000-8000-000000000a02", "0191f000-0000-7000-8000-000000000002", "0191f000-0000-7000-8000-000000000003"]
+        }))),
+        ("minor" = (summary = "Соискатель 14–17 лет: письмо уйдёт законному представителю", value = json!({
+            "email": "misha.petrov@example.ru",
+            "password": "Shkola-57-2026",
+            "role": "candidate",
+            "age": "minor",
+            "minor": {"birth_date": "2010-03-14", "guardian": {"full_name": "Петрова Ольга Викторовна", "email": "o.petrova@example.ru"}},
+            "consents": ["0191f000-0000-7000-8000-000000000a02", "0191f000-0000-7000-8000-000000000002", "0191f000-0000-7000-8000-000000000003"]
+        }))),
+        ("employer" = (summary = "Компания", value = json!({
+            "email": "hr@severny-kod.example",
+            "password": "Sever-Kod-2026",
+            "role": "employer",
+            "company_name": "ООО «Северный код»",
+            "consents": ["0191f000-0000-7000-8000-000000000a02", "0191f000-0000-7000-8000-000000000003"]
+        }))),
+    )))),
     responses(
         (status = 201, body = RegisterResponse),
         (status = 409, description = "`email_taken`", body = Problem),
@@ -347,6 +370,7 @@ async fn resend_verification(
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({"email": "candidate@demo.fsp", "password": "demo12345"}))]
 pub struct LoginRequest {
     pub email: String,
     pub password: String,

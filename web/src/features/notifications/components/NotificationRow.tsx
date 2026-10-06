@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock3, FileText, Flag, Gauge, GraduationCap, Inbox, Mail, MailX, ShieldCheck, UserCheck, UserX, Webhook, type LucideIcon } from "lucide-react";
+import { BadgeCheck, Ban, Clock3, EyeOff, FileText, Flag, Gauge, GraduationCap, Inbox, Mail, MailX, RotateCcw, Scale, ShieldCheck, Snowflake, Trophy, UserCheck, UserX, Video, Webhook, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import type { NotificationKind, NotificationView } from "@/api/types";
 import { cn } from "@/lib/cn";
@@ -19,6 +19,14 @@ const ICON: Record<NotificationKind, LucideIcon> = {
   application_received: Inbox,
   webhook_failing: Webhook,
   trust_changed: Gauge,
+  result_confirmed: BadgeCheck,
+  result_annulled: Ban,
+  retest_ordered: Video,
+  vacancy_unpublished: EyeOff,
+  invitations_frozen: Snowflake,
+  sanction_lifted: RotateCcw,
+  complaint_resolved: Scale,
+  fsp_achievements: Trophy,
 };
 
 const MINUTE = 60_000;

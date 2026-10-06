@@ -10,7 +10,7 @@ const ORDER: OnboardingStep[] = ["profile", "survey", "assessment", "done"];
 const NEXT: Record<Exclude<OnboardingStep, "done">, { title: string; text: string; href: string; cta: string }> = {
   profile: {
     title: "Начните с профиля",
-    text: "Заполните форму или загрузите PDF-резюме — поля распознаются автоматически. Контакты не видны работодателям до вашего согласия.",
+    text: "Заполните форму или загрузите PDF-резюме — поля распознаются автоматически. Контакты не видны компаниям до вашего согласия.",
     href: "/candidate/profile",
     cta: "Заполнить профиль",
   },

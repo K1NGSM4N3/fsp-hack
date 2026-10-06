@@ -238,15 +238,24 @@ fn document_request_errors(api: &mut utoipa::openapi::OpenApi) {
         }
     }
 
-    for item in api.paths.paths.values_mut() {
+    const ROLE_TREES: [&str; 4] = [
+        "/api/v1/candidate/",
+        "/api/v1/employer/",
+        "/api/v1/admin/",
+        "/api/v1/fsp/",
+    ];
+    for (path, item) in api.paths.paths.iter_mut() {
+        let one_role = ROLE_TREES.iter().any(|t| path.starts_with(t))
+            || path == "/api/v1/vacancies/{id}/applications";
         let ops = [
-            &mut item.get,
-            &mut item.put,
-            &mut item.post,
-            &mut item.delete,
-            &mut item.patch,
+            (&mut item.get, false),
+            (&mut item.put, true),
+            (&mut item.post, true),
+            (&mut item.delete, true),
+            (&mut item.patch, true),
         ];
-        for op in ops.into_iter().flatten() {
+        for (op, changes) in ops {
+            let Some(op) = op else { continue };
             let located = |at: ParameterIn| {
                 op.parameters.iter().flatten().any(|p| match p {
                     RefOr::T(p) => p.parameter_in == at,
@@ -314,6 +323,22 @@ fn document_request_errors(api: &mut utoipa::openapi::OpenApi) {
             }
             if session {
                 add(op, "401", "unauthorized", "no session or it has expired");
+                if one_role {
+                    add(
+                        op,
+                        "403",
+                        "wrong_role",
+                        "the method belongs to another role",
+                    );
+                }
+                if changes {
+                    add(
+                        op,
+                        "403",
+                        "csrf",
+                        "a cookie-authenticated change without our `Origin` or `Referer`",
+                    );
+                }
             }
         }
     }
@@ -476,5 +501,43 @@ mod tests {
             assert!(name.starts_with("get "), "{name}: only reads are cached");
             assert!(op.get("security").is_none(), "{name} requires credentials");
         }
+    }
+
+    #[test]
+    fn request_examples_parse_as_their_requests() {
+        use serde::de::DeserializeOwned;
+        fn parses<T: DeserializeOwned>(name: &str, example: &serde_json::Value) {
+            if let Err(e) = serde_json::from_value::<T>(example.clone()) {
+                panic!("{name}: the example does not parse: {e}");
+            }
+        }
+        let api = serde_json::to_value(openapi()).unwrap_or_default();
+        let schemas = &api["components"]["schemas"];
+        let example = |name: &str| {
+            let e = &schemas[name]["example"];
+            assert!(e.is_object(), "{name} has an example");
+            e.clone()
+        };
+        use routes::*;
+        parses::<auth::routes::LoginRequest>("LoginRequest", &example("LoginRequest"));
+        parses::<needs::NeedInput>("NeedInput", &example("NeedInput"));
+        parses::<needs::ShortlistFilters>("ShortlistFilters", &example("ShortlistFilters"));
+        parses::<invitations::SendInvitation>("SendInvitation", &example("SendInvitation"));
+        parses::<invitations::DeclineRequest>("DeclineRequest", &example("DeclineRequest"));
+        parses::<vacancies::ApplyInput>("ApplyInput", &example("ApplyInput"));
+        parses::<reports::ReportInput>("ReportInput", &example("ReportInput"));
+        parses::<moderation::DecisionInput>("DecisionInput", &example("DecisionInput"));
+        parses::<moderation::TrustActionInput>("TrustActionInput", &example("TrustActionInput"));
+        parses::<ats::OutcomeInput>("OutcomeInput", &example("OutcomeInput"));
+        parses::<ats::NeedImport>("NeedImport", &example("NeedImport"));
+        parses::<assessment::StartInput>("StartInput", &example("StartInput"));
+        let register = &api["paths"]["/api/v1/auth/register"]["post"]["requestBody"]["content"]["application/json"]
+            ["examples"];
+        for name in ["candidate", "minor", "employer"] {
+            parses::<auth::routes::RegisterRequest>(name, &register[name]["value"]);
+        }
+        let push = &api["paths"]["/api/v1/fsp/registry/events"]["post"]["requestBody"]["content"]["application/json"]
+            ["example"];
+        parses::<fsp::RegistryEvent>("RegistryEvent", push);
     }
 }

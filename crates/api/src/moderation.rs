@@ -13,6 +13,10 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
+    notify::{
+        self, ComplaintAbout, ComplaintNote, Event, FrozenNote, LiftedNote, Notifier, ReviewNote,
+        UnpublishedNote,
+    },
     proctoring::ProctoringMode,
     skills,
     state::AppState,
@@ -261,11 +265,16 @@ pub async fn decide(
     let category = format!("{}:{}", s.specialization, s.claimed_grade);
     let mut details = json!({ "category": category, "status": status_slug(s.status) });
     let mut changed = false;
+    let mut category_now = match (&s.current_specialization, &s.current_grade) {
+        (Some(spec), Some(grade)) => Category::parse(&format!("{spec}:{grade}")),
+        _ => None,
+    };
     if decision != ReviewDecision::Confirm {
         db::moderation::annul_assignment(&mut *tx, session_id, now).await?;
         let restored = restore_category(&mut tx, s.candidate_id).await?;
         changed = s.assignment_current;
         drop_voided_skills(&mut tx, s.candidate_id, session_id).await?;
+        category_now = restored.as_deref().and_then(Category::parse);
         details["restored_category"] = json!(restored);
     }
     let action = match decision {
@@ -289,6 +298,21 @@ pub async fn decide(
         },
     )
     .await?;
+    let note = ReviewNote {
+        session_id,
+        category: Category::new(s.specialization.parse()?, s.claimed_grade.parse()?),
+        comment: comment.to_owned(),
+        category_now,
+        badge: decision == ReviewDecision::Confirm && in_force && s.assignment_current,
+    };
+    let event = match decision {
+        ReviewDecision::Confirm => Event::ResultConfirmed(note),
+        ReviewDecision::Annul => Event::ResultAnnulled(note),
+        ReviewDecision::Retest => Event::RetestOrdered(note),
+    };
+    Notifier::new(state)
+        .to_candidate(&mut *tx, s.candidate_id, &event)
+        .await?;
     tx.commit().await?;
     // Every decision changes a card (grade, badge or «результат подтверждён»), and cached cards must follow.
     state.candidates.invalidate().await;
@@ -455,6 +479,81 @@ impl Logged<'_> {
     }
 }
 
+/// What the company hears about an action, built once the action is applied.
+enum Notice {
+    Unpublished {
+        vacancy_id: Uuid,
+        title: String,
+        complaints: u64,
+    },
+    Frozen {
+        until: DateTime<Utc>,
+        complaints: u64,
+    },
+    VacancyRestored {
+        vacancy_id: Uuid,
+        title: String,
+    },
+    FreezeLifted,
+    ComplaintDismissed {
+        about: ComplaintAbout,
+        vacancy: Option<(Uuid, String)>,
+    },
+}
+
+impl Notice {
+    fn event(self, comment: &str, quota: i16) -> Event {
+        let comment = comment.to_owned();
+        let upheld = |n: u64| u32::try_from(n).unwrap_or(u32::MAX);
+        match self {
+            Notice::Unpublished {
+                vacancy_id,
+                title,
+                complaints,
+            } => Event::VacancyUnpublished(UnpublishedNote {
+                vacancy_id,
+                title,
+                comment,
+                complaints_upheld: upheld(complaints),
+            }),
+            Notice::Frozen { until, complaints } => Event::InvitationsFrozen(FrozenNote {
+                until,
+                comment,
+                complaints_upheld: upheld(complaints),
+            }),
+            Notice::VacancyRestored { vacancy_id, title } => Event::SanctionLifted(LiftedNote {
+                vacancy_id: Some(vacancy_id),
+                title: Some(title),
+                comment,
+                quota,
+            }),
+            Notice::FreezeLifted => Event::SanctionLifted(LiftedNote {
+                vacancy_id: None,
+                title: None,
+                comment,
+                quota,
+            }),
+            Notice::ComplaintDismissed { about, vacancy } => {
+                let (vacancy_id, vacancy_title) = vacancy.unzip();
+                Event::ComplaintResolved(ComplaintNote {
+                    about,
+                    vacancy_id,
+                    vacancy_title,
+                    quota,
+                })
+            }
+        }
+    }
+}
+
+fn complaint_about(target_kind: &str) -> ComplaintAbout {
+    match target_kind {
+        "vacancy" => ComplaintAbout::Vacancy,
+        "invitation" => ComplaintAbout::Invitation,
+        _ => ComplaintAbout::Company,
+    }
+}
+
 /// Applies an anti-fake action to a queue item. Complaints a sanction answers are closed with
 /// it: taking a vacancy down upholds the complaints about that vacancy, a freeze upholds those
 /// about the company and its invitations (and the complaint it was taken from).
@@ -480,6 +579,7 @@ pub async fn act(
         complaints_resolved: 0,
         frozen_until: None,
     };
+    let mut notice: Option<Notice> = None;
     match (action, kind) {
         (TrustAction::Dismiss, TrustItemKind::Vacancy) => {
             let v = db::moderation::vacancy_target(&mut *tx, id)
@@ -552,6 +652,14 @@ pub async fn act(
             out.company_id = r.company_id;
             out.complaints_resolved = 1;
             let title = complaint_title(&mut tx, &r).await?;
+            let about = complaint_about(&r.target_kind);
+            notice = Some(Notice::ComplaintDismissed {
+                about,
+                vacancy: match (about, &title) {
+                    (ComplaintAbout::Vacancy, Some(t)) => Some((r.target_id, t.clone())),
+                    _ => None,
+                },
+            });
             log.write(
                 &mut tx,
                 ModerationAction::Dismiss,
@@ -605,6 +713,11 @@ pub async fn act(
                 json!({ "title": v.title, "complaints_resolved": out.complaints_resolved }),
             )
             .await?;
+            notice = Some(Notice::Unpublished {
+                vacancy_id: vacancy,
+                title: v.title,
+                complaints: out.complaints_resolved,
+            });
         }
         (TrustAction::Freeze, _) => {
             let days = days
@@ -683,6 +796,10 @@ pub async fn act(
                 }),
             )
             .await?;
+            notice = Some(Notice::Frozen {
+                until,
+                complaints: out.complaints_resolved,
+            });
         }
         (TrustAction::Restore, TrustItemKind::Vacancy) => {
             let v = db::moderation::vacancy_target(&mut *tx, id)
@@ -701,6 +818,10 @@ pub async fn act(
                 json!({ "title": v.title }),
             )
             .await?;
+            notice = Some(Notice::VacancyRestored {
+                vacancy_id: id,
+                title: v.title,
+            });
         }
         (TrustAction::Restore, TrustItemKind::Company) => {
             let c = db::moderation::company_target(&mut *tx, id)
@@ -719,6 +840,7 @@ pub async fn act(
                 json!({ "title": c.name }),
             )
             .await?;
+            notice = Some(Notice::FreezeLifted);
         }
         (TrustAction::Unpublish, _) => {
             return Err(not_applicable(
@@ -730,6 +852,13 @@ pub async fn act(
                 "Вернуть можно снятую вакансию или приглашения компании",
             ));
         }
+    }
+    if let (Some(notice), Some(company)) = (notice, out.company_id) {
+        let trust = notify::trust_now(&mut tx, company, now).await?;
+        let event = notice.event(comment, trust.as_ref().map_or(0, |t| t.quota));
+        Notifier::new(state)
+            .moderation_to_company(&mut tx, company, &event, trust.as_ref())
+            .await?;
     }
     tx.commit().await?;
     Ok(out)

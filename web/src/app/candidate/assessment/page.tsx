@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { isApiError } from "@/api/client";
-import type { Grade } from "@/api/types";
+import type { AttemptKind, Grade } from "@/api/types";
 import { CategoryBadge } from "@/components/domain/Category";
 import { AssessmentStatusBadge } from "@/components/domain/StatusBadges";
 import { Alert, Badge, Button, ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, FieldSet, PageHeader, PageSkeleton, RadioCards, SkeletonCard } from "@/components/ui";
@@ -23,7 +23,7 @@ function Rules() {
     { icon: <TrendingUp className="size-4" aria-hidden />, text: "Тест адаптивный: следующий вопрос подбирается под ваш уровень и заканчивается, как только уровень ясен" },
     { icon: <Lock className="size-4" aria-hidden />, text: "Правильность ответов во время теста не показывается" },
     ...(options.data?.mode === "optional"
-      ? [{ icon: <Video className="size-4" aria-hidden />, text: "Видеозапись — по желанию: её видите вы, а работодатель — только отметку «с видеозаписью» или «без»" }]
+      ? [{ icon: <Video className="size-4" aria-hidden />, text: "Видеозапись — по желанию: её видите вы, а компании — только отметку «с видеозаписью» или «без»" }]
       : []),
   ];
   return (
@@ -77,6 +77,7 @@ function StartCard() {
   const specialization = c.specialization;
   const note = (g: Grade) => {
     const offer = offerFor(g);
+    if (offer?.kind === "placement" && g === "junior") return ATTEMPT_KIND_LABEL.placement;
     if (offer) return ATTEMPT_KIND_HINT[offer.kind];
     if (c.category?.grade === g) return "Ваш текущий грейд";
     const lock = lockFor(g);
@@ -250,7 +251,7 @@ function HistoryCard() {
             {assigned.map((h, i) => (
               <li key={i} className="flex flex-wrap items-center justify-between gap-2">
                 <span className={h.annulled_at ? "text-ink-subtle line-through" : "text-ink"}>
-                  {GRADE_LABEL[h.grade]} · {h.reason}
+                  {GRADE_LABEL[h.grade]} · {(ATTEMPT_KIND_LABEL[h.reason as AttemptKind] ?? h.reason).toLowerCase()}
                 </span>
                 {h.annulled_at && <Badge tone="danger">аннулировано {formatDate(h.annulled_at)}</Badge>}
                 <span className="text-ink-subtle">{formatDate(h.assigned_at)}</span>

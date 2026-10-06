@@ -106,9 +106,13 @@ async fn put_company(
 ) -> ApiResult<Json<CompanyResponse>> {
     let mut v = Validator::default();
     v.check(!p.name.trim().is_empty(), "name", "Укажите название")
-        .check(p.name.len() <= 200, "name", "Слишком длинное название")
         .check(
-            p.description.len() <= 5000,
+            p.name.chars().count() <= 200,
+            "name",
+            "Слишком длинное название",
+        )
+        .check(
+            p.description.chars().count() <= 5000,
             "description",
             "Слишком длинное описание",
         );

@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use fsp_mock::{AppState, DEFAULT_BIND, DEFAULT_TOKEN, DataError, Registry, router};
+use fsp_mock::{AppState, DEFAULT_BIND, DEFAULT_TOKEN, DataError, Push, Registry, router};
 use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, thiserror::Error)]
@@ -14,6 +14,8 @@ enum RunError {
     },
     #[error("server failed: {0}")]
     Serve(std::io::Error),
+    #[error("http client: {0}")]
+    Http(#[from] reqwest::Error),
 }
 
 #[tokio::main]
@@ -35,16 +37,32 @@ async fn run() -> Result<(), RunError> {
         tracing::warn!("FSP_REGISTRY_TOKEN is the dev default; set a real one outside local demos");
     }
 
-    let registry = Registry::embedded()?;
+    let registry = Registry::embedded()?.clone();
+    let push = match (
+        std::env::var("FSP_REGISTRY_WEBHOOK_URL")
+            .ok()
+            .filter(|v| !v.trim().is_empty()),
+        std::env::var("FSP_REGISTRY_WEBHOOK_SECRET")
+            .ok()
+            .filter(|v| !v.trim().is_empty()),
+    ) {
+        (Some(url), Some(secret)) => Some(Push { url, secret }),
+        _ => {
+            tracing::warn!(
+                "FSP_REGISTRY_WEBHOOK_URL or _SECRET unset: admin edits are not pushed to the platform"
+            );
+            None
+        }
+    };
     let listener = tokio::net::TcpListener::bind(&bind)
         .await
         .map_err(|source| RunError::Bind {
             addr: bind.clone(),
             source,
         })?;
-    tracing::info!(%bind, participants = registry.len(), "fsp-mock listening");
+    tracing::info!(%bind, participants = registry.len(), push = push.is_some(), "fsp-mock listening");
 
-    axum::serve(listener, router(AppState::new(registry, token)))
+    axum::serve(listener, router(AppState::new(registry, token, push)?))
         .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(RunError::Serve)

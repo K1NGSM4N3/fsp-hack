@@ -14,6 +14,10 @@ const KINDS: Record<Audience, { kind: T.NotificationKind; title: string; descrip
     { kind: "application_status", title: "Ответы на отклики", description: "Приглашение или отказ по отклику; «просмотрено» — только в кабинете" },
     { kind: "assessment_result", title: "Итоги теста", description: "Присвоена категория или тест не пройден" },
     { kind: "guardian_decision", title: "Решение законного представителя", description: "Согласие дано, не дано или отозвано — для участников 14–17 лет" },
+    { kind: "result_confirmed", title: "Модератор подтвердил результат теста", description: "Спорный тест проверен, результат остаётся — с комментарием модератора" },
+    { kind: "result_annulled", title: "Модератор аннулировал результат теста", description: "Категория из теста снята — с комментарием модератора" },
+    { kind: "retest_ordered", title: "Назначена пересдача с видеозаписью", description: "Пройти тест снова можно сразу, но только с камерой — с комментарием модератора" },
+    { kind: "fsp_achievements", title: "Достижения ФСП", description: "Реестр ФСП прислал новые результаты — профиль обновился сам" },
   ],
   employer: [
     { kind: "invitation_accepted", title: "Кандидат принял приглашение", description: "Контакты кандидата откроются в кабинете; в письме их нет" },
@@ -21,6 +25,10 @@ const KINDS: Record<Audience, { kind: T.NotificationKind; title: string; descrip
     { kind: "application_received", title: "Новые отклики", description: "Отклик на опубликованную вакансию" },
     { kind: "webhook_failing", title: "Сбои доставки в ATS", description: "Вебхук в вашу ATS не принимает события" },
     { kind: "trust_changed", title: "Уровень доверия и квота", description: "Изменилась квота приглашений за 7 дней" },
+    { kind: "vacancy_unpublished", title: "Вакансия снята модератором", description: "С комментарием модератора; вернуть её может только модератор" },
+    { kind: "invitations_frozen", title: "Приглашения приостановлены", description: "До какой даты квота — 0, с комментарием модератора" },
+    { kind: "sanction_lifted", title: "Модератор отменил меру", description: "Вакансия снова опубликована или приглашения доступны раньше срока" },
+    { kind: "complaint_resolved", title: "Жалобы на компанию", description: "Жалоба не подтвердилась и больше не снижает квоту; кто жаловался, не сообщаем" },
   ],
 };
 

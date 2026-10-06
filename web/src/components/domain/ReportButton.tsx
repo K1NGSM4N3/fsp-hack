@@ -39,7 +39,7 @@ export function ReportButton({ targetKind, targetId }: { targetKind: ReportInput
         open={open}
         onClose={close}
         title="Пожаловаться"
-        description="Жалобы помогают находить фиктивные вакансии и недобросовестных работодателей. Компания не узнает, кто пожаловался."
+        description="Жалобы помогают находить фиктивные вакансии и недобросовестные компании. Компания не узнает, кто пожаловался."
         footer={
           <>
             <Button variant="ghost" onClick={close}>

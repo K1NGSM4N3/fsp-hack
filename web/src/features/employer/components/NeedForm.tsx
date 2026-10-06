@@ -91,6 +91,7 @@ function Summary({ d }: { d: NeedDraft }) {
   const spec = d.specialization;
   const salary = d.min && d.max && d.max >= d.min ? formatSalaryRange(d.min, d.max) : null;
   const rows: { label: string; done: boolean; value: ReactNode }[] = [
+    { label: "Название", done: Boolean(d.title.trim()), value: d.title.trim() || "как назвать потребность" },
     {
       label: "Категории",
       done: Boolean(spec && d.grades.length),
@@ -204,7 +205,7 @@ export function NeedForm({ initial, submitLabel, pending, onSubmit, serverError,
           <CardHeader step={1} title="Кого ищете" description="Категория — главный фильтр: в подборку попадают только те, кто подтвердил её тестом" />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Название" error={shown.title} required className="sm:col-span-2">
-              <Input value={d.title} onChange={(e) => set({ title: e.target.value })} placeholder="Backend-разработчик в команду платежей" maxLength={120} />
+              <Input value={d.title} onChange={(e) => set({ title: e.target.value })} placeholder="Например: Go-разработчик в команду платежей" maxLength={120} />
             </Field>
             <Field label="Специализация" error={shown.specialization} required>
               <Select value={d.specialization} onChange={(e) => set({ specialization: e.target.value as Specialization | "" })}>
@@ -245,17 +246,17 @@ export function NeedForm({ initial, submitLabel, pending, onSubmit, serverError,
           <CardHeader step={3} title="Условия" description="Вилка обязательна — кандидат увидит её в приглашении" />
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Зарплата от, ₽" error={shown.min} required>
-              <MoneyInput value={d.min} onChange={(min) => set({ min })} placeholder="250 000" />
+              <MoneyInput value={d.min} onChange={(min) => set({ min })} placeholder="Например: 250 000" />
             </Field>
             <Field label="Зарплата до, ₽" error={shown.max} required>
-              <MoneyInput value={d.max} onChange={(max) => set({ max })} placeholder="320 000" />
+              <MoneyInput value={d.max} onChange={(max) => set({ max })} placeholder="Например: 320 000" />
             </Field>
             {d.specialization && d.grades[0] && <SalaryHint category={{ specialization: d.specialization, grade: d.grades[0] }} min={d.min} max={d.max} className="sm:col-span-2" />}
-            <Field label="Формат" hint="Ничего не выбрано — подойдёт любой">
+            <Field label="Формат" hint={d.work_formats.length ? undefined : "Ничего не выбрано — подойдёт любой"}>
               <ChipSelect<WorkFormat> ariaLabel="Формат работы" options={WORK_FORMATS.map((f) => ({ value: f, label: WORK_FORMAT_LABEL[f] }))} value={d.work_formats} onChange={(work_formats) => set({ work_formats })} />
             </Field>
             <Field label="Город" optional hint="Для офиса и гибрида">
-              <Input value={d.city} onChange={(e) => set({ city: e.target.value })} placeholder="Москва" />
+              <Input value={d.city} onChange={(e) => set({ city: e.target.value })} placeholder="Например: Москва" />
             </Field>
           </div>
         </Card>

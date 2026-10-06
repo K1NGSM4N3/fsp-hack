@@ -192,9 +192,15 @@ services:
     image: fsp-hack/fsp-mock:local
     profiles: [fsp, full]
     restart: unless-stopped
+    # Shares FSP_REGISTRY_TOKEN and FSP_REGISTRY_WEBHOOK_SECRET with the api. Its admin endpoints
+    # (achievements for demos) are reachable from this host only, on 8091: 8090 is where
+    # `make fsp-mock` listens during local development.
     env_file: ../.env
     environment:
       FSP_MOCK_BIND: 0.0.0.0:8090
+      FSP_REGISTRY_WEBHOOK_URL: http://api:8000/api/v1/fsp/registry/events
+    ports:
+      - "127.0.0.1:8091:8090"
     healthcheck:
       test:
         - CMD

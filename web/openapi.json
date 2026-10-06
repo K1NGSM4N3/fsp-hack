@@ -184,7 +184,7 @@
             }
           },
           "403": {
-            "description": "`wrong_role`: moderators only",
+            "description": "`wrong_role`: moderators only; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -701,7 +701,7 @@
             }
           },
           "403": {
-            "description": "`wrong_role`: moderators only",
+            "description": "`wrong_role`: moderators only; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1055,6 +1055,56 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/RegisterRequest"
+              },
+              "examples": {
+                "candidate": {
+                  "summary": "Соискатель 18+ (id согласий — из GET /consents/current)",
+                  "value": {
+                    "age": "adult",
+                    "consents": [
+                      "0191f000-0000-7000-8000-000000000a02",
+                      "0191f000-0000-7000-8000-000000000002",
+                      "0191f000-0000-7000-8000-000000000003"
+                    ],
+                    "email": "anna.smirnova@example.ru",
+                    "password": "Sever-2026!",
+                    "role": "candidate"
+                  }
+                },
+                "employer": {
+                  "summary": "Компания",
+                  "value": {
+                    "company_name": "ООО «Северный код»",
+                    "consents": [
+                      "0191f000-0000-7000-8000-000000000a02",
+                      "0191f000-0000-7000-8000-000000000003"
+                    ],
+                    "email": "hr@severny-kod.example",
+                    "password": "Sever-Kod-2026",
+                    "role": "employer"
+                  }
+                },
+                "minor": {
+                  "summary": "Соискатель 14–17 лет: письмо уйдёт законному представителю",
+                  "value": {
+                    "age": "minor",
+                    "consents": [
+                      "0191f000-0000-7000-8000-000000000a02",
+                      "0191f000-0000-7000-8000-000000000002",
+                      "0191f000-0000-7000-8000-000000000003"
+                    ],
+                    "email": "misha.petrov@example.ru",
+                    "minor": {
+                      "birth_date": "2010-03-14",
+                      "guardian": {
+                        "email": "o.petrova@example.ru",
+                        "full_name": "Петрова Ольга Викторовна"
+                      }
+                    },
+                    "password": "Shkola-57-2026",
+                    "role": "candidate"
+                  }
+                }
               }
             }
           },
@@ -1294,6 +1344,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1338,6 +1398,26 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not the caller's application",
             "content": {
               "application/json": {
                 "schema": {
@@ -1396,6 +1476,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1425,6 +1515,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`/api/v1/candidate/assessments/{id}`"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -1445,6 +1543,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1484,7 +1592,7 @@
             }
           },
           "422": {
-            "description": "`validation_failed`: `proctoring.consent_document_id` missing or not the current version; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "description": "`validation_failed`: `specialization` is not the one from the survey or the current category; `proctoring.consent_document_id` missing or not the current version; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1544,6 +1652,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -1622,6 +1740,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1739,6 +1867,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -1821,6 +1959,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1913,6 +2061,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2092,6 +2250,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2109,7 +2277,7 @@
         "tags": [
           "candidate"
         ],
-        "summary": "Who opened your contacts: company, time and basis — an accepted invitation or your own\napplication (ст. 14 152-ФЗ). Newest first",
+        "summary": "Who opened your contacts: company, time and basis — an accepted invitation or your own\napplication (ст. 14 152-ФЗ). Newest first, the latest 500 entries",
         "operationId": "contact_access",
         "responses": {
           "200": {
@@ -2135,6 +2303,7 @@
             }
           },
           "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2182,6 +2351,7 @@
             }
           },
           "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2238,6 +2408,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2333,6 +2513,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`guardian_not_needed`: you are 18 or older; `guardian_already_confirmed`; `guardian_missing`, `guardian_already_answered`",
             "content": {
@@ -2393,6 +2583,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2445,6 +2645,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2513,6 +2723,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2610,6 +2830,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Not the caller's invitation",
             "content": {
@@ -2651,7 +2881,7 @@
             }
           },
           "422": {
-            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "description": "`validation_failed`: `comment` longer than 1000 characters; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2690,6 +2920,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2738,6 +2978,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2794,6 +3044,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2881,6 +3141,7 @@
             }
           },
           "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2928,6 +3189,7 @@
             }
           },
           "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -2992,6 +3254,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "413": {
             "description": "`payload_too_large`: the body is over the route's limit",
             "content": {
@@ -3013,7 +3285,7 @@
             }
           },
           "422": {
-            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "description": "`validation_failed`: `full_name`, `contacts` (none given), `contacts.phone` (10–15 digits), `contacts.telegram` (5–32 Latin letters, digits, `_`), `salary_expectation_min`, `experience_years`, `about`, `skills`, `experience`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3064,6 +3336,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3105,6 +3387,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3201,6 +3493,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "413": {
             "description": "`payload_too_large`: the body is over the route's limit",
             "content": {
@@ -3271,6 +3573,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3305,6 +3617,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -3356,6 +3678,26 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not the caller's task",
             "content": {
               "application/json": {
                 "schema": {
@@ -3438,6 +3780,26 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not the caller's task",
             "content": {
               "application/json": {
                 "schema": {
@@ -3722,6 +4084,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -3908,13 +4280,16 @@
           {
             "name": "limit",
             "in": "query",
+            "description": "1–100, 20 by default; out-of-range values are clamped.",
             "required": false,
             "schema": {
               "type": [
                 "integer",
                 "null"
               ],
-              "minimum": 0
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
             }
           },
           {
@@ -3926,6 +4301,7 @@
                 "integer",
                 "null"
               ],
+              "default": 0,
               "minimum": 0
             }
           }
@@ -3952,6 +4328,26 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "`need_id` is not a need of this company",
             "content": {
               "application/json": {
                 "schema": {
@@ -4051,6 +4447,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -4130,7 +4536,7 @@
             }
           },
           "403": {
-            "description": "`contacts_not_granted`",
+            "description": "`contacts_not_granted`; `wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -4189,6 +4595,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4229,6 +4645,7 @@
             }
           },
           "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -4285,6 +4702,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4362,6 +4789,7 @@
             }
           },
           "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -4446,6 +4874,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -4500,6 +4938,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4568,6 +5016,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -4626,6 +5084,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4725,6 +5193,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -4813,6 +5291,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`; `webhook_changed`",
             "content": {
@@ -4881,6 +5369,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -4938,6 +5436,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -4987,6 +5495,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5065,6 +5583,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -5095,14 +5623,15 @@
           {
             "name": "Idempotency-Key",
             "in": "header",
-            "description": "Повтор с тем же ключом вернёт уже созданное приглашение",
+            "description": "До 100 символов. Повтор с тем же ключом вернёт уже созданное приглашение — и при одновременной отправке",
             "required": false,
             "schema": {
               "type": [
                 "string",
                 "null"
               ]
-            }
+            },
+            "example": "inv-2026-10-06-0001"
           }
         ],
         "requestBody": {
@@ -5127,6 +5656,14 @@
             }
           },
           "201": {
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`/api/v1/employer/invitations/{id}`"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -5147,6 +5684,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5196,7 +5743,7 @@
             }
           },
           "422": {
-            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "description": "`validation_failed`; `idempotency_key`: longer than 100 characters, or already used for an invitation to another candidate; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5235,6 +5782,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -5304,6 +5861,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -5382,6 +5949,26 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such invitation of this company",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`invitation_closed`; `company_profile_required`",
             "content": {
@@ -5433,6 +6020,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -5471,6 +6068,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`/api/v1/employer/needs/{id}`"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -5491,6 +6096,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5597,6 +6212,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "413": {
             "description": "`payload_too_large`: the body is over the route's limit",
             "content": {
@@ -5686,6 +6311,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -5764,6 +6399,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5870,6 +6515,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -5951,6 +6606,26 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such need or not this company's",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -6012,6 +6687,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -6098,6 +6783,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6225,6 +6920,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -6325,6 +7030,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
             "content": {
               "application/json": {
                 "schema": {
@@ -6496,6 +7211,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -6554,6 +7279,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6655,6 +7390,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6774,6 +7519,26 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such task of this company",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -6846,6 +7611,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7002,6 +7777,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -7040,6 +7825,14 @@
         },
         "responses": {
           "201": {
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`/api/v1/employer/vacancies/{id}`"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -7060,6 +7853,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7170,7 +7973,7 @@
             }
           },
           "403": {
-            "description": "`wrong_role`",
+            "description": "`wrong_role`; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7278,6 +8081,16 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -7356,6 +8169,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7467,6 +8290,26 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such vacancy of this company",
             "content": {
               "application/json": {
                 "schema": {
@@ -7681,6 +8524,16 @@
                 }
               }
             }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -7704,6 +8557,16 @@
           "204": {},
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7829,8 +8692,25 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
-            "description": "Disabled"
+            "description": "`not_found`: `FSP_DEV_LINK` is off",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           },
           "409": {
             "description": "`fsp_already_linked`",
@@ -7904,6 +8784,26 @@
               }
             }
           },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`fsp_unavailable`: the FSP ID provider did not answer",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "503": {
             "description": "`fsp_oidc_disabled`",
             "content": {
@@ -7925,6 +8825,128 @@
         ]
       }
     },
+    "/api/v1/fsp/registry/events": {
+      "post": {
+        "tags": [
+          "fsp"
+        ],
+        "summary": "The ФСП registry reports that a participant's achievements changed",
+        "description": "Вебхук реестра ФСП: вместо ожидания ручной синхронизации реестр сам сообщает, что достижения участника изменились. Подпись — как у вебхуков ATS: `FSP-Signature: t=<unix>,v1=hex(HMAC-SHA256(FSP_REGISTRY_WEBHOOK_SECRET, t + \".\" + тело))`; метка `t` дальше 5 минут от часов сервера — 401 `signature_expired`, повтор перехваченного запроса не пройдёт. Для привязанного участника платформа забирает достижения из реестра (как `POST /fsp/sync`), обновляет навыки, подтверждённые ФСП, и, если что-то изменилось, присылает соискателю уведомление «Новые достижения ФСП в профиле». Ответ одинаков — 202 без тела — для применённого, не изменившего ничего, повторного (`event_id` уже был) события и для `fsp_id`, который на платформе не привязан: о таком событии ничего не сохраняется. Лимит — 300 запросов в минуту с одного адреса.",
+        "operationId": "registry_event",
+        "parameters": [
+          {
+            "name": "FSP-Signature",
+            "in": "header",
+            "description": "`t=<unix seconds>,v1=<hex HMAC-SHA256>`",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegistryEvent"
+              },
+              "example": {
+                "event_id": "evt_01JAB3K9Q7T2",
+                "fsp_id": "FSP-000011",
+                "occurred_at": "2026-10-06T09:30:00Z",
+                "type": "achievements.changed"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Принято (в том числе повтор и неизвестный `fsp_id`)"
+          },
+          "400": {
+            "description": "`invalid_json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`signature_invalid` — подписи нет, она повреждена или не совпала; `signature_expired` — метка старше 5 минут",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large` — тело больше 16 КиБ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json` — поля не по схеме; `validation_failed`: `event_id`, `fsp_id`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "`rate_limited`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "`fsp_unavailable` — реестр не отдал достижения; доставьте событие позже",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`fsp_webhook_disabled` — секрет вебхука не задан; `fsp_registry_disabled` — реестр не настроен",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/fsp/sync": {
       "post": {
         "tags": [
@@ -7944,6 +8966,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -7998,7 +9030,7 @@
           "guardian"
         ],
         "summary": "What a link from the representative's letter is about: the consent text, who asked, the\ncurrent answer and what this link can do now. Anonymous: the token is the credential",
-        "operationId": "view",
+        "operationId": "guardian_consent",
         "parameters": [
           {
             "name": "token",
@@ -8037,7 +9069,7 @@
           "guardian"
         ],
         "summary": "The representative's answer. The answer link grants or declines once while it is valid; the\nrevocation link withdraws the consent (or declines before any answer). Granting writes a\n`guardian_consent` grant on the minor's behalf with the representative's IP, User-Agent and\ntime; declining or revoking hides the profile",
-        "operationId": "answer",
+        "operationId": "answer_guardian_consent",
         "requestBody": {
           "content": {
             "application/json": {
@@ -8241,6 +9273,7 @@
             }
           },
           "401": {
+            "description": "`api_key_required`, `api_key_invalid`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8431,6 +9464,7 @@
             }
           },
           "401": {
+            "description": "`api_key_required`, `api_key_invalid`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8545,6 +9579,7 @@
             }
           },
           "401": {
+            "description": "`api_key_required`, `api_key_invalid`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8657,6 +9692,16 @@
               }
             }
           },
+          "404": {
+            "description": "The key's company no longer exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "content": {
               "application/json": {
@@ -8721,6 +9766,16 @@
           "204": {},
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -8837,6 +9892,16 @@
               }
             }
           },
+          "403": {
+            "description": "`csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "413": {
             "description": "`payload_too_large`: the body is over the route's limit",
             "content": {
@@ -8911,6 +9976,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -9061,6 +10136,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -9237,6 +10322,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -9452,6 +10547,16 @@
               }
             }
           },
+          "403": {
+            "description": "`csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "413": {
             "description": "`payload_too_large`: the body is over the route's limit",
             "content": {
@@ -9583,13 +10688,17 @@
           {
             "name": "limit",
             "in": "query",
+            "description": "1–100, 20 by default; out-of-range values are clamped.",
             "required": false,
             "schema": {
               "type": [
                 "integer",
                 "null"
               ],
-              "format": "int64"
+              "format": "int64",
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1
             }
           },
           {
@@ -9601,7 +10710,9 @@
                 "integer",
                 "null"
               ],
-              "format": "int64"
+              "format": "int64",
+              "default": 0,
+              "minimum": 0
             }
           }
         ],
@@ -9728,6 +10839,16 @@
           },
           "401": {
             "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: the method belongs to another role; `csrf`: a cookie-authenticated change without our `Origin` or `Referer`",
             "content": {
               "application/json": {
                 "schema": {
@@ -10257,6 +11378,9 @@
           "cover_letter": {
             "type": "string"
           }
+        },
+        "example": {
+          "cover_letter": "Здравствуйте! Три года пишу на Go сервисы платежей (PostgreSQL, Kafka), на платформе подтверждён Middle. Готов выйти через две недели."
         }
       },
       "AssessmentRecord": {
@@ -12415,6 +13539,10 @@
             "type": "string",
             "description": "Up to 2000 characters. The candidate reads it in the test history."
           }
+        },
+        "example": {
+          "comment": "Запись просмотрена: соискатель отвечал самостоятельно, уходы со вкладки — по 2–3 секунды на заданиях с кодом.",
+          "decision": "confirm"
         }
       },
       "DecisionView": {
@@ -12463,6 +13591,10 @@
               "null"
             ]
           }
+        },
+        "example": {
+          "comment": "Рассматриваю предложения от 350 000 ₽",
+          "reason": "salary"
         }
       },
       "DeliveryCounts": {
@@ -14283,6 +15415,10 @@
           "password": {
             "type": "string"
           }
+        },
+        "example": {
+          "email": "candidate@demo.fsp",
+          "password": "demo12345"
         }
       },
       "LoginResponse": {
@@ -14836,6 +15972,14 @@
               }
             ]
           }
+        },
+        "example": {
+          "salary": {
+            "max": 450000,
+            "min": 350000
+          },
+          "text": "Senior Python-разработчик в команду ML-платформы\nМосква, гибрид, от 350 000 до 450 000 ₽\nСтек: Python, FastAPI, PostgreSQL, Kafka, Docker, Kubernetes.\nБудет плюсом: Airflow, ClickHouse. Опыт от 5 лет.",
+          "title": "Senior Python-разработчик (ML-платформа)"
         }
       },
       "NeedInput": {
@@ -14909,6 +16053,38 @@
               }
             ]
           }
+        },
+        "example": {
+          "allow_adjacent_grades": false,
+          "city": "Москва",
+          "description": "Процессинг платежей: идемпотентные API, outbox, шардирование PostgreSQL. Команда из 6 человек, релизы каждый день.",
+          "grades": [
+            "middle",
+            "senior"
+          ],
+          "industries": [
+            "fintech"
+          ],
+          "must_skills": [
+            "go",
+            "postgresql",
+            "kafka"
+          ],
+          "nice_skills": [
+            "grpc",
+            "docker"
+          ],
+          "salary": {
+            "max": 360000,
+            "min": 280000
+          },
+          "specialization": "backend",
+          "status": "active",
+          "title": "Go-разработчик в команду платежей",
+          "work_formats": [
+            "remote",
+            "hybrid"
+          ]
         }
       },
       "NeedStatus": {
@@ -14958,7 +16134,15 @@
           "invitation_declined",
           "application_received",
           "webhook_failing",
-          "trust_changed"
+          "trust_changed",
+          "result_confirmed",
+          "result_annulled",
+          "retest_ordered",
+          "vacancy_unpublished",
+          "invitations_frozen",
+          "sanction_lifted",
+          "complaint_resolved",
+          "fsp_achievements"
         ]
       },
       "NotificationPage": {
@@ -15117,6 +16301,13 @@
             "format": "date-time",
             "description": "When it happened in the ATS."
           }
+        },
+        "example": {
+          "application_id": null,
+          "at": "2026-10-06T11:30:00Z",
+          "invitation_id": "019a8d12-77e0-7c3a-b5f1-4d2e9a6c0b18",
+          "reason": null,
+          "stage": "interview"
         }
       },
       "OutcomeRecorded": {
@@ -16490,7 +17681,21 @@
             "type": [
               "object",
               "null"
-            ]
+            ],
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "propertyNames": {
+              "type": "string"
+            },
+            "example": {
+              "salary.min": [
+                "Зарплата «от» обязательна"
+              ]
+            }
           },
           "document_id": {
             "type": [
@@ -17329,6 +18534,35 @@
           }
         }
       },
+      "RegistryEvent": {
+        "type": "object",
+        "required": [
+          "event_id",
+          "type",
+          "fsp_id",
+          "occurred_at"
+        ],
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "description": "Unique per event; a redelivery carries the same id. Up to 128 characters.",
+            "example": "evt_01JAB3K9Q7T2"
+          },
+          "type": {
+            "type": "string",
+            "description": "`achievements.changed`; other types are accepted and ignored.",
+            "example": "achievements.changed"
+          },
+          "fsp_id": {
+            "type": "string",
+            "example": "FSP-000011"
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "Relation": {
         "type": "object",
         "required": [
@@ -17419,6 +18653,12 @@
               "null"
             ]
           }
+        },
+        "example": {
+          "comment": "В вакансии 250–300 тыс. ₽, а на созвоне назвали 120 тыс. и «остальное премией».",
+          "reason": "salary_mismatch",
+          "target_id": "019a8b10-3c4d-7a5b-8e9f-0a1b2c3d4e5f",
+          "target_kind": "vacancy"
         }
       },
       "ReportReason": {
@@ -17879,6 +19119,19 @@
             "type": "string",
             "description": "How the candidate can reach the company (shown in the invitation)."
           }
+        },
+        "example": {
+          "candidate_id": "019a7c3e-5b2d-7f10-9c41-2e8d6a0b7f13",
+          "contact": "Telegram @severny_hr, +7 495 123-45-67",
+          "message": "Здравствуйте! У вас подтверждённый Middle по бэкенду и опыт с Kafka. Предлагаем обсудить роль в процессинге: удалённо, оформление по ТК, ДМС с первого месяца.",
+          "need_id": "01a112db-8cba-72d5-a97b-b8c44094881f",
+          "salary": {
+            "max": 360000,
+            "min": 280000
+          },
+          "title": "Middle Go-разработчик, команда платежей",
+          "vacancy_id": null,
+          "work_format": "remote"
         }
       },
       "SentInvitation": {
@@ -18265,6 +19518,25 @@
             ],
             "minimum": 0
           }
+        },
+        "example": {
+          "adults_only": true,
+          "fsp_only": false,
+          "grades": [
+            "middle"
+          ],
+          "limit": 30,
+          "max_expectation": 350000,
+          "must_skills": [
+            "go",
+            "postgresql"
+          ],
+          "nice_skills": [
+            "kafka"
+          ],
+          "work_formats": [
+            "remote"
+          ]
         }
       },
       "ShortlistItem": {
@@ -18554,6 +19826,14 @@
               }
             ]
           }
+        },
+        "example": {
+          "grade": "middle",
+          "proctoring": {
+            "camera": true,
+            "consent_document_id": "0191f000-0000-7000-8000-000000000004"
+          },
+          "specialization": "backend"
         }
       },
       "StatusCount": {
@@ -19059,6 +20339,13 @@
             "description": "`freeze` only: 1–90 days.",
             "minimum": 0
           }
+        },
+        "example": {
+          "action": "freeze",
+          "comment": "Три подтверждённые жалобы: после приглашения вилку занижают вдвое. Приглашения приостановлены до проверки.",
+          "days": 14,
+          "id": "019a6f00-1111-7222-8333-444455556666",
+          "kind": "company"
         }
       },
       "TrustActionResult": {

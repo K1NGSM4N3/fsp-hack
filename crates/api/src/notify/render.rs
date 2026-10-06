@@ -5,7 +5,7 @@
 use chrono::{DateTime, FixedOffset, Utc};
 use matching::trust::TrustLevel;
 
-use super::{Audience, Event, GuardianOutcome, NotificationKind};
+use super::{Audience, ComplaintAbout, Event, GuardianOutcome, NotificationKind, ReviewNote};
 use crate::dto::{ApplicationStatus, DeclineReason, HiringStage};
 
 /// Letters differ from the feed in one place: a company letter never quotes the candidate's own
@@ -127,6 +127,39 @@ fn clip(s: &str, max: usize) -> String {
         out.push('…');
     }
     out
+}
+
+/// The sentence around the quote ends with its own period: «…аннулирован». — not «…аннулирован.».
+fn comment(c: &str) -> String {
+    let c = c.trim();
+    let c = c
+        .strip_suffix('.')
+        .filter(|r| !r.ends_with('.'))
+        .unwrap_or(c);
+    format!("«{}»", clip(c, 300))
+}
+
+fn category_now(n: &ReviewNote) -> String {
+    match n.category_now {
+        Some(c) => format!("Категория сейчас: {}.", c.name_ru()),
+        None => "Категории сейчас нет.".to_owned(),
+    }
+}
+
+fn invitations(quota: i16) -> String {
+    let n = usize::try_from(quota).unwrap_or(0);
+    format!(
+        "{quota} {}",
+        plural(n, ["приглашение", "приглашения", "приглашений"])
+    )
+}
+
+fn upheld(n: u32) -> String {
+    if n == 0 {
+        String::new()
+    } else {
+        format!(" Подтверждено жалоб: {n} — они снижают квоту 90 дней.")
+    }
 }
 
 pub fn text(event: &Event, channel: Channel) -> Text {
@@ -322,6 +355,120 @@ pub fn text(event: &Event, channel: Channel) -> Text {
                 link: Some("/employer/trust".into()),
             }
         }
+        Event::ResultConfirmed(n) => Text {
+            title: format!(
+                "Модератор подтвердил результат теста: {}",
+                n.category.name_ru()
+            ),
+            body: format!(
+                "{} Комментарий модератора: {}.",
+                if n.badge {
+                    "Отметка «требует подтверждения» снята, компании видят «Результат подтверждён»."
+                } else {
+                    "Отметка «требует подтверждения» снята."
+                },
+                comment(&n.comment)
+            ),
+            link: Some(format!("/candidate/assessment/{}", n.session_id)),
+        },
+        Event::ResultAnnulled(n) => Text {
+            title: format!("Результат теста аннулирован: {}", n.category.name_ru()),
+            body: format!(
+                "Комментарий модератора: {}. {} Тест на {} снова можно пройти через 30 дней.",
+                comment(&n.comment),
+                category_now(n),
+                n.category.grade.name_ru()
+            ),
+            link: Some(format!("/candidate/assessment/{}", n.session_id)),
+        },
+        Event::RetestOrdered(n) => Text {
+            title: format!(
+                "Назначена пересдача с видеозаписью: {}",
+                n.category.name_ru()
+            ),
+            body: format!(
+                "Можно пройти сразу, без ожидания, но только с включённой камерой. Комментарий модератора: {}. {}",
+                comment(&n.comment),
+                category_now(n)
+            ),
+            link: Some(format!("/candidate/assessment/{}", n.session_id)),
+        },
+        Event::VacancyUnpublished(n) => Text {
+            title: format!("Вакансия «{}» снята с публикации", n.title),
+            body: format!(
+                "Комментарий модератора: {}. Вернуть вакансию может только модератор.{}",
+                comment(&n.comment),
+                upheld(n.complaints_upheld)
+            ),
+            link: Some(format!("/employer/vacancies/{}", n.vacancy_id)),
+        },
+        Event::InvitationsFrozen(n) => Text {
+            title: format!("Приглашения приостановлены до {}", day(n.until)),
+            body: format!(
+                "До {} квота приглашений — 0. Комментарий модератора: {}.{}",
+                day_time(n.until),
+                comment(&n.comment),
+                upheld(n.complaints_upheld)
+            ),
+            link: Some("/employer/trust".into()),
+        },
+        Event::SanctionLifted(n) => match (n.vacancy_id, n.title.as_deref()) {
+            (Some(id), title) => Text {
+                title: format!("Вакансия «{}» снова опубликована", title.unwrap_or("")),
+                body: format!("Модератор отменил снятие: {}.", comment(&n.comment)),
+                link: Some(format!("/employer/vacancies/{id}")),
+            },
+            (None, _) => Text {
+                title: "Приглашения снова доступны".into(),
+                body: format!(
+                    "Модератор снял приостановку досрочно: {}. Квота — {} за 7 дней.",
+                    comment(&n.comment),
+                    invitations(n.quota)
+                ),
+                link: Some("/employer/trust".into()),
+            },
+        },
+        Event::ComplaintResolved(n) => Text {
+            title: match (n.about, n.vacancy_title.as_deref()) {
+                (ComplaintAbout::Vacancy, Some(t)) => {
+                    format!("Жалоба на вакансию «{t}» не подтвердилась")
+                }
+                (ComplaintAbout::Vacancy, None) => "Жалоба на вакансию не подтвердилась".into(),
+                (ComplaintAbout::Invitation, _) => "Жалоба на приглашение не подтвердилась".into(),
+                (ComplaintAbout::Company, _) => "Жалоба на компанию не подтвердилась".into(),
+            },
+            body: format!(
+                "Модератор проверил жалобу: нарушений нет, квоту она больше не снижает. Квота — {} за 7 дней.",
+                invitations(n.quota)
+            ),
+            link: Some("/employer/trust".into()),
+        },
+        Event::FspAchievements(n) => {
+            let title = if n.added > 0 {
+                "Новые достижения ФСП в профиле"
+            } else {
+                "Данные ФСП в профиле обновились"
+            };
+            let what = match (n.added, n.latest.as_deref()) {
+                (0, _) if n.removed > 0 => format!(
+                    "Реестр ФСП убрал {} {}.",
+                    n.removed,
+                    plural(usize::from(n.removed), ["запись", "записи", "записей"])
+                ),
+                (0, _) => "Реестр ФСП уточнил записи о достижениях.".to_owned(),
+                (1, Some(latest)) => format!("{latest}."),
+                (k, Some(latest)) => format!("{latest} и ещё {}.", k - 1),
+                (k, None) => format!(
+                    "Реестр ФСП прислал {k} {}.",
+                    plural(usize::from(k), ["результат", "результата", "результатов"])
+                ),
+            };
+            Text {
+                title: title.into(),
+                body: format!("{what} ФСП-скор и навыки, подтверждённые ФСП, уже пересчитаны."),
+                link: Some("/candidate/settings#fsp".into()),
+            }
+        }
     }
 }
 
@@ -478,7 +625,9 @@ pub fn letter(items: &[Event], ctx: &LetterContext<'_>) -> Letter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::notify::{AcceptedNote, DeclinedNote, InvitationNote};
+    use crate::notify::{
+        AcceptedNote, ComplaintNote, DeclinedNote, FspNote, InvitationNote, LiftedNote,
+    };
     use catalog::WorkFormat;
     use uuid::Uuid;
 
@@ -610,5 +759,74 @@ mod tests {
             "the cabinet shows what the company already sees there"
         );
         assert_eq!(subject(&[accepted, declined]), "2 новых уведомления");
+    }
+
+    #[test]
+    fn a_complaint_names_a_public_vacancy_but_not_an_invitation() {
+        let about = |about, title: Option<&str>| {
+            text(
+                &Event::ComplaintResolved(ComplaintNote {
+                    about,
+                    vacancy_id: title.map(|_| Uuid::nil()),
+                    vacancy_title: title.map(str::to_owned),
+                    quota: 21,
+                }),
+                Channel::Email,
+            )
+        };
+        let t = about(ComplaintAbout::Vacancy, Some("Go-разработчик"));
+        assert_eq!(
+            t.title,
+            "Жалоба на вакансию «Go-разработчик» не подтвердилась"
+        );
+        assert!(
+            t.body.ends_with("Квота — 21 приглашение за 7 дней."),
+            "{}",
+            t.body
+        );
+        let t = about(ComplaintAbout::Invitation, None);
+        assert_eq!(t.title, "Жалоба на приглашение не подтвердилась");
+        let lifted = text(
+            &Event::SanctionLifted(LiftedNote {
+                vacancy_id: None,
+                title: None,
+                comment: "  Проверка закончена  ".into(),
+                quota: 25,
+            }),
+            Channel::InApp,
+        );
+        assert_eq!(
+            lifted.body,
+            "Модератор снял приостановку досрочно: «Проверка закончена». Квота — 25 приглашений за 7 дней."
+        );
+    }
+
+    #[test]
+    fn fsp_note_says_what_the_registry_changed() {
+        let fsp = |added, removed, latest: Option<&str>| {
+            text(
+                &Event::FspAchievements(FspNote {
+                    added,
+                    removed,
+                    latest: latest.map(str::to_owned),
+                }),
+                Channel::Email,
+            )
+        };
+        let one = fsp(
+            1,
+            0,
+            Some("Призёр (2 место) всероссийских соревнований, 2026"),
+        );
+        assert_eq!(one.title, "Новые достижения ФСП в профиле");
+        assert_eq!(
+            one.body,
+            "Призёр (2 место) всероссийских соревнований, 2026. ФСП-скор и навыки, подтверждённые ФСП, уже пересчитаны."
+        );
+        assert!(fsp(3, 0, Some("X")).body.starts_with("X и ещё 2."));
+        let gone = fsp(0, 2, None);
+        assert_eq!(gone.title, "Данные ФСП в профиле обновились");
+        assert!(gone.body.starts_with("Реестр ФСП убрал 2 записи."));
+        assert_eq!(one.link.as_deref(), Some("/candidate/settings#fsp"));
     }
 }

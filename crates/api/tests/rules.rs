@@ -68,6 +68,7 @@ impl Api {
                 oidc: None,
                 registry_url,
                 registry_token: "test".into(),
+                webhook_secret: None,
                 dev_link: true,
             },
             grade_change_cooldown_days: 90,

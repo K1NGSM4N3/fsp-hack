@@ -9,14 +9,27 @@ import { ScoreRing } from "@/components/domain/Explanation";
 import { FspAchievementList, FspEmpty } from "@/components/domain/Fsp";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
 import { useMe } from "@/features/auth/hooks";
-import { useCategory, useFspStatus, useMarket, useMyTasks, useReceivedInvitations } from "@/features/candidate/hooks";
+import { useCategory, useFspStatus, useMarket, useMyTasks, usePrivacy, useReceivedInvitations } from "@/features/candidate/hooks";
 import { LinkFspButton } from "@/features/candidate/components/FspCard";
 import { OnboardingCard } from "@/features/candidate/components/Onboarding";
 import { formatDate, formatRelative, pluralize } from "@/lib/format";
 import { GRADE_LABEL, SPEC_LONG_LABEL, categoryLabel } from "@/lib/labels";
 
+/** Whether companies can find the profile right now, and what to do if not. */
+function useVisibility(): { visible: boolean; text: string } | null {
+  const me = useMe();
+  const privacy = usePrivacy();
+  const age = me.data?.candidate?.age;
+  if (!privacy.data) return null;
+  if (age?.bracket === "minor" && age.guardian !== "granted") return { visible: false, text: "Компании пока не видят профиль: ждём согласия законного представителя." };
+  if (!privacy.data.visible) return { visible: false, text: "Профиль скрыт от компаний — включить показ можно в настройках." };
+  if (privacy.data.search_status === "closed") return { visible: false, text: "Поиск закрыт: компании не находят вас в подборках. Открыть его можно в настройках." };
+  return { visible: true, text: "Видна компаниям — по ней вас находят." };
+}
+
 function CategoryCard() {
   const category = useCategory();
+  const visibility = useVisibility();
   if (category.isPending) return <SkeletonCard lines={4} />;
   if (category.isError) return <ErrorAlert error={category.error} onRetry={() => void category.refetch()} />;
   const c = category.data;
@@ -24,7 +37,7 @@ function CategoryCard() {
     return (
       <Card>
         <CardHeader title="Категория" />
-        <p className="text-sm text-ink-muted">Категория появится после теста. До этого профиль не виден работодателям в поиске.</p>
+        <p className="text-sm text-ink-muted">Категория появится после теста. До этого профиль не виден компаниям в поиске.</p>
         <ButtonLink href="/candidate/assessment" className="mt-4" variant="soft">
           К тестированию
         </ButtonLink>
@@ -47,7 +60,16 @@ function CategoryCard() {
           </div>
           <p className="mt-4 text-[28px] leading-tight font-semibold tracking-[-0.03em] sm:text-[32px]">{SPEC_LONG_LABEL[c.category.specialization]}</p>
           <p className="mt-1 font-mono text-lg text-primary-300">{GRADE_LABEL[c.category.grade]}</p>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-night-muted">Видна работодателям — по ней вас находят. Где вы внутри грейда: 0 — у нижней границы, 100 — у верхней.</p>
+          <p className="mt-4 max-w-sm text-sm leading-relaxed text-night-muted">
+            {visibility && !visibility.visible ? (
+              <Link href="/candidate/settings#visibility" className="text-white underline decoration-white/30 underline-offset-4 hover:decoration-white">
+                {visibility.text}
+              </Link>
+            ) : (
+              (visibility?.text ?? "")
+            )}{" "}
+            Где вы внутри грейда: 0 — у нижней границы, 100 — у верхней.
+          </p>
         </div>
         {strength !== null && <ScoreRing score={strength} size={128} tone="night" label="Сила результата в категории" caption="сила" />}
       </div>
@@ -146,7 +168,7 @@ function MarketCard({ enabled }: { enabled: boolean }) {
       )}
       <p className="mt-4 flex items-start gap-2 text-sm text-ink-muted">
         <TrendingUp className="mt-0.5 size-4 shrink-0 text-primary" aria-hidden />
-        <span>Чем выше сила результата и свежее активность, тем выше вы в подборках работодателей.</span>
+        <span>Чем выше сила результата и свежее активность, тем выше вы в подборках компаний.</span>
       </p>
     </Card>
   );

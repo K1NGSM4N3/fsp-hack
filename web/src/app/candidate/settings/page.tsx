@@ -55,7 +55,7 @@ function PrivacySection() {
       await grant.mutateAsync(doc.id);
       await save.mutateAsync({ ...p, visible: true });
       setGate(null);
-      toast.success("Профиль снова виден работодателям");
+      toast.success("Профиль снова виден компаниям");
     } catch (e) {
       const next = consentFor(e);
       if (next) setGate(next);
@@ -69,7 +69,7 @@ function PrivacySection() {
   return (
     <>
       <Card id="search-status" className="scroll-mt-24">
-        <CardHeader title="Статус поиска" description="Работодатели видят его в карточке" />
+        <CardHeader title="Статус поиска" description="Компании видят его в карточке" />
         <RadioCards<SearchStatus>
           name="search_status"
           columns={3}
@@ -80,7 +80,7 @@ function PrivacySection() {
       </Card>
 
       <Card id="visibility" className="scroll-mt-24">
-        <CardHeader title="Что видят работодатели" description="До вашего согласия компании видят анонимную карточку. Контакты не видны никогда, пока вы не примете приглашение или не откликнетесь." />
+        <CardHeader title="Что видят компании" description="До вашего согласия компании видят анонимную карточку. Контакты не видны никогда, пока вы не примете приглашение или не откликнетесь." />
         <div className="divide-y divide-line">
           <Switch
             className="py-4 first:pt-0"
@@ -121,7 +121,7 @@ function PrivacySection() {
         lead={
           gate?.kind === "pd_publication"
             ? "Вы отозвали согласие на публикацию, поэтому профиль скрыт. Дайте его снова — и анонимная карточка вернётся в поиск и подборки."
-            : "Без согласия на обработку данных мы не можем показывать ваш профиль работодателям."
+            : "Без согласия на обработку данных мы не можем показывать ваш профиль компаниям."
         }
         acceptLabel="Дать согласие и показать профиль"
       />
@@ -217,7 +217,7 @@ const KIND_ORDER = ["pd_processing", "pd_publication", "terms", "proctoring_vide
 
 const REVOKE_TEXT: Record<string, string> = {
   pd_processing: "Профиль сразу скроется из поиска, и мы перестанем подбирать вам предложения. Чтобы удалить данные полностью, удалите аккаунт.",
-  pd_publication: "Профиль сразу скроется из поиска работодателей. Уже выданные контакты останутся у компаний, которым вы их открыли. Вернуть согласие можно здесь же.",
+  pd_publication: "Профиль сразу скроется из поиска компаний. Уже выданные контакты останутся у компаний, которым вы их открыли. Вернуть согласие можно здесь же.",
   proctoring_video: "Все видеозаписи ваших тестов удалятся сразу. Отметки «с видеозаписью» у результатов останутся.",
 };
 
@@ -448,7 +448,7 @@ function FspCallbackToast() {
 
 const SECTIONS: { id: string; label: string; group: string }[] = [
   { id: "search-status", label: "Статус поиска", group: "Поиск" },
-  { id: "visibility", label: "Что видят работодатели", group: "Поиск" },
+  { id: "visibility", label: "Что видят компании", group: "Поиск" },
   { id: "fsp", label: "ФСП ID", group: "Профиль" },
   { id: "consents", label: "Согласия", group: "Данные" },
   { id: "contact-access", label: "Доступ к контактам", group: "Данные" },

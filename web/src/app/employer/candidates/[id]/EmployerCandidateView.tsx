@@ -45,7 +45,7 @@ function ContactsCard({ c, onInvite }: { c: CandidateCard; onInvite: () => void 
     );
   }
   return (
-    <Card className="border-success-200">
+    <Card id="contacts" className="scroll-mt-24 border-success-200">
       <CardHeader title="Контакты" description={c.relation.applied ? "Кандидат откликнулся на вашу вакансию" : "Кандидат принял приглашение"} action={<ShieldCheck className="size-5 text-success" aria-hidden />} />
       {!reveal ? (
         <Button variant="secondary" className="w-full" icon={<Eye className="size-4" aria-hidden />} onClick={() => setReveal(true)}>
@@ -95,11 +95,15 @@ function ContactsCard({ c, onInvite }: { c: CandidateCard; onInvite: () => void 
   );
 }
 
-export function EmployerCandidateView({ id, needId }: { id: string; needId: string | null }) {
+export function EmployerCandidateView({ id, needId, vacancyId = null }: { id: string; needId: string | null; vacancyId?: string | null }) {
   const q = useEmployerCandidate(id, needId);
   const need = useNeed(needId ?? "", Boolean(needId));
   const [invite, setInvite] = useState(false);
-  const back = needId ? { href: `/employer/needs/${needId}`, label: need.data?.title ?? "К подборке" } : { href: "/employer/candidates", label: "Поиск по базе" };
+  const back = needId
+    ? { href: `/employer/needs/${needId}`, label: need.data?.title ?? "К подборке" }
+    : vacancyId
+      ? { href: `/employer/vacancies/${vacancyId}`, label: "К откликам на вакансию" }
+      : { href: "/employer/candidates", label: "Поиск по базе" };
 
   if (q.isPending) return <PageSkeleton cards={3} />;
   if (q.isError) {
@@ -130,11 +134,17 @@ export function EmployerCandidateView({ id, needId }: { id: string; needId: stri
           </span>
         }
         title={candidateTitle(c)}
-        description={`Анонимный профиль · активность ${formatRelative(c.last_activity_at)}`}
+        description={`${c.relation.contacts_available ? "Контакты открыты" : "Анонимный профиль"} · активность ${formatRelative(c.last_activity_at)}`}
         actions={
-          <Button icon={<Send className="size-4" aria-hidden />} onClick={() => setInvite(true)} disabled={active || c.relation.contacts_available}>
-            {active ? "Приглашение отправлено" : c.relation.contacts_available ? "Контакты открыты" : "Пригласить"}
-          </Button>
+          c.relation.contacts_available ? (
+            <Button variant="secondary" onClick={() => document.getElementById("contacts")?.scrollIntoView({ block: "start", behavior: "smooth" })}>
+              К контактам
+            </Button>
+          ) : (
+            <Button icon={<Send className="size-4" aria-hidden />} onClick={() => setInvite(true)} disabled={active}>
+              {active ? "Приглашение отправлено" : "Пригласить"}
+            </Button>
+          )
         }
       />
 

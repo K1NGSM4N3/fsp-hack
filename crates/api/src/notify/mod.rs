@@ -20,7 +20,7 @@ use std::time::Duration;
 
 use catalog::{Category, WorkFormat};
 use chrono::{DateTime, Utc};
-use matching::trust::TrustLevel;
+use matching::trust::{TrustAssessment, TrustLevel};
 use serde::{Deserialize, Serialize};
 use sqlx::{PgConnection, PgExecutor};
 use utoipa::ToSchema;
@@ -55,6 +55,22 @@ pub enum NotificationKind {
     WebhookFailing = 10,
     /// The company's trust level or invitation quota moved.
     TrustChanged = 11,
+    /// A moderator reviewed a disputed test and kept its result.
+    ResultConfirmed = 12,
+    /// A moderator voided the category a disputed test gave.
+    ResultAnnulled = 13,
+    /// Voided, plus a retest with the camera open right away.
+    RetestOrdered = 14,
+    VacancyUnpublished = 15,
+    /// Invitations frozen by a moderator until a date.
+    InvitationsFrozen = 16,
+    /// A taken-down vacancy is published again, or a freeze ended early.
+    SanctionLifted = 17,
+    /// A complaint about the company, its vacancy or invitation did not hold up. Upheld ones
+    /// arrive with the sanction they led to.
+    ComplaintResolved = 18,
+    /// The ФСП registry pushed a change of the candidate's achievements.
+    FspAchievements = 19,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -65,7 +81,7 @@ pub enum Audience {
 }
 
 impl NotificationKind {
-    pub const ALL: [NotificationKind; 12] = [
+    pub const ALL: [NotificationKind; 20] = [
         NotificationKind::InvitationReceived,
         NotificationKind::InvitationExpiring,
         NotificationKind::InvitationWithdrawn,
@@ -78,6 +94,14 @@ impl NotificationKind {
         NotificationKind::ApplicationReceived,
         NotificationKind::WebhookFailing,
         NotificationKind::TrustChanged,
+        NotificationKind::ResultConfirmed,
+        NotificationKind::ResultAnnulled,
+        NotificationKind::RetestOrdered,
+        NotificationKind::VacancyUnpublished,
+        NotificationKind::InvitationsFrozen,
+        NotificationKind::SanctionLifted,
+        NotificationKind::ComplaintResolved,
+        NotificationKind::FspAchievements,
     ];
 
     pub const fn slug(self) -> &'static str {
@@ -94,6 +118,14 @@ impl NotificationKind {
             NotificationKind::ApplicationReceived => "application_received",
             NotificationKind::WebhookFailing => "webhook_failing",
             NotificationKind::TrustChanged => "trust_changed",
+            NotificationKind::ResultConfirmed => "result_confirmed",
+            NotificationKind::ResultAnnulled => "result_annulled",
+            NotificationKind::RetestOrdered => "retest_ordered",
+            NotificationKind::VacancyUnpublished => "vacancy_unpublished",
+            NotificationKind::InvitationsFrozen => "invitations_frozen",
+            NotificationKind::SanctionLifted => "sanction_lifted",
+            NotificationKind::ComplaintResolved => "complaint_resolved",
+            NotificationKind::FspAchievements => "fsp_achievements",
         }
     }
 
@@ -121,12 +153,20 @@ impl NotificationKind {
             | NotificationKind::HiringStage
             | NotificationKind::ApplicationStatus
             | NotificationKind::AssessmentResult
-            | NotificationKind::GuardianDecision => Audience::Candidate,
+            | NotificationKind::GuardianDecision
+            | NotificationKind::ResultConfirmed
+            | NotificationKind::ResultAnnulled
+            | NotificationKind::RetestOrdered
+            | NotificationKind::FspAchievements => Audience::Candidate,
             NotificationKind::InvitationAccepted
             | NotificationKind::InvitationDeclined
             | NotificationKind::ApplicationReceived
             | NotificationKind::WebhookFailing
-            | NotificationKind::TrustChanged => Audience::Employer,
+            | NotificationKind::TrustChanged
+            | NotificationKind::VacancyUnpublished
+            | NotificationKind::InvitationsFrozen
+            | NotificationKind::SanctionLifted
+            | NotificationKind::ComplaintResolved => Audience::Employer,
         }
     }
 
@@ -145,6 +185,14 @@ impl NotificationKind {
             NotificationKind::ApplicationReceived => "Новые отклики",
             NotificationKind::WebhookFailing => "Сбои доставки в ATS",
             NotificationKind::TrustChanged => "Уровень доверия и квота",
+            NotificationKind::ResultConfirmed => "Модератор подтвердил результат теста",
+            NotificationKind::ResultAnnulled => "Модератор аннулировал результат теста",
+            NotificationKind::RetestOrdered => "Назначена пересдача с видеозаписью",
+            NotificationKind::VacancyUnpublished => "Вакансия снята модератором",
+            NotificationKind::InvitationsFrozen => "Приглашения приостановлены",
+            NotificationKind::SanctionLifted => "Модератор отменил меру",
+            NotificationKind::ComplaintResolved => "Жалобы на компанию",
+            NotificationKind::FspAchievements => "Достижения ФСП",
         }
     }
 
@@ -172,6 +220,30 @@ impl NotificationKind {
             NotificationKind::ApplicationReceived => "Отклик на опубликованную вакансию",
             NotificationKind::WebhookFailing => "Вебхук в вашу ATS не принимает события",
             NotificationKind::TrustChanged => "Изменилась квота приглашений за 7 дней",
+            NotificationKind::ResultConfirmed => {
+                "Спорный тест проверен, результат остаётся — с комментарием модератора"
+            }
+            NotificationKind::ResultAnnulled => {
+                "Категория из теста снята — с комментарием модератора"
+            }
+            NotificationKind::RetestOrdered => {
+                "Пройти тест снова можно сразу, но только с камерой — с комментарием модератора"
+            }
+            NotificationKind::VacancyUnpublished => {
+                "С комментарием модератора; вернуть её может только модератор"
+            }
+            NotificationKind::InvitationsFrozen => {
+                "До какой даты квота — 0, с комментарием модератора"
+            }
+            NotificationKind::SanctionLifted => {
+                "Вакансия снова опубликована или приглашения доступны раньше срока"
+            }
+            NotificationKind::ComplaintResolved => {
+                "Жалоба не подтвердилась и больше не снижает квоту; кто жаловался, не сообщаем"
+            }
+            NotificationKind::FspAchievements => {
+                "Реестр ФСП прислал новые результаты — профиль обновился сам"
+            }
         }
     }
 
@@ -289,6 +361,77 @@ pub struct TrustNote {
     pub quota: i16,
 }
 
+/// A moderator's decision on the candidate's disputed test. The moderator is not named: the
+/// candidate needs the decision and its reasons, not who took it.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ReviewNote {
+    pub session_id: Uuid,
+    /// The test: specialization × the grade it was taken for.
+    pub category: Category,
+    /// Written by the moderator for the candidate.
+    pub comment: String,
+    /// The candidate's category after the decision.
+    pub category_now: Option<Category>,
+    /// Confirmed, and the current category stands on this test: companies see «Результат
+    /// подтверждён».
+    pub badge: bool,
+}
+
+/// Company notes about moderation carry the company's own item, the moderator's comment and
+/// counts — never who complained or what the complaint said.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct UnpublishedNote {
+    pub vacancy_id: Uuid,
+    pub title: String,
+    pub comment: String,
+    /// Complaints about the vacancy this decision upheld.
+    pub complaints_upheld: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FrozenNote {
+    pub until: DateTime<Utc>,
+    pub comment: String,
+    pub complaints_upheld: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LiftedNote {
+    /// The vacancy published again; `None` — the freeze ended early.
+    pub vacancy_id: Option<Uuid>,
+    pub title: Option<String>,
+    pub comment: String,
+    /// Invitations per 7 days after the decision.
+    pub quota: i16,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComplaintAbout {
+    Company,
+    Vacancy,
+    Invitation,
+}
+
+/// A dismissed complaint. A vacancy is public and may be named; an invitation is not — it went
+/// to one person, and naming it would name the complainant.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ComplaintNote {
+    pub about: ComplaintAbout,
+    pub vacancy_id: Option<Uuid>,
+    pub vacancy_title: Option<String>,
+    pub quota: i16,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FspNote {
+    pub added: u16,
+    pub removed: u16,
+    /// The newest added achievement in words, e.g. «Призёр всероссийских соревнований по
+    /// алгоритмическому программированию, 2026».
+    pub latest: Option<String>,
+}
+
 /// What happened, stored as the item's payload. Cold data: parsed only to render a page of the
 /// feed or a letter.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -306,6 +449,14 @@ pub enum Event {
     ApplicationReceived(ApplicantNote),
     WebhookFailing(WebhookNote),
     TrustChanged(TrustNote),
+    ResultConfirmed(ReviewNote),
+    ResultAnnulled(ReviewNote),
+    RetestOrdered(ReviewNote),
+    VacancyUnpublished(UnpublishedNote),
+    InvitationsFrozen(FrozenNote),
+    SanctionLifted(LiftedNote),
+    ComplaintResolved(ComplaintNote),
+    FspAchievements(FspNote),
 }
 
 impl Event {
@@ -323,6 +474,14 @@ impl Event {
             Event::ApplicationReceived(_) => NotificationKind::ApplicationReceived,
             Event::WebhookFailing(_) => NotificationKind::WebhookFailing,
             Event::TrustChanged(_) => NotificationKind::TrustChanged,
+            Event::ResultConfirmed(_) => NotificationKind::ResultConfirmed,
+            Event::ResultAnnulled(_) => NotificationKind::ResultAnnulled,
+            Event::RetestOrdered(_) => NotificationKind::RetestOrdered,
+            Event::VacancyUnpublished(_) => NotificationKind::VacancyUnpublished,
+            Event::InvitationsFrozen(_) => NotificationKind::InvitationsFrozen,
+            Event::SanctionLifted(_) => NotificationKind::SanctionLifted,
+            Event::ComplaintResolved(_) => NotificationKind::ComplaintResolved,
+            Event::FspAchievements(_) => NotificationKind::FspAchievements,
         }
     }
 
@@ -338,7 +497,17 @@ impl Event {
             Event::InvitationAccepted(n) => Some(n.invitation_id),
             Event::InvitationDeclined(n) => Some(n.invitation_id),
             Event::ApplicationReceived(n) => Some(n.application_id),
-            Event::GuardianDecision(_) | Event::WebhookFailing(_) | Event::TrustChanged(_) => None,
+            Event::ResultConfirmed(n) | Event::ResultAnnulled(n) | Event::RetestOrdered(n) => {
+                Some(n.session_id)
+            }
+            Event::VacancyUnpublished(n) => Some(n.vacancy_id),
+            Event::SanctionLifted(n) => n.vacancy_id,
+            Event::ComplaintResolved(n) => n.vacancy_id,
+            Event::GuardianDecision(_)
+            | Event::WebhookFailing(_)
+            | Event::TrustChanged(_)
+            | Event::InvitationsFrozen(_)
+            | Event::FspAchievements(_) => None,
         }
     }
 
@@ -655,6 +824,53 @@ impl Notifier {
         .await
     }
 
+    /// A moderator's decision or a registry push about the candidate.
+    pub async fn to_candidate(
+        &self,
+        db: impl PgExecutor<'_>,
+        candidate: Uuid,
+        event: &Event,
+    ) -> Result<bool, sqlx::Error> {
+        self.write(
+            db,
+            To::Candidate(candidate),
+            About::default(),
+            event,
+            None,
+            true,
+        )
+        .await
+    }
+
+    /// A moderator's action about the company. `trust` is the level and quota after the action,
+    /// read in the same transaction: it becomes what the company was last told, so the sweeper
+    /// does not announce the same change again as `trust_changed`.
+    pub async fn moderation_to_company(
+        &self,
+        conn: &mut PgConnection,
+        company: Uuid,
+        event: &Event,
+        trust: Option<&TrustAssessment>,
+    ) -> Result<bool, sqlx::Error> {
+        let about = About {
+            candidate_id: None,
+            company_id: Some(company),
+        };
+        let written = self
+            .write(&mut *conn, To::Company(company), about, event, None, true)
+            .await?;
+        if let Some(t) = trust {
+            db::notifications::upsert_trust_seen(
+                &mut *conn,
+                company,
+                sweep::level_slug(t.level),
+                t.quota,
+            )
+            .await?;
+        }
+        Ok(written)
+    }
+
     pub async fn trust_changed(
         &self,
         db: impl PgExecutor<'_>,
@@ -673,6 +889,18 @@ impl Notifier {
     }
 }
 
+/// The company's trust level and quota as this transaction sees them.
+pub async fn trust_now(
+    conn: &mut PgConnection,
+    company: Uuid,
+    now: DateTime<Utc>,
+) -> Result<Option<TrustAssessment>, sqlx::Error> {
+    Ok(db::trust::company_signals(&mut *conn, Some(company))
+        .await?
+        .first()
+        .map(|row| matching::trust::assess(&crate::trust::signals(row), now.timestamp())))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -689,11 +917,11 @@ mod tests {
             assert_eq!(serde_json::to_value(k).unwrap(), k.slug());
             assert_eq!(NotificationKind::from_index(k.index()), Some(*k));
         }
-        assert_eq!(NotificationKind::from_index(12), None);
+        assert_eq!(NotificationKind::from_index(20), None);
         let candidate = EmailMask::all_of(Audience::Candidate);
         let employer = EmailMask::all_of(Audience::Employer);
         assert_eq!(candidate & employer, 0);
-        assert_eq!(candidate | employer, (1 << 12) - 1);
+        assert_eq!(candidate | employer, (1 << 20) - 1);
     }
 
     #[test]

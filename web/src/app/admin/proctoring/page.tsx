@@ -88,7 +88,7 @@ function MobileItem({ s }: { s: QueueSession }) {
         <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
           <dt className="text-ink-subtle">Завершён</dt>
           <dd className="text-ink">{formatDateTime(s.finished_at)}</dd>
-          <dt className="text-ink-subtle">Person-fit l_z</dt>
+          <dt className="text-ink-subtle" title="Статистика person-fit l_z: ниже −2 — нетипичная картина ответов">Согласованность ответов</dt>
           <dd className={s.aberrant ? "font-mono font-medium text-accent-strong" : "font-mono text-ink"}>{lz(s.person_fit_lz)}</dd>
           <dt className="text-ink-subtle">Замечания</dt>
           <dd className="text-ink">{remarksText(s)}</dd>
@@ -120,8 +120,8 @@ function Queue({ filter }: { filter: QueueFilter }) {
               <th scope="col" className="px-3 py-3 font-medium">
                 Завершён
               </th>
-              <th scope="col" className="px-3 py-3 font-medium" title="Статистика согласованности ответов; ниже −2 — нетипичная картина">
-                l_z
+              <th scope="col" className="px-3 py-3 font-medium" title="Статистика person-fit l_z; ниже −2 — нетипичная картина ответов">
+                Согласованность
               </th>
               <th scope="col" className="px-3 py-3 font-medium">
                 Замечания

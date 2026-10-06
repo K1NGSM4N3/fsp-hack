@@ -94,7 +94,7 @@ export function ProctoringResultCard({ session }: { session: AssessmentSession }
   else if (s.status === "declined") text = "Вы прошли тест без камеры. Результат засчитан так же, у него отметка «без видеозаписи».";
   else if (s.status === "interrupted")
     text = `Запись остановилась до конца теста. Результат засчитан, у него отметка «запись прервалась».${s.playable ? " Сохранённую часть можно посмотреть." : ""}`;
-  else text = "Запись видите только вы. Работодатели видео не получают — только отметку.";
+  else text = "Запись видите только вы. Компании видео не получают — только отметку.";
 
   return (
     <Card>
@@ -121,7 +121,7 @@ export function ProctoringResultCard({ session }: { session: AssessmentSession }
           )}
         </div>
         <div>
-          <p className="text-xs text-ink-subtle">Что видят работодатели</p>
+          <p className="text-xs text-ink-subtle">Что видят компании</p>
           <p className="mt-1 text-ink">{employerSees.join(" · ")}</p>
           {s.delete_after && !s.purged && <p className="mt-2 text-xs text-ink-subtle">Запись удалим {formatDate(s.delete_after)}</p>}
         </div>

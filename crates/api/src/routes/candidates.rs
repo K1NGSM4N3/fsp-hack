@@ -45,7 +45,10 @@ pub struct SearchQuery {
     pub q: Option<String>,
     /// Rank by fit to this need instead of profile strength.
     pub need_id: Option<Uuid>,
+    /// 1–100, 20 by default; out-of-range values are clamped.
+    #[param(minimum = 1, maximum = 100, default = 20)]
     pub limit: Option<usize>,
+    #[param(minimum = 0, default = 0)]
     pub offset: Option<usize>,
 }
 
@@ -64,7 +67,7 @@ pub struct BankItem {
 /// expectations, adults only
 #[utoipa::path(get, path = "/candidates", tag = "matching",
     params(SearchQuery),
-    responses((status = 200, body = Page<BankItem>), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
+    responses((status = 200, body = Page<BankItem>), (status = 404, description = "`need_id` is not a need of this company", body = Problem), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn search(
     State(state): State<AppState>,

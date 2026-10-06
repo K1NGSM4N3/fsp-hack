@@ -4,5 +4,6 @@ export default async function EmployerCandidatePage({ params, searchParams }: { 
   const { id } = await params;
   const sp = await searchParams;
   const need = typeof sp.need === "string" ? sp.need : null;
-  return <EmployerCandidateView id={id} needId={need} />;
+  const vacancy = typeof sp.vacancy === "string" ? sp.vacancy : null;
+  return <EmployerCandidateView id={id} needId={need} vacancyId={vacancy} />;
 }

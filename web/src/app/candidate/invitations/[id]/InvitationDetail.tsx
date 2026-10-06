@@ -4,7 +4,7 @@ import { Building2, Check, CheckCircle2, Globe, Lock, MapPin, MessageSquare, Pho
 import Link from "next/link";
 import { useState } from "react";
 import { isApiError } from "@/api/client";
-import type { DeclineReason, ReceivedInvitation } from "@/api/types";
+import type { DeclineReason, Industry, ReceivedInvitation } from "@/api/types";
 import { SalaryRange } from "@/components/domain/Category";
 import { DomainBadge } from "@/components/domain/DomainBadge";
 import { HiringOutcomes } from "@/components/domain/HiringOutcomes";
@@ -13,7 +13,7 @@ import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
 import { Alert, Button, Card, CardHeader, ChipSelect, Dialog, ErrorAlert, Field, PageHeader, PageSkeleton, Textarea, useToast } from "@/components/ui";
 import { useAcceptInvitation, useDeclineInvitation, useReceivedInvitation } from "@/features/candidate/hooks";
 import { formatDate, formatDateTime, formatRelative } from "@/lib/format";
-import { DECLINE_REASON_LABEL, DECLINE_REASONS, WORK_FORMAT_LABEL } from "@/lib/labels";
+import { DECLINE_REASON_LABEL, DECLINE_REASONS, INDUSTRY_LABEL, WORK_FORMAT_LABEL } from "@/lib/labels";
 
 function Timeline({ inv }: { inv: ReceivedInvitation }) {
   const rows = [
@@ -120,7 +120,7 @@ function AcceptDialog({ inv, open, onClose }: { inv: ReceivedInvitation; open: b
               accept.mutate(inv.id, {
                 onSuccess: () => {
                   onClose();
-                  toast.success("Приглашение принято", `${inv.company_name} получила ваши контакты`);
+                  toast.success("Приглашение принято", `Компания «${inv.company_name}» получила ваши контакты`);
                 },
                 onError: (e) => toast.error(isApiError(e) ? e.title : "Не удалось принять", isApiError(e) ? (e.detail ?? undefined) : undefined),
               })
@@ -172,7 +172,7 @@ export function InvitationDetail({ id }: { id: string }) {
             <span className="inline-flex items-center gap-1.5">
               <Building2 className="size-4" aria-hidden />
               {inv.company_name}
-              {inv.company_industry ? ` · ${inv.company_industry}` : ""}
+              {inv.company_industry ? ` · ${INDUSTRY_LABEL[inv.company_industry as Industry] ?? inv.company_industry}` : ""}
             </span>
             <DomainBadge domain={inv.company_verified_domain} />
           </span>

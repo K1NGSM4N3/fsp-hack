@@ -32,9 +32,9 @@ function HiringFunnel({ s }: { s: InvitationStats }) {
   if (s.hiring.length === 0) {
     return (
       <p className="mt-5 border-t border-line pt-4 text-sm text-ink-subtle">
-        Что было после контакта — собеседование, оффер, найм — появится здесь, когда вы{" "}
+        Что было после контакта — собеседование, оффер, найм — появится здесь, когда ATS компании отметит этап. ATS подключается в разделе{" "}
         <Link href="/employer/integrations" className="link-inline font-medium">
-          подключите ATS
+          «Интеграции»
         </Link>
         .
       </p>
@@ -101,7 +101,7 @@ function QuotaCard({ s }: { s: InvitationStats }) {
     <Card>
       <CardHeader
         title="Квота приглашений"
-        description={`До ${s.quota_max} за 7 дней — лимит зависит от уровня доверия к компании, кандидаты получают только точечные предложения`}
+        description={`Сейчас ${s.quota_limit} за 7 дней, максимум ${s.quota_max}: лимит зависит от уровня доверия к компании, а соискатели получают только точечные предложения`}
         action={
           <Link href="/employer/trust" className="tap text-sm font-medium text-primary hover:underline">
             Как поднять

@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { isApiError } from "@/api/client";
 import type { HiringNeed, NeedCategory, ShortlistFilters } from "@/api/types";
 import { CategoryBadge, SalaryRange } from "@/components/domain/Category";
-import { Alert, Badge, ButtonLink, Card, CardHeader, Chip, CodeBlock, EmptyState, ErrorAlert, Markdown, PageHeader, PageSkeleton, ProgressBar, SkeletonCard, useToast } from "@/components/ui";
+import { Alert, Badge, Button, ButtonLink, Card, CardHeader, Chip, CodeBlock, EmptyState, ErrorAlert, Markdown, PageHeader, PageSkeleton, ProgressBar, SkeletonCard, useToast } from "@/components/ui";
 import { useNeed, useNeedCategories, useNeedTestPlan, usePatchShortlist, useRefineShortlist, useShortlist } from "@/features/employer/hooks";
 import { InviteDialog, type InviteTarget } from "@/features/employer/components/InviteDialog";
 import { RefinePanel, ShortlistCard } from "@/features/employer/components/Shortlist";
@@ -90,6 +90,7 @@ function ShortlistSection({ need }: { need: HiringNeed }) {
   const patch = usePatchShortlist(need.id);
   const [invite, setInvite] = useState<InviteTarget | null>(null);
   const [refined, setRefined] = useState(false);
+  const [showHidden, setShowHidden] = useState(false);
   const autoBuilt = useRef(false);
 
   const generated = q.data?.need.shortlist_generated_at;
@@ -112,7 +113,8 @@ function ShortlistSection({ need }: { need: HiringNeed }) {
 
   const shortlist = q.data;
   const visible = shortlist?.items.filter((i) => !i.dismissed) ?? [];
-  const dismissed = (shortlist?.items.length ?? 0) - visible.length;
+  const hidden = shortlist?.items.filter((i) => i.dismissed) ?? [];
+  const dismissed = hidden.length;
   const fresh = visible.filter((i) => i.is_new).length;
   const building = refine.isPending && !generated;
 
@@ -135,7 +137,14 @@ function ShortlistSection({ need }: { need: HiringNeed }) {
               <p className="text-ink">
                 <span className="font-semibold">{pluralize(visible.length, ["кандидат", "кандидата", "кандидатов"])}</span>
                 {fresh > 0 && <span className="text-primary"> · {fresh} новых</span>}
-                {dismissed > 0 && <span className="text-ink-subtle"> · скрыто {dismissed}</span>}
+                {dismissed > 0 && (
+                  <>
+                    {" · "}
+                    <button type="button" aria-expanded={showHidden} onClick={() => setShowHidden((v) => !v)} className="tap text-ink-subtle underline decoration-dotted underline-offset-4 hover:text-primary">
+                      скрыто {dismissed}
+                    </button>
+                  </>
+                )}
               </p>
               <p className="text-xs text-ink-subtle">Сначала закреплённые, затем по баллу{generated ? ` · обновлено ${formatDateTime(generated)}` : ""}</p>
             </div>
@@ -160,12 +169,40 @@ function ShortlistSection({ need }: { need: HiringNeed }) {
                       need={shortlist?.need ?? need}
                       busy={patch.isPending && patch.variables?.candidateId === item.candidate.id}
                       onPin={(pinned) => patch.mutate({ candidateId: item.candidate.id, patch: { pinned } })}
-                      onDismiss={() => patch.mutate({ candidateId: item.candidate.id, patch: { dismissed: true } }, { onSuccess: () => toast.info("Кандидат скрыт из подборки", "Он не появится снова при уточнении") })}
+                      onDismiss={() =>
+                        patch.mutate(
+                          { candidateId: item.candidate.id, patch: { dismissed: true } },
+                          { onSuccess: () => toast.info(`${item.candidate.code} скрыт из подборки`, "Не появится при уточнении. Вернуть — по ссылке «скрыто» над списком") },
+                        )
+                      }
                       onInvite={() => setInvite({ id: item.candidate.id, code: item.candidate.code, display_name: item.candidate.display_name, category: item.candidate.category, minor: item.candidate.minor })}
                     />
                   </li>
                 ))}
               </ul>
+            )}
+            {showHidden && dismissed > 0 && (
+              <Card>
+                <CardHeader title="Скрытые из подборки" description="Не появляются при уточнении, пока вы их не вернёте" />
+                <ul className="divide-y divide-line">
+                  {hidden.map((item) => (
+                    <li key={item.candidate.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                      <span className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-sm font-semibold text-ink">{item.candidate.code}</span>
+                        {item.candidate.category && <CategoryBadge category={item.candidate.category} size="sm" />}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        loading={patch.isPending && patch.variables?.candidateId === item.candidate.id}
+                        onClick={() => patch.mutate({ candidateId: item.candidate.id, patch: { dismissed: false } }, { onSuccess: () => toast.success(`${item.candidate.code} снова в подборке`) })}
+                      >
+                        Вернуть
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
             )}
           </>
         )}

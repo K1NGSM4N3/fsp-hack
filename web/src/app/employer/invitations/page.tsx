@@ -7,7 +7,7 @@ import { isApiError } from "@/api/client";
 import type { InvitationStatus, SentInvitation } from "@/api/types";
 import { CategoryBadge, SalaryRange } from "@/components/domain/Category";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
-import { Button, ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
+import { Button, ButtonLink, Dialog, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
 import { useSentInvitation, useSentInvitations, useWithdrawInvitation } from "@/features/employer/hooks";
 import { cn } from "@/lib/cn";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -35,6 +35,7 @@ function Row({ inv }: { inv: SentInvitation }) {
   const [open, setOpen] = useState(false);
   const toast = useToast();
   const withdraw = useWithdrawInvitation();
+  const [confirm, setConfirm] = useState(false);
   const active = inv.status === "sent" || inv.status === "viewed";
   return (
     <li className="rounded-card border border-line bg-white shadow-card">
@@ -80,12 +81,43 @@ function Row({ inv }: { inv: SentInvitation }) {
                   size="sm"
                   variant="ghost"
                   icon={<Undo2 className="size-4" aria-hidden />}
-                  loading={withdraw.isPending}
-                  onClick={() => withdraw.mutate(inv.id, { onSuccess: () => toast.success("Приглашение отозвано"), onError: (e) => toast.error(isApiError(e) ? e.title : "Не удалось отозвать") })}
+                  onClick={() => setConfirm(true)}
                 >
                   Отозвать
                 </Button>
               )}
+              <Dialog
+                open={confirm}
+                onClose={() => setConfirm(false)}
+                size="sm"
+                title="Отозвать приглашение?"
+                footer={
+                  <>
+                    <Button variant="ghost" onClick={() => setConfirm(false)}>
+                      Отмена
+                    </Button>
+                    <Button
+                      variant="danger"
+                      loading={withdraw.isPending}
+                      onClick={() =>
+                        withdraw.mutate(inv.id, {
+                          onSuccess: () => {
+                            setConfirm(false);
+                            toast.success("Приглашение отозвано");
+                          },
+                          onError: (e) => toast.error(isApiError(e) ? e.title : "Не удалось отозвать"),
+                        })
+                      }
+                    >
+                      Отозвать
+                    </Button>
+                  </>
+                }
+              >
+                <p className="text-sm text-ink-muted">
+                  Соискатель увидит, что приглашение больше не ждёт ответа. Место в квоте не вернётся, а частые отзывы снижают уровень доверия к компании.
+                </p>
+              </Dialog>
             </div>
           </div>
           <div>

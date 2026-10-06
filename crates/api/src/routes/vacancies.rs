@@ -16,7 +16,7 @@ use crate::{
     auth::{CandidateUser, EmployerUser},
     dto::{ApplicationStatus, Page, SalaryRange, VacancyStatus},
     error::{ApiError, ApiResult, Problem, Validator},
-    extract::{Json, Path, Query},
+    extract::{Created, Json, Path, Query},
     integrations::{
         events::{EventType, Outbox},
         outcomes::{HiringOutcome, OutcomeIndex},
@@ -122,9 +122,13 @@ fn validate(v: &VacancyInput) -> ApiResult<()> {
         .collect();
     let mut val = Validator::default();
     val.check(!v.title.trim().is_empty(), "title", "Укажите название")
-        .check(v.title.len() <= 200, "title", "Не длиннее 200 символов")
         .check(
-            v.description.len() <= 10_000,
+            v.title.chars().count() <= 200,
+            "title",
+            "Не длиннее 200 символов",
+        )
+        .check(
+            v.description.chars().count() <= 10_000,
             "description",
             "Не длиннее 10 000 символов",
         )
@@ -196,13 +200,13 @@ async fn check_trust(state: &AppState, company: Uuid, id: Uuid, v: &VacancyInput
 /// Create a vacancy (salary range is mandatory)
 #[utoipa::path(post, path = "/vacancies", tag = "vacancies",
     request_body = VacancyInput,
-    responses((status = 201, body = Vacancy), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
+    responses((status = 201, body = Vacancy, headers(("Location" = String, description = "`/api/v1/employer/vacancies/{id}`"))), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn create(
     State(state): State<AppState>,
     user: EmployerUser,
     Json(v): Json<VacancyInput>,
-) -> ApiResult<(StatusCode, Json<Vacancy>)> {
+) -> ApiResult<Created<Vacancy>> {
     validate(&v)?;
     let company = company_id(&state, user.id).await?;
     let id = Uuid::now_v7();
@@ -214,7 +218,10 @@ async fn create(
     let row = db::vacancies::company_vacancy(&state.pool, company, id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
-    Ok((StatusCode::CREATED, Json(vacancy_from_row!(row))))
+    Ok(Created(
+        format!("/api/v1/employer/vacancies/{id}"),
+        vacancy_from_row!(row),
+    ))
 }
 
 /// One own vacancy
@@ -287,7 +294,7 @@ pub struct IncomingApplication {
 /// Applications to a vacancy. Contacts of applicants are available via `/employer/candidates/{id}/contacts`.
 #[utoipa::path(get, path = "/vacancies/{id}/applications", tag = "vacancies",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vec<IncomingApplication>), (status = 409, description = "`company_profile_required`", body = Problem)),
+    responses((status = 200, body = Vec<IncomingApplication>), (status = 404, description = "No such vacancy of this company", body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_applications(
     State(state): State<AppState>,
@@ -295,6 +302,9 @@ async fn list_applications(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<IncomingApplication>>> {
     let company = company_id(&state, user.id).await?;
+    db::vacancies::company_vacancy(&state.pool, company, id)
+        .await?
+        .ok_or_else(ApiError::not_found)?;
     let rows = db::vacancies::vacancy_applications(&state.pool, id, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
@@ -369,7 +379,10 @@ pub struct VacancyQuery {
     pub q: Option<String>,
     /// Vacancies whose upper salary bound reaches this value.
     pub salary_from: Option<i64>,
+    /// 1–100, 20 by default; out-of-range values are clamped.
+    #[param(minimum = 1, maximum = 100, default = 20)]
     pub limit: Option<i64>,
+    #[param(minimum = 0, default = 0)]
     pub offset: Option<i64>,
 }
 
@@ -479,6 +492,7 @@ async fn get_published(
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({"cover_letter": "Здравствуйте! Три года пишу на Go сервисы платежей (PostgreSQL, Kafka), на платформе подтверждён Middle. Готов выйти через две недели."}))]
 pub struct ApplyInput {
     #[serde(default)]
     pub cover_letter: String,
@@ -512,7 +526,7 @@ async fn apply(
     Path(vacancy_id): Path<Uuid>,
     Json(input): Json<ApplyInput>,
 ) -> ApiResult<(StatusCode, Json<MyApplication>)> {
-    if input.cover_letter.len() > 4000 {
+    if input.cover_letter.chars().count() > 4000 {
         return Err(ApiError::field("cover_letter", "Не длиннее 4000 символов"));
     }
     db::vacancies::published_vacancy(&state.pool, vacancy_id)
@@ -597,7 +611,7 @@ async fn my_applications(
 /// Withdraw an application before the company decides
 #[utoipa::path(post, path = "/applications/{id}/withdraw", tag = "vacancies",
     params(("id" = Uuid, Path)),
-    responses((status = 204), (status = 409, description = "`application_closed`", body = Problem)),
+    responses((status = 204), (status = 404, description = "Not the caller's application", body = Problem), (status = 409, description = "`application_closed`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn withdraw_application(
     State(state): State<AppState>,
@@ -606,6 +620,10 @@ async fn withdraw_application(
 ) -> ApiResult<StatusCode> {
     let mut tx = state.pool.begin().await?;
     if db::vacancies::withdraw_application(&mut *tx, id, user.id).await? == 0 {
+        let own = db::vacancies::candidate_applications(&mut *tx, user.id).await?;
+        if !own.iter().any(|a| a.id == id) {
+            return Err(ApiError::not_found());
+        }
         return Err(ApiError::conflict(
             "application_closed",
             "Отклик уже рассмотрен или отозван",

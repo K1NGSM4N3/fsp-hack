@@ -11,10 +11,15 @@ use api::{
     integrations::webhook::WebhookSender,
     kv::Kv,
     mail::Mailer,
+    notify::{
+        Audience, Event, Notifier,
+        render::{self, LetterContext},
+        sweep,
+    },
     proctoring::{ProctoringMode, RecordingStore},
     state::{AppState, Services},
 };
-use catalog::{Grade, Specialization};
+use catalog::{Category, Grade, Specialization};
 use chrono::{DateTime, Duration, Utc};
 use reqwest::{Method, StatusCode};
 use serde_json::{Value, json};
@@ -79,6 +84,7 @@ impl Api {
                 oidc: None,
                 registry_url: None,
                 registry_token: "test".into(),
+                webhook_secret: None,
                 dev_link: false,
             },
             grade_change_cooldown_days: 90,
@@ -396,6 +402,38 @@ impl Api {
             Some(json!({ "decision": decision, "comment": comment })),
         )
         .await
+    }
+
+    async fn feed(&self, token: &str) -> Vec<Value> {
+        self.call(Method::GET, "/me/notifications?limit=50", token, None)
+            .await
+            .ok()["items"]
+            .as_array()
+            .unwrap()
+            .clone()
+    }
+
+    /// Every letter the user could get, rendered from the stored payloads.
+    async fn letters(&self, user: Uuid, audience: Audience) -> String {
+        let payloads: Vec<String> = sqlx::query_scalar(
+            "SELECT payload::text FROM notifications WHERE user_id = $1 ORDER BY id",
+        )
+        .bind(user)
+        .fetch_all(self.pool())
+        .await
+        .unwrap();
+        let events: Vec<Event> = payloads.iter().filter_map(|p| Event::parse(p)).collect();
+        assert_eq!(events.len(), payloads.len(), "every payload parses");
+        let letter = render::letter(
+            &events,
+            &LetterContext {
+                public_url: "http://localhost:3000",
+                audience,
+                unsubscribe_url: "http://localhost:3000/notifications/unsubscribe?token=T",
+                unsubscribe_label: "все письма",
+            },
+        );
+        format!("{}\n{}\n{}", letter.subject, letter.text, letter.html)
     }
 
     async fn act(
@@ -1481,4 +1519,499 @@ async fn demo_seed_fills_the_moderation_queues(pool: PgPool) {
     let r = review.ok();
     assert_eq!(r["person_fit"]["aberrant"], true, "{}", r["person_fit"]);
     assert!(r["person_fit"]["lz"].as_f64().unwrap() < -2.0);
+}
+
+fn kinds(feed: &[Value]) -> Vec<&str> {
+    feed.iter().map(|n| n["kind"].as_str().unwrap()).collect()
+}
+
+fn text_of(item: &Value) -> String {
+    format!("{} {}", item["title"], item["body"])
+}
+
+#[sqlx::test(
+    migrations = "../../db/migrations",
+    fixtures("fixtures/moderation_reject_notices.sql")
+)]
+async fn a_moderation_notice_commits_with_its_decision_or_not_at_all(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let moderator = api.moderator().await;
+    let t = templates();
+    let (cand, cand_token) = api.candidate("atomic@example.ru").await;
+    let session = api
+        .session(
+            cand,
+            Session {
+                grade: Grade::Middle,
+                kind: "placement",
+                passed: true,
+                finished: Utc::now() - Duration::days(2),
+                aberrant: true,
+                camera: Some(true),
+                events: BEHAVIOUR,
+                answers: &[(t[0], true), (t[1], true)],
+            },
+        )
+        .await;
+    let skills = api.test_skills(cand).await;
+
+    let r = api
+        .decide(
+            &moderator,
+            session,
+            "annul",
+            "Ответы пришли после уходов со вкладки",
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::INTERNAL_SERVER_ERROR, "{}", r.body);
+    let grade: Option<String> =
+        sqlx::query_scalar("SELECT grade FROM candidates WHERE user_id = $1")
+            .bind(cand)
+            .fetch_one(api.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        grade.as_deref(),
+        Some("middle"),
+        "the annulment rolled back with its notice"
+    );
+    assert_eq!(
+        api.test_skills(cand).await,
+        skills,
+        "and so did the skills it would drop"
+    );
+    let reviews: i64 = sqlx::query_scalar("SELECT count(*) FROM session_reviews")
+        .fetch_one(api.pool())
+        .await
+        .unwrap();
+    assert_eq!(reviews, 0);
+    assert!(
+        api.log(&moderator, "").await.is_empty(),
+        "nor was it logged"
+    );
+    assert!(api.feed(&cand_token).await.is_empty());
+
+    api.decide(&moderator, session, "confirm", "Запись чистая")
+        .await
+        .ok();
+    assert_eq!(kinds(&api.feed(&cand_token).await), ["result_confirmed"]);
+
+    let (hr, _) = api.employer("hr@example.ru").await;
+    let vacancy = api
+        .call(
+            Method::POST,
+            "/employer/vacancies",
+            &hr,
+            Some(json!({
+                "title": "Go-разработчик",
+                "description": "Платёжный шлюз на Go и PostgreSQL",
+                "specialization": "backend",
+                "grade": "middle",
+                "skills": ["go"],
+                "salary": { "min": 200000, "max": 260000 },
+                "work_format": "remote",
+                "city": null,
+                "status": "published",
+            })),
+        )
+        .await;
+    let vacancy_id: Uuid = vacancy.ok()["id"].as_str().unwrap().parse().unwrap();
+    let r = api
+        .act(&moderator, "vacancy", vacancy_id, "unpublish", None)
+        .await;
+    assert_eq!(r.status, StatusCode::INTERNAL_SERVER_ERROR, "{}", r.body);
+    let public = api
+        .call(Method::GET, &format!("/vacancies/{vacancy_id}"), "", None)
+        .await;
+    assert_eq!(public.status, StatusCode::OK, "still published");
+    assert_eq!(
+        api.log(&moderator, "").await.len(),
+        1,
+        "only the confirmation"
+    );
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn the_candidate_reads_each_decision_with_its_comment(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let moderator = api.moderator().await;
+    let t = templates();
+    let finished = Utc::now() - Duration::days(2);
+    let disputed = |grade, kind| Session {
+        grade,
+        kind,
+        passed: true,
+        finished,
+        aberrant: true,
+        camera: Some(true),
+        events: BEHAVIOUR,
+        answers: &[],
+    };
+    let middle = Category::new(Specialization::Backend, Grade::Middle).name_ru();
+    let junior = Category::new(Specialization::Backend, Grade::Junior).name_ru();
+
+    let (a, a_token) = api.candidate("confirmed@example.ru").await;
+    let s = api.session(a, disputed(Grade::Middle, "placement")).await;
+    api.decide(
+        &moderator,
+        s,
+        "confirm",
+        "Вкладку открывал на пару секунд, ответы ровные.",
+    )
+    .await
+    .ok();
+    let feed = api.feed(&a_token).await;
+    assert_eq!(kinds(&feed), ["result_confirmed"]);
+    let n = &feed[0];
+    assert_eq!(
+        n["title"],
+        format!("Модератор подтвердил результат теста: {middle}")
+    );
+    assert_eq!(
+        n["body"],
+        "Отметка «требует подтверждения» снята, компании видят «Результат подтверждён». \
+         Комментарий модератора: «Вкладку открывал на пару секунд, ответы ровные»."
+    );
+    assert_eq!(n["link"], format!("/candidate/assessment/{s}"));
+
+    let (b, b_token) = api.candidate("annulled@example.ru").await;
+    api.session(
+        b,
+        Session {
+            finished: Utc::now() - Duration::days(200),
+            aberrant: false,
+            answers: &[(t[0], true)],
+            ..disputed(Grade::Junior, "placement")
+        },
+    )
+    .await;
+    let s = api.session(b, disputed(Grade::Middle, "upgrade")).await;
+    api.decide(
+        &moderator,
+        s,
+        "annul",
+        "Верные ответы на трудных заданиях — сразу после уходов.",
+    )
+    .await
+    .ok();
+    let n = &api.feed(&b_token).await[0];
+    assert_eq!(n["kind"], "result_annulled");
+    assert_eq!(n["title"], format!("Результат теста аннулирован: {middle}"));
+    let body = n["body"].as_str().unwrap();
+    assert!(
+        body.contains("«Верные ответы на трудных заданиях — сразу после уходов»."),
+        "{body}"
+    );
+    assert!(
+        body.contains(&format!("Категория сейчас: {junior}.")),
+        "{body}"
+    );
+    assert!(
+        body.contains("Тест на Middle снова можно пройти через 30 дней."),
+        "{body}"
+    );
+
+    let (c, c_token) = api.candidate("retest@example.ru").await;
+    let s = api.session(c, disputed(Grade::Middle, "placement")).await;
+    api.decide(&moderator, s, "retest", "Пройдите тест ещё раз с камерой.")
+        .await
+        .ok();
+    let n = &api.feed(&c_token).await[0];
+    assert_eq!(n["kind"], "retest_ordered");
+    assert_eq!(
+        n["title"],
+        format!("Назначена пересдача с видеозаписью: {middle}")
+    );
+    let body = n["body"].as_str().unwrap();
+    assert!(
+        body.starts_with("Можно пройти сразу, без ожидания, но только с включённой камерой."),
+        "{body}"
+    );
+    assert!(
+        body.contains("«Пройдите тест ещё раз с камерой»")
+            && body.ends_with("Категории сейчас нет."),
+        "{body}"
+    );
+
+    for (user, token) in [(a, &a_token), (b, &b_token), (c, &c_token)] {
+        let letters = api.letters(user, Audience::Candidate).await;
+        let feed = serde_json::to_string(&api.feed(token).await).unwrap();
+        for part in [&letters, &feed] {
+            assert!(
+                !part.contains("moderator@example.ru"),
+                "the moderator is not named"
+            );
+        }
+        let queued: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM notifications WHERE user_id = $1 AND email_due_at IS NOT NULL",
+        )
+        .bind(user)
+        .fetch_one(api.pool())
+        .await
+        .unwrap();
+        assert_eq!(queued, 1, "email is on by default");
+    }
+
+    let settings = api
+        .call(Method::GET, "/me/notification-settings", &c_token, None)
+        .await;
+    let listed: Vec<&str> = settings.ok()["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["kind"].as_str().unwrap())
+        .collect();
+    for kind in [
+        "result_confirmed",
+        "result_annulled",
+        "retest_ordered",
+        "fsp_achievements",
+    ] {
+        assert!(listed.contains(&kind), "{kind} in {listed:?}");
+    }
+    api.call(
+        Method::PUT,
+        "/me/notification-settings",
+        &a_token,
+        Some(json!({ "email": [{ "kind": "result_annulled", "enabled": false }] })),
+    )
+    .await
+    .ok();
+    let s = api
+        .session(
+            a,
+            Session {
+                finished: Utc::now() - Duration::days(1),
+                ..disputed(Grade::Senior, "upgrade")
+            },
+        )
+        .await;
+    api.decide(&moderator, s, "annul", "Аннулировано.")
+        .await
+        .ok();
+    let queued: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notifications
+         WHERE user_id = $1 AND kind = 'result_annulled' AND email_due_at IS NULL",
+    )
+    .bind(a)
+    .fetch_one(api.pool())
+    .await
+    .unwrap();
+    assert_eq!(queued, 1, "turned off: in the cabinet only");
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn the_company_hears_outcomes_but_never_who_complained(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let moderator = api.moderator().await;
+    let (hr, company) = api.employer("hr@example.ru").await;
+    let owner: Uuid = sqlx::query_scalar("SELECT owner_user_id FROM companies WHERE id = $1")
+        .bind(company)
+        .fetch_one(api.pool())
+        .await
+        .unwrap();
+    sqlx::query("UPDATE users SET created_at = now() - interval '120 days' WHERE id = $1")
+        .bind(owner)
+        .execute(api.pool())
+        .await
+        .unwrap();
+    let (cand, cand_token) = api.candidate("anna.reporter@example.ru").await;
+    db::grades::set_candidate_category(api.pool(), "backend", "middle", 0.4, Utc::now(), cand)
+        .await
+        .unwrap();
+    api.state.candidates.invalidate().await;
+    let code: String = sqlx::query_scalar("SELECT public_code FROM candidates WHERE user_id = $1")
+        .bind(cand)
+        .fetch_one(api.pool())
+        .await
+        .unwrap();
+
+    let vacancy = api
+        .call(
+            Method::POST,
+            "/employer/vacancies",
+            &hr,
+            Some(json!({
+                "title": "Go-разработчик платёжного шлюза",
+                "description": "Платёжный шлюз на Go и PostgreSQL",
+                "specialization": "backend",
+                "grade": "middle",
+                "skills": ["go"],
+                "salary": { "min": 200000, "max": 260000 },
+                "work_format": "remote",
+                "city": null,
+                "status": "published",
+            })),
+        )
+        .await;
+    let vacancy_id: Uuid = vacancy.ok()["id"].as_str().unwrap().parse().unwrap();
+    let invitation = api
+        .call(
+            Method::POST,
+            "/employer/invitations",
+            &hr,
+            Some(json!({
+                "candidate_id": cand,
+                "title": "Личное предложение для Анны",
+                "message": "Здравствуйте!",
+                "salary": { "min": 200000, "max": 260000 },
+                "contact": "@hr",
+            })),
+        )
+        .await;
+    let invitation_id: Uuid = invitation.ok()["id"].as_str().unwrap().parse().unwrap();
+    let complaint_text = "Я Анна Жалобина, +7 900 111-22-33, anna.reporter@example.ru: вилка не та";
+    for (kind, target) in [
+        ("invitation", invitation_id),
+        ("company", company),
+        ("vacancy", vacancy_id),
+    ] {
+        api.call(
+            Method::POST,
+            "/reports",
+            &cand_token,
+            Some(json!({
+                "target_kind": kind,
+                "target_id": target,
+                "reason": "salary_mismatch",
+                "comment": complaint_text,
+            })),
+        )
+        .await
+        .ok();
+    }
+    let open = api
+        .call(
+            Method::GET,
+            "/admin/antifake?kind=complaint",
+            &moderator,
+            None,
+        )
+        .await;
+    let complaint = |target: &str| -> Uuid {
+        open.body["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|i| i["complaint"]["target_kind"] == target)
+            .and_then(|i| i["id"].as_str())
+            .unwrap()
+            .parse()
+            .unwrap()
+    };
+
+    api.act(
+        &moderator,
+        "complaint",
+        complaint("invitation"),
+        "dismiss",
+        None,
+    )
+    .await
+    .ok();
+    api.act(
+        &moderator,
+        "complaint",
+        complaint("company"),
+        "dismiss",
+        None,
+    )
+    .await
+    .ok();
+    api.act(
+        &moderator,
+        "complaint",
+        complaint("vacancy"),
+        "unpublish",
+        None,
+    )
+    .await
+    .ok();
+    let frozen = api
+        .act(&moderator, "company", company, "freeze", Some(14))
+        .await;
+    let until: DateTime<Utc> = frozen.ok()["frozen_until"]
+        .as_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    let written = sweep::check_trust(api.pool(), Notifier::default(), Utc::now())
+        .await
+        .unwrap();
+    assert_eq!(written, 0, "the freeze notice already told the new quota");
+    api.act(&moderator, "company", company, "restore", None)
+        .await
+        .ok();
+    api.act(&moderator, "vacancy", vacancy_id, "restore", None)
+        .await
+        .ok();
+    assert_eq!(
+        sweep::check_trust(api.pool(), Notifier::default(), Utc::now())
+            .await
+            .unwrap(),
+        0,
+        "nor does lifting it come twice"
+    );
+
+    let feed = api.feed(&hr).await;
+    assert_eq!(
+        kinds(&feed),
+        [
+            "sanction_lifted",
+            "sanction_lifted",
+            "invitations_frozen",
+            "vacancy_unpublished",
+            "complaint_resolved",
+            "complaint_resolved",
+        ]
+    );
+    assert_eq!(feed[5]["title"], "Жалоба на приглашение не подтвердилась");
+    assert_eq!(feed[4]["title"], "Жалоба на компанию не подтвердилась");
+    assert!(
+        text_of(&feed[4]).contains("квоту она больше не снижает. Квота — "),
+        "{}",
+        feed[4]
+    );
+    assert_eq!(
+        feed[3]["title"],
+        "Вакансия «Go-разработчик платёжного шлюза» снята с публикации"
+    );
+    assert_eq!(
+        feed[3]["body"],
+        "Комментарий модератора: «unpublish: проверено модератором». Вернуть вакансию может \
+         только модератор. Подтверждено жалоб: 1 — они снижают квоту 90 дней."
+    );
+    assert_eq!(feed[3]["link"], format!("/employer/vacancies/{vacancy_id}"));
+    assert_eq!(
+        feed[2]["title"],
+        format!("Приглашения приостановлены до {}", render::day(until))
+    );
+    assert!(text_of(&feed[2]).contains(
+        "квота приглашений — 0. Комментарий модератора: «freeze: проверено модератором»"
+    ));
+    assert_eq!(feed[1]["title"], "Приглашения снова доступны");
+    assert!(text_of(&feed[1]).contains("за 7 дней"));
+    assert_eq!(
+        feed[0]["title"],
+        "Вакансия «Go-разработчик платёжного шлюза» снова опубликована"
+    );
+
+    let everything = format!(
+        "{}\n{}",
+        serde_json::to_string(&feed).unwrap(),
+        api.letters(owner, Audience::Employer).await
+    );
+    for leak in [
+        "anna.reporter@example.ru",
+        "Анна",
+        "Жалобина",
+        "+7 900",
+        "вилка не та",
+        code.as_str(),
+        &cand.to_string(),
+        "Личное предложение",
+        "moderator@example.ru",
+    ] {
+        assert!(!everything.contains(leak), "{leak} reached the company");
+    }
 }

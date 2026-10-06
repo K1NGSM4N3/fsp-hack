@@ -4,6 +4,7 @@
 use axum::{
     extract::State,
     http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
 };
 use catalog::{Category, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
@@ -20,7 +21,7 @@ use crate::{
     contacts::{AccessChannel, AccessContext, CandidateContacts, ContactGrant},
     dto::{DeclineReason, HiringStage, InvitationStatus, SalaryRange},
     error::{ApiError, ApiResult, Problem, Validator},
-    extract::{Json, Path},
+    extract::{Created, Json, Path},
     integrations::{
         events::{EventType, Outbox, expire_invitations},
         outcomes::{HiringOutcome, OutcomeIndex},
@@ -50,6 +51,16 @@ pub fn candidate_router() -> OpenApiRouter<AppState> {
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({
+    "candidate_id": "019a7c3e-5b2d-7f10-9c41-2e8d6a0b7f13",
+    "need_id": "01a112db-8cba-72d5-a97b-b8c44094881f",
+    "vacancy_id": null,
+    "title": "Middle Go-разработчик, команда платежей",
+    "message": "Здравствуйте! У вас подтверждённый Middle по бэкенду и опыт с Kafka. Предлагаем обсудить роль в процессинге: удалённо, оформление по ТК, ДМС с первого месяца.",
+    "salary": {"min": 280000, "max": 360000},
+    "work_format": "remote",
+    "contact": "Telegram @severny_hr, +7 495 123-45-67"
+}))]
 pub struct SendInvitation {
     pub candidate_id: Uuid,
     pub need_id: Option<Uuid>,
@@ -135,14 +146,18 @@ fn validate(req: &SendInvitation) -> ApiResult<()> {
         "title",
         "Укажите, что предлагаете",
     )
-    .check(req.title.len() <= 200, "title", "Не длиннее 200 символов")
+    .check(
+        req.title.chars().count() <= 200,
+        "title",
+        "Не длиннее 200 символов",
+    )
     .check(
         !req.message.trim().is_empty(),
         "message",
         "Опишите предложение",
     )
     .check(
-        req.message.len() <= 4000,
+        req.message.chars().count() <= 4000,
         "message",
         "Не длиннее 4000 символов",
     )
@@ -169,16 +184,41 @@ fn validate(req: &SendInvitation) -> ApiResult<()> {
     v.finish()
 }
 
+/// The invitation an `Idempotency-Key` already created; the same key for another candidate is a
+/// client bug, not a retry.
+async fn replay(
+    state: &AppState,
+    company: Uuid,
+    key: &str,
+    candidate: Uuid,
+) -> ApiResult<Option<SentInvitation>> {
+    let Some(existing) =
+        db::invitations::invitation_by_idempotency_key(&state.pool, company, key).await?
+    else {
+        return Ok(None);
+    };
+    let row = db::invitations::employer_invitation(&state.pool, company, existing)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    if row.candidate_id != candidate {
+        return Err(ApiError::field(
+            "idempotency_key",
+            "Этот Idempotency-Key уже использован для приглашения другому кандидату",
+        ));
+    }
+    Ok(Some(sent_from_row!(row)))
+}
+
 /// Send an invitation to a candidate (salary range is mandatory, vacancy is optional)
 #[utoipa::path(post, path = "/invitations", tag = "invitations",
     request_body = SendInvitation,
-    params(("Idempotency-Key" = Option<String>, Header, description = "Повтор с тем же ключом вернёт уже созданное приглашение")),
+    params(("Idempotency-Key" = Option<String>, Header, description = "До 100 символов. Повтор с тем же ключом вернёт уже созданное приглашение — и при одновременной отправке", example = "inv-2026-10-06-0001")),
     responses(
-        (status = 201, body = SentInvitation),
+        (status = 201, body = SentInvitation, headers(("Location" = String, description = "`/api/v1/employer/invitations/{id}`"))),
         (status = 200, description = "Повтор по Idempotency-Key", body = SentInvitation),
         (status = 404, description = "Кандидат не найден или скрыт", body = Problem),
         (status = 409, description = "`invitation_quota_exceeded`, `invitations_frozen` (a moderator froze the company's invitations; `detail` names the date), `invitation_already_active`, `candidate_not_available`; `company_profile_required`", body = Problem),
-        (status = 422, body = Problem),
+        (status = 422, description = "`validation_failed`; `idempotency_key`: longer than 100 characters, or already used for an invitation to another candidate", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn send(
@@ -186,22 +226,27 @@ async fn send(
     user: EmployerUser,
     headers: HeaderMap,
     Json(req): Json<SendInvitation>,
-) -> ApiResult<(StatusCode, Json<SentInvitation>)> {
+) -> ApiResult<Response> {
     validate(&req)?;
     let company = company_id(&state, user.id).await?;
-    let idempotency_key = headers
-        .get("idempotency-key")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| v.chars().take(100).collect::<String>());
+    let idempotency_key = match headers.get("idempotency-key") {
+        None => None,
+        Some(v) => Some(
+            v.to_str()
+                .ok()
+                .map(str::trim)
+                .filter(|k| !k.is_empty() && k.chars().count() <= 100)
+                .ok_or_else(|| {
+                    ApiError::field("idempotency_key", "Idempotency-Key — от 1 до 100 символов")
+                })?
+                .to_owned(),
+        ),
+    };
 
     if let Some(key) = idempotency_key.as_deref()
-        && let Some(existing) =
-            db::invitations::invitation_by_idempotency_key(&state.pool, company, key).await?
+        && let Some(sent) = replay(&state, company, key, req.candidate_id).await?
     {
-        let row = db::invitations::employer_invitation(&state.pool, company, existing)
-            .await?
-            .ok_or(sqlx::Error::RowNotFound)?;
-        return Ok((StatusCode::OK, Json(sent_from_row!(row))));
+        return Ok((StatusCode::OK, Json(sent)).into_response());
     }
 
     let candidate = db::candidates::candidate_invitable(&state.pool, req.candidate_id)
@@ -272,6 +317,13 @@ async fn send(
     .await;
     if let Err(e) = inserted {
         if db::is_unique_violation(&e) {
+            drop(tx);
+            // The same key sent twice at once: the second insert lost to the first.
+            if let Some(key) = idempotency_key.as_deref()
+                && let Some(sent) = replay(&state, company, key, req.candidate_id).await?
+            {
+                return Ok((StatusCode::OK, Json(sent)).into_response());
+            }
             return Err(ApiError::conflict(
                 "invitation_already_active",
                 "Этому кандидату уже отправлено действующее приглашение",
@@ -298,7 +350,11 @@ async fn send(
     let row = db::invitations::employer_invitation(&state.pool, company, id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
-    Ok((StatusCode::CREATED, Json(sent_from_row!(row))))
+    Ok(Created(
+        format!("/api/v1/employer/invitations/{id}"),
+        sent_from_row!(row),
+    )
+    .into_response())
 }
 
 /// Invitations sent by the company
@@ -358,7 +414,7 @@ async fn events(pool: &PgPool, id: Uuid) -> ApiResult<Vec<StatusEvent>> {
 /// Withdraw an invitation that has not been answered yet
 #[utoipa::path(post, path = "/invitations/{id}/withdraw", tag = "invitations",
     params(("id" = Uuid, Path)),
-    responses((status = 204), (status = 409, description = "`invitation_closed`; `company_profile_required`", body = Problem)),
+    responses((status = 204), (status = 404, description = "No such invitation of this company", body = Problem), (status = 409, description = "`invitation_closed`; `company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn withdraw(
     State(state): State<AppState>,
@@ -368,6 +424,12 @@ async fn withdraw(
     let company = company_id(&state, user.id).await?;
     let mut tx = state.pool.begin().await?;
     if db::invitations::withdraw_invitation(&mut *tx, id, company).await? == 0 {
+        if db::invitations::employer_invitation(&mut *tx, company, id)
+            .await?
+            .is_none()
+        {
+            return Err(ApiError::not_found());
+        }
         return Err(ApiError::conflict(
             "invitation_closed",
             "Приглашение уже закрыто",
@@ -737,6 +799,7 @@ async fn accept(
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({"reason": "salary", "comment": "Рассматриваю предложения от 350 000 ₽"}))]
 pub struct DeclineRequest {
     pub reason: DeclineReason,
     pub comment: Option<String>,
@@ -746,7 +809,7 @@ pub struct DeclineRequest {
 #[utoipa::path(post, path = "/invitations/{id}/decline", tag = "invitations",
     params(("id" = Uuid, Path)),
     request_body = DeclineRequest,
-    responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`", body = Problem), (status = 404, description = "Not the caller's invitation", body = Problem)),
+    responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`", body = Problem), (status = 404, description = "Not the caller's invitation", body = Problem), (status = 422, description = "`validation_failed`: `comment` longer than 1000 characters", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn decline(
     State(state): State<AppState>,
@@ -754,10 +817,10 @@ async fn decline(
     Path(id): Path<Uuid>,
     Json(req): Json<DeclineRequest>,
 ) -> ApiResult<Json<ReceivedInvitation>> {
-    let comment = req
-        .comment
-        .map(|c| c.chars().take(1000).collect::<String>())
-        .filter(|c| !c.trim().is_empty());
+    let comment = req.comment.filter(|c| !c.trim().is_empty());
+    if comment.as_ref().is_some_and(|c| c.chars().count() > 1000) {
+        return Err(ApiError::field("comment", "Не длиннее 1000 символов"));
+    }
     let declined = respond(
         &state,
         user,

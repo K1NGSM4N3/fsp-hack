@@ -624,6 +624,7 @@ async fn session_recording(
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({"decision": "confirm", "comment": "Запись просмотрена: соискатель отвечал самостоятельно, уходы со вкладки — по 2–3 секунды на заданиях с кодом."}))]
 pub struct DecisionInput {
     pub decision: ReviewDecision,
     /// Up to 2000 characters. The candidate reads it in the test history.
@@ -1015,6 +1016,13 @@ async fn trust_queue(
 }
 
 #[derive(Deserialize, ToSchema)]
+#[schema(example = json!({
+    "kind": "company",
+    "id": "019a6f00-1111-7222-8333-444455556666",
+    "action": "freeze",
+    "comment": "Три подтверждённые жалобы: после приглашения вилку занижают вдвое. Приглашения приостановлены до проверки.",
+    "days": 14
+}))]
 pub struct TrustActionInput {
     pub kind: TrustItemKind,
     pub id: Uuid,

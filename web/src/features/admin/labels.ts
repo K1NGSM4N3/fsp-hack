@@ -43,7 +43,7 @@ export const ITEM_KIND_LABEL: Record<TrustItemKind, string> = {
 };
 
 export const TRUST_ACTION_LABEL: Record<TrustAction, string> = {
-  dismiss: "Снять: нарушений нет",
+  dismiss: "Отклонить: нарушений нет",
   unpublish: "Снять вакансию с публикации",
   freeze: "Приостановить приглашения",
   restore: "Вернуть",
