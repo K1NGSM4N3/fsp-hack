@@ -198,3 +198,15 @@ export type ApiScope = S["Scope"];
 export type ApiKeyView = S["ApiKeyView"];
 export type ApiKeyInput = S["ApiKeyInput"];
 export type ApiKeyCreated = S["ApiKeyCreated"];
+
+export type NotificationKind = S["NotificationKind"];
+export type NotificationView = S["NotificationView"];
+export type NotificationPage = S["NotificationPage"];
+export type NotificationQuery = NonNullable<operations["list_notifications"]["parameters"]["query"]>;
+export type UnreadCount = S["UnreadCount"];
+export type MarkRead = S["MarkRead"];
+export type NotificationSettings = S["NotificationSettings"];
+export type NotificationKindSetting = S["KindSetting"];
+export type NotificationSettingsInput = S["SettingsInput"];
+export type EmailToggle = S["EmailToggle"];
+export type Unsubscribed = S["Unsubscribed"];

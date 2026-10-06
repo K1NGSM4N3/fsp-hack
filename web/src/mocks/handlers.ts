@@ -2122,3 +2122,4 @@ export async function createReport(body: T.ReportInput): Promise<void> {
 }
 
 export * from "./integrations";
+export * from "./notifications";

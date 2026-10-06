@@ -174,6 +174,15 @@ impl Crypto {
         mac.finalize().into_bytes().to_vec()
     }
 
+    /// A key for one purpose, derived from the blind-index secret: no new secret to configure,
+    /// and the label keeps it apart from blind indexes (an email never starts with `derive:`).
+    pub fn derive_key(&self, purpose: &str) -> [u8; 32] {
+        let mut mac = self.bidx.clone();
+        mac.update(b"derive:");
+        mac.update(purpose.as_bytes());
+        mac.finalize().into_bytes().into()
+    }
+
     pub fn encrypt_str(&self, value: &str) -> Result<Vec<u8>, CryptoError> {
         self.fields.encrypt(value.as_bytes())
     }
@@ -294,5 +303,15 @@ mod tests {
         let e = normalize_email("  Ivan@Example.RU ");
         assert_eq!(a.blind_index(&e), a.blind_index("ivan@example.ru"));
         assert_ne!(a.blind_index(&e), b.blind_index(&e));
+    }
+
+    #[test]
+    fn derived_keys_differ_by_purpose_and_secret() {
+        let a = Crypto::new(&[1; 32], &[2; 32]);
+        let b = Crypto::new(&[1; 32], &[3; 32]);
+        assert_eq!(a.derive_key("x"), a.derive_key("x"));
+        assert_ne!(a.derive_key("x"), a.derive_key("y"));
+        assert_ne!(a.derive_key("x"), b.derive_key("x"));
+        assert_ne!(a.derive_key("x").to_vec(), a.blind_index("x"));
     }
 }

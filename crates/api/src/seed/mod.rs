@@ -7,6 +7,7 @@ mod demo;
 mod moderation;
 
 pub use moderation::{DEMO_DISPUTED_EMAIL, DEMO_MODERATOR_EMAIL};
+mod notifications;
 
 use catalog::{Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
@@ -67,6 +68,8 @@ pub struct SeedReport {
     pub review_remarks: usize,
     pub flagged_vacancies: usize,
     pub complaints: usize,
+    /// Demo bell items of `candidate@demo.fsp` and `employer@demo.fsp`.
+    pub notifications: usize,
 }
 
 struct Account {
@@ -1021,6 +1024,7 @@ pub async fn seed_sized(
     .await?;
     let (minors_confirmed, minors_pending) =
         seed_minors(&mut tx, crypto, &mut minors_rng, &juniors, now).await?;
+    let notifications = notifications::seed_notifications(&mut tx, crypto, &companies, now).await?;
     tx.commit().await?;
     Ok(Some(SeedReport {
         companies: companies.len(),
@@ -1036,5 +1040,6 @@ pub async fn seed_sized(
         review_remarks: review.remarks_only,
         flagged_vacancies: review.flagged_vacancies,
         complaints: review.complaints,
+        notifications,
     }))
 }

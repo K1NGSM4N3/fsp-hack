@@ -22,6 +22,7 @@ use crate::{
         keys::{self, MAX_ACTIVE_KEYS, Scope, Scopes},
         seal_secret, signature,
     },
+    notify::Notifier,
     state::AppState,
 };
 
@@ -296,6 +297,7 @@ async fn send_test_event(
         state.webhooks.clone(),
         None,
     )
+    .with_notifier(Notifier::new(&state))
     .deliver(event)
     .await?;
     Ok(Json(match attempt {

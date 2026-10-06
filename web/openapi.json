@@ -8944,7 +8944,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,\nconsents with the declared age, profile, age (birth date and legal representative for 14–17),\ntests with summaries, category history, invitations, applications, who opened your contacts,\nproctoring summaries; for an employer — the account and the company's data",
+        "summary": "Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,\nconsents with the declared age, profile, age (birth date and legal representative for 14–17),\ntests with summaries, category history, invitations, applications, who opened your contacts,\nproctoring summaries; for an employer — the account and the company's data; for both —\nnotifications, email settings and the letters sent",
         "operationId": "export",
         "responses": {
           "200": {
@@ -8984,6 +8984,425 @@
             "bearer": []
           }
         ]
+      }
+    },
+    "/api/v1/me/notification-settings": {
+      "get": {
+        "tags": [
+          "Уведомления"
+        ],
+        "summary": "Which notifications also come by email. In-app is always on",
+        "operationId": "notification_settings",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettings"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Уведомления"
+        ],
+        "summary": "Turn email on or off per kind; kinds not listed keep their setting. A letter already queued\nleaves out the kinds turned off before it is sent",
+        "operationId": "update_notification_settings",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SettingsInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `email` — a kind of the other role, or the same kind twice; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/notifications": {
+      "get": {
+        "tags": [
+          "Уведомления"
+        ],
+        "summary": "Your notifications, newest first. Keyset pagination: pass `next_cursor` as `cursor`",
+        "operationId": "list_notifications",
+        "parameters": [
+          {
+            "name": "unread",
+            "in": "query",
+            "description": "Only unread items.",
+            "required": false,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` of the previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–50, 20 by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotificationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/notifications/read": {
+      "post": {
+        "tags": [
+          "Уведомления"
+        ],
+        "summary": "Mark items read: the listed `ids` or `all`. Returns the new unread count",
+        "operationId": "mark_notifications_read",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MarkRead"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCount"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `ids` — neither ids nor `all`, or more than 100 ids; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/me/notifications/unread-count": {
+      "get": {
+        "tags": [
+          "Уведомления"
+        ],
+        "summary": "Unread items for the badge: one indexed count, made to be polled",
+        "operationId": "unread_notifications",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnreadCount"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/notifications/unsubscribe": {
+      "get": {
+        "tags": [
+          "Уведомления"
+        ],
+        "summary": "The letter's unsubscribe link opened in a browser: a GET never unsubscribes (RFC 8058 — mail\nscanners follow links), it leads to the page with the button",
+        "operationId": "unsubscribe_link",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "description": "Token from the letter's unsubscribe link.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "To `/notifications/unsubscribe?token=…` on the site",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_token`; `invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Уведомления"
+        ],
+        "summary": "One-click unsubscribe (RFC 8058): the mail client POSTs `List-Unsubscribe=One-Click` here,\nthe site's button POSTs the same. No session needed — the signed token names the account and\nthe kind. Repeating it changes nothing",
+        "operationId": "unsubscribe",
+        "parameters": [
+          {
+            "name": "token",
+            "in": "query",
+            "description": "Token from the letter's unsubscribe link.",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Unsubscribed"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_token`: not a link from our letter; `invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/reports": {
@@ -11880,7 +12299,8 @@
           "format",
           "generated_at",
           "account",
-          "consents"
+          "consents",
+          "notifications"
         ],
         "properties": {
           "format": {
@@ -11920,6 +12340,10 @@
                 "type": "null"
               }
             ]
+          },
+          "notifications": {
+            "$ref": "#/components/schemas/NotificationExport",
+            "description": "The feed, email settings per kind and the letters sent."
           }
         }
       },
@@ -12348,6 +12772,64 @@
           "hint": {
             "type": "string",
             "description": "The result in words and, if it failed, how to fix it."
+          }
+        }
+      },
+      "EmailRecord": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "items",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "$ref": "#/components/schemas/EmailStatus",
+            "description": "`skipped`: every kind in it was turned off before it went out."
+          },
+          "items": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sent_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "EmailStatus": {
+        "type": "string",
+        "enum": [
+          "pending",
+          "sent",
+          "failed",
+          "skipped"
+        ]
+      },
+      "EmailToggle": {
+        "type": "object",
+        "required": [
+          "kind",
+          "enabled"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "enabled": {
+            "type": "boolean"
           }
         }
       },
@@ -13701,6 +14183,34 @@
           }
         }
       },
+      "KindSetting": {
+        "type": "object",
+        "required": [
+          "kind",
+          "title",
+          "description",
+          "in_app",
+          "email"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "in_app": {
+            "type": "boolean",
+            "description": "Always on: the feed in the cabinet keeps every item."
+          },
+          "email": {
+            "type": "boolean"
+          }
+        }
+      },
       "LockReason": {
         "type": "string",
         "description": "Why a test is not available yet; the same codes `POST /candidate/assessments` answers with.",
@@ -13793,6 +14303,23 @@
           },
           "user": {
             "$ref": "#/components/schemas/SessionUser"
+          }
+        }
+      },
+      "MarkRead": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "Up to 100 ids of your own items."
+          },
+          "all": {
+            "type": "boolean",
+            "description": "Everything unread."
           }
         }
       },
@@ -14390,6 +14917,130 @@
           "active",
           "closed"
         ]
+      },
+      "NotificationExport": {
+        "type": "object",
+        "required": [
+          "settings",
+          "items",
+          "emails"
+        ],
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/NotificationSettings"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationView"
+            }
+          },
+          "emails": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailRecord"
+            },
+            "description": "Letters the platform sent or tried to send you; their text is the items above."
+          }
+        }
+      },
+      "NotificationKind": {
+        "type": "string",
+        "enum": [
+          "invitation_received",
+          "invitation_expiring",
+          "invitation_withdrawn",
+          "hiring_stage",
+          "application_status",
+          "assessment_result",
+          "guardian_decision",
+          "invitation_accepted",
+          "invitation_declined",
+          "application_received",
+          "webhook_failing",
+          "trust_changed"
+        ]
+      },
+      "NotificationPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NotificationView"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Pass as `cursor` for the next page; `null` on the last one."
+          }
+        }
+      },
+      "NotificationSettings": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KindSetting"
+            },
+            "description": "The kinds of your role, in the order the settings page shows them."
+          }
+        }
+      },
+      "NotificationView": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "title",
+          "body",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/NotificationKind"
+          },
+          "title": {
+            "type": "string",
+            "description": "One line: who did what."
+          },
+          "body": {
+            "type": "string"
+          },
+          "link": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Where it leads in the cabinet, e.g. `/candidate/invitations/{id}`."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "read_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
       },
       "Offer": {
         "type": "object",
@@ -17508,6 +18159,21 @@
           }
         }
       },
+      "SettingsInput": {
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "properties": {
+          "email": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EmailToggle"
+            },
+            "description": "Only the kinds to change; up to one entry per kind of your role."
+          }
+        }
+      },
       "Shortlist": {
         "type": "object",
         "required": [
@@ -18741,6 +19407,47 @@
           }
         }
       },
+      "UnreadCount": {
+        "type": "object",
+        "required": [
+          "count"
+        ],
+        "properties": {
+          "count": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Up to 100: the badge shows «99+» beyond that."
+          }
+        }
+      },
+      "Unsubscribed": {
+        "type": "object",
+        "required": [
+          "title",
+          "settings_path"
+        ],
+        "properties": {
+          "kind": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/NotificationKind",
+                "description": "The kind turned off; `null` — every email."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": {
+            "type": "string",
+            "description": "What stopped, in words: «Новые приглашения» or «все письма»."
+          },
+          "settings_path": {
+            "type": "string",
+            "description": "Where to turn it back on after signing in."
+          }
+        }
+      },
       "UserConsent": {
         "type": "object",
         "required": [
@@ -19147,6 +19854,10 @@
     {
       "name": "Модерация",
       "description": "Кабинет модератора (роль `admin`, в интерфейсе — «Модератор»): очередь разбора тестов с видеозаписью и решениями, очередь антифейка и жалоб с действиями, журнал аудита. Каждое действие и каждый просмотр записи теста пишутся в журнал. Списки — с курсором `cursor` / `next_cursor`"
+    },
+    {
+      "name": "Уведомления",
+      "description": "Лента уведомлений кабинета, счётчик непрочитанных, настройки писем по видам и отписка в один клик по ссылке из письма. В письмах компаниям нет ФИО и контактов кандидата — только анонимный код"
     },
     {
       "name": "Интеграции ATS",

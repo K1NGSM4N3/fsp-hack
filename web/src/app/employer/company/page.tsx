@@ -8,6 +8,7 @@ import type { Company, CompanyProfile } from "@/api/types";
 import { Button, Card, CardHeader, ErrorAlert, Field, Input, PageHeader, PageSkeleton, Textarea, useToast } from "@/components/ui";
 import { DataExportCard } from "@/features/auth/components/DataExportCard";
 import { useCompany, useUpdateCompany } from "@/features/employer/hooks";
+import { NotificationSettingsCard } from "@/features/notifications/components/NotificationSettingsCard";
 import { formatDateTime } from "@/lib/format";
 
 type Draft = Record<keyof CompanyProfile, string>;
@@ -131,7 +132,8 @@ export default function CompanyPage() {
     <div>
       <PageHeader title="Профиль компании" description="Верификация компаний в MVP не требуется. Квота приглашений защищает кандидатов от спама." />
       {q.isPending ? <PageSkeleton cards={2} /> : q.isError ? <ErrorAlert error={q.error} onRetry={() => void q.refetch()} /> : <CompanyForm company={q.data} />}
-      <div className="mt-10 max-w-3xl">
+      <div className="mt-10 max-w-3xl space-y-6">
+        <NotificationSettingsCard />
         <DataExportCard description="JSON-файл со всем, что платформа хранит о вашем аккаунте и компании: email, согласия, профиль компании, потребности, вакансии, приглашения и задания." />
       </div>
     </div>

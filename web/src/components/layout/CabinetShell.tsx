@@ -9,6 +9,7 @@ import type { Role } from "@/api/types";
 import { Logo } from "@/components/brand/Logo";
 import { Button, IconButton, PageSkeleton } from "@/components/ui";
 import { useLogout, useMe } from "@/features/auth/hooks";
+import { NotificationBell, NotificationWatcher } from "@/features/notifications/components/NotificationBell";
 import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
 
@@ -128,7 +129,7 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
 
   const displayName = me.data?.company?.name ?? me.data?.email ?? "";
   const current = nav.find((item) => isActive(item, pathname));
-  const section = current?.label ?? "Раздел";
+  const section = current?.label ?? (pathname.endsWith("/notifications") ? "Уведомления" : "Раздел");
 
   useEffect(() => {
     document.title = `${section} · ${ROLE_CABINET[role]} · ФСП Таланты`;
@@ -184,10 +185,14 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur-xl lg:hidden print:hidden">
           <Logo href={ROLE_HOME[role]} />
-          <IconButton label="Открыть меню" onClick={() => setDrawer(true)} aria-expanded={drawer}>
-            <Menu className="size-5" aria-hidden />
-          </IconButton>
+          <div className="flex items-center gap-1">
+            {role !== "admin" && <NotificationBell role={role} />}
+            <IconButton label="Открыть меню" onClick={() => setDrawer(true)} aria-expanded={drawer}>
+              <Menu className="size-5" aria-hidden />
+            </IconButton>
+          </div>
         </header>
+        {role !== "admin" && <NotificationWatcher role={role} />}
         <header className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b border-line bg-white/80 px-10 backdrop-blur-xl lg:flex print:hidden">
           <nav aria-label="Хлебные крошки" className="min-w-0">
             <ol className="flex min-w-0 items-center gap-2 text-sm">
@@ -204,10 +209,13 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
               </li>
             </ol>
           </nav>
-          <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-xs text-ink-muted">
-            <span className="size-1.5 rounded-full bg-success" aria-hidden />
-            {me.data?.role === "candidate" && me.data.candidate?.category ? "Категория подтверждена" : ROLE_LABEL[role]}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-xs text-ink-muted">
+              <span className="size-1.5 rounded-full bg-success" aria-hidden />
+              {me.data?.role === "candidate" && me.data.candidate?.category ? "Категория подтверждена" : ROLE_LABEL[role]}
+            </span>
+            {role !== "admin" && <NotificationBell role={role} />}
+          </div>
         </header>
 
         <dialog

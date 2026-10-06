@@ -539,3 +539,35 @@ export async function revokeApiKey(id: T.Uuid): Promise<void> {
   if (USE_MOCKS) return (await mocks()).revokeApiKey(id);
   return http("DELETE", `/employer/integrations/keys/${id}`);
 }
+
+export async function listNotifications(query: T.NotificationQuery = {}): Promise<T.NotificationPage> {
+  if (USE_MOCKS) return (await mocks()).listNotifications(query);
+  return http("GET", "/me/notifications", { query: { ...query } });
+}
+
+/** Marks the listed items (or `all`) read and returns the new unread count. */
+export async function markNotificationsRead(body: T.MarkRead): Promise<T.UnreadCount> {
+  if (USE_MOCKS) return (await mocks()).markNotificationsRead(body);
+  return http("POST", "/me/notifications/read", { body });
+}
+
+export async function getUnreadCount(): Promise<T.UnreadCount> {
+  if (USE_MOCKS) return (await mocks()).getUnreadCount();
+  return http("GET", "/me/notifications/unread-count");
+}
+
+export async function getNotificationSettings(): Promise<T.NotificationSettings> {
+  if (USE_MOCKS) return (await mocks()).getNotificationSettings();
+  return http("GET", "/me/notification-settings");
+}
+
+export async function updateNotificationSettings(body: T.NotificationSettingsInput): Promise<T.NotificationSettings> {
+  if (USE_MOCKS) return (await mocks()).updateNotificationSettings(body);
+  return http("PUT", "/me/notification-settings", { body });
+}
+
+/** One-click unsubscribe by the signed token from a letter; works without a session. */
+export async function unsubscribe(token: string): Promise<T.Unsubscribed> {
+  if (USE_MOCKS) return (await mocks()).unsubscribe(token);
+  return http("POST", "/notifications/unsubscribe", { query: { token }, noRefresh: true });
+}

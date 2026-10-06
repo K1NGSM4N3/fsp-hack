@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO company_trust_seen (company_id, level, quota) VALUES ($1, $2, $3)\n         ON CONFLICT (company_id) DO UPDATE\n         SET level = EXCLUDED.level, quota = EXCLUDED.quota, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Int2"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6ec2f4bff421c4b230071d4e0f5194289a09ca5701bb1df588f18ea3371e6757"
+}

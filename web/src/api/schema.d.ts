@@ -1791,11 +1791,109 @@ export interface paths {
          * Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,
          *     consents with the declared age, profile, age (birth date and legal representative for 14–17),
          *     tests with summaries, category history, invitations, applications, who opened your contacts,
-         *     proctoring summaries; for an employer — the account and the company's data
+         *     proctoring summaries; for an employer — the account and the company's data; for both —
+         *     notifications, email settings and the letters sent
          */
         get: operations["export"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notification-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Which notifications also come by email. In-app is always on */
+        get: operations["notification_settings"];
+        /**
+         * Turn email on or off per kind; kinds not listed keep their setting. A letter already queued
+         *     leaves out the kinds turned off before it is sent
+         */
+        put: operations["update_notification_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Your notifications, newest first. Keyset pagination: pass `next_cursor` as `cursor` */
+        get: operations["list_notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark items read: the listed `ids` or `all`. Returns the new unread count */
+        post: operations["mark_notifications_read"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/me/notifications/unread-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Unread items for the badge: one indexed count, made to be polled */
+        get: operations["unread_notifications"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/notifications/unsubscribe": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * The letter's unsubscribe link opened in a browser: a GET never unsubscribes (RFC 8058 — mail
+         *     scanners follow links), it leads to the page with the button
+         */
+        get: operations["unsubscribe_link"];
+        put?: never;
+        /**
+         * One-click unsubscribe (RFC 8058): the mail client POSTs `List-Unsubscribe=One-Click` here,
+         *     the site's button POSTs the same. No session needed — the signed token names the account and
+         *     the kind. Repeating it changes nothing
+         */
+        post: operations["unsubscribe"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2579,6 +2677,8 @@ export interface components {
             consents: components["schemas"]["ConsentRecord"][];
             candidate?: components["schemas"]["CandidateData"] | null;
             employer?: components["schemas"]["EmployerData"] | null;
+            /** @description The feed, email settings per kind and the letters sent. */
+            notifications: components["schemas"]["NotificationExport"];
         };
         /** @description Final classification once the session stops. */
         Decision: {
@@ -2700,6 +2800,24 @@ export interface components {
             check: components["schemas"]["DomainCheck"];
             /** @description The result in words and, if it failed, how to fix it. */
             hint: string;
+        };
+        EmailRecord: {
+            /** Format: uuid */
+            id: string;
+            /** @description `skipped`: every kind in it was turned off before it went out. */
+            status: components["schemas"]["EmailStatus"];
+            /** Format: int64 */
+            items: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            sent_at?: string | null;
+        };
+        /** @enum {string} */
+        EmailStatus: "pending" | "sent" | "failed" | "skipped";
+        EmailToggle: {
+            kind: components["schemas"]["NotificationKind"];
+            enabled: boolean;
         };
         EmployerData: {
             company?: components["schemas"]["CompanyResponse"] | null;
@@ -3102,6 +3220,14 @@ export interface components {
             /** Format: int32 */
             time_limit_secs: number;
         };
+        KindSetting: {
+            kind: components["schemas"]["NotificationKind"];
+            title: string;
+            description: string;
+            /** @description Always on: the feed in the cabinet keeps every item. */
+            in_app: boolean;
+            email: boolean;
+        };
         /**
          * @description Why a test is not available yet; the same codes `POST /candidate/assessments` answers with.
          * @enum {string}
@@ -3134,6 +3260,12 @@ export interface components {
             /** Format: int64 */
             expires_in: number;
             user: components["schemas"]["SessionUser"];
+        };
+        MarkRead: {
+            /** @description Up to 100 ids of your own items. */
+            ids?: string[];
+            /** @description Everything unread. */
+            all?: boolean;
         };
         MarketStats: {
             category: components["schemas"]["Category"];
@@ -3296,6 +3428,40 @@ export interface components {
         };
         /** @enum {string} */
         NeedStatus: "active" | "closed";
+        NotificationExport: {
+            settings: components["schemas"]["NotificationSettings"];
+            items: components["schemas"]["NotificationView"][];
+            /** @description Letters the platform sent or tried to send you; their text is the items above. */
+            emails: components["schemas"]["EmailRecord"][];
+        };
+        /** @enum {string} */
+        NotificationKind: "invitation_received" | "invitation_expiring" | "invitation_withdrawn" | "hiring_stage" | "application_status" | "assessment_result" | "guardian_decision" | "invitation_accepted" | "invitation_declined" | "application_received" | "webhook_failing" | "trust_changed";
+        NotificationPage: {
+            items: components["schemas"]["NotificationView"][];
+            /**
+             * Format: uuid
+             * @description Pass as `cursor` for the next page; `null` on the last one.
+             */
+            next_cursor?: string | null;
+        };
+        NotificationSettings: {
+            /** @description The kinds of your role, in the order the settings page shows them. */
+            items: components["schemas"]["KindSetting"][];
+        };
+        NotificationView: {
+            /** Format: uuid */
+            id: string;
+            kind: components["schemas"]["NotificationKind"];
+            /** @description One line: who did what. */
+            title: string;
+            body: string;
+            /** @description Where it leads in the cabinet, e.g. `/candidate/invitations/{id}`. */
+            link?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            read_at?: string | null;
+        };
         Offer: {
             grade: components["schemas"]["Grade"];
             kind: components["schemas"]["AttemptKind"];
@@ -4203,6 +4369,10 @@ export interface components {
             email: string;
             email_verified: boolean;
         };
+        SettingsInput: {
+            /** @description Only the kinds to change; up to one entry per kind of your role. */
+            email: components["schemas"]["EmailToggle"][];
+        };
         Shortlist: {
             need: components["schemas"]["HiringNeed"];
             items: components["schemas"]["ShortlistItem"][];
@@ -4579,6 +4749,20 @@ export interface components {
         TrustWarning: {
             kind: components["schemas"]["WarningKind"];
             text: string;
+        };
+        UnreadCount: {
+            /**
+             * Format: int64
+             * @description Up to 100: the badge shows «99+» beyond that.
+             */
+            count: number;
+        };
+        Unsubscribed: {
+            kind?: components["schemas"]["NotificationKind"] | null;
+            /** @description What stopped, in words: «Новые приглашения» or «все письма». */
+            title: string;
+            /** @description Where to turn it back on after signing in. */
+            settings_path: string;
         };
         UserConsent: {
             /** Format: uuid */
@@ -11248,6 +11432,304 @@ export interface operations {
             };
             /** @description `unauthorized`: no session or it has expired */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    notification_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    update_notification_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationSettings"];
+                };
+            };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `email` — a kind of the other role, or the same kind twice; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    list_notifications: {
+        parameters: {
+            query?: {
+                /** @description Only unread items. */
+                unread?: boolean | null;
+                /** @description `next_cursor` of the previous page. */
+                cursor?: string | null;
+                /** @description 1–50, 20 by default. */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationPage"];
+                };
+            };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    mark_notifications_read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MarkRead"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCount"];
+                };
+            };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `ids` — neither ids nor `all`, or more than 100 ids; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    unread_notifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnreadCount"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    unsubscribe_link: {
+        parameters: {
+            query: {
+                /** @description Token from the letter's unsubscribe link. */
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description To `/notifications/unsubscribe?token=…` on the site */
+            303: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description `invalid_token`; `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    unsubscribe: {
+        parameters: {
+            query: {
+                /** @description Token from the letter's unsubscribe link. */
+                token: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Unsubscribed"];
+                };
+            };
+            /** @description `invalid_token`: not a link from our letter; `invalid_query`: a query parameter is missing or does not parse */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

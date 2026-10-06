@@ -14,6 +14,7 @@ import { DataExportCard } from "@/features/auth/components/DataExportCard";
 import { useConsentDocuments, useDeleteAccount, useGrantConsent, useMe, useMyConsents, useRevokeConsent } from "@/features/auth/hooks";
 import { useContactAccess, useFspStatus, useFspSync, useFspUnlink, usePrivacy, useProfile, useUpdatePrivacy } from "@/features/candidate/hooks";
 import { LinkFspButton, SyncIcon } from "@/features/candidate/components/FspCard";
+import { NotificationSettingsCard } from "@/features/notifications/components/NotificationSettingsCard";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { SEARCH_STATUS_LABEL } from "@/lib/labels";
 
@@ -451,6 +452,7 @@ const SECTIONS: { id: string; label: string; group: string }[] = [
   { id: "fsp", label: "ФСП ID", group: "Профиль" },
   { id: "consents", label: "Согласия", group: "Данные" },
   { id: "contact-access", label: "Доступ к контактам", group: "Данные" },
+  { id: "notifications", label: "Уведомления", group: "Данные" },
   { id: "data", label: "Выгрузка данных", group: "Данные" },
   { id: "delete", label: "Удаление аккаунта", group: "Аккаунт" },
 ];
@@ -541,6 +543,9 @@ export default function SettingsPage() {
           <FspSection />
           <ConsentsSection />
           <ContactAccessSection />
+          <div id="notifications" className="scroll-mt-24">
+            <NotificationSettingsCard />
+          </div>
           <div id="data" className="scroll-mt-24">
             <DataExportCard description="JSON-файл со всем, что платформа хранит о вас: профиль, согласия, тесты и их итоги, история категории, приглашения, отклики, кто открывал контакты, сводки видеозаписи. Сами видеозаписи в файл не входят — их можно посмотреть в истории тестов." />
           </div>

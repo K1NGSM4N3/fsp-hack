@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT e.id, e.status AS \"status: NotificationEmailStatus\",\n                  (SELECT count(*) FROM notifications n WHERE n.email_id = e.id) AS \"items!\",\n                  e.created_at, e.sent_at\n           FROM notification_emails e\n           WHERE e.user_id = $1\n           ORDER BY e.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "status: NotificationEmailStatus",
+        "type_info": {
+          "Custom": {
+            "name": "notification_email_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "sent",
+                "failed",
+                "skipped"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "items!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "sent_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      false,
+      true
+    ]
+  },
+  "hash": "34d0331f1fba6fe1c85299da51d89fc2b2331b812c55424154e544030b74e545"
+}

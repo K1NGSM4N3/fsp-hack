@@ -17,6 +17,7 @@ use crate::{
     error::{ApiError, ApiResult, Problem, Validator},
     extract::{Json, Query},
     guardian::{self, GuardianContact, GuardianState, clean_contact},
+    notify::{GuardianOutcome, Notifier},
     state::AppState,
 };
 
@@ -261,6 +262,14 @@ async fn answer(
             db::me::hide_candidate(&mut *tx, t.candidate_id).await?;
         }
     }
+    let outcome = match req.action {
+        GuardianAction::Grant => GuardianOutcome::Granted,
+        GuardianAction::Decline => GuardianOutcome::Declined,
+        GuardianAction::Revoke => GuardianOutcome::Revoked,
+    };
+    Notifier::new(&state)
+        .guardian(&mut *tx, t.candidate_id, outcome)
+        .await?;
     tx.commit().await?;
     state.candidates.invalidate().await;
     let t = target(&state, &req.token).await?;

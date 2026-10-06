@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notifications SET email_id = $2, email_due_at = NULL\n         WHERE user_id = $1 AND email_due_at IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc0927872e218bb60a679018c3c0446d556549f27ec9cef05d4af7d7413526b9"
+}

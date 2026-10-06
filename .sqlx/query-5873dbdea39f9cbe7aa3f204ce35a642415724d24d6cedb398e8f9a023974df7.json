@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH due AS (\n             SELECT id FROM notification_emails\n             WHERE status = 'pending' AND next_attempt_at <= now()\n             ORDER BY next_attempt_at\n             LIMIT $1\n             FOR UPDATE SKIP LOCKED\n         )\n         UPDATE notification_emails e\n         SET next_attempt_at = now() + make_interval(secs => $2)\n         FROM due\n         WHERE e.id = due.id\n         RETURNING e.id, e.user_id, e.attempts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "attempts",
+        "type_info": "Int2"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5873dbdea39f9cbe7aa3f204ce35a642415724d24d6cedb398e8f9a023974df7"
+}
