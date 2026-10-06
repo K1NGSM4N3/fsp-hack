@@ -146,7 +146,7 @@ impl Api {
             self.pool(),
             id,
             role.into(),
-            &self.state.crypto.encrypt_str(email),
+            &self.state.crypto.encrypt_str(email).unwrap(),
             &self.state.crypto.blind_index(email),
             "h",
         )
@@ -202,8 +202,8 @@ impl Api {
             self.pool(),
             request,
             id,
-            &self.state.crypto.encrypt_str("Петрова Мария"),
-            &self.state.crypto.encrypt_str(&parent),
+            &self.state.crypto.encrypt_str("Петрова Мария").unwrap(),
+            &self.state.crypto.encrypt_str(&parent).unwrap(),
             &self.state.crypto.blind_index(&parent),
         )
         .await
@@ -1497,6 +1497,229 @@ async fn other_replica_never_shows_a_hidden_profile(pool: PgPool) {
     let r = b.call(Method::GET, search, Some(&et), None).await;
     assert_eq!(r.status, StatusCode::OK);
     assert!(!found(&r, anna), "replica b has no Valkey generation yet");
+}
+
+/// Whether replica `api` holds the employer card of `id` in its current backend snapshot.
+async fn card_cached(api: &Api, id: Uuid) -> bool {
+    api.state.candidates.current_pools().await[catalog::Specialization::Backend as usize]
+        .as_ref()
+        .is_some_and(|p| p.value.card(id).is_some())
+}
+
+fn card_of(r: &Reply, id: Uuid) -> Option<Value> {
+    r.body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|i| i["candidate"]["id"] == id.to_string())
+        .map(|i| i["candidate"].clone())
+}
+
+/// Cards are cached with the pool snapshot. Replica b keeps its cards until the generation
+/// reaches it — here never, there is no Valkey — yet shows nothing a candidate has just hidden on
+/// replica a: the profile, the name, employer names in the experience, a profile closed to offers.
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn other_replica_with_warm_cards_never_shows_hidden_data(pool: PgPool) {
+    let a = Api::start(pool.clone()).await;
+    let b = Api::start(pool).await;
+    let anna = a.candidate("anna@example.ru").await;
+    let boris = a.candidate("boris@example.ru").await;
+    let vera = a.candidate("vera@example.ru").await;
+    let (hr, _) = a.employer("hr@example.ru").await;
+    let et = b.token(hr, Role::Employer);
+    let shown = |name: bool, experience: bool, status: &str| {
+        json!({
+            "visible": true,
+            "show_name": name,
+            "show_fsp": true,
+            "show_experience": experience,
+            "search_status": status,
+        })
+    };
+    for (id, name) in [(boris, "Борис Иванов"), (vera, "Вера Смирнова")] {
+        let ct = a.token(id, Role::Candidate);
+        let r = a
+            .call(
+                Method::PUT,
+                "/candidate/profile",
+                Some(&ct),
+                Some(json!({
+                    "full_name": name,
+                    "contacts": { "telegram": "@candidate" },
+                    "experience": [{ "company": "Яндекс", "position": "Разработчик", "start": "2022-01" }],
+                })),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+        let r = a
+            .call(
+                Method::PUT,
+                "/candidate/privacy",
+                Some(&ct),
+                Some(shown(true, true, "open")),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    }
+    let shortlist = backend_need(&b, &et).await;
+    let search = "/employer/candidates?specialization=backend";
+    b.call(Method::POST, &shortlist, Some(&et), Some(json!({})))
+        .await;
+    let r = b.call(Method::GET, &shortlist, Some(&et), None).await;
+    for id in [anna, boris, vera] {
+        assert!(listed(&r, id), "{}", r.body);
+        assert!(card_cached(&b, id).await, "the card is cached");
+    }
+    assert_eq!(card_of(&r, boris).unwrap()["display_name"], "Борис Иванов");
+    assert_eq!(
+        card_of(&r, vera).unwrap()["experience"][0]["company"],
+        "Яндекс"
+    );
+
+    let r = a
+        .call(
+            Method::POST,
+            &format!("/me/consents/{PUBLICATION}/revoke"),
+            Some(&a.token(anna, Role::Candidate)),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    for (id, privacy) in [
+        (boris, shown(false, true, "open")),
+        (vera, shown(true, false, "closed")),
+    ] {
+        let r = a
+            .call(
+                Method::PUT,
+                "/candidate/privacy",
+                Some(&a.token(id, Role::Candidate)),
+                Some(privacy),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    }
+
+    let r = b.call(Method::GET, &shortlist, Some(&et), None).await;
+    assert!(!listed(&r, anna), "publication consent revoked");
+    assert!(!listed(&r, vera), "closed to offers");
+    assert_eq!(
+        card_of(&r, boris).unwrap()["display_name"],
+        Value::Null,
+        "the name is hidden at once"
+    );
+    let r = b.call(Method::GET, search, Some(&et), None).await;
+    assert!(!found(&r, anna) && !found(&r, vera) && found(&r, boris));
+    let r = b
+        .call(
+            Method::GET,
+            &format!("/employer/candidates/{vera}"),
+            Some(&et),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.body["candidate"]["search_status"], "closed");
+    assert_eq!(
+        r.body["candidate"]["experience"][0]["company"],
+        Value::Null,
+        "employer names are hidden at once"
+    );
+    let r = b
+        .call(
+            Method::GET,
+            &format!("/employer/candidates/{anna}"),
+            Some(&et),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert!(
+        card_cached(&b, anna).await,
+        "b still holds the old snapshot: the live check did the hiding"
+    );
+}
+
+/// Task stats on a card change without a profile write; submitting and reviewing bump the cache
+/// generation, so a warm card shows them on the next request.
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn warm_cards_follow_task_submissions_and_reviews(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let anna = api.candidate("anna@example.ru").await;
+    let (hr, _) = api.employer("hr@example.ru").await;
+    let (ct, et) = (
+        api.token(anna, Role::Candidate),
+        api.token(hr, Role::Employer),
+    );
+    let r = api
+        .call(
+            Method::POST,
+            "/employer/tasks",
+            Some(&et),
+            Some(json!({
+                "title": "Кеш",
+                "body": "Как бы вы кешировали карточки кандидатов?",
+                "kind": "approach",
+                "specialization": "backend",
+                "grades": ["middle"],
+            })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.body);
+    let task = r.body["id"].as_str().unwrap().to_owned();
+    let r = api
+        .call(Method::GET, "/candidate/tasks", Some(&ct), None)
+        .await;
+    let assignment = r.body[0]["id"].as_str().unwrap().to_owned();
+    let profile = format!("/employer/candidates/{anna}");
+    let warm = || async {
+        api.call(
+            Method::GET,
+            "/employer/candidates?specialization=backend",
+            Some(&et),
+            None,
+        )
+        .await;
+        api.call(Method::GET, &profile, Some(&et), None).await;
+        assert!(card_cached(&api, anna).await);
+    };
+
+    warm().await;
+    let r = api.call(Method::GET, &profile, Some(&et), None).await;
+    assert_eq!(r.body["candidate"]["tasks_done"], 0);
+    let r = api
+        .call(
+            Method::POST,
+            &format!("/candidate/tasks/{assignment}/submit"),
+            Some(&ct),
+            Some(json!({ "answer": "Снимок в памяти, поколение в Valkey" })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    let r = api.call(Method::GET, &profile, Some(&et), None).await;
+    assert_eq!(r.body["candidate"]["tasks_done"], 1);
+
+    warm().await;
+    let r = api
+        .call(
+            Method::GET,
+            &format!("/employer/tasks/{task}/submissions"),
+            Some(&et),
+            None,
+        )
+        .await;
+    let submission = r.body[0]["id"].as_str().unwrap().to_owned();
+    let r = api
+        .call(
+            Method::POST,
+            &format!("/employer/tasks/{task}/submissions/{submission}/review"),
+            Some(&et),
+            Some(json!({ "rating": 5 })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT, "{}", r.body);
+    let r = api.call(Method::GET, &profile, Some(&et), None).await;
+    assert_eq!(r.body["candidate"]["task_rating"], 5.0);
 }
 
 /// The company of an employer is cached; deleting the account must end it for every session at

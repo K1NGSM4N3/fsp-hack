@@ -15,10 +15,12 @@ pub struct Ring<T> {
 }
 
 impl<T> Ring<T> {
+    /// Holds at least one item.
     pub fn new(capacity: usize) -> Self {
-        assert!(capacity > 0);
         Self {
-            slots: (0..capacity).map(|_| ArcSwapOption::empty()).collect(),
+            slots: (0..capacity.max(1))
+                .map(|_| ArcSwapOption::empty())
+                .collect(),
             next: AtomicU64::new(0),
         }
     }

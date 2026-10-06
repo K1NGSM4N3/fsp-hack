@@ -300,6 +300,8 @@ async fn review(
     {
         return Err(ApiError::not_found());
     }
+    // The rating is on the candidate's card, which employers' caches hold.
+    state.candidates.invalidate().await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -406,6 +408,8 @@ async fn submit(
         ));
     }
     db::candidates::touch_candidate_activity(&state.pool, user.id).await?;
+    // The count of solved tasks is on the candidate's card, which employers' caches hold.
+    state.candidates.invalidate().await;
     Ok(Json(load_my_tasks(&state.pool, user.id).await?))
 }
 

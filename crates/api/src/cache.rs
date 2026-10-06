@@ -1,12 +1,14 @@
 //! In-process caches of data derived from the candidate tables: the search pool of every
-//! specialization, the category cards and the demand stats of each category (architecture.md §12.2),
-//! plus the company of each employer account, read by every employer request.
+//! specialization with the employer cards of its candidates, the category cards and the demand
+//! stats of each category (architecture.md §12.2), plus the company of each employer account,
+//! read by every employer request.
 //!
-//! They are invalidated by a generation. A write that changes what employers can find calls
-//! [`CandidateCache::invalidate`] after its commit: the local epoch makes the next request on this
-//! replica reload, and with Valkey an `INCR` reaches the other replicas within [`REMOTE_TTL`].
-//! [`HARD_TTL`] bounds whatever does not bump: activity timestamps, a birthday crossing 18, an
-//! `INCR` lost while Valkey is down.
+//! They are invalidated by a generation. A write that changes what employers can find or see on a
+//! card calls [`CandidateCache::invalidate`] after its commit: the local epoch makes the next
+//! request on this replica reload, and with Valkey an `INCR` reaches the other replicas within
+//! [`REMOTE_TTL`]. [`HARD_TTL`] (plus at most [`RELOAD_GRACE`] while a reload runs) bounds
+//! whatever does not bump: activity timestamps in scoring, a birthday crossing 18, an `INCR` lost
+//! while Valkey is down.
 
 use std::{
     future::Future,
@@ -21,13 +23,17 @@ use std::{
 
 use arc_swap::ArcSwapOption;
 use catalog::{Grade, Specialization};
+use metrics::Counter;
 use sqlx::PgPool;
-use tokio::sync::Notify;
+use tokio::sync::{Notify, futures::Notified};
 use uuid::Uuid;
 
 use crate::{error::ApiResult, kv::Kv, pool::SpecPool};
 
 pub const HARD_TTL: Duration = Duration::from_secs(30);
+/// How long past [`HARD_TTL`] an entry of the current generation keeps serving while one request
+/// reloads it, so the other requests don't queue behind the reload every 30 seconds.
+pub const RELOAD_GRACE: Duration = Duration::from_secs(5);
 pub const REMOTE_TTL: Duration = Duration::from_millis(250);
 const GENERATION_KEY: &str = "cache:candidates:generation";
 const NEVER: u64 = u64::MAX;
@@ -114,30 +120,82 @@ pub struct Entry<T> {
     pub value: T,
 }
 
+/// `cache_lookups_total{cache, result}`: the handles are resolved once, an increment is one
+/// atomic add.
+pub struct Lookups {
+    hit: Counter,
+    miss: Counter,
+}
+
+impl Lookups {
+    fn new(cache: &'static str) -> Self {
+        Self {
+            hit: metrics::counter!("cache_lookups_total", "cache" => cache, "result" => "hit"),
+            miss: metrics::counter!("cache_lookups_total", "cache" => cache, "result" => "miss"),
+        }
+    }
+
+    pub fn record(&self, hits: usize, misses: usize) {
+        if hits > 0 {
+            self.hit.increment(hits as u64);
+        }
+        if misses > 0 {
+            self.miss.increment(misses as u64);
+        }
+    }
+}
+
+/// Single-flight gate: one caller loads, the others wait for it instead of loading the same thing.
+/// Waiters create their [`Flight::landed`] future and `enable` it before [`Flight::lead`], then
+/// look at the value once more before awaiting, so a load that ends in between is not missed.
+#[derive(Default)]
+pub struct Flight {
+    busy: AtomicBool,
+    done: Notify,
+}
+
+/// Held by the caller that loads. Dropping it — after the value is stored, on an error or on
+/// cancellation — wakes the waiters and lets the next caller lead.
+pub struct Lead<'a>(&'a Flight);
+
+impl Drop for Lead<'_> {
+    fn drop(&mut self) {
+        self.0.busy.store(false, Ordering::Release);
+        self.0.done.notify_waiters();
+    }
+}
+
+impl Flight {
+    pub fn lead(&self) -> Option<Lead<'_>> {
+        // Not `then_some`: an eagerly built `Lead` would be dropped on failure and open the gate
+        // held by the actual leader.
+        match self
+            .busy
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+        {
+            Ok(_) => Some(Lead(self)),
+            Err(_) => None,
+        }
+    }
+
+    pub fn landed(&self) -> Notified<'_> {
+        self.done.notified()
+    }
+}
+
 /// One cached value with single-flight loading: concurrent misses wait for one load instead of
 /// all hitting the database.
 pub struct Slot<T> {
     entry: ArcSwapOption<Entry<T>>,
-    loading: AtomicBool,
-    loaded: Notify,
+    flight: Flight,
 }
 
 impl<T> Default for Slot<T> {
     fn default() -> Self {
         Self {
             entry: ArcSwapOption::empty(),
-            loading: AtomicBool::new(false),
-            loaded: Notify::new(),
+            flight: Flight::default(),
         }
-    }
-}
-
-struct Loading<'a, T>(&'a Slot<T>);
-
-impl<T> Drop for Loading<'_, T> {
-    fn drop(&mut self) {
-        self.0.loading.store(false, Ordering::Release);
-        self.0.loaded.notify_waiters();
     }
 }
 
@@ -148,36 +206,55 @@ impl<T> Slot<T> {
             .filter(|e| e.stamp == stamp && e.born.elapsed() < HARD_TTL)
     }
 
+    /// Past [`HARD_TTL`] but of the current generation, and not older than [`RELOAD_GRACE`] past
+    /// it: no write has invalidated it, it has only aged out.
+    fn aged(&self, stamp: Stamp) -> Option<Arc<Entry<T>>> {
+        self.entry
+            .load_full()
+            .filter(|e| e.stamp == stamp && e.born.elapsed() < HARD_TTL + RELOAD_GRACE)
+    }
+
     /// The stamp is read before the load and kept with the value: a write committed while
     /// loading bumps the generation afterwards, so the value is never newer-labelled than its data.
-    pub async fn get<F, Fut>(&self, generation: &Generation, load: F) -> ApiResult<Arc<Entry<T>>>
+    /// A value that has only aged out keeps serving everyone but the one reloading it; a value of
+    /// an older generation is never served.
+    pub async fn get<F, Fut>(
+        &self,
+        generation: &Generation,
+        lookups: &Lookups,
+        load: F,
+    ) -> ApiResult<Arc<Entry<T>>>
     where
         F: Fn() -> Fut,
         Fut: Future<Output = ApiResult<T>>,
     {
+        let mut first = true;
         loop {
             let stamp = generation.stamp().await;
             if let Some(e) = self.fresh(stamp) {
+                lookups.record(usize::from(first), 0);
                 return Ok(e);
             }
-            let mut loaded = pin!(self.loaded.notified());
-            loaded.as_mut().enable();
-            if self
-                .loading
-                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-                .is_ok()
-            {
-                let _loading = Loading(self);
+            if first {
+                lookups.record(0, 1);
+                first = false;
+            }
+            let mut landed = pin!(self.flight.landed());
+            landed.as_mut().enable();
+            if let Some(_lead) = self.flight.lead() {
+                if let Some(e) = self.fresh(stamp) {
+                    return Ok(e);
+                }
                 let born = Instant::now();
                 let value = load().await?;
                 let entry = Arc::new(Entry { stamp, born, value });
                 self.entry.store(Some(Arc::clone(&entry)));
                 return Ok(entry);
             }
-            if let Some(e) = self.fresh(stamp) {
+            if let Some(e) = self.fresh(stamp).or_else(|| self.aged(stamp)) {
                 return Ok(e);
             }
-            loaded.await;
+            landed.await;
         }
     }
 }
@@ -196,9 +273,18 @@ pub struct CandidateCache {
     demand: [Slot<db::market::CategoryDemand>; CATEGORIES],
     companies: Box<[ArcSwapOption<CompanyOf>]>,
     hasher: std::hash::RandomState,
+    pool_lookups: Lookups,
+    stats_lookups: Lookups,
+    company_lookups: Lookups,
+    /// Employer cards, counted per card by `cards::load`.
+    pub card_lookups: Lookups,
 }
 
+/// The current snapshot of each specialization, if loaded; see [`CandidateCache::current_pools`].
+pub type CurrentPools = [Option<Arc<Entry<SpecPool>>>; SPECS];
+
 impl CandidateCache {
+    /// Call after the metrics recorder is installed: the counters bind to it here.
     pub fn new(kv: Kv) -> Self {
         Self {
             generation: Generation::new(kv),
@@ -207,6 +293,10 @@ impl CandidateCache {
             demand: std::array::from_fn(|_| Slot::default()),
             companies: (0..COMPANY_SLOTS).map(|_| ArcSwapOption::empty()).collect(),
             hasher: std::hash::RandomState::new(),
+            pool_lookups: Lookups::new("pool"),
+            stats_lookups: Lookups::new("category_stats"),
+            company_lookups: Lookups::new("company"),
+            card_lookups: Lookups::new("card"),
         }
     }
 
@@ -223,8 +313,10 @@ impl CandidateCache {
             && e.stamp == stamp
             && e.born.elapsed() < HARD_TTL
         {
+            self.company_lookups.record(1, 0);
             return Ok(Some(e.company));
         }
+        self.company_lookups.record(0, 1);
         let company = db::me::company_by_owner(pg, owner).await?.map(|c| c.id);
         if let Some(company) = company {
             slot.store(Some(Arc::new(CompanyOf {
@@ -237,16 +329,29 @@ impl CandidateCache {
         Ok(company)
     }
 
-    /// After the commit of any write to what the pool is built from: profile, skills, category,
-    /// privacy and search status, consents, FSP data, account deletion.
+    /// After the commit of any write to what the pool or a card is built from: profile, skills,
+    /// category, privacy and search status, consents, FSP data, task submissions and reviews,
+    /// proctoring uploads after the test, account deletion.
     pub async fn invalidate(&self) {
         self.generation.bump().await;
     }
 
     pub async fn pool(&self, pg: &PgPool, spec: Specialization) -> ApiResult<Arc<Entry<SpecPool>>> {
         self.pools[spec as usize]
-            .get(&self.generation, || SpecPool::load(pg, spec))
+            .get(&self.generation, &self.pool_lookups, || {
+                SpecPool::load(pg, spec)
+            })
             .await
+    }
+
+    /// The snapshots that serve requests now — fresh, or aged out and being reloaded — without
+    /// loading the others.
+    pub async fn current_pools(&self) -> CurrentPools {
+        let stamp = self.generation.stamp().await;
+        std::array::from_fn(|i| {
+            let slot = &self.pools[i];
+            slot.fresh(stamp).or_else(|| slot.aged(stamp))
+        })
     }
 
     pub async fn overview(
@@ -254,7 +359,7 @@ impl CandidateCache {
         pg: &PgPool,
     ) -> ApiResult<Arc<Entry<Vec<db::market::CategoryOverview>>>> {
         self.overview
-            .get(&self.generation, || async {
+            .get(&self.generation, &self.stats_lookups, || async {
                 Ok(db::market::category_overview(pg).await?)
             })
             .await
@@ -269,7 +374,7 @@ impl CandidateCache {
         grade: Grade,
     ) -> ApiResult<Arc<Entry<db::market::CategoryDemand>>> {
         self.demand[spec as usize * Grade::ALL.len() + grade as usize]
-            .get(&self.generation, || async {
+            .get(&self.generation, &self.stats_lookups, || async {
                 Ok(db::market::category_demand(pg, spec.slug(), grade.slug()).await?)
             })
             .await
@@ -284,6 +389,10 @@ mod tests {
 
     fn generation() -> Generation {
         Generation::new(Kv::Memory(Arc::new(crate::kv::MemoryKv::new(64))))
+    }
+
+    fn lookups() -> Lookups {
+        Lookups::new("test")
     }
 
     #[test]
@@ -302,11 +411,12 @@ mod tests {
         let slot: Slot<usize> = Slot::default();
         let loads = AtomicUsize::new(0);
         let load = || async { Ok(loads.fetch_add(1, Ordering::SeqCst)) };
-        assert_eq!(slot.get(&g, load).await.unwrap().value, 0);
-        assert_eq!(slot.get(&g, load).await.unwrap().value, 0);
+        let l = lookups();
+        assert_eq!(slot.get(&g, &l, load).await.unwrap().value, 0);
+        assert_eq!(slot.get(&g, &l, load).await.unwrap().value, 0);
         g.bump().await;
-        assert_eq!(slot.get(&g, load).await.unwrap().value, 1);
-        assert_eq!(slot.get(&g, load).await.unwrap().value, 1);
+        assert_eq!(slot.get(&g, &l, load).await.unwrap().value, 1);
+        assert_eq!(slot.get(&g, &l, load).await.unwrap().value, 1);
         assert_eq!(loads.load(Ordering::SeqCst), 2);
     }
 
@@ -319,7 +429,7 @@ mod tests {
             .map(|_| {
                 let (g, slot, loads) = (g.clone(), slot.clone(), loads.clone());
                 tokio::spawn(async move {
-                    slot.get(&g, || async {
+                    slot.get(&g, &lookups(), || async {
                         loads.fetch_add(1, Ordering::SeqCst);
                         tokio::time::sleep(Duration::from_millis(20)).await;
                         Ok(7)
@@ -340,12 +450,85 @@ mod tests {
         let g = generation();
         let slot: Slot<u8> = Slot::default();
         let failed = slot
-            .get(&g, || async {
+            .get(&g, &lookups(), || async {
                 Err(crate::error::ApiError::from(sqlx::Error::PoolTimedOut))
             })
             .await;
         assert!(failed.is_err());
-        assert_eq!(slot.get(&g, || async { Ok(3) }).await.unwrap().value, 3);
+        assert_eq!(
+            slot.get(&g, &lookups(), || async { Ok(3) })
+                .await
+                .unwrap()
+                .value,
+            3
+        );
+    }
+
+    #[tokio::test]
+    async fn aged_entry_serves_while_one_request_reloads() {
+        let g = Arc::new(generation());
+        let slot: Arc<Slot<u32>> = Arc::new(Slot::default());
+        let stamp = g.stamp().await;
+        slot.entry.store(Some(Arc::new(Entry {
+            stamp,
+            born: Instant::now() - HARD_TTL,
+            value: 1,
+        })));
+        let reload = {
+            let (g, slot) = (g.clone(), slot.clone());
+            tokio::spawn(async move {
+                slot.get(&g, &lookups(), || async {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    Ok(2)
+                })
+                .await
+                .map(|e| e.value)
+            })
+        };
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let during = slot
+            .get(&g, &lookups(), || async { Ok(3) })
+            .await
+            .unwrap()
+            .value;
+        assert_eq!(during, 1, "the aged value serves while the reload runs");
+        assert_eq!(reload.await.unwrap().unwrap(), 2);
+        assert_eq!(
+            slot.get(&g, &lookups(), || async { Ok(4) })
+                .await
+                .unwrap()
+                .value,
+            2
+        );
+
+        slot.entry.store(Some(Arc::new(Entry {
+            stamp,
+            born: Instant::now(),
+            value: 5,
+        })));
+        g.bump().await;
+        let reload = {
+            let (g, slot) = (g.clone(), slot.clone());
+            tokio::spawn(async move {
+                slot.get(&g, &lookups(), || async {
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    Ok(6)
+                })
+                .await
+                .map(|e| e.value)
+            })
+        };
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        let after_write = slot
+            .get(&g, &lookups(), || async { Ok(7) })
+            .await
+            .unwrap()
+            .value;
+        assert_eq!(
+            after_write, 6,
+            "a value of an older generation is never served"
+        );
+        assert_eq!(reload.await.unwrap().unwrap(), 6);
     }
 
     #[test]

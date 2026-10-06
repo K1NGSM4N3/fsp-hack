@@ -390,3 +390,70 @@ async fn pool_rows_without_fsp_link(pool: PgPool) {
     assert!(cards[0].invitation_status.is_none() && !cards[0].applied);
     assert!(cards[0].proctoring().is_none());
 }
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn task_pick_counts_distinct_shown_skills(pool: PgPool) {
+    let company_id = company(&pool).await;
+    let id = candidate(&pool, "vera@example.ru").await;
+    db::grades::set_candidate_category(&pool, "backend", "middle", 0.3, Utc::now(), id)
+        .await
+        .unwrap();
+    for (skill, source) in [
+        ("rust", "declared"),
+        ("rust", "test"),
+        ("kafka", "fsp"),
+        ("postgresql", "declared"),
+    ] {
+        db::candidates::insert_candidate_skill(&pool, id, skill, source)
+            .await
+            .unwrap();
+    }
+    let task = |skills: &'static [&'static str]| {
+        let pool = pool.clone();
+        async move {
+            let task_id = Uuid::now_v7();
+            let skills: Vec<String> = skills.iter().map(|s| (*s).to_owned()).collect();
+            db::tasks::insert_task(
+                &pool,
+                &db::tasks::NewTask {
+                    id: task_id,
+                    company_id,
+                    specialization: "backend",
+                    grades: &["middle".to_owned()],
+                    skills: &skills,
+                    title: "Задание",
+                    body: "Текст",
+                    kind: "solution",
+                },
+            )
+            .await
+            .unwrap();
+            task_id
+        }
+    };
+    let older = task(&["rust"]).await;
+    let newer = task(&["kafka", "postgresql"]).await;
+    let pick = || db::tasks::pick_task_for(&pool, id);
+
+    assert_eq!(
+        pick().await.unwrap(),
+        Some(newer),
+        "two distinct skills beat one skill held from two sources"
+    );
+    db::candidates::update_candidate_privacy(
+        &pool,
+        true,
+        false,
+        false,
+        true,
+        db::types::SearchStatus::Active,
+        id,
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        pick().await.unwrap(),
+        Some(older),
+        "a hidden FSP-confirmed skill does not count"
+    );
+}

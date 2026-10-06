@@ -197,7 +197,7 @@ async fn put_chunk(
             .with_detail(format!("Ожидается фрагмент {expected}")));
         }
     }
-    let sealed = proctoring::seal(&state.crypto, id, seq, &body);
+    let sealed = proctoring::seal(&state.crypto, id, seq, &body)?;
     state
         .recordings
         .write_chunk(user.id, id, seq, &sealed)
@@ -209,6 +209,12 @@ async fn put_chunk(
         db::proctoring::set_mime(&mut *tx, id, mime).await?;
     }
     tx.commit().await?;
+    metrics::counter!("proctoring_chunks_total").increment(1);
+    metrics::counter!("proctoring_chunk_bytes_total").increment(u64::from(size));
+    if !in_progress {
+        // The test is graded; this tail upload changes the proctoring mark on the card.
+        state.candidates.invalidate().await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -271,6 +277,7 @@ async fn post_events(
     }
     let room = usize::try_from((MAX_EVENTS - t.events).max(0)).unwrap_or(0);
     let latest = t.finished_at.unwrap_or(now).max(t.started_at);
+    let stored = batch.events.len().min(room);
     for e in batch.events.iter().take(room) {
         db::proctoring::insert_event(
             &mut *tx,
@@ -285,6 +292,11 @@ async fn post_events(
         .await?;
     }
     tx.commit().await?;
+    metrics::counter!("proctoring_events_total").increment(stored as u64);
+    if !in_progress && stored > 0 {
+        // The test is graded; these late events change the proctoring mark on the card.
+        state.candidates.invalidate().await;
+    }
     Ok(StatusCode::NO_CONTENT)
 }
 

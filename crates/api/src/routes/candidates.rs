@@ -152,7 +152,7 @@ async fn search(
     let total = ordered.len() as i64;
     let page: Vec<_> = ordered.into_iter().skip(offset).take(limit).collect();
     let ids: Vec<Uuid> = page.iter().map(|(i, ..)| loaded.ids[*i]).collect();
-    let mut cards = cards::load(&state.pool, &state.crypto, company, &ids, now).await?;
+    let mut cards = cards::load(&state, company, &ids, now).await?;
     // The pool may be up to a generation old on another replica; the page is checked live.
     cards.retain(|c| c.searchable);
     let mut items = Vec::with_capacity(page.len());
@@ -197,7 +197,7 @@ async fn profile(
 ) -> ApiResult<Json<CandidateProfileView>> {
     let company = company_id(&state, user.id).await?;
     let now = Utc::now().timestamp();
-    let found = cards::load(&state.pool, &state.crypto, company, &[id], now)
+    let found = cards::load(&state, company, &[id], now)
         .await?
         .pop()
         .ok_or_else(ApiError::not_found)?;

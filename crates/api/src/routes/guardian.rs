@@ -427,8 +427,8 @@ async fn change(
     let clean = clean_contact(&state.crypto, &c, &own, &mut v, ("full_name", "email"));
     v.finish()?;
     guardian::letter_quota(&state, user.id, &clean.bidx).await?;
-    let name_enc = state.crypto.encrypt_str(&clean.full_name);
-    let email_enc = state.crypto.encrypt_str(&clean.email);
+    let name_enc = state.crypto.encrypt_str(&clean.full_name)?;
+    let email_enc = state.crypto.encrypt_str(&clean.email)?;
     let updated = match &request {
         Some(r) if r.decision.is_none() => {
             db::guardians::update_contact(&state.pool, r.id, &name_enc, &email_enc, &clean.bidx)

@@ -546,6 +546,16 @@ pub async fn purge_settled_events(
     .map(|r| r.rows_affected())
 }
 
+/// Outbox events still to be delivered, for the `webhook_outbox_pending` gauge; reads only the
+/// partial index of pending events.
+pub async fn pending_events(db: impl PgExecutor<'_>) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT count(*) AS "pending!" FROM integration_events WHERE status = 'pending'"#
+    )
+    .fetch_one(db)
+    .await
+}
+
 pub async fn insert_api_key(
     db: impl PgExecutor<'_>,
     k: &NewApiKey<'_>,

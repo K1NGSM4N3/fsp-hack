@@ -38,7 +38,7 @@ pub fn secret_hint(secret: &str) -> String {
 }
 
 fn mac(secret: &[u8], timestamp: i64, body: &[u8]) -> Hmac<Sha256> {
-    let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(secret).expect("HMAC accepts any key size");
+    let mut mac = crate::crypto::hmac_sha256(secret);
     mac.update(timestamp.to_string().as_bytes());
     mac.update(b".");
     mac.update(body);

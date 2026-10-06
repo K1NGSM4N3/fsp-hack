@@ -135,7 +135,7 @@ impl Api {
             self.pool(),
             id,
             role.into(),
-            &self.state.crypto.encrypt_str(email),
+            &self.state.crypto.encrypt_str(email).unwrap(),
             &self.state.crypto.blind_index(email),
             "h",
         )

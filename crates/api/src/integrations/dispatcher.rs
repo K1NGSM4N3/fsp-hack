@@ -25,6 +25,8 @@ const DEFAULT_INTERVAL: StdDuration = StdDuration::from_secs(2);
 /// Settled events (and their payloads with contacts) are kept this long for the delivery log.
 pub const RETENTION_DAYS: i64 = 30;
 const PURGE_EVERY: StdDuration = StdDuration::from_secs(3_600);
+/// How often the pending-events gauge is refreshed: the Prometheus scrape interval.
+const GAUGE_EVERY: StdDuration = StdDuration::from_secs(15);
 /// After a rotation the old secret keeps signing for this long.
 pub const ROTATION_OVERLAP_HOURS: i64 = 24;
 
@@ -74,7 +76,15 @@ impl Dispatcher {
     pub fn spawn(self) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
             let mut last_purge: Option<tokio::time::Instant> = None;
+            let mut last_gauge: Option<tokio::time::Instant> = None;
             loop {
+                if last_gauge.is_none_or(|t| t.elapsed() >= GAUGE_EVERY) {
+                    last_gauge = Some(tokio::time::Instant::now());
+                    match db::integrations::pending_events(&self.pool).await {
+                        Ok(n) => metrics::gauge!("webhook_outbox_pending").set(n as f64),
+                        Err(e) => tracing::warn!(error = %e, "pending events count failed"),
+                    }
+                }
                 if last_purge.is_none_or(|t| t.elapsed() >= PURGE_EVERY) {
                     last_purge = Some(tokio::time::Instant::now());
                     let before = Utc::now() - Duration::days(RETENTION_DAYS);
@@ -113,6 +123,7 @@ impl Dispatcher {
     ) -> Result<Option<Attempt>, sqlx::Error> {
         let (Some(url), Some(secret_enc)) = (e.url.as_deref(), e.secret_enc.as_deref()) else {
             db::integrations::mark_failed(&self.pool, e.id, "Вебхук не настроен").await?;
+            delivered("failed");
             return Ok(None);
         };
         let now = Utc::now();
@@ -132,6 +143,7 @@ impl Dispatcher {
                 tracing::error!(event = %e.id, error = %err, "integration event payload unreadable");
                 db::integrations::mark_failed(&self.pool, e.id, "Не удалось подготовить событие")
                     .await?;
+                delivered("failed");
                 return Ok(None);
             }
         };
@@ -173,22 +185,33 @@ impl Dispatcher {
             },
         )
         .await?;
-        if attempt.ok() {
+        let result = if attempt.ok() {
             db::integrations::mark_delivered(&mut *tx, e.id).await?;
+            "delivered"
         } else {
             let error = attempt.error.as_deref().unwrap_or("Ошибка доставки");
             let failed = u16::try_from(e.attempts).unwrap_or(0).saturating_add(1);
             match next_step(failed, Utc::now(), e.deadline_at) {
                 Next::RetryAt(at) => {
                     db::integrations::schedule_retry(&mut *tx, e.id, at, error).await?;
+                    "retry"
                 }
                 Next::GiveUp => {
                     db::integrations::mark_failed(&mut *tx, e.id, error).await?;
+                    "failed"
                 }
             }
-        }
-        tx.commit().await
+        };
+        tx.commit().await?;
+        delivered(result);
+        Ok(())
     }
+}
+
+/// `webhook_deliveries_total{result}`: `delivered`, `retry` (failed, will be retried) or `failed`
+/// (given up after the delivery window, or no webhook to deliver to).
+fn delivered(result: &'static str) {
+    metrics::counter!("webhook_deliveries_total", "result" => result).increment(1);
 }
 
 #[cfg(test)]

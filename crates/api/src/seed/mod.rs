@@ -78,7 +78,7 @@ async fn account(
         &mut *tx,
         id,
         role,
-        &crypto.encrypt_str(&email),
+        &crypto.encrypt_str(&email)?,
         &crypto.blind_index(&email),
         hash,
         at,
@@ -491,8 +491,8 @@ async fn seed_minors(
             &db::seed::SeedGuardian {
                 id: Uuid::now_v7(),
                 candidate_id: j.id,
-                full_name_enc: &crypto.encrypt_str(&name),
-                email_enc: &crypto.encrypt_str(&email),
+                full_name_enc: &crypto.encrypt_str(&name)?,
+                email_enc: &crypto.encrypt_str(&email)?,
                 email_bidx: &crypto.blind_index(&email),
                 confirm_hash: &confirm_hash,
                 revoke_hash: &revoke_hash,
@@ -508,7 +508,7 @@ async fn seed_minors(
             db::seed::seed_login_email(
                 &mut *tx,
                 j.id,
-                &crypto.encrypt_str(DEMO_MINOR_EMAIL),
+                &crypto.encrypt_str(DEMO_MINOR_EMAIL)?,
                 &crypto.blind_index(DEMO_MINOR_EMAIL),
             )
             .await?;
@@ -787,7 +787,7 @@ pub async fn seed_sized(
             let candidate = db::seed::SeedCandidate {
                 user_id: acc.id,
                 public_code: "",
-                full_name_enc: &crypto.encrypt_str(&full_name),
+                full_name_enc: &crypto.encrypt_str(&full_name)?,
                 contacts_enc: &crypto.encrypt_json(&contacts)?,
                 city: corpus::CITIES.choose(&mut rng).copied(),
                 relocation: rng.random_bool(0.2),

@@ -187,7 +187,7 @@ impl FromRequestParts<AppState> for ApiClient {
             .hit(&format!("rl:apikey:{}", row.id), Duration::from_secs(60))
             .await?;
         if hit.over(RATE_PER_MINUTE) {
-            return Err(ApiError::rate_limited(hit.retry_after));
+            return Err(ApiError::rate_limited("api_key", hit.retry_after));
         }
         db::integrations::touch_api_key(&state.pool, row.id).await?;
         let client = ApiClient {

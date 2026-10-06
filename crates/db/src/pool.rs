@@ -83,6 +83,29 @@ pub struct CandidateCard {
     pub recording_failed: Option<i64>,
 }
 
+/// The columns of [`CandidateCard`] read on every display even when the rest of the card is
+/// cached: visibility and privacy flags, which must never lag, the company's relation, and the
+/// fields that change without a cache generation bump (activity time, age).
+#[derive(Debug, Clone)]
+pub struct CardLive {
+    pub user_id: Uuid,
+    pub show_name: bool,
+    pub show_fsp: bool,
+    pub show_experience: bool,
+    pub search_status: SearchStatus,
+    pub last_activity_at: DateTime<Utc>,
+    pub minor: bool,
+    pub published: bool,
+    pub invitation_status: Option<InvitationStatus>,
+    pub applied: bool,
+}
+
+impl CardLive {
+    pub fn searchable(&self) -> bool {
+        self.published && self.search_status != SearchStatus::Closed
+    }
+}
+
 impl CandidateCard {
     /// Published and not closed to offers: the rule of [`searchable_pool`]. Derived here rather
     /// than in SQL, where a second reference to `published` evaluated its subqueries twice.
@@ -177,12 +200,15 @@ pub async fn text_ranks(
 /// inferred from the plan, it depends on the join order the planner picks for the data at hand. Skills and task stats are
 /// aggregated per candidate in lateral subqueries (a group-by over the wide joined rows cost twice
 /// as much); the company's relation and the proctoring of the latest grade assignment ride along.
-/// Shown shortlists and search pages are re-checked with the live [`CandidateCard::searchable`],
-/// so hiding a profile takes effect on the next request whatever the age of the cached pool.
+/// The API keeps the rest of the card in memory (`api::cards`) and reads only [`card_live`] for
+/// the cards it holds, so visibility is checked live on every display either way.
 ///
 /// The ids go through a subquery so the planner cannot see them: with a visible one-element
 /// array it kept re-planning this statement on every call (about 0.7 ms, four times the
 /// execution) instead of switching to the cached generic plan, which suits any number of ids.
+/// «Applied» is a scalar subquery with `LIMIT 1` rather than `EXISTS`: the planner turned the
+/// `EXISTS` into a hashed scan of all the company's applications, which costs more than one
+/// probe of `applications_candidate_idx` per card as soon as the company has a few thousand.
 pub async fn candidate_cards(
     db: impl PgExecutor<'_>,
     company_id: Uuid,
@@ -205,9 +231,9 @@ pub async fn candidate_cards(
                   vis.published AS "published!",
                   (SELECT i.status FROM invitations i WHERE i.company_id = $1 AND i.candidate_id = c.user_id
                     ORDER BY i.created_at DESC LIMIT 1) AS "invitation_status?: InvitationStatus",
-                  EXISTS (SELECT 1 FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
-                           WHERE v.company_id = $1 AND a.candidate_id = c.user_id
-                             AND a.status <> 'withdrawn') AS "applied!",
+                  (SELECT true FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
+                    WHERE a.candidate_id = c.user_id AND v.company_id = $1
+                      AND a.status <> 'withdrawn' LIMIT 1) IS NOT NULL AS "applied!",
                   pb.camera AS "proctoring_camera?", pb.chunks AS "proctoring_chunks?",
                   pb.tab_hidden AS "tab_hidden?", pb.window_blur AS "window_blur?",
                   pb.fullscreen_exit AS "fullscreen_exit?", pb.paste AS "paste?",
@@ -245,6 +271,36 @@ pub async fn candidate_cards(
                LEFT JOIN proctoring_events e ON e.session_id = p.session_id
                GROUP BY p.session_id
            ) pb ON true
+           WHERE c.user_id = ANY ((SELECT $2::uuid[])::uuid[])"#,
+        company_id,
+        ids,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// The [`CardLive`] columns of `ids` as `company_id` sees them: the same expressions as in
+/// [`candidate_cards`], without the aggregates over skills, tasks and proctoring that make up
+/// most of its cost. The ids go through a subquery for the same reason.
+pub async fn card_live(
+    db: impl PgExecutor<'_>,
+    company_id: Uuid,
+    ids: &[Uuid],
+) -> Result<Vec<CardLive>, sqlx::Error> {
+    sqlx::query_as!(
+        CardLive,
+        r#"SELECT c.user_id AS "user_id!", c.show_name AS "show_name!", c.show_fsp AS "show_fsp!",
+                  c.show_experience AS "show_experience!",
+                  c.search_status AS "search_status!: SearchStatus",
+                  c.last_activity_at AS "last_activity_at!",
+                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS "minor!",
+                  EXISTS (SELECT 1 FROM published_candidates p WHERE p.user_id = c.user_id) AS "published!",
+                  (SELECT i.status FROM invitations i WHERE i.company_id = $1 AND i.candidate_id = c.user_id
+                    ORDER BY i.created_at DESC LIMIT 1) AS "invitation_status?: InvitationStatus",
+                  (SELECT true FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
+                    WHERE a.candidate_id = c.user_id AND v.company_id = $1
+                      AND a.status <> 'withdrawn' LIMIT 1) IS NOT NULL AS "applied!"
+           FROM candidates c
            WHERE c.user_id = ANY ((SELECT $2::uuid[])::uuid[])"#,
         company_id,
         ids,

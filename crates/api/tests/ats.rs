@@ -155,7 +155,7 @@ impl Api {
             self.pool(),
             id,
             role.into(),
-            &self.state.crypto.encrypt_str(email),
+            &self.state.crypto.encrypt_str(email).unwrap(),
             &self.state.crypto.blind_index(email),
             "h",
         )
@@ -186,7 +186,7 @@ impl Api {
             self.pool(),
             id,
             &db::candidates::ProfileUpdate {
-                full_name_enc: Some(&self.state.crypto.encrypt_str(name)),
+                full_name_enc: Some(&self.state.crypto.encrypt_str(name).unwrap()),
                 contacts_enc: Some(&self.state.crypto.encrypt_json(&contacts).unwrap()),
                 city: Some("Москва"),
                 relocation: false,

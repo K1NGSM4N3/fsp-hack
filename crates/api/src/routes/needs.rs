@@ -433,14 +433,12 @@ pub struct Shortlist {
 async fn shortlist_view(state: &AppState, company: Uuid, need: HiringNeed) -> ApiResult<Shortlist> {
     let visible = db::needs::shortlist_items(&state.pool, need.id).await?;
     let ids: Vec<Uuid> = visible.iter().map(|r| r.candidate_id).collect();
-    let mut cards = cards::load(
-        &state.pool,
-        &state.crypto,
-        company,
-        &ids,
-        Utc::now().timestamp(),
-    )
-    .await?;
+    // The snapshot holds the cached cards; loading it here keeps a shortlist cheap to reopen.
+    state
+        .candidates
+        .pool(&state.pool, need.specialization)
+        .await?;
+    let mut cards = cards::load(state, company, &ids, Utc::now().timestamp()).await?;
     cards.retain(|c| c.searchable || c.related());
     let generated = need.shortlist_generated_at;
     let had_previous = generated.is_some_and(|g| visible.iter().any(|r| r.first_seen_at < g));

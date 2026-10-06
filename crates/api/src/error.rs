@@ -257,7 +257,9 @@ impl ApiError {
         Self::new(StatusCode::CONFLICT, code, title)
     }
 
-    pub fn rate_limited(retry_after: Duration) -> Self {
+    /// Counted in `rate_limit_rejections_total{scope}`; `scope` names the limiter.
+    pub fn rate_limited(scope: &'static str, retry_after: Duration) -> Self {
+        metrics::counter!("rate_limit_rejections_total", "scope" => scope).increment(1);
         Self::RateLimited { retry_after }
     }
 
@@ -480,7 +482,7 @@ mod tests {
 
     #[tokio::test]
     async fn rate_limited_tells_how_long_to_wait() {
-        let response = ApiError::rate_limited(Duration::from_secs(250)).into_response();
+        let response = ApiError::rate_limited("test", Duration::from_secs(250)).into_response();
         assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(response.headers()[header::RETRY_AFTER], "250");
         let bytes = axum::body::to_bytes(response.into_body(), 4096)
@@ -489,7 +491,7 @@ mod tests {
         let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(body["code"], "rate_limited");
         assert_eq!(body["detail"], "Повторите через 5 мин");
-        let response = ApiError::rate_limited(Duration::ZERO).into_response();
+        let response = ApiError::rate_limited("test", Duration::ZERO).into_response();
         assert_eq!(response.headers()[header::RETRY_AFTER], "1");
         assert_eq!(in_ru(59), "через 59 с");
         assert_eq!(in_ru(3601), "через 2 ч");

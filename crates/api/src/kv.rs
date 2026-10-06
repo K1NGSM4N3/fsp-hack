@@ -167,8 +167,9 @@ pub struct MemoryKv {
 const PROBE: usize = 8;
 
 impl MemoryKv {
+    /// `slots` is rounded up to a power of two.
     pub fn new(slots: usize) -> Self {
-        assert!(slots.is_power_of_two());
+        let slots = slots.max(1).next_power_of_two();
         let table = || {
             (0..slots)
                 .map(|_| AtomicU64::new(0))
@@ -215,20 +216,20 @@ impl MemoryKv {
         let packed = (fp << 32) | expires;
         let start = h as usize;
         loop {
-            let mut victim: Option<(usize, u64)> = None;
+            // Expiries fit in 32 bits, so the first probed slot always replaces this start value.
+            let (mut idx, mut current, mut soonest) = (start & self.mask, 0, u64::MAX);
             for i in 0..PROBE {
-                let idx = (start + i) & self.mask;
-                let current = self.flags[idx].load(Ordering::Acquire);
-                let (cur_fp, cur_exp) = (current >> 32, current & 0xFFFF_FFFF);
-                if current == 0 || cur_fp == fp || cur_exp <= now {
-                    victim = Some((idx, current));
+                let at = (start + i) & self.mask;
+                let value = self.flags[at].load(Ordering::Acquire);
+                let (cur_fp, cur_exp) = (value >> 32, value & 0xFFFF_FFFF);
+                if value == 0 || cur_fp == fp || cur_exp <= now {
+                    (idx, current) = (at, value);
                     break;
                 }
-                if victim.is_none_or(|(_, v)| cur_exp < v & 0xFFFF_FFFF) {
-                    victim = Some((idx, current));
+                if cur_exp < soonest {
+                    (idx, current, soonest) = (at, value, cur_exp);
                 }
             }
-            let (idx, current) = victim.expect("PROBE > 0");
             if self.flags[idx]
                 .compare_exchange(current, packed, Ordering::AcqRel, Ordering::Acquire)
                 .is_ok()

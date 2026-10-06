@@ -26,7 +26,11 @@ fn secret_context(company_id: Uuid) -> Vec<u8> {
     ctx
 }
 
-pub fn seal_secret(crypto: &Crypto, company_id: Uuid, secret: &str) -> Vec<u8> {
+pub fn seal_secret(
+    crypto: &Crypto,
+    company_id: Uuid,
+    secret: &str,
+) -> Result<Vec<u8>, CryptoError> {
     crypto
         .fields
         .encrypt_bound(secret.as_bytes(), &secret_context(company_id))
@@ -81,7 +85,7 @@ pub async fn provision_demo(
                     pool,
                     company,
                     url.as_str(),
-                    &seal_secret(crypto, company, secret),
+                    &seal_secret(crypto, company, secret)?,
                     &signature::secret_hint(secret),
                 )
                 .await?

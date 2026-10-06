@@ -125,7 +125,7 @@ async fn eval_pairs(
     let ip = client_ip(&headers).unwrap_or_default();
     let hit = state.kv.hit(&format!("rl:eval:{ip}"), RATE_WINDOW).await?;
     if hit.over(RATE_LIMIT) {
-        return Err(ApiError::rate_limited(hit.retry_after));
+        return Err(ApiError::rate_limited("eval_pairs", hit.retry_after));
     }
     let Json(input) = body.map_err(rejected)?;
     input.check()?;

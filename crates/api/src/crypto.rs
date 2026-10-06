@@ -29,6 +29,8 @@ pub enum CryptoError {
     Truncated,
     #[error("ciphertext authentication failed")]
     Authentication,
+    #[error("encryption failed")]
+    Encrypt,
     #[error("decrypted value is not utf-8")]
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("decrypted value is not valid json: {0}")]
@@ -42,13 +44,16 @@ pub trait PasswordHasher: Send + Sync {
     fn verify(&self, password: &str, phc: &str) -> bool;
 }
 
-/// OWASP baseline: m = 19 MiB, t = 2, p = 1.
+/// OWASP baseline: m = 19 MiB, t = 2, p = 1 (the crate's `Params::DEFAULT`).
 pub struct Argon2id(Argon2<'static>);
 
 impl Default for Argon2id {
     fn default() -> Self {
-        let params = Params::new(19 * 1024, 2, 1, None).expect("constant argon2 params are valid");
-        Self(Argon2::new(Algorithm::Argon2id, Version::V0x13, params))
+        Self(Argon2::new(
+            Algorithm::Argon2id,
+            Version::V0x13,
+            Params::DEFAULT,
+        ))
     }
 }
 
@@ -68,7 +73,7 @@ impl PasswordHasher for Argon2id {
 }
 
 pub trait FieldCipher: Send + Sync {
-    fn encrypt(&self, plaintext: &[u8]) -> Vec<u8> {
+    fn encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
         self.encrypt_bound(plaintext, &[])
     }
 
@@ -78,7 +83,7 @@ pub trait FieldCipher: Send + Sync {
 
     /// `context` is authenticated but not stored: the ciphertext only decrypts with the same
     /// context, so a blob moved to another record or position fails instead of being accepted.
-    fn encrypt_bound(&self, plaintext: &[u8], context: &[u8]) -> Vec<u8>;
+    fn encrypt_bound(&self, plaintext: &[u8], context: &[u8]) -> Result<Vec<u8>, CryptoError>;
     fn decrypt_bound(&self, ciphertext: &[u8], context: &[u8]) -> Result<Vec<u8>, CryptoError>;
 }
 
@@ -96,7 +101,7 @@ impl XChaChaV1 {
 }
 
 impl FieldCipher for XChaChaV1 {
-    fn encrypt_bound(&self, plaintext: &[u8], context: &[u8]) -> Vec<u8> {
+    fn encrypt_bound(&self, plaintext: &[u8], context: &[u8]) -> Result<Vec<u8>, CryptoError> {
         let mut nonce = [0u8; NONCE_LEN];
         rand::rng().fill_bytes(&mut nonce);
         let ct = self
@@ -108,12 +113,12 @@ impl FieldCipher for XChaChaV1 {
                     aad: context,
                 },
             )
-            .expect("in-memory AEAD encryption cannot fail");
+            .map_err(|_| CryptoError::Encrypt)?;
         let mut out = Vec::with_capacity(V1.len() + NONCE_LEN + ct.len());
         out.extend_from_slice(V1);
         out.extend_from_slice(&nonce);
         out.extend_from_slice(&ct);
-        out
+        Ok(out)
     }
 
     fn decrypt_bound(&self, data: &[u8], context: &[u8]) -> Result<Vec<u8>, CryptoError> {
@@ -137,7 +142,20 @@ impl FieldCipher for XChaChaV1 {
 pub struct Crypto {
     pub passwords: Box<dyn PasswordHasher>,
     pub fields: Box<dyn FieldCipher>,
-    bidx_key: [u8; 32],
+    bidx: Hmac<Sha256>,
+}
+
+/// HMAC-SHA256 under any key, without the `Result` of `new_from_slice`, which never fails for
+/// HMAC: as RFC 2104 prescribes, a key longer than the 64-byte block is hashed first and a shorter
+/// one is zero-padded to the block, which is then a full-size key for `KeyInit::new`.
+pub fn hmac_sha256(key: &[u8]) -> Hmac<Sha256> {
+    let mut block = [0u8; 64];
+    if key.len() > block.len() {
+        block[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        block[..key.len()].copy_from_slice(key);
+    }
+    <Hmac<Sha256> as KeyInit>::new(&block.into())
 }
 
 impl Crypto {
@@ -145,19 +163,18 @@ impl Crypto {
         Self {
             passwords: Box::new(Argon2id::default()),
             fields: Box::new(XChaChaV1::new(field_key)),
-            bidx_key: *bidx_key,
+            bidx: hmac_sha256(bidx_key),
         }
     }
 
     /// Keyed hash for equality lookups on encrypted columns (blind index).
     pub fn blind_index(&self, value: &str) -> Vec<u8> {
-        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(&self.bidx_key)
-            .expect("HMAC accepts any key size");
+        let mut mac = self.bidx.clone();
         mac.update(value.as_bytes());
         mac.finalize().into_bytes().to_vec()
     }
 
-    pub fn encrypt_str(&self, value: &str) -> Vec<u8> {
+    pub fn encrypt_str(&self, value: &str) -> Result<Vec<u8>, CryptoError> {
         self.fields.encrypt(value.as_bytes())
     }
 
@@ -166,7 +183,7 @@ impl Crypto {
     }
 
     pub fn encrypt_json<T: serde::Serialize>(&self, value: &T) -> Result<Vec<u8>, CryptoError> {
-        Ok(self.fields.encrypt(&serde_json::to_vec(value)?))
+        self.fields.encrypt(&serde_json::to_vec(value)?)
     }
 
     pub fn decrypt_json<T: serde::de::DeserializeOwned>(
@@ -177,14 +194,12 @@ impl Crypto {
     }
 }
 
-/// Verified when a login email is unknown, so both branches cost one Argon2 run.
-pub fn dummy_hash() -> &'static str {
-    static HASH: LazyLock<String> = LazyLock::new(|| {
-        Argon2id::default()
-            .hash("dummy-password")
-            .expect("argon2 with constant input")
-    });
-    &HASH
+/// Verified when a login email is unknown, so both branches cost one Argon2 run. `None` only if
+/// hashing a constant failed, which the default parameters rule out.
+pub fn dummy_hash() -> Option<&'static str> {
+    static HASH: LazyLock<Option<String>> =
+        LazyLock::new(|| Argon2id::default().hash("dummy-password").ok());
+    HASH.as_deref()
 }
 
 pub fn normalize_email(email: &str) -> String {
@@ -222,15 +237,15 @@ mod tests {
         assert!(h.verify("correct horse", &phc));
         assert!(!h.verify("wrong", &phc));
         assert!(!h.verify("x", "garbage"));
-        assert!(!h.verify("x", dummy_hash()));
+        assert!(!h.verify("x", dummy_hash().unwrap()));
     }
 
     #[test]
     fn field_cipher_round_trip_and_tamper() {
         let c = XChaChaV1::new(&[7u8; 32]);
-        let ct = c.encrypt(b"+7 999 123-45-67");
+        let ct = c.encrypt(b"+7 999 123-45-67").unwrap();
         assert_eq!(c.decrypt(&ct).unwrap(), b"+7 999 123-45-67");
-        assert_ne!(c.encrypt(b"same"), c.encrypt(b"same"));
+        assert_ne!(c.encrypt(b"same").unwrap(), c.encrypt(b"same").unwrap());
         let mut bad = ct.clone();
         *bad.last_mut().unwrap() ^= 1;
         assert!(matches!(c.decrypt(&bad), Err(CryptoError::Authentication)));
@@ -243,14 +258,33 @@ mod tests {
     #[test]
     fn bound_ciphertext_needs_its_context() {
         let c = XChaChaV1::new(&[9u8; 32]);
-        let ct = c.encrypt_bound(b"chunk", b"session-a:0");
+        let ct = c.encrypt_bound(b"chunk", b"session-a:0").unwrap();
         assert_eq!(c.decrypt_bound(&ct, b"session-a:0").unwrap(), b"chunk");
         assert!(matches!(
             c.decrypt_bound(&ct, b"session-a:1"),
             Err(CryptoError::Authentication)
         ));
         assert!(matches!(c.decrypt(&ct), Err(CryptoError::Authentication)));
-        assert_eq!(c.decrypt_bound(&c.encrypt(b"x"), b"").unwrap(), b"x");
+        assert_eq!(
+            c.decrypt_bound(&c.encrypt(b"x").unwrap(), b"").unwrap(),
+            b"x"
+        );
+    }
+
+    #[test]
+    fn hmac_key_of_any_length_matches_new_from_slice() {
+        for len in [0, 1, 32, 63, 64, 65, 200] {
+            let key = vec![0xA5u8; len];
+            let mut ours = hmac_sha256(&key);
+            let mut reference = <Hmac<Sha256> as Mac>::new_from_slice(&key).unwrap();
+            ours.update(b"payload");
+            reference.update(b"payload");
+            assert_eq!(
+                ours.finalize().into_bytes(),
+                reference.finalize().into_bytes(),
+                "{len}"
+            );
+        }
     }
 
     #[test]

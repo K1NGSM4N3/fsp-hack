@@ -1,0 +1,102 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.user_id AS \"user_id!\", c.show_name AS \"show_name!\", c.show_fsp AS \"show_fsp!\",\n                  c.show_experience AS \"show_experience!\",\n                  c.search_status AS \"search_status!: SearchStatus\",\n                  c.last_activity_at AS \"last_activity_at!\",\n                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS \"minor!\",\n                  EXISTS (SELECT 1 FROM published_candidates p WHERE p.user_id = c.user_id) AS \"published!\",\n                  (SELECT i.status FROM invitations i WHERE i.company_id = $1 AND i.candidate_id = c.user_id\n                    ORDER BY i.created_at DESC LIMIT 1) AS \"invitation_status?: InvitationStatus\",\n                  (SELECT true FROM applications a JOIN vacancies v ON v.id = a.vacancy_id\n                    WHERE a.candidate_id = c.user_id AND v.company_id = $1\n                      AND a.status <> 'withdrawn' LIMIT 1) IS NOT NULL AS \"applied!\"\n           FROM candidates c\n           WHERE c.user_id = ANY ((SELECT $2::uuid[])::uuid[])",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "show_name!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "show_fsp!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "show_experience!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "search_status!: SearchStatus",
+        "type_info": {
+          "Custom": {
+            "name": "search_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "open",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_activity_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "minor!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 7,
+        "name": "published!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "invitation_status?: InvitationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "invitation_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "declined",
+                "expired",
+                "withdrawn"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "applied!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "255188b4be73b82d2fd4c5000b4afc8e49ab10eec578fca02b3d32c034586f18"
+}

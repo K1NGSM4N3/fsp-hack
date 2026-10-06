@@ -1,6 +1,6 @@
 //! Extractors for request input whose rejections are problem+json with a stable `code`
 //! (`invalid_json`, `unsupported_media_type`, `invalid_path`, `invalid_query`,
-//! `payload_too_large`) instead of axum's plain text. Handlers import these in place of axum's
+//! `payload_too_large`, `invalid_body`) instead of axum's plain text. Handlers import these in place of axum's
 //! own; `Json` also serves responses. Clippy (`crates/api/clippy.toml`) rejects the axum types.
 
 #![allow(clippy::disallowed_types)]

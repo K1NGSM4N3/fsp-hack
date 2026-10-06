@@ -169,7 +169,7 @@ pub async fn letter_quota(state: &AppState, candidate: Uuid, email_bidx: &[u8]) 
         .map(|(hit, _)| hit.retry_after)
         .max();
     match wait {
-        Some(retry_after) => Err(ApiError::rate_limited(retry_after)),
+        Some(retry_after) => Err(ApiError::rate_limited("guardian_letters", retry_after)),
         None => Ok(()),
     }
 }

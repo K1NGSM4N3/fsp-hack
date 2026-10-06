@@ -77,10 +77,16 @@ pub(crate) fn valid_email(email: &str) -> bool {
         && !email.chars().any(char::is_whitespace)
 }
 
-async fn rate_limit(state: &AppState, key: String, limit: u64, window: Duration) -> ApiResult<()> {
+async fn rate_limit(
+    state: &AppState,
+    scope: &'static str,
+    key: String,
+    limit: u64,
+    window: Duration,
+) -> ApiResult<()> {
     let hit = state.kv.hit(&key, window).await?;
     if hit.over(limit) {
-        return Err(ApiError::rate_limited(hit.retry_after));
+        return Err(ApiError::rate_limited(scope, hit.retry_after));
     }
     Ok(())
 }
@@ -102,6 +108,7 @@ async fn register(
     let ip = client_ip(&headers);
     rate_limit(
         &state,
+        "register",
         format!("rl:register:{}", ip.as_deref().unwrap_or("-")),
         20,
         Duration::from_secs(3600),
@@ -198,7 +205,7 @@ async fn register(
         &mut *tx,
         user_id,
         role_db,
-        &state.crypto.encrypt_str(&email),
+        &state.crypto.encrypt_str(&email)?,
         &bidx,
         &password_hash,
     )
@@ -224,8 +231,8 @@ async fn register(
                     &mut *tx,
                     Uuid::now_v7(),
                     user_id,
-                    &state.crypto.encrypt_str(&contact.full_name),
-                    &state.crypto.encrypt_str(&contact.email),
+                    &state.crypto.encrypt_str(&contact.full_name)?,
+                    &state.crypto.encrypt_str(&contact.email)?,
                     &contact.bidx,
                 )
                 .await?;
@@ -234,7 +241,7 @@ async fn register(
         Role::Employer => {
             db::companies::insert_company(&mut *tx, Uuid::now_v7(), user_id, company_name).await?;
         }
-        Role::Admin => unreachable!("validated above"),
+        Role::Admin => return Err(ApiError::field("role", "Недопустимая роль")),
     }
     db::users::insert_email_verification(
         &mut *tx,
@@ -307,6 +314,7 @@ async fn resend_verification(
     let email = normalize_email(&req.email);
     rate_limit(
         &state,
+        "resend_verification",
         format!("rl:resend:{email}"),
         3,
         Duration::from_secs(3600),
@@ -371,6 +379,7 @@ async fn login(
     let ip = client_ip(&headers).unwrap_or_default();
     rate_limit(
         &state,
+        "login",
         format!("rl:login:{ip}:{email}"),
         10,
         Duration::from_secs(900),
@@ -382,10 +391,10 @@ async fn login(
         .filter(|u| u.deleted_at.is_none());
 
     // Unknown emails still pay for one Argon2 verification: response time must not reveal accounts.
-    let phc = user.as_ref().map_or_else(
-        || crate::crypto::dummy_hash().to_owned(),
-        |u| u.password_hash.clone(),
-    );
+    let phc = match &user {
+        Some(u) => u.password_hash.clone(),
+        None => crate::crypto::dummy_hash().unwrap_or_default().to_owned(),
+    };
     let password = req.password.clone();
     let crypto = state.crypto.clone();
     let ok = tokio::task::spawn_blocking(move || crypto.passwords.verify(&password, &phc)).await?;

@@ -12,6 +12,14 @@ discovery.docker "compose" {
 discovery.relabel "compose" {
 	targets = []
 
+	// Loki's and Alloy's own logs stay in `docker logs`: shipped to Loki, an ingestion error
+	// produced more error lines to ship, and a restarting Loki was fed its own backlog.
+	rule {
+		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+		regex         = "loki|alloy"
+		action        = "drop"
+	}
+
 	rule {
 		source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
 		target_label  = "service"

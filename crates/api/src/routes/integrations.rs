@@ -182,7 +182,7 @@ async fn put_webhook(
         &state.pool,
         company,
         &url,
-        &seal_secret(&state.crypto, company, &secret),
+        &seal_secret(&state.crypto, company, &secret)?,
         &signature::secret_hint(&secret),
     )
     .await?;
@@ -233,7 +233,7 @@ async fn rotate_webhook_secret(
     let rotated = db::integrations::rotate_webhook_secret(
         &state.pool,
         company,
-        &seal_secret(&state.crypto, company, &secret),
+        &seal_secret(&state.crypto, company, &secret)?,
         &signature::secret_hint(&secret),
         Utc::now() + Duration::hours(dispatcher::ROTATION_OVERLAP_HOURS),
     )
@@ -278,7 +278,7 @@ async fn send_test_event(
         )
         .await?;
     if hits.over(TEST_EVENTS_PER_MINUTE) {
-        return Err(ApiError::rate_limited(hits.retry_after));
+        return Err(ApiError::rate_limited("webhook_test", hits.retry_after));
     }
     if !db::integrations::webhook_enabled(&state.pool, company).await? {
         return Err(ApiError::not_found().with_detail("Вебхук не настроен"));

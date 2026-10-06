@@ -156,7 +156,7 @@ pub fn summary_view(
 
 /// Employer-facing proctoring mark of the test behind the current category. No session id and
 /// no link: the video stays out of reach until and after «Принять», like the contacts (V-2).
-#[derive(Serialize, ToSchema)]
+#[derive(Clone, Serialize, ToSchema)]
 pub struct ProctoringBadge {
     pub status: ProctoringStatus,
     /// Times the candidate left the test tab or window.
@@ -197,7 +197,12 @@ fn context(session: Uuid, seq: u32) -> [u8; 30] {
     c
 }
 
-pub fn seal(crypto: &Crypto, session: Uuid, seq: u32, chunk: &[u8]) -> Vec<u8> {
+pub fn seal(
+    crypto: &Crypto,
+    session: Uuid,
+    seq: u32,
+    chunk: &[u8],
+) -> Result<Vec<u8>, CryptoError> {
     crypto.fields.encrypt_bound(chunk, &context(session, seq))
 }
 
@@ -406,7 +411,7 @@ mod tests {
     fn chunk_is_bound_to_session_and_position() {
         let crypto = Crypto::new(&[3; 32], &[4; 32]);
         let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
-        let sealed = seal(&crypto, a, 0, b"webm");
+        let sealed = seal(&crypto, a, 0, b"webm").unwrap();
         assert_eq!(open(&crypto, a, 0, &sealed).unwrap(), b"webm");
         assert!(open(&crypto, a, 1, &sealed).is_err());
         assert!(open(&crypto, b, 0, &sealed).is_err());

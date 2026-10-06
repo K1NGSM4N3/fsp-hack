@@ -77,9 +77,10 @@ async fn create_report(
         let wait = recent
             .first_slot_frees_at
             .map_or(0, |at| (at - Utc::now()).num_seconds());
-        return Err(ApiError::rate_limited(Duration::from_secs(
-            wait.max(1).unsigned_abs(),
-        )));
+        return Err(ApiError::rate_limited(
+            "reports",
+            Duration::from_secs(wait.max(1).unsigned_abs()),
+        ));
     }
     let kind = match r.target_kind {
         ReportTarget::Vacancy => "vacancy",

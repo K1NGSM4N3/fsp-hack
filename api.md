@@ -48,7 +48,7 @@
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
 | POST | `/api/v1/auth/register` | 🅰 | `{email, password, role, consents[], company_name?, age?, minor?}` → 201, письмо с подтверждением (ссылка живёт 24 ч). Все обязательные для роли документы — в `consents`, иначе 422 `consents`; занятый email — 409 `email_taken`; 20 регистраций в час с IP. Работодатель обязан передать `company_name`. Кандидат обязан передать `age`: `adult` — больше ничего; `minor` — `minor: {birth_date, guardian: {full_name, email}}`, дата рождения должна давать 14–17 лет, почта представителя ≠ своя (422 `age`, `minor`, `minor.birth_date`, `minor.guardian.*`). Работодатель — 18+ по декларации в форме, `age` не нужен. Возраст пишется в `age_bracket` выданных согласий | ✅ |
-| POST | `/api/v1/auth/verify-email` | 🅰 | `{token}` → подтверждает email; у кандидата 14–17 лет — отправляет письмо законному представителю | ✅ |
+| POST | `/api/v1/auth/verify-email` | 🅰 | `{token}` → подтверждает email; у кандидата 14–17 лет — отправляет письмо законному представителю. 400 `invalid_token` — ссылка недействительна, устарела или уже использована | ✅ |
 | POST | `/api/v1/auth/resend-verification` | 🅰 | `{email}` → 204 всегда (не раскрываем наличие); 3 письма в час на адрес | ✅ |
 | POST | `/api/v1/auth/login` | 🅰 | `{email, password}` → cookie + `{access_token, expires_in, user}`. 401 `invalid_credentials`, 403 `email_not_verified`; 10 попыток за 15 минут на пару IP + email | ✅ |
 | POST | `/api/v1/auth/refresh` | 🅰 | По cookie `fsp_rt` → новая пара | ✅ |
@@ -69,7 +69,7 @@
 | GET | `/api/v1/candidate/profile.pdf` | 🅲 | Стандартизированный PDF-профиль | ✅ |
 | GET / PUT | `/api/v1/candidate/privacy` | 🅲 | Что видно работодателю, статус поиска. `visible: true` без действующих `pd_processing` и `pd_publication` → 409 `consent_required`, в problem — `document_id` и `document_kind` текущей редакции, которую нужно принять. До 18 лет без действующего `guardian_consent` → 409 `guardian_consent_required` | ✅ |
 | GET | `/api/v1/candidate/guardian` | 🅲 | Согласие законного представителя: `required` (младше 18 сегодня), `adult_from`, `state` (`pending`, `expired`, `granted`, `declined`, `revoked`; `null`, пока запроса нет — в `/me` это `not_sent`), ФИО и email представителя, даты письма, ответа, отзыва. У взрослых — `required: false` | ✅ |
-| POST | `/api/v1/candidate/guardian/resend` | 🅲 | Письмо представителю ещё раз с новыми ссылками (старые гаснут); после отказа или отзыва — новый запрос тому же человеку. 409 `guardian_not_needed`, `guardian_already_confirmed`, `guardian_missing`; 429 — больше 3 писем в час от подростка или 5 в сутки на один адрес | ✅ |
+| POST | `/api/v1/candidate/guardian/resend` | 🅲 | Письмо представителю ещё раз с новыми ссылками (старые гаснут); после отказа или отзыва — новый запрос тому же человеку. 409 `guardian_not_needed`, `guardian_already_confirmed`, `guardian_missing`, `guardian_already_answered` (представитель ответил, пока готовилось письмо); 429 — больше 3 писем в час от подростка или 5 в сутки на один адрес | ✅ |
 | PUT | `/api/v1/candidate/guardian` | 🅲 | `{full_name, email}` — другой представитель или адрес, сразу письмо. 422 (в т. ч. своя почта), 409, 429 — как выше | ✅ |
 | GET | `/api/v1/candidate/contact-access` | 🅲 | «Кто открывал ваши контакты»: компания (`company_name: null`, если она удалила аккаунт), время, основание `invitation` / `application`, канал `channel`: `cabinet` / `api` / `webhook` (передано в ATS компании); новые сверху, до 500 записей. Сотрудник, IP и браузер в ответ не входят | ✅ |
 | GET | `/api/v1/me` → `candidate.onboarding_step` | 🅲 | Шаг пути: профиль → опрос → тест → категория (отдельного эндпоинта нет) | ✅ |
@@ -87,10 +87,10 @@
 | POST | `/api/v1/candidate/invitations/{id}/decline` | 🅲 | `{reason, comment?}` → `declined`; `reason`: `salary`, `stack`, `format`, `company`, `not_looking`, `other`, комментарий до 1000 символов. `not_looking` закрывает статус поиска. 409 `invitation_closed` | ✅ |
 | GET | `/api/v1/candidate/market` | 🅲 | Анонимный спрос в своей категории; сколько компаний открывали профиль за 30 дней. 409 `no_category` — категории ещё нет | ✅ |
 | GET | `/api/v1/candidate/applications` | 🅲 | Свои отклики; `outcomes` — этапы найма от ATS компании | ✅ |
-| POST | `/api/v1/candidate/applications/{id}/withdraw` | 🅲 | Отозвать отклик | ✅ |
+| POST | `/api/v1/candidate/applications/{id}/withdraw` | 🅲 | Отозвать отклик; 409 `application_closed` — отклик уже рассмотрен или отозван | ✅ |
 | GET | `/api/v1/candidate/tasks` | 🅲 | Регулярные задания | ✅ |
-| POST | `/api/v1/candidate/tasks/{id}/submit` | 🅲 | Решение или подход | ✅ |
-| POST | `/api/v1/candidate/tasks/{id}/skip` | 🅲 | Пропустить задание | ✅ |
+| POST | `/api/v1/candidate/tasks/{id}/submit` | 🅲 | Решение или подход; 409 `task_closed` — задание закрыто или просрочено | ✅ |
+| POST | `/api/v1/candidate/tasks/{id}/skip` | 🅲 | Пропустить задание; 409 `task_closed` | ✅ |
 
 ## Прокторинг теста
 
@@ -204,7 +204,7 @@
 |---|---|---|---|---|
 | GET | `/api/v1/vacancies` | 🅰 | Опубликованные вакансии с фильтрами; `company_verified_domain` → отметка «Домен подтверждён» (также в `GET /candidate/invitations`) | ✅ |
 | GET | `/api/v1/vacancies/{id}` | 🅰 | Вакансия | ✅ |
-| POST | `/api/v1/vacancies/{id}/applications` | 🅲 | Откликнуться `{cover_letter?}`. До 18 лет — только с действующим согласием представителя, иначе 409 `guardian_consent_required`: отклик открывает компании контакты | ✅ |
+| POST | `/api/v1/vacancies/{id}/applications` | 🅲 | Откликнуться `{cover_letter?}`. До 18 лет — только с действующим согласием представителя, иначе 409 `guardian_consent_required`: отклик открывает компании контакты; 409 `already_applied` — отклик уже есть | ✅ |
 | POST | `/api/v1/reports` | 🅼 | Жалоба на вакансию, приглашение или компанию (до 20 в сутки) | ✅ |
 
 ## Согласие законного представителя
@@ -222,7 +222,7 @@
 
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
-| POST | `/api/v1/eval/pairs` | 🅰 | `{vacancies: [{id, text, …}], candidates: [{id, resume_text, …}], labels?: [{vacancy_id, candidate_id, relevance 0–3}], k?, now?}` → как распознана каждая вакансия, топ-k нашего подбора с объяснениями и топ-k базовой линии «ключевые слова + стаж», Precision@5/@k, nDCG@k, MAP, MRR по вакансиям и в среднем, покрытие. Тело ≤ 8 МиБ (413 `payload_too_large`), ≤ 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты ≤ 20 000 символов (422 `validation_failed`, поле в `errors`); JSON не по схеме — 400/422 `invalid_json`, не JSON — 415 `unsupported_media_type`; `k` — 1–20, по умолчанию 10; 10 запросов за 10 минут с IP (429). Достижения ФСП кандидата (`fsp_achievements`) подтверждают навыки по тому же правилу, что в API | ✅ |
+| POST | `/api/v1/eval/pairs` | 🅰 | `{vacancies: [{id, text, …}], candidates: [{id, resume_text, …}], labels?: [{vacancy_id, candidate_id, relevance 0–3}], k?, now?}` → как распознана каждая вакансия, топ-k нашего подбора с объяснениями и топ-k базовой линии «ключевые слова + стаж», Precision@5/@k, nDCG@k, MAP, MRR по вакансиям и в среднем, покрытие. Тело ≤ 8 МиБ (413 `payload_too_large`), ≤ 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты ≤ 20 000 символов (422 `validation_failed`, поле в `errors`); синтаксическая ошибка JSON — 400, JSON не по схеме — 422 `invalid_json`, не тот `Content-Type` — 415 `unsupported_media_type`; `k` — 1–20, по умолчанию 10; 10 запросов за 10 минут с IP (429). Достижения ФСП кандидата (`fsp_achievements`) подтверждают навыки по тому же правилу, что в API | ✅ |
 
 ## Статусы
 

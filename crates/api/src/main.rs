@@ -87,6 +87,8 @@ async fn main() -> Result<(), StartupError> {
     if command == "seed" {
         return Ok(());
     }
+    // Before anything records: counters resolved earlier would stay bound to no recorder.
+    let metrics = api::metrics::install()?;
 
     api::guardian::spawn_sweeper(pool.clone());
     let recordings = Arc::new(RecordingStore::new(config.proctoring.dir.clone()));
@@ -127,7 +129,7 @@ async fn main() -> Result<(), StartupError> {
         http: reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()?,
-        metrics: Some(api::metrics::install()?),
+        metrics: Some(metrics),
         recordings,
         webhooks,
         pool,

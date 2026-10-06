@@ -12,6 +12,3 @@ chrono.workspace = true
 serde.workspace = true
 serde_json = { workspace = true, features = ["raw_value"] }
 uuid.workspace = true
-
-[dev-dependencies]
-tokio.workspace = true

@@ -1,9 +1,10 @@
 //! The candidate pool behind shortlists, bank search and category cards. Each specialization's
 //! searchable candidates are loaded once into a [`SpecPool`] (compact scoring data only) and cached
 //! by [`crate::cache::CandidateCache`]; a request filters it in memory and attaches its own text
-//! relevance. Display data is fetched later for the final top-N only.
+//! relevance. Display data is read for the final top-N only and kept in the same snapshot
+//! ([`crate::cards`]).
 
-use std::{hash::BuildHasher, sync::Arc};
+use std::{hash::BuildHasher, pin::pin, sync::Arc};
 
 use arc_swap::ArcSwapOption;
 use catalog::{Category, Grade, Industry, Specialization, WorkFormat};
@@ -14,7 +15,9 @@ use matching::{
 use sqlx::PgPool;
 use uuid::Uuid;
 
-use crate::{dto::parse_slugs, error::ApiResult, state::AppState};
+use crate::{
+    cache::Flight, cards::CachedCard, dto::parse_slugs, error::ApiResult, state::AppState,
+};
 
 /// Distinct need texts whose ranks a snapshot keeps; a direct-mapped table, so a new text evicts
 /// the one in its slot.
@@ -46,7 +49,13 @@ pub struct SpecPool {
     /// Bit per candidate: under 18 when loaded (present only with the representative's consent).
     minors: Vec<u64>,
     texts: [ArcSwapOption<TextRanks>; TEXT_SLOTS],
+    /// One ranking query per slot at a time: right after a reload every request of the need
+    /// misses the same slot.
+    text_flights: [Flight; TEXT_SLOTS],
     hasher: std::hash::RandomState,
+    /// Employer card of each candidate, by index, filled on first display: cold data, kept apart
+    /// from the scoring pool and dropped with the snapshot.
+    cards: Box<[ArcSwapOption<CachedCard>]>,
 }
 
 /// Raw `ts_rank_cd` per snapshot index for one query; 0 where the text does not match.
@@ -109,11 +118,27 @@ impl SpecPool {
         );
         Ok(Self {
             pool: CandidatePool::from_snapshots(&snapshots),
+            cards: ids.iter().map(|_| ArcSwapOption::empty()).collect(),
             ids,
             minors,
             texts: Default::default(),
+            text_flights: Default::default(),
             hasher: std::hash::RandomState::new(),
         })
+    }
+
+    pub fn card(&self, id: Uuid) -> Option<Arc<CachedCard>> {
+        let i = self.ids.binary_search(&id).ok()?;
+        self.cards.get(i)?.load_full()
+    }
+
+    /// Remembers a card of a candidate in this snapshot; others are not kept.
+    pub fn keep_card(&self, id: Uuid, card: impl FnOnce() -> CachedCard) {
+        if let Ok(i) = self.ids.binary_search(&id)
+            && let Some(slot) = self.cards.get(i)
+        {
+            slot.store(Some(Arc::new(card())));
+        }
     }
 
     fn is_minor(&self, index: usize) -> bool {
@@ -130,24 +155,37 @@ impl SpecPool {
         spec: Specialization,
         query: String,
     ) -> ApiResult<Arc<TextRanks>> {
-        let slot = &self.texts[self.hasher.hash_one(&query) as usize % TEXT_SLOTS];
-        if let Some(cached) = slot.load_full()
-            && *cached.query == *query
-        {
-            return Ok(cached);
-        }
-        let mut ranks = vec![0f32; self.ids.len()];
-        for r in db::pool::text_ranks(pg, spec.slug(), &query).await? {
-            if let Ok(i) = self.ids.binary_search(&r.user_id) {
-                ranks[i] = r.rank;
+        let i = self.hasher.hash_one(&query) as usize % TEXT_SLOTS;
+        let (slot, flight) = (&self.texts[i], &self.text_flights[i]);
+        let cached = || slot.load_full().filter(|c| *c.query == *query);
+        loop {
+            if let Some(ranks) = cached() {
+                return Ok(ranks);
             }
+            let mut landed = pin!(flight.landed());
+            landed.as_mut().enable();
+            if let Some(_lead) = flight.lead() {
+                if let Some(ranks) = cached() {
+                    return Ok(ranks);
+                }
+                let mut ranks = vec![0f32; self.ids.len()];
+                for r in db::pool::text_ranks(pg, spec.slug(), &query).await? {
+                    if let Ok(i) = self.ids.binary_search(&r.user_id) {
+                        ranks[i] = r.rank;
+                    }
+                }
+                let computed = Arc::new(TextRanks {
+                    query: query.into_boxed_str(),
+                    ranks: ranks.into_boxed_slice(),
+                });
+                slot.store(Some(Arc::clone(&computed)));
+                return Ok(computed);
+            }
+            if let Some(ranks) = cached() {
+                return Ok(ranks);
+            }
+            landed.await;
         }
-        let computed = Arc::new(TextRanks {
-            query: query.into_boxed_str(),
-            ranks: ranks.into_boxed_slice(),
-        });
-        slot.store(Some(Arc::clone(&computed)));
-        Ok(computed)
     }
 }
 

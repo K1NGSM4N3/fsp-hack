@@ -204,7 +204,10 @@ pub async fn has_open_assignment(
     .await
 }
 
-/// Oldest active task for the candidate's category that they have not seen yet; skills overlap first.
+/// Oldest active task for the candidate's category that they have not seen yet; the most
+/// overlapping skills first. Overlap counts distinct skills (one skill held from several sources
+/// is still one), and FSP-confirmed skills only while the candidate shows FSP data — the rule of
+/// [`crate::pool::searchable_pool`].
 pub async fn pick_task_for(
     db: impl PgExecutor<'_>,
     candidate_id: Uuid,
@@ -217,8 +220,9 @@ pub async fn pick_task_for(
            AND t.specialization = c.specialization
            AND c.grade = ANY (t.grades)
            AND NOT EXISTS (SELECT 1 FROM task_assignments a WHERE a.task_id = t.id AND a.candidate_id = c.user_id)
-         ORDER BY (SELECT count(*) FROM candidate_skills s
-                    WHERE s.candidate_id = c.user_id AND s.skill = ANY (t.skills)) DESC,
+         ORDER BY (SELECT count(DISTINCT s.skill) FROM candidate_skills s
+                    WHERE s.candidate_id = c.user_id AND s.skill = ANY (t.skills)
+                      AND (s.source <> 'fsp' OR c.show_fsp)) DESC,
                   t.created_at
          LIMIT 1",
         candidate_id,

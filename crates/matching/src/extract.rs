@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 use crate::lexicon;
 use crate::skills::{self, SkillId};
 
+/// For the constant patterns of this module only; `static_patterns_compile` builds every one,
+/// so a typo fails the tests instead of a request.
 fn re(pattern: &str) -> Regex {
     Regex::new(pattern).expect("static regex is valid")
 }
@@ -374,6 +376,19 @@ mod tests {
 
     fn sal(s: &str) -> Option<(Option<i64>, Option<i64>)> {
         salary(&fold(s)).map(|r| (r.min, r.max))
+    }
+
+    #[test]
+    fn static_patterns_compile() {
+        for p in [
+            &SALARY,
+            &EXPERIENCE_TOTAL,
+            &EXPERIENCE_BEFORE,
+            &EXPERIENCE_AFTER,
+            &DATE_RANGE,
+        ] {
+            LazyLock::force(p);
+        }
     }
 
     #[test]

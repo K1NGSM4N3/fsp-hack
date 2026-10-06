@@ -260,7 +260,7 @@ fn payload_context(id: Uuid) -> Vec<u8> {
     ctx
 }
 
-pub fn seal_payload(crypto: &Crypto, id: Uuid, body: &[u8]) -> Vec<u8> {
+pub fn seal_payload(crypto: &Crypto, id: Uuid, body: &[u8]) -> Result<Vec<u8>, CryptoError> {
     crypto.fields.encrypt_bound(body, &payload_context(id))
 }
 
@@ -512,7 +512,7 @@ impl<'a> Outbox<'a> {
                 company_id,
                 candidate_id,
                 event_type: kind.as_str(),
-                payload_enc: &seal_payload(self.crypto, id, &body),
+                payload_enc: &seal_payload(self.crypto, id, &body)?,
                 next_attempt_at,
                 deadline_at: created_at + Duration::hours(DELIVERY_WINDOW_HOURS),
             },
@@ -675,7 +675,7 @@ mod tests {
     fn sealed_payload_is_bound_to_its_event() {
         let crypto = Crypto::new(&[3; 32], &[4; 32]);
         let (a, b) = (Uuid::now_v7(), Uuid::now_v7());
-        let sealed = seal_payload(&crypto, a, b"{\"x\":1}");
+        let sealed = seal_payload(&crypto, a, b"{\"x\":1}").unwrap();
         assert_eq!(open_payload(&crypto, a, &sealed).unwrap(), b"{\"x\":1}");
         assert!(open_payload(&crypto, b, &sealed).is_err());
     }

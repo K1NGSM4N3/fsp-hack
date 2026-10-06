@@ -100,6 +100,8 @@ const ROLE_WORDS: &[&str] = &[
 static ROLE_MATCHER: LazyLock<Matcher<()>> =
     LazyLock::new(|| Matcher::new(ROLE_WORDS.iter().map(|w| (*w, ()))));
 
+/// For the constant patterns of this module only; `static_patterns_compile` builds every one,
+/// so a typo fails the tests instead of a request.
 fn re(pattern: &str) -> Regex {
     Regex::new(pattern).expect("static regex is valid")
 }
@@ -372,6 +374,21 @@ pub fn parse_resume(text: &str, now_unix: i64) -> ParsedResume {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn static_patterns_compile() {
+        for p in [
+            &EMAIL,
+            &PHONE,
+            &TG_LINK,
+            &TG_LABEL,
+            &TG_BARE,
+            &NAME_LABEL,
+            &PARENS,
+        ] {
+            LazyLock::force(p);
+        }
+    }
 
     #[test]
     fn phones_normalize_to_e164() {

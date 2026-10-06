@@ -271,7 +271,7 @@ async fn put_profile(
         &mut *tx,
         user.id,
         &db::candidates::ProfileUpdate {
-            full_name_enc: Some(&state.crypto.encrypt_str(full_name)),
+            full_name_enc: Some(&state.crypto.encrypt_str(full_name)?),
             contacts_enc: Some(&state.crypto.encrypt_json(&contacts)?),
             city: non_empty(p.city).as_deref(),
             relocation: p.relocation,
@@ -416,7 +416,10 @@ async fn contact_access(
 }
 
 #[derive(ToSchema)]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "never constructed: an OpenAPI schema of the multipart body"
+)]
 pub struct ResumeUpload {
     /// PDF up to 10 MB with a text layer.
     #[schema(format = Binary, value_type = String)]
