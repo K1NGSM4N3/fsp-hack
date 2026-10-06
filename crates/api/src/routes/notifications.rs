@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use crate::{
     auth::{AuthUser, Role},
+    dto::EmailStatus,
     error::{ApiError, ApiResult, Problem},
     extract::{Json, Query},
     notify::{
@@ -176,7 +177,7 @@ pub(crate) fn settings_view(role: Role, email_off: i32) -> NotificationSettings 
 }
 
 /// Your notifications, newest first. Keyset pagination: pass `next_cursor` as `cursor`
-#[utoipa::path(get, path = "/notifications", tag = TAG,
+#[utoipa::path(get, path = "/notifications", tag = TAG, operation_id = "list_notifications",
     params(FeedQuery),
     responses((status = 200, body = NotificationPage), (status = 401, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
@@ -204,7 +205,7 @@ async fn feed(
 }
 
 /// Mark items read: the listed `ids` or `all`. Returns the new unread count
-#[utoipa::path(post, path = "/notifications/read", tag = TAG,
+#[utoipa::path(post, path = "/notifications/read", tag = TAG, operation_id = "mark_notifications_read",
     request_body = MarkRead,
     responses(
         (status = 200, body = UnreadCount),
@@ -232,7 +233,7 @@ async fn mark_read(
 }
 
 /// Unread items for the badge: one indexed count, made to be polled
-#[utoipa::path(get, path = "/notifications/unread-count", tag = TAG,
+#[utoipa::path(get, path = "/notifications/unread-count", tag = TAG, operation_id = "unread_notifications",
     responses((status = 200, body = UnreadCount), (status = 401, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn unread_count(
@@ -244,7 +245,7 @@ async fn unread_count(
 }
 
 /// Which notifications also come by email. In-app is always on
-#[utoipa::path(get, path = "/notification-settings", tag = TAG,
+#[utoipa::path(get, path = "/notification-settings", tag = TAG, operation_id = "notification_settings",
     responses((status = 200, body = NotificationSettings), (status = 401, body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn settings(
@@ -257,7 +258,7 @@ async fn settings(
 
 /// Turn email on or off per kind; kinds not listed keep their setting. A letter already queued
 /// leaves out the kinds turned off before it is sent
-#[utoipa::path(put, path = "/notification-settings", tag = TAG,
+#[utoipa::path(put, path = "/notification-settings", tag = TAG, operation_id = "update_notification_settings",
     request_body = SettingsInput,
     responses(
         (status = 200, body = NotificationSettings),
@@ -301,7 +302,7 @@ fn scope_label(scope: Scope) -> (Option<NotificationKind>, String) {
 
 /// The letter's unsubscribe link opened in a browser: a GET never unsubscribes (RFC 8058 — mail
 /// scanners follow links), it leads to the page with the button
-#[utoipa::path(get, path = "/notifications/unsubscribe", tag = TAG,
+#[utoipa::path(get, path = "/notifications/unsubscribe", tag = TAG, operation_id = "unsubscribe_link",
     params(UnsubscribeQuery),
     responses(
         (status = 303, description = "To `/notifications/unsubscribe?token=…` on the site", headers(("Location" = String))),
@@ -332,7 +333,7 @@ fn invalid_token() -> ApiError {
 /// One-click unsubscribe (RFC 8058): the mail client POSTs `List-Unsubscribe=One-Click` here,
 /// the site's button POSTs the same. No session needed — the signed token names the account and
 /// the kind. Repeating it changes nothing
-#[utoipa::path(post, path = "/notifications/unsubscribe", tag = TAG,
+#[utoipa::path(post, path = "/notifications/unsubscribe", tag = TAG, operation_id = "unsubscribe",
     params(UnsubscribeQuery),
     responses(
         (status = 200, body = Unsubscribed),
@@ -366,8 +367,8 @@ async fn unsubscribe(
 #[derive(Serialize, ToSchema)]
 pub struct EmailRecord {
     pub id: Uuid,
-    /// `pending`, `sent`, `failed` or `skipped` (every kind in it was turned off meanwhile).
-    pub status: String,
+    /// `skipped`: every kind in it was turned off before it went out.
+    pub status: EmailStatus,
     pub items: i64,
     pub created_at: DateTime<Utc>,
     pub sent_at: Option<DateTime<Utc>>,
@@ -393,13 +394,7 @@ pub(crate) async fn export(state: &AppState, user: AuthUser) -> ApiResult<Notifi
             .into_iter()
             .map(|e| EmailRecord {
                 id: e.id,
-                status: match e.status {
-                    db::types::NotificationEmailStatus::Pending => "pending",
-                    db::types::NotificationEmailStatus::Sent => "sent",
-                    db::types::NotificationEmailStatus::Failed => "failed",
-                    db::types::NotificationEmailStatus::Skipped => "skipped",
-                }
-                .to_owned(),
+                status: e.status.into(),
                 items: e.items,
                 created_at: e.created_at,
                 sent_at: e.sent_at,

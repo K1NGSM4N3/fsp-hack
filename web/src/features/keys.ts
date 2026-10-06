@@ -47,6 +47,12 @@ export const qk = {
   deliveries: ["employer", "integrations", "deliveries"] as const,
   apiKeys: ["employer", "integrations", "keys"] as const,
 
+  notifications: ["notifications"] as const,
+  notificationFeed: (unread: boolean) => ["notifications", "feed", unread] as const,
+  notificationsLatest: ["notifications", "latest"] as const,
+  unreadCount: ["notifications", "unread"] as const,
+  notificationSettings: ["notification-settings"] as const,
+
   vacancies: (p: VacancyQuery) => ["vacancies", p] as const,
   vacancy: (id: string) => ["vacancies", "one", id] as const,
 };

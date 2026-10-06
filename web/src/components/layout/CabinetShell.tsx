@@ -9,6 +9,7 @@ import type { Role } from "@/api/types";
 import { Logo } from "@/components/brand/Logo";
 import { Button, IconButton, PageSkeleton } from "@/components/ui";
 import { useLogout, useMe } from "@/features/auth/hooks";
+import { NotificationBell, NotificationWatcher } from "@/features/notifications/components/NotificationBell";
 import { cn } from "@/lib/cn";
 import { initials } from "@/lib/format";
 
@@ -170,20 +171,27 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-line bg-white/90 px-4 backdrop-blur-xl lg:hidden print:hidden">
           <Logo href={ROLE_HOME[role]} />
-          <IconButton label="Открыть меню" onClick={() => setDrawer(true)} aria-expanded={drawer}>
-            <Menu className="size-5" aria-hidden />
-          </IconButton>
+          <div className="flex items-center gap-1">
+            <NotificationBell role={role} />
+            <IconButton label="Открыть меню" onClick={() => setDrawer(true)} aria-expanded={drawer}>
+              <Menu className="size-5" aria-hidden />
+            </IconButton>
+          </div>
         </header>
+        <NotificationWatcher role={role} />
         <div className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b border-line bg-white/80 px-10 backdrop-blur-xl lg:flex print:hidden">
           <p className="flex min-w-0 items-center gap-2 text-sm">
             <span className="text-ink-subtle">{ROLE_CABINET[role]}</span>
             <span aria-hidden className="text-line-strong">/</span>
-            <span className="truncate font-medium text-ink">{current?.label ?? "Раздел"}</span>
+            <span className="truncate font-medium text-ink">{current?.label ?? (pathname.endsWith("/notifications") ? "Уведомления" : "Раздел")}</span>
           </p>
-          <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-xs text-ink-muted">
-            <span className="size-1.5 rounded-full bg-success" aria-hidden />
-            {me.data?.role === "candidate" && me.data.candidate?.category ? "Категория подтверждена" : ROLE_LABEL[role]}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-xs text-ink-muted">
+              <span className="size-1.5 rounded-full bg-success" aria-hidden />
+              {me.data?.role === "candidate" && me.data.candidate?.category ? "Категория подтверждена" : ROLE_LABEL[role]}
+            </span>
+            <NotificationBell role={role} />
+          </div>
         </div>
 
         {drawer && (

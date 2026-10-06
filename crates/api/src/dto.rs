@@ -30,6 +30,7 @@ mirror_enum!(TaskStatus => db::types::TaskAssignmentStatus { Assigned, Submitted
 mirror_enum!(VacancyStatus => db::types::VacancyStatus { Draft, Published, Closed });
 mirror_enum!(HiringStage => db::types::HiringStage { Interview, Offer, Hired, Rejected });
 mirror_enum!(DeliveryStatus => db::types::IntegrationEventStatus { Pending, Delivered, Failed });
+mirror_enum!(EmailStatus => db::types::NotificationEmailStatus { Pending, Sent, Failed, Skipped });
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]

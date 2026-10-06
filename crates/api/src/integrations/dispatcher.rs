@@ -31,7 +31,7 @@ const PURGE_EVERY: StdDuration = StdDuration::from_secs(3_600);
 /// After a rotation the old secret keeps signing for this long.
 pub const ROTATION_OVERLAP_HOURS: i64 = 24;
 /// The company hears about a failing webhook once an event has failed this many times in a row
-/// (about 36 minutes of failures), at most once a day.
+/// (the third attempt comes about 6 minutes after the first), at most once a day.
 pub const ALERT_AFTER_FAILURES: u16 = 3;
 
 pub fn backoff(failed_attempts: u16) -> Duration {

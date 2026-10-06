@@ -14,6 +14,7 @@ import { DataExportCard } from "@/features/auth/components/DataExportCard";
 import { useConsentDocuments, useDeleteAccount, useGrantConsent, useMe, useMyConsents, useRevokeConsent } from "@/features/auth/hooks";
 import { useContactAccess, useFspStatus, useFspSync, useFspUnlink, usePrivacy, useProfile, useUpdatePrivacy } from "@/features/candidate/hooks";
 import { LinkFspButton, SyncIcon } from "@/features/candidate/components/FspCard";
+import { NotificationSettingsCard } from "@/features/notifications/components/NotificationSettingsCard";
 import { formatDate, formatDateTime } from "@/lib/format";
 import { SEARCH_STATUS_LABEL } from "@/lib/labels";
 
@@ -457,6 +458,7 @@ export default function SettingsPage() {
         <FspSection />
         <ConsentsSection />
         <ContactAccessSection />
+        <NotificationSettingsCard />
         <DataExportCard description="JSON-файл со всем, что платформа хранит о вас: профиль, согласия, тесты и их итоги, история категории, приглашения, отклики, кто открывал контакты, сводки видеозаписи. Сами видеозаписи в файл не входят — их можно посмотреть в истории тестов." />
         <DangerZone />
       </div>
