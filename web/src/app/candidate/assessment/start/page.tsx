@@ -87,11 +87,14 @@ function Step() {
   const valid = grade && GRADES.includes(grade) && c.available.some((o) => o.grade === grade);
   if (!spec || !grade || !valid) {
     return (
-      <EmptyState
-        title="Этот тест сейчас недоступен"
-        description="Выберите грейд на странице тестирования."
-        action={<ButtonLink href="/candidate/assessment">К тестированию</ButtonLink>}
-      />
+      <div className="mx-auto max-w-3xl">
+        <PageHeader back={{ href: "/candidate/assessment", label: "Тестирование" }} title="Тест недоступен" />
+        <EmptyState
+          title="Этот тест сейчас недоступен"
+          description="Выберите грейд на странице тестирования."
+          action={<ButtonLink href="/candidate/assessment">К тестированию</ButtonLink>}
+        />
+      </div>
     );
   }
 
@@ -187,11 +190,11 @@ function Step() {
               label="Согласен(на) на видеозапись во время теста"
               description={
                 <>
-                  <button type="button" className="rounded text-primary hover:underline" onClick={() => setDocOpen(true)}>
+                  <button type="button" className="link-inline rounded" onClick={() => setDocOpen(true)}>
                     Текст согласия
                   </button>
                   {" · "}
-                  <Link href="/privacy#proctoring_video" target="_blank" className="text-primary hover:underline">
+                  <Link href="/privacy#proctoring_video" target="_blank" className="link-inline">
                     как мы храним запись
                   </Link>
                 </>

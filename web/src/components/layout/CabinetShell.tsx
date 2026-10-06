@@ -3,7 +3,7 @@
 import { ArrowUpRight, LogOut, Menu, RotateCcw, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isApiError, USE_MOCKS } from "@/api/client";
 import type { Role } from "@/api/types";
 import { Logo } from "@/components/brand/Logo";
@@ -67,8 +67,9 @@ function NavList({ nav, pathname, onNavigate }: { nav: NavItem[]; pathname: stri
                     </span>
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     {item.badge ? (
-                      <span className="tabular rounded-full bg-accent px-1.5 py-0.5 font-mono text-xs leading-none text-white" aria-label={`новых: ${item.badge}`}>
+                      <span className="tabular rounded-full bg-accent px-1.5 py-0.5 font-mono text-xs leading-none text-white">
                         {item.badge}
+                        <span className="sr-only"> новых</span>
                       </span>
                     ) : null}
                   </Link>
@@ -110,6 +111,7 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
   const me = useMe();
   const logout = useLogout();
   const [drawer, setDrawer] = useState(false);
+  const drawerRef = useRef<HTMLDialogElement>(null);
 
   const unauthorized = me.isError && isApiError(me.error) && me.error.status === 401;
   const wrongRole = me.data && me.data.role !== role;
@@ -126,6 +128,18 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
 
   const displayName = me.data?.company?.name ?? me.data?.email ?? "";
   const current = nav.find((item) => isActive(item, pathname));
+  const section = current?.label ?? "Раздел";
+
+  useEffect(() => {
+    document.title = `${section} · ${ROLE_CABINET[role]} · ФСП Таланты`;
+  }, [section, role]);
+
+  useEffect(() => {
+    const el = drawerRef.current;
+    if (!el) return;
+    if (drawer && !el.open) el.showModal();
+    if (!drawer && el.open) el.close();
+  }, [drawer]);
 
   const userBlock = (
     <div className="flex items-center gap-3 rounded-[14px] border border-night-line bg-white/[0.03] p-2.5">
@@ -174,22 +188,42 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
             <Menu className="size-5" aria-hidden />
           </IconButton>
         </header>
-        <div className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b border-line bg-white/80 px-10 backdrop-blur-xl lg:flex print:hidden">
-          <p className="flex min-w-0 items-center gap-2 text-sm">
-            <span className="text-ink-subtle">{ROLE_CABINET[role]}</span>
-            <span aria-hidden className="text-line-strong">/</span>
-            <span className="truncate font-medium text-ink">{current?.label ?? "Раздел"}</span>
-          </p>
+        <header className="sticky top-0 z-20 hidden h-14 items-center justify-between border-b border-line bg-white/80 px-10 backdrop-blur-xl lg:flex print:hidden">
+          <nav aria-label="Хлебные крошки" className="min-w-0">
+            <ol className="flex min-w-0 items-center gap-2 text-sm">
+              <li className="shrink-0">
+                <Link href={ROLE_HOME[role] ?? "/"} className="text-ink-subtle transition-colors hover:text-primary">
+                  {ROLE_CABINET[role]}
+                </Link>
+              </li>
+              <li aria-hidden className="text-line-strong">
+                /
+              </li>
+              <li className="min-w-0 truncate font-medium text-ink" aria-current="page">
+                {section}
+              </li>
+            </ol>
+          </nav>
           <span className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1 text-xs text-ink-muted">
             <span className="size-1.5 rounded-full bg-success" aria-hidden />
             {me.data?.role === "candidate" && me.data.candidate?.category ? "Категория подтверждена" : ROLE_LABEL[role]}
           </span>
-        </div>
+        </header>
 
-        {drawer && (
-          <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true" aria-label="Меню">
-            <button type="button" aria-label="Закрыть меню" className="absolute inset-0 animate-fade-in bg-night/50 backdrop-blur-sm" onClick={() => setDrawer(false)} />
-            <div className="absolute inset-y-0 right-0 flex w-[min(20rem,88vw)] animate-[toast-in_420ms_var(--ease-out-expo)_both] flex-col bg-night px-4 py-4 shadow-pop">
+        <dialog
+          ref={drawerRef}
+          aria-label="Меню кабинета"
+          onCancel={(e) => {
+            e.preventDefault();
+            setDrawer(false);
+          }}
+          onClick={(e) => {
+            if (e.target === drawerRef.current) setDrawer(false);
+          }}
+          className="fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none w-[min(20rem,88vw)] max-w-none bg-night p-0 text-white shadow-pop open:animate-[toast-in_420ms_var(--ease-out-expo)_both] lg:hidden"
+        >
+          {drawer && (
+            <div className="flex h-full flex-col px-4 py-4">
               <div className="mb-6 flex items-center justify-between">
                 <span className="font-mono text-xs tracking-[0.12em] text-night-faint uppercase">{ROLE_CABINET[role]}</span>
                 <IconButton label="Закрыть меню" onClick={() => setDrawer(false)} className="text-night-muted hover:bg-white/10 hover:text-white">
@@ -204,8 +238,8 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
                 {userBlock}
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </dialog>
 
         <main id="main" className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 print:max-w-none print:p-0">
           {me.isPending || unauthorized || wrongRole ? (

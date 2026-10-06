@@ -10,11 +10,12 @@ import { ScenePhone } from "@/components/site/home/ScenePhone";
 import { SideLines } from "@/components/site/home/SideLines";
 import { Marquee } from "@/components/site/Marquee";
 import { Container, Cta } from "@/components/site/primitives";
+import { PUBLIC_PAGES } from "@/lib/site";
 
 export const metadata: Metadata = {
-  title: { absolute: "ФСП Таланты · компании пишут первыми и сразу называют зарплату" },
-  description:
-    "Подбор ИТ-специалистов Федерации спортивного программирования России. Соискатель один раз проходит тест, компании пишут ему сами и в первом же сообщении называют зарплату от и до.",
+  title: { absolute: PUBLIC_PAGES.home.title },
+  description: PUBLIC_PAGES.home.description,
+  alternates: { canonical: "/" },
 };
 
 const SPECS = ["Бэкенд", "Фронтенд", "DevOps", "Тестирование", "Data Science", "Безопасность"];

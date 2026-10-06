@@ -4,6 +4,8 @@
  * The default Tailwind palette is disabled so no color can bypass the brand tokens.
  * Brand red #EC1D35 is only 4.4:1 on white (fails AA for body text), hence
  * accent-strong #D0142C (5.5:1) for red text and destructive buttons.
+ * Every text gray clears WCAG AA (4.5:1) on the surfaces it is used on: ink-subtle on surface #EDEDED (4.97),
+ * ink-faint on canvas #F6F6F7 (4.62), night-faint on night-soft and the footer glow (5.3).
  */
 @theme {
   --color-*: initial;
@@ -32,8 +34,8 @@
 
   --color-ink: #1b1c21;
   --color-ink-muted: #5a5c66;
-  --color-ink-subtle: #6b6e78;
-  --color-ink-faint: #9a9ca5;
+  --color-ink-subtle: #62656f;
+  --color-ink-faint: #6d6f79;
   --color-surface: #ededed;
   --color-canvas: #f6f6f7;
   --color-line: #e4e4e8;
@@ -44,7 +46,7 @@
   --color-night-soft: #1c1c28;
   --color-night-line: #2a2a3a;
   --color-night-muted: #a5a6b8;
-  --color-night-faint: #6f7086;
+  --color-night-faint: #8e8fa6;
 
   --color-success: #0e7a4b;
   --color-success-50: #e7f6ee;
@@ -152,6 +154,13 @@ body {
   outline: 2px solid var(--color-primary);
   outline-offset: 2px;
 }
+/* Brand blue is under 3:1 on the night surfaces, so the ring turns light there (WCAG 1.4.11). */
+:where(.bg-night, .bg-night-raised, .bg-night-soft) :focus-visible {
+  outline-color: var(--color-primary-300);
+}
+:where(.bg-primary) :focus-visible {
+  outline-color: var(--color-white);
+}
 
 ::selection {
   background: var(--color-primary-200);
@@ -224,6 +233,19 @@ html.lenis body {
     width: max(100%, 2.5rem);
     height: max(100%, 2.5rem);
     transform: translate(-50%, -50%);
+  }
+}
+
+/* A link inside running text: color alone is not enough to tell it apart (WCAG 1.4.1), so it keeps a soft underline. */
+@utility link-inline {
+  color: var(--color-primary);
+  text-decoration-line: underline;
+  text-decoration-thickness: 1px;
+  text-decoration-color: color-mix(in oklab, currentColor 40%, transparent);
+  text-underline-offset: 3px;
+  transition: text-decoration-color 150ms;
+  &:hover {
+    text-decoration-color: currentColor;
   }
 }
 

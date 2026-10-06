@@ -194,7 +194,7 @@ export function GuardianConfirm() {
         </h2>
         <p className="mt-1 text-sm text-ink-subtle">
           {v.document.title}, редакция {v.document.version} ·{" "}
-          <Link href="/privacy#guardian_consent" className="text-primary hover:underline">
+          <Link href="/privacy#guardian_consent" className="link-inline">
             политика обработки данных
           </Link>
         </p>

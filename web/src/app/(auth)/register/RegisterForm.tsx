@@ -202,7 +202,7 @@ export function RegisterForm() {
       <h1 className="text-[28px] leading-tight font-semibold tracking-[-0.03em] text-ink">Регистрация</h1>
       <p className="mt-2 text-sm text-ink-muted">
         Уже есть аккаунт?{" "}
-        <Link href="/login" className="font-medium text-primary hover:underline">
+        <Link href="/login" className="link-inline font-medium">
           Войти
         </Link>
       </p>
@@ -306,7 +306,7 @@ export function RegisterForm() {
                       label={
                         <>
                           Я принимаю: {d.title.charAt(0).toLowerCase() + d.title.slice(1)}{" "}
-                          <button type="button" className="inline font-medium text-primary underline-offset-2 hover:underline" onClick={() => setOpenDoc(d)}>
+                          <button type="button" className="link-inline inline font-medium" onClick={() => setOpenDoc(d)}>
                             (текст)
                           </button>
                         </>
@@ -314,7 +314,7 @@ export function RegisterForm() {
                       description={
                         <>
                           Редакция {d.version} ·{" "}
-                          <Link href={`/privacy#${d.kind}`} target="_blank" className="text-primary hover:underline">
+                          <Link href={`/privacy#${d.kind}`} target="_blank" className="link-inline">
                             на отдельной странице
                           </Link>
                         </>
@@ -328,7 +328,7 @@ export function RegisterForm() {
                   )}
                   <p className="text-xs text-ink-subtle">
                     Что мы храним, кому показываем и как всё удалить —{" "}
-                    <Link href="/privacy" target="_blank" className="font-medium text-primary hover:underline">
+                    <Link href="/privacy" target="_blank" className="link-inline font-medium">
                       в политике обработки персональных данных
                     </Link>
                     .

@@ -1,19 +1,22 @@
 "use client";
 
 import { Search, SearchX } from "lucide-react";
-import { useDeferredValue, useState } from "react";
-import type { Grade, Specialization, VacancyQuery, WorkFormat } from "@/api/types";
+import { useDeferredValue, useId, useState } from "react";
+import type { Grade, Page, PublicVacancy, Specialization, VacancyQuery, WorkFormat } from "@/api/types";
 import { Button, EmptyState, ErrorAlert, Field, Input, MoneyInput, Select, SkeletonCard } from "@/components/ui";
 import { useSkillNamePreload } from "@/features/catalog/hooks";
-import { useVacancies } from "@/features/vacancies/hooks";
+import { VACANCY_PAGE_SIZE } from "@/features/keys";
+import { useVacancies, type Seed } from "@/features/vacancies/hooks";
 import { pluralize } from "@/lib/format";
 import { GRADES, GRADE_LABEL, SPECIALIZATIONS, SPEC_LONG_LABEL, WORK_FORMATS, WORK_FORMAT_LABEL } from "@/lib/labels";
 import { VacancyCard } from "./VacancyCard";
 
-const PAGE = 10;
+const PAGE = VACANCY_PAGE_SIZE;
 
-export function VacancyBrowser({ hrefFor }: { hrefFor: (id: string) => string }) {
+/** `seed` is the unfiltered first page rendered on the server; any filter or "show more" fetches from the API. */
+export function VacancyBrowser({ hrefFor, seed }: { hrefFor: (id: string) => string; seed?: Seed<Page<PublicVacancy>> | null }) {
   useSkillNamePreload();
+  const listId = useId();
   const [q, setQ] = useState("");
   const [specialization, setSpecialization] = useState<Specialization | "">("");
   const [grade, setGrade] = useState<Grade | "">("");
@@ -31,7 +34,11 @@ export function VacancyBrowser({ hrefFor }: { hrefFor: (id: string) => string })
     limit,
     offset: 0,
   };
-  const query = useVacancies(params);
+  const unfiltered = !params.q && !params.specialization && !params.grade && !params.work_format && !params.salary_from && params.limit === PAGE;
+  // The server page is the answer to the unfiltered first page only; any other key must not start from it.
+  const query = useVacancies(params, unfiltered ? seed : null);
+  // Busy only while new filters or a longer page load; a background refresh of the server-rendered page is silent.
+  const changing = query.isFetching && query.isPlaceholderData;
   const reset = () => {
     setQ("");
     setSpecialization("");
@@ -88,7 +95,10 @@ export function VacancyBrowser({ hrefFor }: { hrefFor: (id: string) => string })
         )}
       </aside>
 
-      <section aria-label="Список вакансий" aria-busy={query.isFetching} className="min-w-0 space-y-4">
+      <section aria-labelledby={listId} aria-busy={changing} className="min-w-0 space-y-4">
+        <h2 id={listId} className="sr-only">
+          Список вакансий
+        </h2>
         {query.isPending ? (
           Array.from({ length: 3 }, (_, i) => <SkeletonCard key={i} />)
         ) : query.isError ? (
@@ -110,7 +120,7 @@ export function VacancyBrowser({ hrefFor }: { hrefFor: (id: string) => string })
             ))}
             {query.data.total > query.data.items.length && (
               <div className="flex justify-center pt-2">
-                <Button variant="secondary" loading={query.isFetching} onClick={() => setLimit((l) => l + PAGE)}>
+                <Button variant="secondary" loading={changing} onClick={() => setLimit((l) => l + PAGE)}>
                   Показать ещё
                 </Button>
               </div>

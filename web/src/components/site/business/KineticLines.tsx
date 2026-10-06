@@ -47,6 +47,19 @@ const LINES: Line[] = [
 const SIZE = "font-display text-[clamp(2rem,0.9rem+4.1vw,4.6rem)] leading-[1.02] font-semibold tracking-[-0.045em] text-balance";
 
 /**
+ * Server HTML holds each sentence once, in the filled layer: the outline under it is drawn from a data attribute by
+ * CSS, so crawlers and screen readers never get the text twice. Desktop splits the fill into letters for the scroll
+ * fill-in; the split copy is then hidden from screen readers and a plain sentence stands in for it.
+ */
+function readableCopy(el: HTMLElement): HTMLElement {
+  const copy = document.createElement("span");
+  copy.className = "sr-only";
+  copy.textContent = el.textContent;
+  el.after(copy);
+  return copy;
+}
+
+/**
  * Each benefit is one sentence drawn as an outline. Desktop: scrolling fills it in letter by letter.
  * Phones: no letter split; the filled copy fades in over the outline once, then the note rises.
  */
@@ -60,17 +73,19 @@ export function KineticLines() {
         for (const line of gsap.utils.toArray<HTMLElement>("[data-line]", root.current)) {
           gsap
             .timeline({ scrollTrigger: { trigger: line, start: "top 78%", once: true } })
-            .fromTo(line.querySelector("[data-fill-text]"), { autoAlpha: 0 }, { autoAlpha: 1, duration: 1.1, ease: "power1.inOut" })
-            .fromTo(line.querySelector("[data-note]"), { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.5);
+            .fromTo(line.querySelector("[data-fill-text]"), { opacity: 0 }, { opacity: 1, duration: 1.1, ease: "power1.inOut" })
+            .fromTo(line.querySelector("[data-note]"), { opacity: 0, y: 14 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.5);
         }
       });
       mm.add(MOTION_DESKTOP, () => {
+        const copies: HTMLElement[] = [];
         gsap.utils.toArray<HTMLElement>("[data-line]", root.current).forEach((line, i) => {
           const fill = line.querySelector<HTMLElement>("[data-fill-text]");
           const sentence = line.querySelector<HTMLElement>("[data-sentence]");
           const note = line.querySelector<HTMLElement>("[data-note]");
           if (!fill || !sentence) return;
-          const split = SplitText.create(fill, { type: "words,chars" });
+          copies.push(readableCopy(fill));
+          const split = SplitText.create(fill, { type: "words,chars", aria: "hidden" });
           gsap.fromTo(
             split.chars,
             { opacity: 0 },
@@ -84,11 +99,12 @@ export function KineticLines() {
           if (note) {
             gsap.fromTo(
               note,
-              { autoAlpha: 0, y: 18 },
-              { autoAlpha: 1, y: 0, duration: 0.8, ease: "expo.out", scrollTrigger: { trigger: line, start: "top 50%", toggleActions: "play none none reverse" } },
+              { opacity: 0, y: 18 },
+              { opacity: 1, y: 0, duration: 0.8, ease: "expo.out", scrollTrigger: { trigger: line, start: "top 50%", toggleActions: "play none none reverse" } },
             );
           }
         });
+        return () => copies.forEach((c) => c.remove());
       });
     },
     { scope: root },
@@ -107,11 +123,11 @@ export function KineticLines() {
               <span className="pt-2 font-mono text-sm text-night-faint">0{i + 1}</span>
               <div className="min-w-0">
                 <div data-sentence className="grid [grid-template-areas:'t'] *:[grid-area:t]">
-                  <p aria-hidden className={`${SIZE} text-transparent [-webkit-text-stroke:1px_rgb(169_163_255/0.4)]`}>
-                    {l.before}
-                    {l.key}
-                    {l.after}
-                  </p>
+                  <p
+                    aria-hidden
+                    data-outline={`${l.before}${l.key}${l.after}`}
+                    className={`${SIZE} text-transparent [-webkit-text-stroke:1px_rgb(169_163_255/0.55)] before:content-[attr(data-outline)]`}
+                  />
                   <p data-fill-text className={`${SIZE} text-white`}>
                     {l.before}
                     <span className="text-primary-300">{l.key}</span>

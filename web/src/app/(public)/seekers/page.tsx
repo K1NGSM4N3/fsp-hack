@@ -9,11 +9,11 @@ import { PrepChecklist } from "@/components/site/seekers/PrepChecklist";
 import { PrivacyPanel } from "@/components/site/seekers/PrivacyPanel";
 import { PushPhone } from "@/components/site/seekers/PushPhone";
 import { WeekStrip } from "@/components/site/seekers/WeekStrip";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { breadcrumbs } from "@/lib/jsonld";
+import { PUBLIC_PAGES, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: { absolute: "Соискателям · ФСП Таланты" },
-  description: "Короткий профиль, один тест на 10–25 минут и приглашения от компаний, где зарплата от и до указана в первом сообщении.",
-};
+export const metadata: Metadata = pageMetadata(PUBLIC_PAGES.seekers);
 
 const REGISTER = "/register?role=candidate";
 
@@ -221,6 +221,7 @@ function Prepare() {
 export default function SeekersPage() {
   return (
     <MotionRoot variant="rise">
+      <JsonLd data={breadcrumbs([PUBLIC_PAGES.seekers])} />
       <Hero />
       <Week />
       <Test />

@@ -38,10 +38,10 @@ export function Field({ label, hint, error, required = false, optional = false, 
   const id = useId();
   const hintId = hint ? `${id}-hint` : undefined;
   const errorId = error ? `${id}-error` : undefined;
-  const describedBy = [errorId, hintId].filter(Boolean).join(" ") || undefined;
+  const describedBy = errorId ?? hintId;
   return (
     <FieldContext.Provider value={{ id, describedBy, invalid: Boolean(error), required }}>
-      <div className={cn("flex min-w-0 flex-col gap-1.5", className)}>
+      <div data-field className={cn("flex min-w-0 flex-col gap-1.5", className)}>
         <div className="flex items-baseline justify-between gap-2">
           <label htmlFor={id} className="text-sm font-medium text-ink">
             {label}
@@ -56,7 +56,7 @@ export function Field({ label, hint, error, required = false, optional = false, 
         </div>
         {children}
         {error ? (
-          <p id={errorId} className="text-sm text-accent-strong" role="alert">
+          <p id={errorId} data-field-error className="text-sm text-accent-strong" role="alert">
             {error}
           </p>
         ) : hint ? (
@@ -82,7 +82,7 @@ interface FieldSetProps {
 export function FieldSet({ legend, hint, error, required, className, children }: FieldSetProps) {
   const id = useId();
   return (
-    <fieldset className={cn("flex min-w-0 flex-col gap-2", className)} aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}>
+    <fieldset data-field className={cn("flex min-w-0 flex-col gap-2", className)} aria-describedby={error ? `${id}-error` : hint ? `${id}-hint` : undefined}>
       <legend className="mb-1.5 text-sm font-medium text-ink">
         {legend}
         {required && (
@@ -93,7 +93,7 @@ export function FieldSet({ legend, hint, error, required, className, children }:
       </legend>
       {children}
       {error ? (
-        <p id={`${id}-error`} className="text-sm text-accent-strong" role="alert">
+        <p id={`${id}-error`} data-field-error className="text-sm text-accent-strong" role="alert">
           {error}
         </p>
       ) : hint ? (
@@ -105,5 +105,16 @@ export function FieldSet({ legend, hint, error, required, className, children }:
   );
 }
 
+/** After a failed submit: bring the first field with an error into view and put the caret in it. */
+export function focusFirstError(root: HTMLElement | null) {
+  requestAnimationFrame(() => {
+    const field = root?.querySelector("[data-field-error]")?.closest("[data-field]");
+    if (!field) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    field.scrollIntoView({ block: "center", behavior: still ? "auto" : "smooth" });
+    field.querySelector<HTMLElement>("input:not([type=hidden]), select, textarea, button")?.focus({ preventScroll: true });
+  });
+}
+
 export const controlBase =
-  "w-full rounded-control border border-line-strong bg-white text-ink placeholder:text-ink-faint transition-colors hover:border-ink-faint focus:border-primary focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-primary disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-subtle aria-[invalid=true]:border-accent-strong";
+  "w-full rounded-control border border-line-strong bg-white text-ink placeholder:text-ink-faint transition-colors hover:border-ink-faint/60 focus:border-primary focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-primary disabled:cursor-not-allowed disabled:bg-canvas disabled:text-ink-subtle aria-[invalid=true]:border-accent-strong";

@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Caddy compresses every response (zstd, then gzip); compressing here as well would hand it gzip it cannot improve.
   compress: false,
+  // Link previews of vacancies are rendered on request and read these fonts from disk.
+  outputFileTracingIncludes: { "/vacancies/*": ["./assets/og/*.ttf"] },
   async rewrites() {
     return [
       {

@@ -88,7 +88,7 @@ function CompanyForm({ company }: { company: Company }) {
                   Домен {company.verified_domain} подтверждён
                 </span>
               ) : (
-                <Link href="/employer/trust" className="text-primary hover:underline">
+                <Link href="/employer/trust" className="link-inline">
                   Сайт на домене вашей почты подтверждает компанию
                 </Link>
               )

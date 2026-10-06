@@ -32,7 +32,7 @@ export function FspAchievementList({ achievements, limit, className }: { achieve
                   .join(" · ")}
               </p>
               {a.protocol_url && (
-                <a href={a.protocol_url} target="_blank" rel="noreferrer" className="tap mt-0.5 inline-block text-xs text-primary underline-offset-2 hover:underline">
+                <a href={a.protocol_url} target="_blank" rel="noreferrer" className="link-inline tap mt-0.5 inline-block text-xs">
                   Протокол
                 </a>
               )}

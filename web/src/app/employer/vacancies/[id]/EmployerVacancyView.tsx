@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { EmployerApplicationStatus, IncomingApplication } from "@/api/types";
 import { CategoryBadge } from "@/components/domain/Category";
 import { ApplicationStatusBadge, VacancyStatusBadge } from "@/components/domain/StatusBadges";
-import { Button, EmptyState, ErrorAlert, PageHeader, PageSkeleton, SkeletonCard, Tabs, useToast } from "@/components/ui";
+import { Button, EmptyState, ErrorAlert, PageHeader, PageSkeleton, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
 import { useOwnVacancy, useSetApplicationStatus, useVacancyApplications } from "@/features/employer/hooks";
 import { VacancyForm } from "@/features/employer/components/VacancyForm";
 import { formatRelative } from "@/lib/format";
@@ -73,9 +73,10 @@ export function EmployerVacancyView({ id }: { id: string }) {
   if (q.isError) return <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />;
   const v = q.data;
   return (
-    <div className="max-w-4xl">
+    <div className="max-w-6xl">
       <PageHeader back={{ href: "/employer/vacancies", label: "Вакансии" }} eyebrow={<VacancyStatusBadge status={v.status} />} title={v.title} />
       <Tabs<View>
+        idPrefix="vacancy"
         ariaLabel="Раздел вакансии"
         value={view}
         onChange={setView}
@@ -85,7 +86,15 @@ export function EmployerVacancyView({ id }: { id: string }) {
           { value: "edit", label: "Редактирование" },
         ]}
       />
-      {view === "applications" ? <Applications vacancyId={v.id} /> : <VacancyForm vacancy={v} onSaved={() => setView("applications")} />}
+      <div {...tabPanelProps("vacancy", view)}>
+        {view === "applications" ? (
+          <div className="max-w-4xl">
+            <Applications vacancyId={v.id} />
+          </div>
+        ) : (
+          <VacancyForm vacancy={v} onSaved={() => setView("applications")} onCancel={() => setView("applications")} />
+        )}
+      </div>
     </div>
   );
 }

@@ -67,7 +67,7 @@ function PrivacySection() {
   const waitsForGuardian = age?.bracket === "minor" && age.guardian !== "granted";
   return (
     <>
-      <Card>
+      <Card id="search-status" className="scroll-mt-24">
         <CardHeader title="Статус поиска" description="Работодатели видят его в карточке" />
         <RadioCards<SearchStatus>
           name="search_status"
@@ -78,7 +78,7 @@ function PrivacySection() {
         />
       </Card>
 
-      <Card>
+      <Card id="visibility" className="scroll-mt-24">
         <CardHeader title="Что видят работодатели" description="До вашего согласия компании видят анонимную карточку. Контакты не видны никогда, пока вы не примете приглашение или не откликнетесь." />
         <div className="divide-y divide-line">
           <Switch
@@ -248,7 +248,7 @@ function ConsentsSection() {
         description={
           <>
             Обработка персональных данных по 152-ФЗ. Что и зачем мы храним —{" "}
-            <Link href="/privacy" className="text-primary hover:underline">
+            <Link href="/privacy" className="link-inline">
               в политике обработки данных
             </Link>
             .
@@ -398,7 +398,7 @@ function DangerZone() {
   const [open, setOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   return (
-    <Card className="border-accent-100">
+    <Card id="delete" className="scroll-mt-24 border-accent-100">
       <CardHeader title="Удаление аккаунта" description="Удалим профиль, результаты тестов и персональные данные. Действие необратимо." />
       <Button variant="danger" icon={<Trash2 className="size-4" aria-hidden />} onClick={() => setOpen(true)}>
         Удалить аккаунт
@@ -421,7 +421,7 @@ function DangerZone() {
       >
         <div className="space-y-4">
           <p className="text-sm text-ink-muted">Категория, история тестов, приглашения и отклики будут удалены. Связи с компаниями обезличатся.</p>
-          <Field label="Введите «удалить», чтобы подтвердить">
+          <Field label="Введите «удалить», чтобы подтвердить" hint="Так мы убедимся, что это не случайное нажатие">
             <Input value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoComplete="off" />
           </Field>
           {del.isError && <Alert tone="danger" title="Не удалось удалить аккаунт" />}
@@ -445,20 +445,107 @@ function FspCallbackToast() {
   return null;
 }
 
+const SECTIONS: { id: string; label: string; group: string }[] = [
+  { id: "search-status", label: "Статус поиска", group: "Поиск" },
+  { id: "visibility", label: "Что видят работодатели", group: "Поиск" },
+  { id: "fsp", label: "ФСП ID", group: "Профиль" },
+  { id: "consents", label: "Согласия", group: "Данные" },
+  { id: "contact-access", label: "Доступ к контактам", group: "Данные" },
+  { id: "data", label: "Выгрузка данных", group: "Данные" },
+  { id: "delete", label: "Удаление аккаунта", group: "Аккаунт" },
+];
+
+/** Section index with the section in view highlighted; a horizontal strip on phones. */
+function SectionNav() {
+  const [current, setCurrent] = useState(SECTIONS[0]?.id ?? "");
+  useEffect(() => {
+    // Measured on each scroll frame rather than observed once: sections replace their skeletons after mount.
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      let active = SECTIONS[0]?.id ?? "";
+      for (const s of SECTIONS) {
+        const el = document.getElementById(s.id);
+        if (el && el.getBoundingClientRect().top <= 140) active = s.id;
+      }
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4) active = SECTIONS.at(-1)?.id ?? active;
+      setCurrent(active);
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(update);
+    };
+    schedule();
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, []);
+  const groups = SECTIONS.reduce<{ group: string; items: typeof SECTIONS }[]>((acc, s) => {
+    const last = acc.at(-1);
+    if (last?.group === s.group) last.items.push(s);
+    else acc.push({ group: s.group, items: [s] });
+    return acc;
+  }, []);
+  const link = (s: (typeof SECTIONS)[number], className: string) => (
+    <a href={`#${s.id}`} aria-current={current === s.id ? "location" : undefined} onClick={() => setCurrent(s.id)} className={className}>
+      {s.label}
+    </a>
+  );
+  return (
+    <nav aria-label="Разделы настроек" className="min-w-0 lg:sticky lg:top-20 lg:self-start">
+      <ul className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden">
+        {SECTIONS.map((s) => (
+          <li key={s.id} className="shrink-0">
+            {link(
+              s,
+              "inline-flex h-10 items-center rounded-full border px-3.5 text-sm whitespace-nowrap transition-colors aria-[current=location]:border-primary aria-[current=location]:bg-primary-50 aria-[current=location]:text-primary-strong border-line bg-white text-ink-muted hover:text-ink",
+            )}
+          </li>
+        ))}
+      </ul>
+      <div className="hidden space-y-5 lg:block">
+        {groups.map((g) => (
+          <div key={g.group}>
+            <p className="eyebrow mb-1.5 px-3 text-ink-subtle">{g.group}</p>
+            <ul className="space-y-0.5">
+              {g.items.map((s) => (
+                <li key={s.id}>
+                  {link(
+                    s,
+                    "relative flex min-h-10 items-center rounded-control px-3 text-sm text-ink-muted transition-colors hover:bg-white hover:text-ink aria-[current=location]:bg-white aria-[current=location]:font-medium aria-[current=location]:text-ink aria-[current=location]:shadow-card",
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
 export default function SettingsPage() {
   return (
-    <div>
+    <div className="max-w-6xl">
       <Suspense>
         <FspCallbackToast />
       </Suspense>
-      <PageHeader title="Настройки" description="Приватность, статус поиска, ФСП ID, согласия и ваши данные." />
-      <div className="max-w-3xl space-y-6">
-        <PrivacySection />
-        <FspSection />
-        <ConsentsSection />
-        <ContactAccessSection />
-        <DataExportCard description="JSON-файл со всем, что платформа хранит о вас: профиль, согласия, тесты и их итоги, история категории, приглашения, отклики, кто открывал контакты, сводки видеозаписи. Сами видеозаписи в файл не входят — их можно посмотреть в истории тестов." />
-        <DangerZone />
+      <PageHeader eyebrow="Аккаунт" title="Настройки" description="Статус поиска и видимость профиля, ФСП ID, согласия на обработку данных и всё, что платформа о вас хранит." />
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
+        <SectionNav />
+        <div className="min-w-0 max-w-3xl space-y-6">
+          <PrivacySection />
+          <FspSection />
+          <ConsentsSection />
+          <ContactAccessSection />
+          <div id="data" className="scroll-mt-24">
+            <DataExportCard description="JSON-файл со всем, что платформа хранит о вас: профиль, согласия, тесты и их итоги, история категории, приглашения, отклики, кто открывал контакты, сводки видеозаписи. Сами видеозаписи в файл не входят — их можно посмотреть в истории тестов." />
+          </div>
+          <DangerZone />
+        </div>
       </div>
     </div>
   );

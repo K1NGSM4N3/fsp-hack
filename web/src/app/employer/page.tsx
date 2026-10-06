@@ -33,7 +33,7 @@ function HiringFunnel({ s }: { s: InvitationStats }) {
     return (
       <p className="mt-5 border-t border-line pt-4 text-sm text-ink-subtle">
         Что было после контакта — собеседование, оффер, найм — появится здесь, когда вы{" "}
-        <Link href="/employer/integrations" className="font-medium text-primary hover:underline">
+        <Link href="/employer/integrations" className="link-inline font-medium">
           подключите ATS
         </Link>
         .

@@ -4,7 +4,7 @@ import { ArrowLeftRight, Check, ChevronDown, Copy, KeyRound, Lock, RefreshCw, Ro
 import { useState, type ReactNode } from "react";
 import { isApiError } from "@/api/client";
 import type { ApiKeyView, ApiScope, DeliveryView, IntegrationEventType, IntegrationsOverview, TestDelivery } from "@/api/types";
-import { Alert, Badge, Button, Card, CardHeader, Checkbox, CodeBlock, Dialog, EmptyState, ErrorAlert, Field, Input, PageHeader, PageSkeleton, SkeletonCard, useToast } from "@/components/ui";
+import { Alert, Badge, Button, Card, CardHeader, Checkbox, CodeBlock, Dialog, EmptyState, ErrorAlert, Field, Input, PageHeader, PageSkeleton, SkeletonCard, ToggleChip, useToast } from "@/components/ui";
 import {
   useApiKeys,
   useCreateApiKey,
@@ -18,7 +18,7 @@ import {
   useSendTestEvent,
 } from "@/features/integrations/hooks";
 import { cn } from "@/lib/cn";
-import { formatDateTime, formatRelative } from "@/lib/format";
+import { formatDateTime, formatRelative, plural } from "@/lib/format";
 
 const EVENT_LABEL: Record<IntegrationEventType, string> = {
   "invitation.sent": "Приглашение отправлено",
@@ -65,13 +65,10 @@ function CopyField({ value, label, mono = true }: { value: string; label: string
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-stretch gap-2">
-      <code className={cn("min-w-0 flex-1 rounded-control border border-line bg-canvas px-3 py-2 text-[13px] break-all text-ink", mono && "font-mono")} aria-label={label}>
-        {value}
-      </code>
+      <code className={cn("min-w-0 flex-1 rounded-control border border-line bg-canvas px-3 py-2 text-[13px] break-all text-ink", mono && "font-mono")}>{value}</code>
       <Button
         variant="secondary"
         size="md"
-        aria-label={`Скопировать: ${label}`}
         icon={copied ? <Check className="size-4" aria-hidden /> : <Copy className="size-4" aria-hidden />}
         onClick={() => {
           void navigator.clipboard?.writeText(value).then(() => {
@@ -80,8 +77,12 @@ function CopyField({ value, label, mono = true }: { value: string; label: string
           });
         }}
       >
-        <span className="hidden sm:inline">{copied ? "Скопировано" : "Копировать"}</span>
+        <span className="max-sm:sr-only">{copied ? "Скопировано" : "Копировать"}</span>
+        <span className="sr-only">: {label}</span>
       </Button>
+      <span role="status" className="sr-only">
+        {copied ? `${label} в буфере обмена` : ""}
+      </span>
     </div>
   );
 }
@@ -395,10 +396,20 @@ function DeliveryRow({ d }: { d: DeliveryView }) {
   );
 }
 
+type DeliveryFilter = "all" | DeliveryView["status"];
+
+const FILTER_LABEL: Record<DeliveryFilter, string> = { all: "Все", delivered: "Доставлено", pending: "В очереди", failed: "Не доставлено" };
+const FIRST_PAGE = 8;
+
 function DeliveriesCard() {
   const q = useDeliveries();
+  const [filter, setFilter] = useState<DeliveryFilter>("all");
+  const [all, setAll] = useState(false);
+  const list = (q.data ?? []).filter((d) => filter === "all" || d.status === filter);
+  const shown = all ? list : list.slice(0, FIRST_PAGE);
+  const count = (f: DeliveryFilter) => (f === "all" ? (q.data?.length ?? 0) : (q.data ?? []).filter((d) => d.status === f).length);
   return (
-    <Card>
+    <Card id="deliveries" className="scroll-mt-24">
       <CardHeader title="Журнал доставок" description="Последние 50 событий. Неудачные повторяем через 1 мин, 5 мин, 30 мин, 2 ч и 12 ч; через сутки сдаёмся" />
       {q.isPending ? (
         <SkeletonCard lines={3} className="border-0 p-0" />
@@ -407,11 +418,39 @@ function DeliveriesCard() {
       ) : q.data.length === 0 ? (
         <EmptyState compact icon={<Webhook className="size-5" aria-hidden />} title="Событий пока нет" description="Подключите вебхук и нажмите «Тестовое событие» — оно появится здесь вместе с ответом вашей ATS." />
       ) : (
-        <ul className="divide-y divide-line">
-          {q.data.map((d) => (
-            <DeliveryRow key={d.event_id} d={d} />
-          ))}
-        </ul>
+        <>
+          <div role="group" aria-label="Фильтр по статусу доставки" className="mb-4 flex flex-wrap gap-2">
+            {(["all", "delivered", "pending", "failed"] as DeliveryFilter[]).map((f) => (
+              <ToggleChip
+                key={f}
+                selected={filter === f}
+                onToggle={() => {
+                  setFilter(f);
+                  setAll(false);
+                }}
+              >
+                {FILTER_LABEL[f]}
+                <span className="tabular font-mono text-xs opacity-80">{count(f)}</span>
+              </ToggleChip>
+            ))}
+          </div>
+          {list.length === 0 ? (
+            <p className="rounded-control bg-canvas px-4 py-3 text-sm text-ink-muted">Событий с таким статусом нет.</p>
+          ) : (
+            <ul className="divide-y divide-line">
+              {shown.map((d) => (
+                <DeliveryRow key={d.event_id} d={d} />
+              ))}
+            </ul>
+          )}
+          {list.length > FIRST_PAGE && (
+            <div className="mt-4 flex justify-center border-t border-line pt-4">
+              <Button variant="secondary" size="sm" onClick={() => setAll((v) => !v)} aria-expanded={all}>
+                {all ? "Свернуть" : `Показать все: ${list.length}`}
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </Card>
   );
@@ -549,7 +588,7 @@ function ApiKeysCard({ data }: { data: IntegrationsOverview }) {
         <CopyField value={data.api_base_url} label="Адрес API" />
         <p className="text-sm text-ink-muted">
           Методы и схемы событий —{" "}
-          <a href="/api/docs" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+          <a href="/api/docs" target="_blank" rel="noreferrer" className="link-inline font-medium">
             в Swagger, раздел «Интеграции ATS»
           </a>
           .
@@ -579,6 +618,22 @@ export default function IntegrationsPage() {
         }
         title="Интеграции"
         description="Подключите свою систему подбора: события о приглашениях и откликах придут туда сами, а этапы найма вернутся обратно к кандидату."
+        actions={
+          q.data ? (
+            <>
+              {q.data.webhook ? (
+                <Badge tone="success" dot>
+                  Вебхук подключён
+                </Badge>
+              ) : (
+                <Badge tone="muted">Вебхук не настроен</Badge>
+              )}
+              <Badge tone="neutral">
+                {q.data.active_keys} {plural(q.data.active_keys, ["ключ", "ключа", "ключей"])} API
+              </Badge>
+            </>
+          ) : undefined
+        }
       />
       {q.isPending ? (
         <PageSkeleton cards={3} />

@@ -6,7 +6,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import { isApiError } from "@/api/client";
 import type { Direction, Grade, Industry, Specialization, SurveyResponse } from "@/api/types";
 import { SkillInput } from "@/components/domain/Skills";
-import { Alert, Button, Card, ChipSelect, Field, FieldSet, Input, PageHeader, PageSkeleton, ProgressBar, RadioCards, ToggleChip, useToast } from "@/components/ui";
+import { Alert, Button, Card, Chip, ChipSelect, Field, FieldSet, Input, PageHeader, PageSkeleton, RadioCards, ToggleChip, useToast } from "@/components/ui";
 import { useCatalog, useTypicalSkills } from "@/features/catalog/hooks";
 import { useSubmitSurvey, useSurveyHistory } from "@/features/candidate/hooks";
 import { OnboardingStrip } from "@/features/candidate/components/Onboarding";
@@ -94,7 +94,7 @@ function History({ items }: { items: SurveyResponse[] }) {
   const [open, setOpen] = useState(false);
   if (!items.length) return null;
   return (
-    <Card className="mt-8">
+    <Card className="mt-8 xl:mr-[calc(19rem+1.5rem)]">
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 text-left">
         <span className="text-base font-semibold text-ink">История опросов</span>
         <ChevronDown className={cn("size-5 text-ink-subtle transition-transform", open && "rotate-180")} aria-hidden />
@@ -123,6 +123,95 @@ export default function SurveyPage() {
   return <SurveyWizard initial={fromHistory(history.data?.[0])} history={history.data ?? []} />;
 }
 
+function StepTrack({ step, reachable, onJump }: { step: number; reachable: number; onJump: (i: number) => void }) {
+  return (
+    <div>
+      <ol className="grid grid-cols-5 gap-1.5 sm:gap-2" aria-label="Шаги опроса">
+        {STEPS.map((label, i) => {
+          const state = i < step ? "done" : i === step ? "current" : "upcoming";
+          const bar = (
+            <>
+              <span aria-hidden className={cn("block h-1.5 rounded-full transition-colors", state === "upcoming" ? "bg-surface" : "bg-primary", state === "done" && "bg-primary/70")} />
+              <span className={cn("mt-2 hidden truncate text-xs sm:block", state === "current" ? "font-semibold text-ink" : state === "done" ? "text-ink-muted" : "text-ink-subtle")}>
+                <span className="tabular font-mono">{i + 1}</span> {label}
+              </span>
+              <span className="sr-only">
+                {i + 1}. {label}
+                {state === "done" ? " (заполнено)" : state === "current" ? " (текущий шаг)" : ""}
+              </span>
+            </>
+          );
+          return (
+            <li key={label} aria-current={state === "current" ? "step" : undefined} className="min-w-0">
+              {i !== step && i <= reachable ? (
+                <button type="button" onClick={() => onJump(i)} className="tap block w-full rounded text-left hover:[&>span:first-child]:bg-primary">
+                  {bar}
+                </button>
+              ) : (
+                <span className="block">{bar}</span>
+              )}
+            </li>
+          );
+        })}
+      </ol>
+      <p className="mt-3 flex items-center justify-between gap-3 text-sm sm:hidden" aria-hidden>
+        <span className="font-semibold text-ink">{STEPS[step]}</span>
+        <span className="tabular text-ink-subtle">
+          Шаг {step + 1} из {STEPS.length}
+        </span>
+      </p>
+    </div>
+  );
+}
+
+function Answers({ draft, step, reachable, onJump, directionName }: { draft: Draft; step: number; reachable: number; onJump: (i: number) => void; directionName: string | null }) {
+  const rows: { step: number; label: string; value: ReactNode }[] = [
+    { step: 0, label: "Направление", value: directionName },
+    { step: 1, label: "Специализация", value: draft.specialization ? SPEC_LONG_LABEL[draft.specialization] : null },
+    {
+      step: 2,
+      label: "Стек",
+      value: draft.skills.length ? (
+        <span className="flex flex-wrap gap-1.5">
+          {draft.skills.slice(0, 8).map((s) => (
+            <Chip key={s}>{skillName(s)}</Chip>
+          ))}
+          {draft.skills.length > 8 && <span className="self-center text-xs text-ink-subtle">ещё {draft.skills.length - 8}</span>}
+        </span>
+      ) : null,
+    },
+    { step: 3, label: "Отрасли", value: draft.industries.length ? draft.industries.map((i) => INDUSTRY_LABEL[i]).join(", ") : null },
+    { step: 4, label: "Грейд для теста", value: draft.claimed_grade ? GRADE_LABEL[draft.claimed_grade] : null },
+  ];
+  return (
+    <Card padding="sm" className="p-5">
+      <h2 className="eyebrow text-ink-subtle">Ваши ответы</h2>
+      <dl className="mt-4 space-y-3.5">
+        {rows.map((r) => (
+          <div key={r.label} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 text-sm">
+            <dt className="text-xs text-ink-subtle">{r.label}</dt>
+            <dd className={cn("col-start-1 mt-0.5", r.value ? "text-ink" : "text-ink-faint")}>{r.value ?? (r.step === 3 ? "необязательно" : "не выбрано")}</dd>
+            {r.step <= reachable && r.step !== step && (
+              <dd className="col-start-2 row-span-2 row-start-1">
+                <button type="button" onClick={() => onJump(r.step)} className="tap rounded text-xs font-medium text-primary hover:underline">
+                  {r.value ? "Изменить" : "Заполнить"}
+                  <span className="sr-only">: {r.label.toLowerCase()}</span>
+                </button>
+              </dd>
+            )}
+          </div>
+        ))}
+      </dl>
+    </Card>
+  );
+}
+
+const NEXT_STEPS = [
+  "Адаптивный тест на выбранный грейд: 8–20 заданий, на каждое до трёх минут",
+  "Категория появится сразу после теста, и компании начнут вас находить",
+  "Не прошли — можно сразу пройти тест на грейд ниже",
+];
+
 function SurveyWizard({ initial, history }: { initial: Draft; history: SurveyResponse[] }) {
   const router = useRouter();
   const toast = useToast();
@@ -131,9 +220,11 @@ function SurveyWizard({ initial, history }: { initial: Draft; history: SurveyRes
   const [step, setStep] = useState(0);
   const [draft, setDraft] = useState<Draft>(initial);
   const [error, setError] = useState<string | null>(null);
+  const [stepError, setStepError] = useState<string | null>(null);
 
   const update = (patch: Partial<Draft>) => {
     setError(null);
+    setStepError(null);
     setDraft((d) => ({ ...d, ...patch }));
   };
 
@@ -146,11 +237,30 @@ function SurveyWizard({ initial, history }: { initial: Draft; history: SurveyRes
   const typical = useTypicalSkills(draft.specialization);
   const suggestions = useMemo(() => (typical.data ?? []).filter((s) => !draft.skills.includes(s.slug)).slice(0, 12), [typical.data, draft.skills]);
 
-  const canNext = [Boolean(draft.direction), Boolean(draft.specialization), draft.skills.length > 0, true, Boolean(draft.claimed_grade)][step];
-  const stepHint = ["Выберите направление", "Выберите специализацию", "Добавьте хотя бы один навык", "", "Выберите грейд"][step];
+  const valid = [Boolean(draft.direction), Boolean(draft.specialization), draft.skills.length > 0, true, Boolean(draft.claimed_grade)];
+  const stepHint = ["Выберите направление, чтобы продолжить", "Выберите специализацию — от неё зависит тест", "Добавьте хотя бы один навык: начните вводить или нажмите на популярный", "", "Выберите грейд, который хотите подтвердить"];
+  const firstInvalid = valid.findIndex((v) => !v);
+  const reachable = firstInvalid === -1 ? STEPS.length - 1 : firstInvalid;
+  const directionName = draft.direction ? (catalog.data?.directions.find((x) => x.slug === draft.direction)?.name ?? DIRECTION_LABEL[draft.direction]) : null;
+
+  const jump = (i: number) => {
+    setStepError(null);
+    setStep(i);
+  };
+
+  const next = () => {
+    if (!valid[step]) {
+      setStepError(stepHint[step] ?? null);
+      return;
+    }
+    jump(step + 1);
+  };
 
   const finish = () => {
-    if (!draft.direction || !draft.specialization || !draft.claimed_grade) return;
+    if (!draft.direction || !draft.specialization || !draft.claimed_grade) {
+      setStepError(stepHint[step] ?? null);
+      return;
+    }
     const topics = SPEC_TOPICS[draft.specialization];
     submit.mutate(
       {
@@ -173,131 +283,135 @@ function SurveyWizard({ initial, history }: { initial: Draft; history: SurveyRes
   };
 
   return (
-    <div>
-      <PageHeader title="Опрос" description="Специализация и стек определяют, какой тест вы пройдёте. Можно пройти заново — история сохранится." />
+    <div className="max-w-6xl">
+      <PageHeader eyebrow="Категория" title="Опрос" description="Специализация и стек определяют, какой тест вы пройдёте. Около трёх минут. Можно пройти заново — история сохранится." />
       <OnboardingStrip />
 
-      <Card padding="lg">
-        <div className="mb-6">
-          <div className="mb-2 flex items-center justify-between text-sm">
-            <span className="font-mono font-semibold text-ink">{STEPS[step]}</span>
-            <span className="tabular text-ink-subtle">
-              Шаг {step + 1} из {STEPS.length}
-            </span>
-          </div>
-          <ProgressBar value={step + 1} max={STEPS.length} label="Прогресс опроса" />
-        </div>
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_19rem]">
+        <Card padding="lg" className="min-w-0 self-start">
+          <StepTrack step={step} reachable={reachable} onJump={jump} />
 
-        <div className="min-h-64">
-          {step === 0 && (
-            <FieldSet legend="В каком направлении вы работаете?">
-              <RadioCards<Direction>
-                name="direction"
-                columns={2}
-                value={draft.direction}
-                onChange={(d) => update({ direction: d, specialization: specsOf(d).length === 1 ? (specsOf(d)[0] ?? null) : null })}
-                options={DIRECTIONS.map((d) => ({
-                  value: d,
-                  title: catalog.data?.directions.find((x) => x.slug === d)?.name ?? DIRECTION_LABEL[d],
-                  description: specsOf(d)
-                    .map((s) => SPEC_LONG_LABEL[s])
-                    .join(", "),
-                  icon: DIRECTION_ICON[d],
-                }))}
-              />
-            </FieldSet>
-          )}
-
-          {step === 1 && (
-            <FieldSet legend="Ваша специализация">
-              <RadioCards<Specialization>
-                name="specialization"
-                columns={2}
-                value={draft.specialization}
-                onChange={(s) => update({ specialization: s })}
-                options={specsOf(draft.direction).map((s) => ({ value: s, title: SPEC_LONG_LABEL[s], description: SPEC_DESCRIPTION[s] }))}
-              />
-            </FieldSet>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-5">
-              <Field label="С какими технологиями работаете?" hint="Начните вводить или выберите из популярных ниже">
-                <SkillInput value={draft.skills} onChange={(skills) => update({ skills })} />
-              </Field>
-              {suggestions.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs text-ink-subtle">Популярное в {SPEC_LONG_LABEL[draft.specialization as Specialization].toLowerCase()}</p>
-                  <div className="flex flex-wrap gap-2">
-                    {suggestions.map((s) => (
-                      <ToggleChip key={s.slug} selected={false} onToggle={() => setDraft((d) => ({ ...d, skills: d.skills.includes(s.slug) ? d.skills : [...d.skills, s.slug] }))} icon={<Plus className="size-3.5" aria-hidden />}>
-                        {s.name}
-                      </ToggleChip>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <Field label="Опыт в специализации, лет" optional className="max-w-48">
-                <Input inputMode="decimal" value={draft.experience_years} onChange={(e) => update({ experience_years: e.target.value.replace(/[^\d.,]/g, "").replace(",", ".") })} />
-              </Field>
-            </div>
-          )}
-
-          {step === 3 && (
-            <FieldSet legend="В каких отраслях был опыт?" hint="Необязательно. Отрасль не влияет на категорию, но помогает подбору">
-              <ChipSelect<Industry> ariaLabel="Отрасли" options={INDUSTRIES.map((i) => ({ value: i, label: INDUSTRY_LABEL[i] }))} value={draft.industries} onChange={(industries) => update({ industries })} />
-            </FieldSet>
-          )}
-
-          {step === 4 && draft.specialization && (
-            <div className="space-y-8">
-              <FieldSet legend="Какой грейд хотите подтвердить?" hint="Тест начнётся с этого уровня. Не прошли — сразу можно пройти на грейд ниже.">
-                <RadioCards<Grade>
-                  name="grade"
-                  columns={3}
-                  value={draft.claimed_grade}
-                  onChange={(g) => update({ claimed_grade: g })}
-                  options={GRADES.map((g) => ({ value: g, title: GRADE_LABEL[g], description: GRADE_HINT[g] }))}
+          <div className="mt-8 min-h-64">
+            {step === 0 && (
+              <FieldSet legend="В каком направлении вы работаете?" error={stepError ?? undefined}>
+                <RadioCards<Direction>
+                  name="direction"
+                  columns={2}
+                  value={draft.direction}
+                  onChange={(d) => update({ direction: d, specialization: specsOf(d).length === 1 ? (specsOf(d)[0] ?? null) : null })}
+                  options={DIRECTIONS.map((d) => ({
+                    value: d,
+                    title: catalog.data?.directions.find((x) => x.slug === d)?.name ?? DIRECTION_LABEL[d],
+                    description: specsOf(d)
+                      .map((s) => SPEC_LONG_LABEL[s])
+                      .join(", "),
+                    icon: DIRECTION_ICON[d],
+                  }))}
                 />
               </FieldSet>
-              <FieldSet legend="Оцените себя по темам теста" hint="1 — не знаком, 5 — эксперт. На категорию не влияет, помогает подобрать темы заданий.">
-                <div className="space-y-3">
-                  {SPEC_TOPICS[draft.specialization].map((t) => (
-                    <Scale key={t} topic={TOPIC_LABEL[t]} value={draft.self_assessment[t]} onChange={(v) => setDraft((d) => ({ ...d, self_assessment: { ...d.self_assessment, [t]: v } }))} />
-                  ))}
-                </div>
+            )}
+
+            {step === 1 && (
+              <FieldSet legend="Ваша специализация" error={stepError ?? undefined}>
+                <RadioCards<Specialization>
+                  name="specialization"
+                  columns={2}
+                  value={draft.specialization}
+                  onChange={(s) => update({ specialization: s })}
+                  options={specsOf(draft.direction).map((s) => ({ value: s, title: SPEC_LONG_LABEL[s], description: SPEC_DESCRIPTION[s] }))}
+                />
               </FieldSet>
-            </div>
-          )}
-        </div>
+            )}
 
-        {error && <Alert tone="danger" title={error} className="mt-6" />}
+            {step === 2 && (
+              <div className="space-y-6">
+                <Field label="С какими технологиями работаете?" hint="Начните вводить или выберите из популярных ниже" error={stepError ?? undefined}>
+                  <SkillInput value={draft.skills} onChange={(skills) => update({ skills })} />
+                </Field>
+                {suggestions.length > 0 && (
+                  <div>
+                    <p className="mb-2 text-xs text-ink-subtle">Популярное в {SPEC_LONG_LABEL[draft.specialization as Specialization].toLowerCase()}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {suggestions.map((s) => (
+                        <ToggleChip key={s.slug} selected={false} onToggle={() => update({ skills: draft.skills.includes(s.slug) ? draft.skills : [...draft.skills, s.slug] })} icon={<Plus className="size-3.5" aria-hidden />}>
+                          {s.name}
+                        </ToggleChip>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <Field label="Опыт в специализации, лет" optional className="max-w-48">
+                  <Input inputMode="decimal" value={draft.experience_years} onChange={(e) => update({ experience_years: e.target.value.replace(/[^\d.,]/g, "").replace(",", ".") })} />
+                </Field>
+              </div>
+            )}
 
-        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 border-t border-line pt-5">
-          <Button variant="ghost" icon={<ArrowLeft className="size-4" aria-hidden />} onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
-            Назад
-          </Button>
-          <div className="flex items-center gap-3">
-            {!canNext && stepHint && <span className="hidden text-sm text-ink-subtle sm:inline">{stepHint}</span>}
+            {step === 3 && (
+              <FieldSet legend="В каких отраслях был опыт?" hint="Необязательно. Отрасль не влияет на категорию, но помогает подбору">
+                <ChipSelect<Industry> ariaLabel="Отрасли" options={INDUSTRIES.map((i) => ({ value: i, label: INDUSTRY_LABEL[i] }))} value={draft.industries} onChange={(industries) => update({ industries })} />
+              </FieldSet>
+            )}
+
+            {step === 4 && draft.specialization && (
+              <div className="space-y-8">
+                <FieldSet legend="Какой грейд хотите подтвердить?" hint="Тест начнётся с этого уровня. Не прошли — сразу можно пройти на грейд ниже." error={stepError ?? undefined}>
+                  <RadioCards<Grade>
+                    name="grade"
+                    columns={3}
+                    value={draft.claimed_grade}
+                    onChange={(g) => update({ claimed_grade: g })}
+                    options={GRADES.map((g) => ({ value: g, title: GRADE_LABEL[g], description: GRADE_HINT[g] }))}
+                  />
+                </FieldSet>
+                <FieldSet legend="Оцените себя по темам теста" hint="1 — не знаком, 5 — эксперт. На категорию не влияет, помогает подобрать темы заданий.">
+                  <div className="divide-y divide-line rounded-control border border-line px-4">
+                    {SPEC_TOPICS[draft.specialization].map((t) => (
+                      <div key={t} className="py-3">
+                        <Scale topic={TOPIC_LABEL[t]} value={draft.self_assessment[t]} onChange={(v) => setDraft((d) => ({ ...d, self_assessment: { ...d.self_assessment, [t]: v } }))} />
+                      </div>
+                    ))}
+                  </div>
+                </FieldSet>
+              </div>
+            )}
+          </div>
+
+          {error && <Alert tone="danger" title={error} className="mt-6" />}
+
+          <div className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-8 flex flex-wrap items-center justify-between gap-3 rounded-b-card border-t border-line bg-white/95 px-6 py-4 backdrop-blur sm:-mx-8 sm:-mb-8 sm:px-8">
+            <Button variant="ghost" icon={<ArrowLeft className="size-4" aria-hidden />} onClick={() => jump(Math.max(0, step - 1))} disabled={step === 0}>
+              Назад
+            </Button>
             {step < STEPS.length - 1 ? (
-              <Button onClick={() => setStep((s) => s + 1)} disabled={!canNext}>
+              <Button onClick={next}>
                 Далее
                 <ArrowRight className="size-4" aria-hidden />
               </Button>
             ) : (
-              <Button onClick={finish} disabled={!canNext} loading={submit.isPending} icon={<Check className="size-4" aria-hidden />}>
+              <Button onClick={finish} loading={submit.isPending} icon={<Check className="size-4" aria-hidden />}>
                 Сохранить и перейти к тесту
               </Button>
             )}
           </div>
-        </div>
-      </Card>
+        </Card>
 
-      {draft.skills.length > 0 && step !== 2 && (
-        <p className="mt-4 text-sm text-ink-muted">
-          Стек: {draft.skills.map(skillName).join(", ")}
-        </p>
-      )}
+        <aside aria-label="Сводка опроса" className="min-w-0 space-y-4 xl:sticky xl:top-20 xl:self-start">
+          <Answers draft={draft} step={step} reachable={reachable} onJump={jump} directionName={directionName} />
+          <Card padding="sm" className="bg-canvas/60 p-5">
+            <h2 className="eyebrow text-ink-subtle">Что дальше</h2>
+            <ol className="mt-4 space-y-3">
+              {NEXT_STEPS.map((t, i) => (
+                <li key={t} className="flex gap-3 text-sm text-ink">
+                  <span aria-hidden className="tabular mt-px flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-50 font-mono text-xs font-semibold text-primary-strong">
+                    {i + 1}
+                  </span>
+                  {t}
+                </li>
+              ))}
+            </ol>
+          </Card>
+        </aside>
+      </div>
 
       <History items={history} />
     </div>

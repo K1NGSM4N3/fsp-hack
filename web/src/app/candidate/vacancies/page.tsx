@@ -8,7 +8,7 @@ import { SalaryRange } from "@/components/domain/Category";
 import { HiringOutcomes } from "@/components/domain/HiringOutcomes";
 import { ApplicationStatusBadge } from "@/components/domain/StatusBadges";
 import { VacancyBrowser } from "@/components/domain/VacancyBrowser";
-import { Button, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, useToast } from "@/components/ui";
+import { Button, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
 import { useMyApplications, useWithdrawApplication } from "@/features/candidate/hooks";
 import { formatDate } from "@/lib/format";
 
@@ -78,6 +78,7 @@ export default function CandidateVacanciesPage() {
     <div>
       <PageHeader title="Вакансии и отклики" description="Отклик раскрывает компании ваши контакты так же, как принятое приглашение." />
       <Tabs<View>
+        idPrefix="vacancies"
         ariaLabel="Раздел"
         value={view}
         onChange={setView}
@@ -87,7 +88,9 @@ export default function CandidateVacanciesPage() {
           { value: "browse", label: "Все вакансии" },
         ]}
       />
-      {view === "applications" ? <Applications onBrowse={() => setView("browse")} /> : <VacancyBrowser hrefFor={(id) => `/candidate/vacancies/${id}`} />}
+      <div {...tabPanelProps("vacancies", view)}>
+        {view === "applications" ? <Applications onBrowse={() => setView("browse")} /> : <VacancyBrowser hrefFor={(id) => `/candidate/vacancies/${id}`} />}
+      </div>
     </div>
   );
 }

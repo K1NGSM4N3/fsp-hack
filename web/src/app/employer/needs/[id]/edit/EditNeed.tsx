@@ -32,20 +32,27 @@ export function EditNeed({ id }: { id: string }) {
   if (q.isPending) return <PageSkeleton cards={2} />;
   if (q.isError) return <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />;
   return (
-    <div>
-      <PageHeader back={{ href: `/employer/needs/${id}`, label: q.data.title }} title="Изменить потребность" description="После сохранения подборка пересчитается, закреплённые кандидаты останутся." />
+    <div className="max-w-6xl">
+      <PageHeader
+        back={{ href: `/employer/needs/${id}`, label: q.data.title }}
+        eyebrow="Подбор"
+        title="Изменить потребность"
+        description="После сохранения подборка пересчитается, закреплённые кандидаты останутся."
+      />
       <NeedForm
         initial={toDraft(q.data)}
+        trackChanges
         submitLabel="Сохранить"
         pending={update.isPending}
         serverError={isApiError(update.error) ? update.error : null}
-        onCancel={() => router.back()}
+        onCancel={() => router.push(`/employer/needs/${id}`)}
         onSubmit={(input) =>
           update.mutate(input, {
             onSuccess: () => {
               toast.success("Потребность обновлена");
               router.push(`/employer/needs/${id}`);
             },
+            onError: (e) => toast.error(isApiError(e) ? e.title : "Не удалось сохранить"),
           })
         }
       />

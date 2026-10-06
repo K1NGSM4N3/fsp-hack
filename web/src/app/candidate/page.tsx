@@ -91,7 +91,7 @@ function InvitationsCard() {
       ) : q.isError ? (
         <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
       ) : q.data.length === 0 ? (
-        <EmptyState compact icon={<Mail className="size-5" aria-hidden />} title="Пока нет приглашений" description="Компании приглашают кандидатов из подтверждённых категорий. Держите статус «Активно ищу»." />
+        <EmptyState compact icon={<Mail className="size-5" aria-hidden />} title="Пока нет приглашений" description="Компании приглашают соискателей с подтверждённой категорией. Держите статус «Активно ищу»." />
       ) : (
         <>
           <div className="mb-4 grid grid-cols-3 gap-3">
@@ -133,7 +133,7 @@ function MarketCard({ enabled }: { enabled: boolean }) {
     <Card>
       <CardHeader title="Спрос в вашей категории" description={`${categoryLabel(m.category)} · за 30 дней, анонимно`} />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <Stat label="Кандидатов в категории" value={m.peers_in_category} />
+        <Stat label="Соискателей в категории" value={m.peers_in_category} />
         <Stat label="Компаний смотрели вас" value={m.companies_viewed_you_30d} tone="primary" />
         <Stat label="Приглашений в категории" value={m.invitations_in_category_30d} />
         <Stat label="Открытых запросов" value={m.open_needs} />

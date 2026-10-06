@@ -42,7 +42,7 @@ export function ConsentDialog({ doc, onClose, onAccept, loading, title, lead, ac
           </div>
           <p className="text-xs text-ink-subtle">
             Отозвать согласие можно в любой момент здесь же, в настройках. Как мы обращаемся с данными —{" "}
-            <Link href={`/privacy#${doc.kind}`} target="_blank" className="text-primary hover:underline">
+            <Link href={`/privacy#${doc.kind}`} target="_blank" className="link-inline">
               в политике обработки
             </Link>
             .

@@ -2,15 +2,28 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/endpoints";
-import type { VacancyQuery } from "@/api/types";
+import type { Page, PublicVacancy, VacancyQuery } from "@/api/types";
 import { fresh, qk } from "../keys";
 
-export function useVacancies(params: VacancyQuery) {
-  return useQuery({ queryKey: qk.vacancies(params), queryFn: () => api.listVacancies(params), placeholderData: keepPreviousData, ...fresh.detail });
+/** Server-rendered data the client starts from, with the time it was fetched so staleness is judged correctly. */
+export interface Seed<T> {
+  data: T;
+  at: number;
 }
 
-export function useVacancy(id: string) {
-  return useQuery({ queryKey: qk.vacancy(id), queryFn: () => api.getVacancy(id), ...fresh.detail });
+export function useVacancies(params: VacancyQuery, seed?: Seed<Page<PublicVacancy>> | null) {
+  return useQuery({
+    queryKey: qk.vacancies(params),
+    queryFn: () => api.listVacancies(params),
+    placeholderData: keepPreviousData,
+    initialData: seed?.data,
+    initialDataUpdatedAt: seed?.at,
+    ...fresh.detail,
+  });
+}
+
+export function useVacancy(id: string, seed?: Seed<PublicVacancy> | null) {
+  return useQuery({ queryKey: qk.vacancy(id), queryFn: () => api.getVacancy(id), initialData: seed?.data, initialDataUpdatedAt: seed?.at, ...fresh.detail });
 }
 
 export function useApply() {

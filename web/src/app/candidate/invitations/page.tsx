@@ -7,7 +7,7 @@ import type { ReceivedInvitation } from "@/api/types";
 import { SalaryRange } from "@/components/domain/Category";
 import { DomainBadge } from "@/components/domain/DomainBadge";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
-import { ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs } from "@/components/ui";
+import { ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, tabPanelProps } from "@/components/ui";
 import { useReceivedInvitations } from "@/features/candidate/hooks";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
@@ -79,6 +79,7 @@ export default function InvitationsPage() {
     <div>
       <PageHeader title="Приглашения" description="Компании приходят с вилкой и описанием задачи. Контакты откроются им, только если вы примете приглашение." />
       <Tabs<Filter>
+        idPrefix="invitations"
         ariaLabel="Фильтр приглашений"
         value={filter}
         onChange={setFilter}
@@ -89,31 +90,33 @@ export default function InvitationsPage() {
           { value: "archive", label: "Архив", count: data.filter(FILTERS.archive).length },
         ]}
       />
-      {q.isPending ? (
-        <div className="space-y-3">
-          <SkeletonCard lines={2} />
-          <SkeletonCard lines={2} />
-        </div>
-      ) : q.isError ? (
-        <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
-      ) : list.length === 0 ? (
-        <EmptyState
-          icon={<Inbox className="size-5" aria-hidden />}
-          title={filter === "active" ? "Новых приглашений нет" : "Здесь пока пусто"}
-          description={
-            data.length === 0
-              ? "Компании находят кандидатов по подтверждённой категории. Пройдите тест, привяжите ФСП ID и держите статус «Активно ищу» — так вас увидят чаще."
-              : "Загляните на другие вкладки."
-          }
-          action={data.length === 0 ? <ButtonLink href="/candidate/settings" variant="secondary">Настроить статус поиска</ButtonLink> : undefined}
-        />
-      ) : (
-        <ul className="space-y-3">
-          {list.map((inv) => (
-            <InvitationRow key={inv.id} inv={inv} />
-          ))}
-        </ul>
-      )}
+      <div {...tabPanelProps("invitations", filter)}>
+        {q.isPending ? (
+          <div className="space-y-3">
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </div>
+        ) : q.isError ? (
+          <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
+        ) : list.length === 0 ? (
+          <EmptyState
+            icon={<Inbox className="size-5" aria-hidden />}
+            title={filter === "active" ? "Новых приглашений нет" : "Здесь пока пусто"}
+            description={
+              data.length === 0
+                ? "Компании находят соискателей по подтверждённой категории. Пройдите тест, привяжите ФСП ID и держите статус «Активно ищу» — так вас увидят чаще."
+                : "Загляните на другие вкладки."
+            }
+            action={data.length === 0 ? <ButtonLink href="/candidate/settings" variant="secondary">Настроить статус поиска</ButtonLink> : undefined}
+          />
+        ) : (
+          <ul className="space-y-3">
+            {list.map((inv) => (
+              <InvitationRow key={inv.id} inv={inv} />
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

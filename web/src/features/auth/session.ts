@@ -8,6 +8,7 @@ function release(res: Response) {
   if (res.body && !res.bodyUsed) res.body.cancel().catch(() => {});
 }
 
+const SESSION = "/session";
 const ME = "/api/v1/me";
 const REFRESH = "/api/v1/auth/refresh";
 const init: RequestInit = { credentials: "include", headers: { Accept: "application/json" } };
@@ -15,6 +16,12 @@ const init: RequestInit = { credentials: "include", headers: { Accept: "applicat
 /** Same contract as the API client (one refresh, then one retry) without pulling the client into marketing pages. */
 async function fetchMe(): Promise<Me | null> {
   if (process.env.NEXT_PUBLIC_USE_MOCKS === "1") return (await import("@/api/endpoints")).getMe();
+  const marker = await fetch(SESSION, init);
+  if (!marker.ok) {
+    release(marker);
+    return null;
+  }
+  if (!((await marker.json()) as { signedIn: boolean }).signedIn) return null;
   let res = await fetch(ME, init);
   if (res.status === 401) {
     release(res);

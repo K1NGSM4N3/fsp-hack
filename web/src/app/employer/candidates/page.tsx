@@ -24,12 +24,14 @@ function CategoryMatrix({ spec, grade, onPick }: { spec: Specialization; grade: 
   if (q.isError) return null;
   const find = (s: Specialization, g: Grade) => q.data.find((c) => c.category.specialization === s && c.category.grade === g);
   return (
-    <Card padding="sm" className="mb-6 overflow-x-auto">
+    <Card padding="sm" className="relative mb-6 overflow-x-auto">
       <CardHeader title="Категории" description="Кандидаты с подтверждённым тестом грейдом · из них с достижениями ФСП · медианные ожидания" className="mb-3 px-1" />
       <table className="w-full min-w-[34rem] border-separate border-spacing-1 text-sm">
         <thead>
           <tr>
-            <th className="w-40" />
+            <th scope="col" className="w-40">
+              <span className="sr-only">Специализация</span>
+            </th>
             {GRADES.map((g) => (
               <th key={g} scope="col" className="px-2 pb-1 text-left font-mono text-xs font-medium text-ink-subtle">
                 {GRADE_LABEL[g]}
@@ -52,15 +54,20 @@ function CategoryMatrix({ spec, grade, onPick }: { spec: Specialization; grade: 
                       type="button"
                       onClick={() => onPick(s, g)}
                       aria-pressed={active}
-                      aria-label={`${SPEC_LABEL[s]} ${GRADE_LABEL[g]}: ${c?.candidates ?? 0} кандидатов`}
                       className={cn(
                         "flex min-h-10 w-full items-center justify-between gap-2 rounded-control border px-2.5 py-2 text-left transition-colors",
                         active ? "border-primary bg-primary text-white" : "border-line bg-white hover:border-primary",
                       )}
                     >
-                      <span className="tabular font-mono font-semibold">{c?.candidates ?? 0}</span>
+                      <span className="tabular font-mono font-semibold">
+                        <span className="sr-only">
+                          {SPEC_LABEL[s]} {GRADE_LABEL[g]}, кандидатов:{" "}
+                        </span>
+                        {c?.candidates ?? 0}
+                      </span>
                       <span className={cn("flex items-center gap-1 text-xs", active ? "text-primary-100" : "text-ink-subtle")}>
                         <Trophy className="size-3" aria-hidden />
+                        <span className="sr-only">с достижениями ФСП:</span>
                         {c?.with_fsp ?? 0}
                         <span className="hidden lg:inline">· {c?.median_expectation ? formatRubShort(c.median_expectation) : "—"}</span>
                       </span>

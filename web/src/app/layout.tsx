@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { JetBrains_Mono, Onest } from "next/font/google";
 import "./globals.css";
 import { MotionFlag } from "@/components/motion/MotionFlag";
+import { HOME_SHARE, SITE_NAME, SITE_URL } from "@/lib/site";
 
 const onest = Onest({ subsets: ["latin", "cyrillic"], variable: "--font-onest", display: "swap" });
 // Preloaded: otherwise the CSS-discovered mono file is fetched late at top priority and delays first paint.
@@ -10,9 +11,14 @@ const onest = Onest({ subsets: ["latin", "cyrillic"], variable: "--font-onest", 
 const jetbrains = JetBrains_Mono({ weight: ["400", "500", "600", "700"], subsets: ["latin", "cyrillic"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata: Metadata = {
+  metadataBase: SITE_URL,
+  applicationName: SITE_NAME,
   title: { default: "ФСП Таланты: компании пишут первыми и сразу называют зарплату", template: "%s · ФСП Таланты" },
   description:
     "Платформа подбора ИТ-специалистов Федерации спортивного программирования России. Вы один раз подтверждаете уровень тестом, а компании пишут вам сами и сразу называют зарплату.",
+  openGraph: { type: "website", locale: "ru_RU", siteName: SITE_NAME, ...HOME_SHARE },
+  twitter: { card: "summary_large_image" },
+  formatDetection: { telephone: false, email: false, address: false },
 };
 
 export const viewport: Viewport = {

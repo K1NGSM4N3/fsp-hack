@@ -9,16 +9,16 @@ import { ProductTour } from "@/components/site/business/ProductTour";
 import { RulesReceipt } from "@/components/site/business/RulesReceipt";
 import { SCREENS } from "@/components/site/business/TourScreens";
 import { Container, Eyebrow, Section, TextLink } from "@/components/site/primitives";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { breadcrumbs } from "@/lib/jsonld";
+import { PUBLIC_PAGES, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: { absolute: "Компаниям · ФСП Таланты" },
-  description:
-    "Вставьте текст вакансии и получите подборку ИТ-специалистов, чей грейд подтверждён тестом. У каждого написано, чем подходит и чего не хватает. Зарплата в первом сообщении, контакты после согласия.",
-};
+export const metadata: Metadata = pageMetadata(PUBLIC_PAGES.business);
 
 export default function BusinessPage() {
   return (
     <MotionRoot>
+      <JsonLd data={breadcrumbs([PUBLIC_PAGES.business])} />
       <BusinessHero />
 
       <Section tone="canvas" id="compare" className="scroll-mt-24">

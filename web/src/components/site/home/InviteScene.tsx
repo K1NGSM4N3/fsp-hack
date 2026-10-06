@@ -155,6 +155,7 @@ export function InviteScene({ laptop, phone }: { laptop: ReactNode; phone: React
           SplitText.create(cap.querySelectorAll("[data-s-cap-line]"), {
             type: "lines",
             mask: "lines",
+            aria: "none",
             linesClass: "split-line",
             autoSplit: true,
             onSplit(self) {

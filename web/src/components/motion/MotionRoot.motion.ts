@@ -8,17 +8,21 @@ interface Look {
   stagger: gsap.StaggerVars;
 }
 
-const SHOW: gsap.TweenVars = { autoAlpha: 1, x: 0, y: 0, scale: 1 };
+/**
+ * Reveals fade with opacity, never visibility: content waiting below the fold stays in the accessibility tree and in
+ * the tab order (focusing it scrolls it into view, which plays the reveal).
+ */
+const SHOW: gsap.TweenVars = { opacity: 1, x: 0, y: 0, scale: 1 };
 
 const REVEAL: Record<string, { from: gsap.TweenVars; to: gsap.TweenVars }> = {
-  up: { from: { autoAlpha: 0, y: 56 }, to: SHOW },
-  left: { from: { autoAlpha: 0, x: -56 }, to: SHOW },
-  right: { from: { autoAlpha: 0, x: 56 }, to: SHOW },
-  scale: { from: { autoAlpha: 0, y: 32, scale: 0.94 }, to: SHOW },
-  fade: { from: { autoAlpha: 0 }, to: SHOW },
+  up: { from: { opacity: 0, y: 56 }, to: SHOW },
+  left: { from: { opacity: 0, x: -56 }, to: SHOW },
+  right: { from: { opacity: 0, x: 56 }, to: SHOW },
+  scale: { from: { opacity: 0, y: 32, scale: 0.94 }, to: SHOW },
+  fade: { from: { opacity: 0 }, to: SHOW },
   wipe: { from: { clipPath: "inset(0% 100% 0% 0%)", x: -24 }, to: { clipPath: "inset(0% 0% 0% 0%)", x: 0, clearProps: "clipPath" } },
   center: { from: { clipPath: "inset(50% 50% 50% 50% round 28px)", scale: 0.97 }, to: { clipPath: "inset(0% 0% 0% 0% round 28px)", scale: 1, clearProps: "clipPath" } },
-  blur: { from: { autoAlpha: 0, filter: "blur(18px)", scale: 0.97 }, to: { autoAlpha: 1, filter: "blur(0px)", scale: 1, clearProps: "filter" } },
+  blur: { from: { opacity: 0, filter: "blur(18px)", scale: 0.97 }, to: { opacity: 1, filter: "blur(0px)", scale: 1, clearProps: "filter" } },
 };
 
 const LOOKS: Record<MotionVariant, Look> = {
@@ -254,10 +258,10 @@ function belowFold(els: HTMLElement[]): HTMLElement[] {
 }
 
 const MOBILE_FROM: Record<string, gsap.TweenVars> = {
-  fade: { autoAlpha: 0 },
-  scale: { autoAlpha: 0, y: 20, scale: 0.97 },
+  fade: { opacity: 0 },
+  scale: { opacity: 0, y: 20, scale: 0.97 },
 };
-const MOBILE_UP: gsap.TweenVars = { autoAlpha: 0, y: 24 };
+const MOBILE_UP: gsap.TweenVars = { opacity: 0, y: 24 };
 
 /**
  * Phone language: headings and blocks rise a little and fade in once, in batches as they enter. No splitting, no clip
@@ -271,14 +275,14 @@ function mobileReveals(root: HTMLElement) {
     ScrollTrigger.batch(els, {
       start: "top 92%",
       once: true,
-      onEnter: (batch) => gsap.to(batch, { autoAlpha: 1, y: 0, scale: 1, duration: 0.75, ease: "power3.out", stagger: 0.08, overwrite: true }),
+      onEnter: (batch) => gsap.to(batch, { opacity: 1, y: 0, scale: 1, duration: 0.75, ease: "power3.out", stagger: 0.08, overwrite: true }),
     });
   }
   for (const box of boxes) {
     gsap.fromTo(
       box.children,
-      { autoAlpha: 0, y: 16 },
-      { autoAlpha: 1, y: 0, duration: 0.6, ease: "power3.out", stagger: 0.05, scrollTrigger: { trigger: box, start: "top 90%", once: true } },
+      { opacity: 0, y: 16 },
+      { opacity: 1, y: 0, duration: 0.6, ease: "power3.out", stagger: 0.05, scrollTrigger: { trigger: box, start: "top 90%", once: true } },
     );
   }
 }

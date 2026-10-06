@@ -13,26 +13,24 @@ export function Checkbox({ label, description, className, id, ...props }: Checkb
   const autoId = useId();
   const inputId = id ?? autoId;
   return (
-    <div className={cn("flex items-start gap-3", className)}>
-      <label htmlFor={inputId} className="tap mt-0.5 flex size-4 shrink-0 cursor-pointer">
-        <input
-          id={inputId}
-          type="checkbox"
-          className="size-4 cursor-pointer rounded border-line-strong accent-primary"
-          aria-describedby={description ? `${inputId}-desc` : undefined}
-          {...props}
-        />
+    <div className={cn("grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 text-sm", className)}>
+      <label htmlFor={inputId} className="col-span-2 grid cursor-pointer grid-cols-subgrid items-start text-ink">
+        <span className="tap mt-0.5 flex size-4 shrink-0">
+          <input
+            id={inputId}
+            type="checkbox"
+            className="size-4 cursor-pointer rounded border-line-strong accent-primary"
+            aria-describedby={description ? `${inputId}-desc` : undefined}
+            {...props}
+          />
+        </span>
+        <span>{label}</span>
       </label>
-      <div className="min-w-0 text-sm">
-        <label htmlFor={inputId} className="cursor-pointer text-ink">
-          {label}
-        </label>
-        {description && (
-          <p id={`${inputId}-desc`} className="mt-0.5 text-xs text-ink-subtle">
-            {description}
-          </p>
-        )}
-      </div>
+      {description && (
+        <p id={`${inputId}-desc`} className="col-start-2 mt-0.5 text-xs text-ink-subtle">
+          {description}
+        </p>
+      )}
     </div>
   );
 }

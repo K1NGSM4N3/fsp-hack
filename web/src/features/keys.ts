@@ -1,5 +1,11 @@
 import type { CandidateSearchParams, SalaryCheckQuery, VacancyQuery } from "@/api/types";
 
+/**
+ * First page of the public vacancy list; the server renders the same page for crawlers and hydrates the client with
+ * it. Six cards keep the `/vacancies` document inside the first TCP round trip (about 14 KB compressed) on phones.
+ */
+export const VACANCY_PAGE_SIZE = 6;
+
 export const qk = {
   me: ["me"] as const,
   catalog: ["catalog"] as const,

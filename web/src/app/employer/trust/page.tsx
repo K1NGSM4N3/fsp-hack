@@ -1,9 +1,8 @@
 "use client";
 
 import { ArrowRight, Globe, Lightbulb, Minus, Plus, ShieldCheck } from "lucide-react";
-import Link from "next/link";
 import type { TrustLevel, TrustReason, TrustStatus } from "@/api/types";
-import { Badge, type BadgeTone, Card, CardHeader, ErrorAlert, PageHeader, PageSkeleton, ProgressBar } from "@/components/ui";
+import { Badge, type BadgeTone, ButtonLink, Card, CardHeader, ErrorAlert, PageHeader, PageSkeleton, ProgressBar } from "@/components/ui";
 import { useTrustStatus } from "@/features/employer/hooks";
 import { cn } from "@/lib/cn";
 import { plural } from "@/lib/format";
@@ -45,9 +44,22 @@ function QuotaCard({ t }: { t: TrustStatus }) {
           <dd className={cn("tabular mt-0.5 font-mono font-semibold", t.penalty < 0 ? "text-accent-strong" : "text-ink")}>{signed(t.penalty)}</dd>
         </div>
       </dl>
-      <p className="mt-4 text-sm text-ink-muted">
-        Сейчас использовано {t.quota_used}, осталось {left} {plural(left, ["приглашение", "приглашения", "приглашений"])}.
-      </p>
+      <div className="mt-5 rounded-control bg-canvas p-4">
+        <ProgressBar
+          value={Math.min(t.quota_used, t.quota_limit)}
+          max={t.quota_limit}
+          tone={left === 0 ? "warning" : "ink"}
+          label="Использовано на этой неделе"
+          caption={
+            <>
+              Использовано на этой неделе: <span className="tabular font-mono text-ink">{t.quota_used}</span>
+            </>
+          }
+        />
+        <p className="mt-2 text-sm text-ink-muted">
+          {left === 0 ? "Квота на эту неделю исчерпана — новые приглашения можно будет отправить, когда старые выйдут из семидневного окна." : `Осталось ${left} ${plural(left, ["приглашение", "приглашения", "приглашений"])}.`}
+        </p>
+      </div>
     </Card>
   );
 }
@@ -132,10 +144,10 @@ function DomainCard({ t }: { t: TrustStatus }) {
         </p>
       ) : (
         t.domain.check.status !== "public_mail" && (
-          <Link href="/employer/company" className="tap mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+          <ButtonLink href="/employer/company" variant="soft" size="sm" className="mt-4">
             Указать сайт в профиле компании
             <ArrowRight className="size-4" aria-hidden />
-          </Link>
+          </ButtonLink>
         )
       )}
     </Card>
@@ -163,9 +175,14 @@ export default function TrustPage() {
   return (
     <div>
       <PageHeader
-        eyebrow={<span className="eyebrow text-primary">Аккаунт</span>}
+        eyebrow="Аккаунт"
         title="Доверие и квота"
         description="Квота приглашений защищает кандидатов от рассылок. Она растёт, когда компания подтверждает себя и кандидаты откликаются на её предложения. Здесь видно, из чего она складывается сейчас и что можно сделать."
+        actions={
+          <ButtonLink href="/employer/company" variant="secondary">
+            Профиль компании
+          </ButtonLink>
+        }
       />
       {q.isPending ? (
         <PageSkeleton cards={4} />

@@ -66,7 +66,7 @@ function ContactsCard({ c, onInvite }: { c: CandidateCard; onInvite: () => void 
           {contacts.data.email && (
             <li className="flex items-center gap-2">
               <Mail className="size-4 text-ink-subtle" aria-hidden />
-              <a href={`mailto:${contacts.data.email}`} className="text-primary hover:underline">
+              <a href={`mailto:${contacts.data.email}`} className="link-inline">
                 {contacts.data.email}
               </a>
             </li>
@@ -74,7 +74,7 @@ function ContactsCard({ c, onInvite }: { c: CandidateCard; onInvite: () => void 
           {contacts.data.phone && (
             <li className="flex items-center gap-2">
               <Phone className="size-4 text-ink-subtle" aria-hidden />
-              <a href={`tel:${contacts.data.phone.replace(/[^\d+]/g, "")}`} className="text-ink hover:underline">
+              <a href={`tel:${contacts.data.phone.replace(/[^\d+]/g, "")}`} className="text-ink underline decoration-line-strong underline-offset-[3px] hover:decoration-ink">
                 {contacts.data.phone}
               </a>
             </li>
@@ -198,7 +198,7 @@ export function EmployerCandidateView({ id, needId }: { id: string; needId: stri
                         {a.protocol_url && (
                           <>
                             {" · "}
-                            <a href={a.protocol_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                            <a href={a.protocol_url} target="_blank" rel="noreferrer" className="link-inline">
                               протокол
                             </a>
                           </>

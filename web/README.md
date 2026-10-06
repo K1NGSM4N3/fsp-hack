@@ -17,17 +17,32 @@ GSAP + Lenis для анимаций публичного сайта. Node.js �
 | `/privacy` | Политика обработки ПДн; действующие тексты согласий запрашиваются у API на сервере при каждом запросе |
 | `/guardian/confirm?token=…` | Страница законного представителя соискателя 14–17 лет: подтвердить, отказаться, отозвать (noindex) |
 
+`/vacancies` пересобирается раз в минуту (ISR) с первой страницей вакансий в HTML, `/vacancies/[id]` рендерится на
+сервере с вакансией внутри (неизвестный id — настоящий 404). Браузер стартует с этими данными (`initialData`) и дальше
+работает через API. Пока собирается образ, API недоступен: та сборка `/vacancies` без списка, его загрузит браузер.
+
+**Состояния** (`src/components/states`): `app/not-found.tsx` — 404 в стиле первого экрана (код, объяснение, главные
+разделы сайта); `app/error.tsx` — ошибка вне кабинетов с кнопкой «Попробовать снова» (`retry`) и кодом для поддержки
+(`digest`); в кабинетах свои `error.tsx` и `loading.tsx` — оболочка и меню остаются, заменяется только раздел.
+
 **Вход** (`src/app/(auth)`): `/login` (с кнопками демо-входа), `/register` (роль, возраст, представитель для 14–17,
 согласия), `/verify-email`.
 
-**Кабинет кандидата** (`/candidate/*`, клиентские страницы): главная (категория, приглашения, спрос, ФСП), профиль
-и резюме, опрос, тестирование (шаг видеозаписи `/assessment/start`, сессия `/assessment/[id]`), приглашения,
-вакансии и отклики, регулярные задания, настройки (статус поиска, видимость, ФСП ID, согласия, «Кто открывал ваши
-контакты», выгрузка данных, удаление аккаунта). Для 14–17 лет без согласия представителя — баннер в шапке кабинета.
+**Кабинет соискателя** (`/candidate/*`, клиентские страницы): главная (категория, приглашения, спрос, ФСП), профиль
+и резюме, опрос (шаги с прогрессом и сводкой ответов), тестирование (шаг видеозаписи `/assessment/start`, сессия
+`/assessment/[id]`), приглашения, вакансии и отклики, регулярные задания, настройки с оглавлением разделов (статус
+поиска, видимость, ФСП ID, согласия, «Кто открывал ваши контакты», выгрузка данных, удаление аккаунта). Для 14–17 лет
+без согласия представителя — баннер в шапке кабинета.
 
-**Кабинет работодателя** (`/employer/*`): главная (квота, воронка, причины отказов), потребности и подборки
+**Кабинет компании** (`/employer/*`): главная (квота, воронка, причины отказов), потребности и подборки
 (создание из текста, подборка с объяснениями, категории, план теста), поиск по базе, профиль кандидата, приглашения,
-вакансии и отклики, регулярные задания, интеграции (вебхук, ключи API, журнал доставок), компания, доверие и квота.
+вакансии и отклики, регулярные задания, интеграции (вебхук, ключи API, журнал доставок с фильтром), компания, доверие
+и квота.
+
+Длинные формы (вакансия, потребность) устроены одинаково: пронумерованные разделы, справа — предпросмотр или сводка
+с готовностью, внизу — плавающая панель действий `FormActions`. Ошибки показываются у поля (`aria-describedby`,
+`role="alert"`) сразу после первой попытки отправки и пропадают по мере исправления; `focusFirstError` переводит
+фокус к первому полю с ошибкой, а панель перечисляет, что осталось проверить.
 
 ## Скрипты
 
@@ -39,6 +54,7 @@ npm run start      # запуск собранного приложения
 npm run lint       # eslint
 npm run typecheck  # tsc --noEmit
 npm run gen:api    # openapi.json → src/api/schema.d.ts (см. make gen-api)
+npm run check:seo  # проверка сайта глазами краулера, см. «SEO и ИИ-поиск»: node scripts/seo-check.mjs http://localhost:3000
 ```
 
 ## Переменные окружения
@@ -48,6 +64,7 @@ npm run gen:api    # openapi.json → src/api/schema.d.ts (см. make gen-api)
 | `API_PROXY_URL` | `http://localhost:8000` (`.env.development`); в Docker — `http://api:8000` | Куда `next dev` / `next start` проксируют `/api/*` (rewrite в `next.config.ts`, при сборке фиксируется), и откуда `/privacy` на сервере берёт тексты согласий. В Docker `/api/*` отдаёт Caddy, мимо Next |
 | `NEXT_PUBLIC_USE_MOCKS` | `0` (`.env.development`, `.env.example`) | `1` — данные из встроенного мок-API в браузере, без бэкенда. Подставляется при сборке |
 | `NEXT_PUBLIC_DEMO_LOGIN` | включено | `0` — скрыть кнопки демо-входа на `/login` (в мок-режиме они видны всегда) |
+| `SITE_URL` | `http://localhost:8080` | Публичный адрес сайта: `metadataBase`, canonical, Open Graph, sitemap, robots, JSON-LD, `llms.txt`. Публичные страницы пререндерятся, поэтому значение нужно и при сборке |
 
 Шаблон — `.env.example`. Локальные переопределения — в `.env.local` (не коммитится).
 
@@ -81,10 +98,20 @@ src/api/client.ts       fetch-обёртка: cookie-сессия, один об
 src/api/endpoints.ts    одна функция на эндпоинт (+ переключатель на моки)
 src/features/*          хуки TanStack Query (hooks.ts) и компоненты разделов: auth, candidate, catalog, employer,
                         integrations, reports, vacancies; features/keys.ts — ключи запросов и их свежесть
-src/features/auth/session.ts  лёгкая проверка сессии для шапки публичного сайта, без клиента API
-src/components/ui       примитивы: Button, Field, Input (+ Select, MoneyInput, Textarea), Choice, Chip, Card, Badge,
-                        Tabs, Dialog, Stepper, Feedback (ProgressBar, EmptyState, Skeleton, Alert, Stat), QueryState,
-                        Toast, Spinner, PageHeader, AnimatedNumber, CodeBlock, Markdown
+src/features/auth/session.ts  лёгкая проверка сессии для шапки публичного сайта, без клиента API: сначала `/session`
+                        (Next читает httpOnly-маркер `fsp_session`), и только при входе — `/api/v1/me`. Без сессии
+                        нет ни одного 401 в консоли
+src/lib/site.ts         SITE_URL и реестр публичных страниц PUBLIC_PAGES: метаданные, sitemap, хлебные крошки, llms.txt
+src/lib/og.tsx          карточки Open Graph (ImageResponse); шрифты — статические TTF в assets/og
+src/lib/jsonld.ts       JSON-LD: Organization + WebSite, BreadcrumbList, ItemList, JobPosting
+src/lib/llms.ts         llms.txt и llms-full.txt; html-text.ts — текст страницы из её HTML
+src/lib/public-api.ts   серверные запросы к публичному API (вакансия, первая страница списка)
+src/components/ui       примитивы: Button, Field (+ focusFirstError), Input (+ Select, MoneyInput, Textarea), Choice,
+                        Chip, Card (+ CardHeader со step), Badge, Tabs, Dialog, Stepper, Feedback (ProgressBar,
+                        EmptyState, Skeleton, Alert, Stat), FormActions, QueryState, Toast, Spinner, PageHeader,
+                        AnimatedNumber, CodeBlock, Markdown
+src/components/states   404, ошибки и загрузка (сайт и кабинеты)
+src/components/seo      JsonLd — серверный <script type="application/ld+json">
 src/components/domain   категории, зарплата, навыки, ФСП, объяснение подбора, карточки кандидатов и вакансий,
                         отметка домена, этапы найма, статусы, жалоба
 src/components/layout   CabinetShell — оболочка обоих кабинетов
@@ -104,6 +131,47 @@ src/proxy.ts            только редирект на /login без cookie 
 Цвета и шрифты ФСП — токены в `src/app/globals.css` (стандартная палитра Tailwind отключена).
 Шрифты: Onest (текст и заголовки) и фирменный JetBrains Mono (подписи, цифры, код), оба через `next/font/google`.
 Логотипы — `public/brand/`. Иконки — lucide-react.
+
+## Доступность
+
+Цель — 100 в Lighthouse Accessibility на публичных страницах и ноль нарушений axe в кабинетах.
+
+- **Контраст через токены.** Серые `ink-subtle`, `ink-faint`, `night-faint` подобраны так, что текст ими проходит
+  WCAG AA (4,5:1) на всех фонах, где используется. Кольцо фокуса на тёмных фонах светлое (`primary-300`).
+- **Ссылки в тексте** — утилита `link-inline`: цвет плюс подчёркивание (одного цвета мало, WCAG 1.4.1).
+- **Анимации не прячут контент.** Появления меняют `opacity`, а не `visibility`: текст ниже первого экрана остаётся в
+  дереве доступности и в порядке табуляции. SplitText не вешает `aria-label` на абзацы: у разбитого на буквы текста
+  есть доступная копия (`sr-only` или контурный слой), а сам он `aria-hidden`. Декоративные макеты, где текст
+  намеренно полупрозрачный, — `aria-hidden` и `inert`.
+- **Кабинеты:** шапка — `header` с хлебными крошками в `nav`, мобильное меню — нативный `<dialog>` (ловушка фокуса,
+  Esc, возврат фокуса), заголовок вкладки браузера — «Раздел · Кабинет · ФСП Таланты», у вкладок `Tabs` всегда есть
+  панель, тосты объявляются через `aria-live`.
+
+## SEO и ИИ-поиск
+
+- `app/robots.txt/route.ts` — разрешены публичные страницы для поисковиков и ИИ-краулеров (Googlebot, YandexBot,
+  GPTBot, OAI-SearchBot, ClaudeBot, PerplexityBot и др., все названы явно), закрыты кабинеты, `/admin`, `/guardian`,
+  `/login`, `/register`, `/api/`; `Clean-param` для utm-меток (Яндекс); ссылка на sitemap.
+- `app/sitemap.ts` — публичные страницы из `PUBLIC_PAGES` и опубликованные вакансии (до 100, рендерится по запросу).
+- Метаданные каждой публичной страницы — `pageMetadata(PUBLIC_PAGES.…)`: title, description, canonical, Open Graph
+  и Twitter. Кабинеты и `/verify-email` — `noindex`.
+- `opengraph-image.tsx` у каждой публичной страницы (и у вакансии — с названием, компанией и вилкой); общий макет в
+  `src/lib/og.tsx`. Satori не читает WOFF2 и вариативные шрифты, поэтому Onest (400, 600) и JetBrains Mono (500)
+  лежат статическими TTF в `assets/og` (OFL; для вакансий они попадают в standalone через
+  `outputFileTracingIncludes`). Twitter-карточка берёт ту же картинку.
+- `app/manifest.ts`, `app/favicon.ico` (16/32/48), `app/apple-icon.png` (180), `public/icons/` (192, 512, maskable
+  512) — растр из `public/brand/fsp-mark.svg`; `app/icon.svg` остаётся для современных браузеров.
+- **JSON-LD** (`src/lib/jsonld.ts`, рендерится на сервере): Organization и WebSite на всех публичных страницах,
+  BreadcrumbList на внутренних, ItemList на `/vacancies`, JobPosting на каждой вакансии (вилка в RUB за месяц,
+  `TELECOMMUTE` для удалёнки, город — для офиса и гибрида, `directApply`). Тип занятости не размечается: у вакансий
+  есть формат работы, но нет полной или частичной занятости.
+- **`/llms.txt`** (по llmstxt.org) — что это за платформа, главные правила и ссылки на страницы из `PUBLIC_PAGES`.
+  **`/llms-full.txt`** — факты о продукте (тест, подбор, приватность, ФСП, ATS, антифейк, результаты валидации)
+  плюс текст всех публичных страниц, извлечённый из их собственного HTML (`src/lib/html-text.ts`), и список
+  опубликованных вакансий. Страницы запрашиваются у этого же процесса по `127.0.0.1:$PORT`, результат кешируется
+  на 10 минут — текст не расходится с сайтом.
+- `scripts/seo-check.mjs` (`npm run check:seo [адрес]`) запрашивает сайт как GPTBot без JavaScript и проверяет
+  robots, sitemap, llms-файлы, один `h1`, `lang`, canonical, `<main>` и формы JSON-LD на каждой странице.
 
 ## Анимации
 

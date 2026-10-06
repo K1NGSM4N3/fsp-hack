@@ -32,7 +32,7 @@ export function SalaryRange({ salary, size = "md", className, label }: { salary:
 
 export function Percentile({ value, className }: { value: number; className?: string }) {
   return (
-    <span className={cn("tabular font-mono", className)} title="Перцентиль внутри категории: доля кандидатов с более слабым результатом теста">
+    <span className={cn("tabular font-mono", className)} title="Перцентиль внутри категории: доля соискателей категории с более слабым результатом теста">
       {formatNumber(value)}-й перцентиль
     </span>
   );

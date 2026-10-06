@@ -18,7 +18,7 @@ import { ProctoringMark, useProctoringOptions } from "./_proctoring/ui";
 function Rules() {
   const options = useProctoringOptions();
   const items = [
-    { icon: <Shuffle className="size-4" aria-hidden />, text: "У каждого кандидата свой вариант заданий одинаковой сложности, слитые ответы не помогут" },
+    { icon: <Shuffle className="size-4" aria-hidden />, text: "У каждого соискателя свой вариант заданий одинаковой сложности, слитые ответы не помогут" },
     { icon: <Clock className="size-4" aria-hidden />, text: "У каждого задания свой таймер; если время вышло — ответ не засчитывается" },
     { icon: <TrendingUp className="size-4" aria-hidden />, text: "Тест адаптивный: следующий вопрос подбирается под ваш уровень и заканчивается, как только уровень ясен" },
     { icon: <Lock className="size-4" aria-hidden />, text: "Правильность ответов во время теста не показывается" },
@@ -91,7 +91,7 @@ function StartCard() {
         description={
           <>
             Специализация: <span className="font-medium text-ink">{SPEC_LONG_LABEL[specialization]}</span> ·{" "}
-            <Link href="/candidate/survey" className="text-primary hover:underline">
+            <Link href="/candidate/survey" className="link-inline">
               изменить в опросе
             </Link>
           </>

@@ -2,13 +2,30 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { MotionRoot } from "@/components/motion/MotionRoot";
 import { Container } from "@/components/site/primitives";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { VACANCY_PAGE_SIZE } from "@/features/keys";
+import { breadcrumbs, vacancyList } from "@/lib/jsonld";
+import { fetchVacancyPage } from "@/lib/public-api";
+import { PUBLIC_PAGES, pageMetadata } from "@/lib/site";
 import { PublicVacancyBrowser } from "./PublicVacancyBrowser";
 
-export const metadata: Metadata = { title: "Вакансии" };
+export const metadata: Metadata = pageMetadata(PUBLIC_PAGES.vacancies);
 
-export default function VacanciesPage() {
+/**
+ * Regenerated every minute with the first page of vacancies in the HTML, so crawlers see the list without JavaScript.
+ * While the image is built the API is unreachable: that render has no list (the browser fetches it), and the short
+ * interval replaces it soon after the first visits.
+ */
+export const revalidate = 60;
+
+export default async function VacanciesPage() {
+  const page = await fetchVacancyPage(VACANCY_PAGE_SIZE);
+  // Cards never show the long texts or the company card; leaving them out keeps the hydration payload small.
+  const seed = page && { ...page, data: { ...page.data, items: page.data.items.map((v) => ({ ...v, description: "", company_description: null, company_city: null })) } };
   return (
     <MotionRoot variant="wipe" className="flex flex-1 flex-col bg-canvas">
+      <JsonLd data={breadcrumbs([PUBLIC_PAGES.vacancies])} />
+      {seed && seed.data.items.length > 0 && <JsonLd data={vacancyList(seed.data.items)} />}
       <section className="relative isolate overflow-hidden border-b border-line bg-white pt-32 pb-12 sm:pt-40 sm:pb-16">
         <div aria-hidden className="bg-grid mask-radial pointer-events-none absolute inset-0 -z-10 opacity-70" />
         <div aria-hidden className="pointer-events-none absolute -top-56 right-[-10rem] -z-10 size-[40rem] rounded-full bg-[radial-gradient(circle,rgb(64_47_255/0.18),transparent_64%)]" />
@@ -26,7 +43,7 @@ export default function VacanciesPage() {
             </h1>
             <p data-hero="lead" className="text-lg leading-relaxed text-ink-muted">
               Здесь можно откликнуться по-старому. Но после теста компании пишут сами, и откликаться становится необязательно.{" "}
-              <Link href="/seekers" className="font-medium text-primary underline-offset-4 hover:underline">
+              <Link href="/seekers" className="link-inline font-medium">
                 Про тест
               </Link>
             </p>
@@ -34,7 +51,7 @@ export default function VacanciesPage() {
         </Container>
       </section>
       <Container className="py-10 sm:py-14">
-        <PublicVacancyBrowser />
+        <PublicVacancyBrowser seed={seed} />
       </Container>
     </MotionRoot>
   );

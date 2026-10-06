@@ -1,18 +1,20 @@
 "use client";
 
 import { ChevronDown, ListChecks, Plus, Star } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { isApiError } from "@/api/client";
 import type { EmployerTask, Grade, Specialization, TaskKind, TaskSubmission } from "@/api/types";
 import { SkillInput } from "@/components/domain/Skills";
 import { TaskStatusBadge } from "@/components/domain/StatusBadges";
-import { Badge, Button, Card, CardHeader, ChipSelect, Dialog, EmptyState, ErrorAlert, Field, Input, Markdown, PageHeader, RadioCards, Select, SkeletonCard, Switch, Textarea, useToast } from "@/components/ui";
+import { Badge, Button, Card, CardHeader, ChipSelect, Dialog, ErrorAlert, Field, FieldSet, Input, Markdown, PageHeader, RadioCards, Select, SkeletonCard, Stat, Switch, Textarea, focusFirstError, useToast } from "@/components/ui";
 import { CategoryBadge } from "@/components/domain/Category";
 import { useCreateTask, useEmployerTasks, useReviewSubmission, useSetTaskActive, useTaskSubmissions } from "@/features/employer/hooks";
 import { cn } from "@/lib/cn";
-import { formatDate, formatRelative } from "@/lib/format";
+import { formatDate, formatRelative, plural } from "@/lib/format";
 import { GRADE_LABEL, GRADES, SPEC_LONG_LABEL, SPECIALIZATIONS, TASK_KIND_LABEL } from "@/lib/labels";
 import { skillName } from "@/lib/skills";
+
+const MIN_BODY = 30;
 
 function ReviewForm({ taskId, sub }: { taskId: string; sub: TaskSubmission }) {
   const toast = useToast();
@@ -80,12 +82,19 @@ function TaskRow({ task }: { task: EmployerTask }) {
               <CategoryBadge key={g} category={{ specialization: task.specialization, grade: g }} size="sm" />
             ))}
           </div>
-          <p className="mt-2 font-mono font-semibold text-ink">{task.title}</p>
-          <p className="text-xs text-ink-subtle">
+          <p className="mt-2 text-base font-semibold tracking-tight text-ink">{task.title}</p>
+          <p className="mt-0.5 text-xs text-ink-subtle">
             создано {formatDate(task.created_at)} · ответов {task.submissions} · оценено {task.reviewed}
           </p>
         </div>
-        <ChevronDown className={cn("size-5 shrink-0 text-ink-subtle transition-transform", open && "rotate-180")} aria-hidden />
+        <span className="flex shrink-0 items-center gap-3">
+          {task.submissions > task.reviewed && (
+            <Badge tone="warning" dot>
+              Ждут оценки: {task.submissions - task.reviewed}
+            </Badge>
+          )}
+          <ChevronDown className={cn("size-5 text-ink-subtle transition-transform", open && "rotate-180")} aria-hidden />
+        </span>
       </button>
       {open && (
         <div className="space-y-5 border-t border-line p-5">
@@ -111,14 +120,19 @@ function CreateDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [spec, setSpec] = useState<Specialization>("backend");
   const [grades, setGrades] = useState<Grade[]>(["middle"]);
   const [skills, setSkills] = useState<string[]>([]);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [attempted, setAttempted] = useState(false);
+  const form = useRef<HTMLDivElement>(null);
+  const errors: Record<string, string> = {};
+  if (attempted && title.trim().length < 3) errors.title = "Назовите задание — хотя бы 3 символа";
+  if (attempted && body.trim().length < MIN_BODY) errors.body = `Опишите задание подробнее — хотя бы ${MIN_BODY} символов`;
+  if (attempted && !grades.length) errors.grades = "Выберите хотя бы один грейд";
+  const bodyLeft = MIN_BODY - body.trim().length;
   const submit = () => {
-    const e: Record<string, string> = {};
-    if (title.trim().length < 3) e.title = "Укажите название";
-    if (body.trim().length < 30) e.body = "Опишите задание — хотя бы 30 символов";
-    if (!grades.length) e.grades = "Выберите грейды";
-    setErrors(e);
-    if (Object.keys(e).length) return;
+    setAttempted(true);
+    if (title.trim().length < 3 || body.trim().length < MIN_BODY || !grades.length) {
+      focusFirstError(form.current);
+      return;
+    }
     create.mutate(
       { title: title.trim(), body: body.trim(), kind, specialization: spec, grades, skills },
       {
@@ -148,22 +162,29 @@ function CreateDialog({ open, onClose }: { open: boolean; onClose: () => void })
         </>
       }
     >
-      <div className="space-y-4">
+      <div ref={form} className="space-y-5">
         <Field label="Название" required error={errors.title}>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Идемпотентный платёж" maxLength={120} />
         </Field>
-        <Field label="Что нужно сделать" required error={errors.body} hint="Поддерживается `код` и блоки ```">
-          <Textarea rows={6} value={body} onChange={(e) => setBody(e.target.value)} />
+        <Field
+          label="Что нужно сделать"
+          required
+          error={errors.body}
+          hint={bodyLeft > 0 ? `Поддерживается \`код\` и блоки \`\`\`. Ещё ${bodyLeft} ${plural(bodyLeft, ["символ", "символа", "символов"])} до минимума` : "Поддерживается `код` и блоки ```"}
+        >
+          <Textarea rows={6} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Пользователь дважды нажал «Оплатить». Как не списать деньги дважды?" />
         </Field>
-        <RadioCards<TaskKind>
-          name="kind"
-          value={kind}
-          onChange={setKind}
-          options={[
-            { value: "approach", title: TASK_KIND_LABEL.approach, description: "Кандидат описывает идею и компромиссы" },
-            { value: "solution", title: TASK_KIND_LABEL.solution, description: "Кандидат присылает решение или код" },
-          ]}
-        />
+        <FieldSet legend="Формат ответа">
+          <RadioCards<TaskKind>
+            name="kind"
+            value={kind}
+            onChange={setKind}
+            options={[
+              { value: "approach", title: TASK_KIND_LABEL.approach, description: "Кандидат описывает идею и компромиссы" },
+              { value: "solution", title: TASK_KIND_LABEL.solution, description: "Кандидат присылает решение или код" },
+            ]}
+          />
+        </FieldSet>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Специализация">
             <Select value={spec} onChange={(e) => setSpec(e.target.value as Specialization)}>
@@ -186,32 +207,82 @@ function CreateDialog({ open, onClose }: { open: boolean; onClose: () => void })
   );
 }
 
+const HOW = [
+  { title: "Задача на 15–30 минут", text: "Опишите ситуацию из вашей работы: что сломалось, что нужно спроектировать или ускорить." },
+  { title: "Её получают кандидаты категории", text: "Раз в неделю, если у кандидата нет открытого задания. На ответ — неделя." },
+  { title: "Вы оцениваете ответ", text: "Оценка и короткий отзыв уходят кандидату. Видно, как человек думает, ещё до приглашения." },
+];
+
+function Intro({ onCreate }: { onCreate: () => void }) {
+  return (
+    <Card padding="lg" className="relative overflow-hidden">
+      <div className="max-w-xl">
+        <span className="flex size-11 items-center justify-center rounded-2xl bg-primary-50 text-primary ring-8 ring-primary-50/50">
+          <ListChecks className="size-5" aria-hidden />
+        </span>
+        <h2 className="mt-5 text-xl font-semibold tracking-[-0.02em] text-ink">Заданий пока нет</h2>
+        <p className="mt-2 text-sm leading-relaxed text-ink-muted">Регулярные задания показывают ход мысли кандидатов до приглашения и держат их профили актуальными. Одно хорошее задание работает месяцами.</p>
+      </div>
+      <ol className="mt-8 grid gap-5 border-t border-line pt-6 md:grid-cols-3">
+        {HOW.map((h, i) => (
+          <li key={h.title} className="flex gap-3">
+            <span aria-hidden className="tabular mt-px flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-50 font-mono text-xs font-semibold text-primary-strong ring-1 ring-primary-100">
+              {i + 1}
+            </span>
+            <span className="min-w-0 text-sm">
+              <span className="block font-medium text-ink">{h.title}</span>
+              <span className="mt-1 block text-ink-muted">{h.text}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      <Button className="mt-8" icon={<Plus className="size-4" aria-hidden />} onClick={onCreate}>
+        Создать задание
+      </Button>
+    </Card>
+  );
+}
+
 export default function EmployerTasksPage() {
   const q = useEmployerTasks();
   const [creating, setCreating] = useState(false);
+  const tasks = q.data ?? [];
+  const answers = tasks.reduce((s, t) => s + t.submissions, 0);
+  const reviewed = tasks.reduce((s, t) => s + t.reviewed, 0);
   return (
     <div>
       <PageHeader
+        eyebrow="Найм"
         title="Регулярные задания"
         description="Короткие задачи для кандидатов нужных категорий: помогают увидеть ход мысли и поддерживают актуальность профилей."
         actions={
-          <Button icon={<Plus className="size-4" aria-hidden />} onClick={() => setCreating(true)}>
-            Новое задание
-          </Button>
+          tasks.length > 0 ? (
+            <Button icon={<Plus className="size-4" aria-hidden />} onClick={() => setCreating(true)}>
+              Новое задание
+            </Button>
+          ) : undefined
         }
       />
       {q.isPending ? (
         <SkeletonCard lines={3} />
       ) : q.isError ? (
         <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
-      ) : q.data.length === 0 ? (
-        <EmptyState icon={<ListChecks className="size-5" aria-hidden />} title="Заданий пока нет" description="Создайте задание — его получат кандидаты выбранной категории." action={<Button onClick={() => setCreating(true)}>Создать задание</Button>} />
+      ) : tasks.length === 0 ? (
+        <Intro onCreate={() => setCreating(true)} />
       ) : (
-        <div className="space-y-4">
-          <CardHeader title={`Заданий: ${q.data.length}`} as="h2" className="mb-0" />
-          {q.data.map((t) => (
-            <TaskRow key={t.id} task={t} />
-          ))}
+        <div className="space-y-6">
+          <Card padding="sm" className="grid grid-cols-2 gap-5 p-5 sm:grid-cols-4">
+            <Stat label="Выдаются" value={tasks.filter((t) => t.active).length} hint={`из ${tasks.length}`} />
+            <Stat label="Ответов" value={answers} />
+            <Stat label="Оценено" value={reviewed} />
+            <Stat label="Ждут оценки" value={answers - reviewed} tone={answers > reviewed ? "primary" : "default"} />
+          </Card>
+          <section className="space-y-3">
+            <CardHeader title="Задания" description="Откройте задание, чтобы прочитать ответы и поставить оценку" as="h2" className="mb-1" />
+            {tasks.map((t) => (
+              <TaskRow key={t.id} task={t} />
+            ))}
+          </section>
         </div>
       )}
       <CreateDialog key={String(creating)} open={creating} onClose={() => setCreating(false)} />

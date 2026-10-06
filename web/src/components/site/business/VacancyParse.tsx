@@ -177,7 +177,12 @@ export function VacancyParse() {
         const replay = el?.querySelector<HTMLButtonElement>("[data-replay]");
         if (!el || !text || !caret || !replay) return;
 
-        const split = SplitText.create(text, { type: "words,chars", charsClass: "vp-char", wordsClass: "vp-word" });
+        // Split letters are aria-hidden; screen readers get this one plain sentence instead (server HTML has it once).
+        const copy = document.createElement("span");
+        copy.className = "sr-only";
+        copy.textContent = text.textContent;
+        text.after(copy);
+        const split = SplitText.create(text, { type: "words,chars", charsClass: "vp-char", wordsClass: "vp-word", aria: "hidden" });
         const chars = split.chars as HTMLElement[];
         const phrases = gsap.utils.toArray<HTMLElement>("[data-phrase]", el);
         const marks = gsap.utils.toArray<HTMLElement>("[data-mark]", el);
@@ -254,7 +259,10 @@ export function VacancyParse() {
           if (!ctx.isReverted) ctx.add(build);
         });
 
-        return () => replay.removeEventListener("click", onReplay);
+        return () => {
+          replay.removeEventListener("click", onReplay);
+          copy.remove();
+        };
       });
     },
     { scope: root, extra: loadMotionPath },
@@ -326,12 +334,13 @@ export function VacancyParse() {
                   </span>
                 ))}
               </dd>
-              <span className="col-start-2 row-start-1 flex items-center gap-1.5 sm:col-start-3">
+              <dd className="col-start-2 row-start-1 flex items-center gap-1.5 sm:col-start-3">
                 <span data-check className="flex size-5 items-center justify-center rounded-full bg-success-300 text-night">
                   <Check className="size-3" strokeWidth={3} aria-hidden />
                 </span>
                 <PenLine className="size-4 text-night-faint" aria-hidden />
-              </span>
+                <span className="sr-only">распознано, можно поправить</span>
+              </dd>
             </div>
           ))}
         </dl>

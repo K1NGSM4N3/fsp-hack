@@ -23,7 +23,7 @@ export function PageHeader({ title, description, actions, back, eyebrow, classNa
       )}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
-          {eyebrow && <div className="mb-2">{eyebrow}</div>}
+          {eyebrow && <div className="mb-2">{typeof eyebrow === "string" ? <span className="eyebrow text-primary">{eyebrow}</span> : eyebrow}</div>}
           <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.03em] text-ink sm:text-[32px]">{title}</h1>
           {description && <p className="mt-2 max-w-2xl text-sm leading-relaxed text-ink-muted sm:text-[15px]">{description}</p>}
         </div>

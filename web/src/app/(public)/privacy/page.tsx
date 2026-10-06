@@ -3,11 +3,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import type { ConsentDocument } from "@/api/types";
 import { Container } from "@/components/site/primitives";
+import { JsonLd } from "@/components/seo/JsonLd";
+import { breadcrumbs } from "@/lib/jsonld";
+import { PUBLIC_PAGES, pageMetadata } from "@/lib/site";
 
-export const metadata: Metadata = {
-  title: { absolute: "Политика обработки персональных данных · ФСП Таланты" },
-  description: "Какие данные хранит платформа ФСП Таланты, зачем, кому их видно, сколько храним и как распоряжаться ими из личного кабинета.",
-};
+export const metadata: Metadata = pageMetadata(PUBLIC_PAGES.privacy);
 
 export const dynamic = "force-dynamic";
 
@@ -80,6 +80,7 @@ export default async function PrivacyPage() {
   const docs = await currentDocuments();
   return (
     <div className="flex flex-1 flex-col bg-white">
+      <JsonLd data={breadcrumbs([PUBLIC_PAGES.privacy])} />
       <Container className="pt-28 pb-20 sm:pt-32 lg:pb-28">
         <div className="grid gap-12 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-16">
           <nav aria-label="Разделы политики" className="hidden lg:block">
@@ -109,7 +110,7 @@ export default async function PrivacyPage() {
                 Оператор персональных данных — организация, которая эксплуатирует платформу «ФСП Таланты». Её полное наименование, ИНН, ОГРН, адрес и контакт ответственного за организацию обработки персональных данных публикуются на этой странице при вводе платформы в эксплуатацию.
               </p>
               <p>
-                Уже сейчас посмотреть, выгрузить, исправить и удалить свои данные, а также отозвать согласие можно в настройках личного кабинета — как именно, описано в разделе <a href="#rights" className="text-primary hover:underline">«Ваши права»</a>.
+                Уже сейчас посмотреть, выгрузить, исправить и удалить свои данные, а также отозвать согласие можно в настройках личного кабинета — как именно, описано в разделе <a href="#rights" className="link-inline">«Ваши права»</a>.
               </p>
             </Part>
 
@@ -180,7 +181,7 @@ export default async function PrivacyPage() {
 
             <Part id="actions" title="Что мы делаем с данными">
               <p>
-                Сбор, запись, систематизация, накопление, хранение, уточнение (обновление, изменение), извлечение, использование, предоставление — только компаниям и только в случаях из раздела <a href="#recipients" className="text-primary hover:underline">«Кому видны данные»</a>, — обезличивание, блокирование, удаление и уничтожение. Обработка автоматизированная.
+                Сбор, запись, систематизация, накопление, хранение, уточнение (обновление, изменение), извлечение, использование, предоставление — только компаниям и только в случаях из раздела <a href="#recipients" className="link-inline">«Кому видны данные»</a>, — обезличивание, блокирование, удаление и уничтожение. Обработка автоматизированная.
               </p>
             </Part>
 
@@ -280,7 +281,7 @@ export default async function PrivacyPage() {
 
             <Part id="contact" title="Как связаться">
               <p>
-                Почти всё решается в кабинете сразу. Если нужно то, чего там нет, — например, вопрос о данных, которых нет в выгрузке, — используйте контакт ответственного за обработку персональных данных: он появится в разделе <a href="#operator" className="text-primary hover:underline">«Кто обрабатывает данные»</a> при вводе платформы в эксплуатацию. На запрос отвечаем в течение 10 рабочих дней.
+                Почти всё решается в кабинете сразу. Если нужно то, чего там нет, — например, вопрос о данных, которых нет в выгрузке, — используйте контакт ответственного за обработку персональных данных: он появится в разделе <a href="#operator" className="link-inline">«Кто обрабатывает данные»</a> при вводе платформы в эксплуатацию. На запрос отвечаем в течение 10 рабочих дней.
               </p>
               <p>
                 <Link href="/login" className="font-medium text-primary hover:underline">

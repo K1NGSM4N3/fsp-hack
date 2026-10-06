@@ -12,6 +12,14 @@ const ITEMS: { title: string; text: string }[] = [
   { title: "ФСП ID, если выступали на соревнованиях ФСП", text: "Достижения подтянутся из реестра и поднимут вас внутри категории. Без них вы в поиске на общих основаниях." },
 ];
 
+/** The unticked text is dimmed to ink-faint (still AA on white) rather than faded with opacity, so it stays readable. */
+function textTone(row: HTMLElement) {
+  const text = [...row.querySelectorAll<HTMLElement>("[data-text]")];
+  const dim = getComputedStyle(row).getPropertyValue("--color-ink-faint").trim() || "#6d6f79";
+  const own = text.map((el) => getComputedStyle(el).color);
+  return { text, from: { color: dim }, to: { color: (i: number) => own[i] ?? dim } };
+}
+
 /** Checklist whose boxes fill and tick in step with the scroll on desktop; on phones each row ticks once as it enters. */
 export function PrepChecklist() {
   const root = useRef<HTMLOListElement>(null);
@@ -20,9 +28,10 @@ export function PrepChecklist() {
       const mm = gsap.matchMedia();
       mm.add(MOTION_MOBILE, () => {
         for (const row of gsap.utils.toArray<HTMLElement>("[data-item]", root.current)) {
+          const tone = textTone(row);
           gsap
             .timeline({ scrollTrigger: { trigger: row, start: "top 82%", once: true } })
-            .fromTo(row.querySelectorAll("[data-text]"), { opacity: 0.32 }, { opacity: 1, duration: 0.5, ease: "power1.out" }, 0)
+            .fromTo(tone.text, tone.from, { ...tone.to, duration: 0.5, ease: "power1.out" }, 0)
             .fromTo(row.querySelector("[data-fill]"), { scale: 0.3, autoAlpha: 0, transformOrigin: "50% 50%" }, { scale: 1, autoAlpha: 1, duration: 0.4, ease: "back.out(2)" }, 0.1)
             .fromTo(row.querySelector("[data-check]"), { drawSVG: "0%", opacity: 0 }, { drawSVG: "100%", opacity: 1, duration: 0.4, ease: "power2.out" }, 0.3);
         }
@@ -33,8 +42,8 @@ export function PrepChecklist() {
         rows.forEach((row, i) => {
           const fill = row.querySelector("[data-fill]");
           const check = row.querySelector("[data-check]");
-          const text = row.querySelectorAll("[data-text]");
-          tl.fromTo(text, { opacity: 0.32 }, { opacity: 1, duration: 0.5, ease: "none" }, i)
+          const tone = textTone(row);
+          tl.fromTo(tone.text, tone.from, { ...tone.to, duration: 0.5, ease: "none" }, i)
             .fromTo(fill, { scale: 0.3, autoAlpha: 0, transformOrigin: "50% 50%" }, { scale: 1, autoAlpha: 1, duration: 0.35, ease: "back.out(2)" }, i + 0.2)
             .fromTo(check, { drawSVG: "0%", opacity: 0 }, { drawSVG: "100%", opacity: 1, duration: 0.45, ease: "power2.out" }, i + 0.4);
         });

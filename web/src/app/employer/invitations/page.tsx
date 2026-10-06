@@ -7,7 +7,7 @@ import { isApiError } from "@/api/client";
 import type { InvitationStatus, SentInvitation } from "@/api/types";
 import { CategoryBadge, SalaryRange } from "@/components/domain/Category";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
-import { Button, ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, useToast } from "@/components/ui";
+import { Button, ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
 import { useSentInvitation, useSentInvitations, useWithdrawInvitation } from "@/features/employer/hooks";
 import { cn } from "@/lib/cn";
 import { formatDateTime, formatRelative } from "@/lib/format";
@@ -110,33 +110,36 @@ export default function EmployerInvitationsPage() {
     <div>
       <PageHeader title="Приглашения" description="Статусы обновляются, когда кандидат открывает приглашение и отвечает. Приглашение действует 14 дней." />
       <Tabs<Filter>
+        idPrefix="sent"
         ariaLabel="Фильтр по статусу"
         value={filter}
         onChange={setFilter}
         className="mb-6"
         items={[{ value: "all" as Filter, label: "Все", count: data.length }, ...statuses.map((s) => ({ value: s as Filter, label: INVITATION_STATUS_LABEL[s], count: count(s) }))]}
       />
-      {q.isPending ? (
-        <div className="space-y-3">
-          <SkeletonCard lines={2} />
-          <SkeletonCard lines={2} />
-        </div>
-      ) : q.isError ? (
-        <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
-      ) : list.length === 0 ? (
-        <EmptyState
-          icon={<Send className="size-5" aria-hidden />}
-          title={data.length === 0 ? "Вы ещё никого не пригласили" : "Нет приглашений с таким статусом"}
-          description={data.length === 0 ? "Откройте подборку по потребности или найдите кандидата в базе — и отправьте приглашение с вилкой." : undefined}
-          action={data.length === 0 ? <ButtonLink href="/employer/needs">К подборкам</ButtonLink> : undefined}
-        />
-      ) : (
-        <ul className="space-y-3">
-          {list.map((inv) => (
-            <Row key={inv.id} inv={inv} />
-          ))}
-        </ul>
-      )}
+      <div {...tabPanelProps("sent", filter)}>
+        {q.isPending ? (
+          <div className="space-y-3">
+            <SkeletonCard lines={2} />
+            <SkeletonCard lines={2} />
+          </div>
+        ) : q.isError ? (
+          <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
+        ) : list.length === 0 ? (
+          <EmptyState
+            icon={<Send className="size-5" aria-hidden />}
+            title={data.length === 0 ? "Вы ещё никого не пригласили" : "Нет приглашений с таким статусом"}
+            description={data.length === 0 ? "Откройте подборку по потребности или найдите кандидата в базе — и отправьте приглашение с вилкой." : undefined}
+            action={data.length === 0 ? <ButtonLink href="/employer/needs">К подборкам</ButtonLink> : undefined}
+          />
+        ) : (
+          <ul className="space-y-3">
+            {list.map((inv) => (
+              <Row key={inv.id} inv={inv} />
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

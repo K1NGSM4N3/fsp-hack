@@ -11,7 +11,8 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "gen:api": "openapi-typescript openapi.json -o src/api/schema.d.ts"
+    "gen:api": "openapi-typescript openapi.json -o src/api/schema.d.ts",
+    "check:seo": "node scripts/seo-check.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",

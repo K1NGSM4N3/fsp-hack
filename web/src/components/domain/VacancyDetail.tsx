@@ -1,5 +1,6 @@
 "use client";
 
+import type { PublicVacancy } from "@/api/types";
 import { Building2, CheckCircle2, MapPin, Send } from "lucide-react";
 import { useState } from "react";
 import { isApiError } from "@/api/client";
@@ -8,7 +9,7 @@ import { ReportButton } from "@/components/domain/ReportButton";
 import { useMe } from "@/features/auth/hooks";
 import { useMyApplications } from "@/features/candidate/hooks";
 import { useSkillNamePreload } from "@/features/catalog/hooks";
-import { useApply, useVacancy } from "@/features/vacancies/hooks";
+import { useApply, useVacancy, type Seed } from "@/features/vacancies/hooks";
 import { formatDate } from "@/lib/format";
 import { GRADE_LABEL, SPEC_LONG_LABEL, WORK_FORMAT_LABEL } from "@/lib/labels";
 import { skillName } from "@/lib/skills";
@@ -31,7 +32,7 @@ function ApplyBox({ vacancyId, loginNext }: { vacancyId: string; loginNext: stri
       <Card>
         <CardHeader title="Откликнуться" description="Отклик раскрывает компании ваши контакты — так же, как принятое приглашение." />
         <ButtonLink href={`/login?next=${encodeURIComponent(loginNext)}`} className="w-full">
-          Войти как кандидат
+          Войти как соискатель
         </ButtonLink>
         <ButtonLink href="/register?role=candidate" variant="ghost" className="mt-2 w-full">
           Создать профиль
@@ -40,7 +41,7 @@ function ApplyBox({ vacancyId, loginNext }: { vacancyId: string; loginNext: stri
     );
   }
   if (!isCandidate) {
-    return <Alert title="Вы вошли как работодатель">Откликаться на вакансии могут только кандидаты.</Alert>;
+    return <Alert title="Вы вошли как компания">Откликаться на вакансии могут только соискатели.</Alert>;
   }
   if (mine) {
     return (
@@ -86,9 +87,9 @@ function ApplyBox({ vacancyId, loginNext }: { vacancyId: string; loginNext: stri
   );
 }
 
-export function VacancyDetail({ id, backHref, backLabel }: { id: string; backHref: string; backLabel: string }) {
+export function VacancyDetail({ id, backHref, backLabel, seed }: { id: string; backHref: string; backLabel: string; seed?: Seed<PublicVacancy> | null }) {
   useSkillNamePreload();
-  const query = useVacancy(id);
+  const query = useVacancy(id, seed);
   if (query.isPending) return <PageSkeleton cards={2} />;
   if (query.isError) {
     if (isApiError(query.error) && query.error.status === 404) {
@@ -138,7 +139,9 @@ export function VacancyDetail({ id, backHref, backLabel }: { id: string; backHre
               </div>
               <div>
                 <dt className="text-ink-subtle">Опубликована</dt>
-                <dd className="mt-0.5 text-ink">{formatDate(v.published_at)}</dd>
+                <dd className="mt-0.5 text-ink" suppressHydrationWarning>
+                  {formatDate(v.published_at)}
+                </dd>
               </div>
             </dl>
           </Card>

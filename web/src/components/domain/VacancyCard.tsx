@@ -11,7 +11,7 @@ import { DomainBadge } from "./DomainBadge";
 
 export function VacancyCard({ vacancy: v, href, footer }: { vacancy: PublicVacancy; href: string; footer?: ReactNode }) {
   return (
-    <article className="rounded-card border border-line bg-white p-5 shadow-card transition-colors hover:border-primary-200">
+    <article className="rounded-card border border-line bg-white p-5 shadow-card transition-colors [contain-intrinsic-size:auto_11rem] [content-visibility:auto] hover:border-primary-200">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <h3 className="text-base font-semibold tracking-tight">
@@ -34,7 +34,9 @@ export function VacancyCard({ vacancy: v, href, footer }: { vacancy: PublicVacan
         </div>
         <div className="shrink-0 sm:text-right">
           <SalaryRange salary={v.salary} label="Зарплата" />
-          <p className="mt-0.5 text-xs text-ink-subtle">{v.published_at ? `опубликована ${formatRelative(v.published_at)}` : "черновик"}</p>
+          <p className="mt-0.5 text-xs text-ink-subtle" suppressHydrationWarning>
+            {v.published_at ? `опубликована ${formatRelative(v.published_at)}` : "черновик"}
+          </p>
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-1.5">

@@ -61,7 +61,9 @@ export function SiteHeader() {
   const getLenis = useLenis();
   const role = useSessionRole();
   const [open, setOpen] = useState(false);
-  const shell = useRef<HTMLDivElement>(null);
+  const shell = useRef<HTMLElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const nav = useRef<HTMLElement>(null);
   const indicator = useRef<HTMLSpanElement>(null);
@@ -122,21 +124,36 @@ export function SiteHeader() {
     lenis?.stop();
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const focusable = () => [...(menu.current?.querySelectorAll<HTMLElement>("a[href], button:not([disabled])") ?? [])];
+    focusable()[0]?.focus();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
+      if (e.key !== "Tab") return;
+      const items = focusable();
+      const first = items[0];
+      const last = items.at(-1);
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
+    const back = opener.current;
     return () => {
       lenis?.start();
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
+      back?.focus();
     };
   }, [open, getLenis]);
 
   const close = () => setOpen(false);
 
   return (
-    <div ref={shell} className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4 print:hidden">
+    <header ref={shell} className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4 print:hidden">
       <div
         ref={bar}
         className="group/bar pointer-events-auto mx-auto flex h-14 max-w-[1240px] items-center justify-between gap-3 rounded-full border border-white/60 bg-white/75 pr-2 pl-4 shadow-[0_10px_40px_-18px_rgb(11_11_18/0.35)] backdrop-blur-xl backdrop-saturate-150 transition-[background-color,box-shadow] duration-300 data-[scrolled]:bg-white/90 data-[scrolled]:shadow-[0_14px_44px_-16px_rgb(11_11_18/0.4)] sm:h-16 sm:pl-5"
@@ -177,6 +194,7 @@ export function SiteHeader() {
           <AuthActions role={role} />
         </div>
         <button
+          ref={opener}
           type="button"
           onClick={() => setOpen(true)}
           aria-expanded={open}
@@ -190,6 +208,7 @@ export function SiteHeader() {
 
       {open && (
         <div
+          ref={menu}
           id="site-menu"
           role="dialog"
           aria-modal="true"
@@ -229,6 +248,6 @@ export function SiteHeader() {
           </div>
         </div>
       )}
-    </div>
+    </header>
   );
 }

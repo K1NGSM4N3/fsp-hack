@@ -23,9 +23,10 @@ const PEOPLE = [
   { code: "К-3D27", name: "Дарья Белова", cat: "Бэкенд · Middle" },
 ];
 
+/** Decorative demos are inert as well as aria-hidden: the faded back cards are illustration, and clicks fall through to the door link. */
 function OfferStack() {
   return (
-    <div className="relative h-[15.5rem] w-full max-w-[22rem]" aria-hidden>
+    <div className="relative h-[15.5rem] w-full max-w-[22rem]" aria-hidden inert>
       {OFFERS.map((o, i) => (
         <div
           key={o.role}
@@ -49,7 +50,7 @@ function OfferStack() {
 
 function PeopleList() {
   return (
-    <ul className="w-full max-w-[24rem] divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white shadow-card" aria-hidden>
+    <ul className="w-full max-w-[24rem] divide-y divide-line overflow-hidden rounded-2xl border border-line bg-white shadow-card" aria-hidden inert>
       {PEOPLE.map((p, i) => (
         <li key={p.code} data-person className="relative flex items-center gap-3 px-4 py-3">
           <span data-person-hl className={cn("absolute inset-0 bg-primary-50", i === 0 ? "opacity-100" : "opacity-0")} />

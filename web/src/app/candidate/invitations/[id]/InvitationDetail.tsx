@@ -258,7 +258,7 @@ export function InvitationDetail({ id }: { id: string }) {
               {inv.company_website && (
                 <li className="flex items-center gap-2">
                   <Globe className="size-4 text-ink-subtle" aria-hidden />
-                  <a href={inv.company_website} target="_blank" rel="noreferrer" className="text-primary hover:underline">
+                  <a href={inv.company_website} target="_blank" rel="noreferrer" className="link-inline">
                     {inv.company_website.replace(/^https?:\/\//, "")}
                   </a>
                 </li>
