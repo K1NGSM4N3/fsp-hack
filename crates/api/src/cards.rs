@@ -98,6 +98,10 @@ pub struct CandidateCard {
     /// How the test behind the current category was proctored; `None` for tests taken without
     /// proctoring. Never carries the video.
     pub proctoring: Option<ProctoringBadge>,
+    /// «Результат подтверждён»: a moderator reviewed the test behind the current category and
+    /// confirmed it. The decision itself, the comment and the video stay with the moderator and
+    /// the candidate.
+    pub result_confirmed: bool,
     /// Under 18 (registered as 14–17, legal representative's consent given): show a neutral
     /// «14–17 лет». The birth date itself never reaches employers.
     pub minor: bool,
@@ -315,6 +319,7 @@ fn build(
         task_rating: r.task_rating,
         tasks_done: r.tasks_done,
         proctoring,
+        result_confirmed: r.result_confirmed.unwrap_or(false),
         minor: r.minor,
         relation: relation(r.invitation_status, r.applied),
     };

@@ -1,0 +1,171 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.candidate_id, c.public_code, s.specialization, s.claimed_grade,\n                  s.attempt_kind, s.status AS \"status: AssessmentStatus\", s.started_at, s.finished_at,\n                  s.theta, s.se, s.measured_grade, s.person_fit_lz, s.aberrant,\n                  c.specialization AS current_specialization, c.grade AS current_grade,\n                  g.assigned_at AS \"assigned_at?\", g.annulled_at AS \"annulled_at?\",\n                  (g.id IS NOT NULL AND g.annulled_at IS NULL AND NOT EXISTS (\n                       SELECT 1 FROM grade_assignments n\n                        WHERE n.candidate_id = s.candidate_id AND n.annulled_at IS NULL\n                          AND (n.assigned_at, n.id) > (g.assigned_at, g.id))) AS \"assignment_current!\",\n                  r.decision AS \"decision?: ReviewDecision\", r.comment AS \"decision_comment?\",\n                  r.decided_at AS \"decided_at?\"\n           FROM assessment_sessions s\n           JOIN candidates c ON c.user_id = s.candidate_id\n           LEFT JOIN grade_assignments g ON g.session_id = s.id\n           LEFT JOIN session_reviews r ON r.session_id = s.id\n           WHERE s.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "claimed_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "attempt_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "status: AssessmentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "assessment_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "passed",
+                "failed",
+                "expired"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "finished_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "se",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 11,
+        "name": "measured_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "person_fit_lz",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "aberrant",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 14,
+        "name": "current_specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "current_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 16,
+        "name": "assigned_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 17,
+        "name": "annulled_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 18,
+        "name": "assignment_current!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 19,
+        "name": "decision?: ReviewDecision",
+        "type_info": {
+          "Custom": {
+            "name": "review_decision",
+            "kind": {
+              "Enum": [
+                "confirm",
+                "annul",
+                "retest"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "decision_comment?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
+        "name": "decided_at?",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7018640169123d1994272f5a9c92d7d889620c56e277672c700c8e9f48cd79cd"
+}

@@ -311,8 +311,32 @@ function OfferCard({ offer, session }: { offer: Offer; session: AssessmentSessio
   );
 }
 
+const DECISION_VIEW: Record<NonNullable<AssessmentSession["review"]>["decision"], { tone: "success" | "danger" | "warning"; title: string }> = {
+  confirm: { tone: "success", title: "Модератор подтвердил результат" },
+  annul: { tone: "danger", title: "Модератор аннулировал результат" },
+  retest: { tone: "warning", title: "Модератор назначил пересдачу с видеозаписью" },
+};
+
+function ModeratorDecision({ review, grade }: { review: NonNullable<AssessmentSession["review"]>; grade: AssessmentSession["claimed_grade"] }) {
+  const v = DECISION_VIEW[review.decision];
+  const effect =
+    review.decision === "confirm"
+      ? "Отметка «требует подтверждения» снята. Работодатели видят у вашей категории «Результат подтверждён»."
+      : review.decision === "annul"
+        ? `Категория из этого теста снята, вернулась прежняя — если она была. Тест на ${GRADE_LABEL[grade]} снова доступен через 30 дней после решения.`
+        : `Пройти тест на ${GRADE_LABEL[grade]} можно сразу, но только с включённой камерой. До этого категория из этого теста снята.`;
+  return (
+    <Alert tone={v.tone} title={v.title}>
+      <p>{effect}</p>
+      <blockquote className="mt-2 border-l-2 border-line-strong pl-3 whitespace-pre-line text-ink">{review.comment}</blockquote>
+      <p className="mt-2 text-xs text-ink-subtle">Решение от {formatDate(review.decided_at)}</p>
+    </Alert>
+  );
+}
+
 function Result({ session }: { session: AssessmentSession }) {
   const r = session.result;
+  const voided = session.review?.decision === "annul" || session.review?.decision === "retest";
   const category = { specialization: session.specialization, grade: session.claimed_grade };
 
   if (session.status === "expired" || !r) {
@@ -345,17 +369,21 @@ function Result({ session }: { session: AssessmentSession }) {
         className="mb-0"
       />
 
-      <Card padding="lg" className={d.passed ? "border-success-200" : ""}>
+      <Card padding="lg" className={d.passed && !voided ? "border-success-200" : ""}>
         <div className="flex items-start gap-4">
-          {d.passed ? <CheckCircle2 className="size-10 shrink-0 text-success" aria-hidden /> : <CircleSlash className="size-10 shrink-0 text-ink-faint" aria-hidden />}
+          {d.passed && !voided ? <CheckCircle2 className="size-10 shrink-0 text-success" aria-hidden /> : <CircleSlash className="size-10 shrink-0 text-ink-faint" aria-hidden />}
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold tracking-tight text-ink">{d.passed ? "Грейд подтверждён" : `Грейд ${GRADE_LABEL[session.claimed_grade]} пока не подтверждён`}</h2>
+            <h2 className="text-xl font-semibold tracking-tight text-ink">
+              {voided ? "Результат аннулирован модератором" : d.passed ? "Грейд подтверждён" : `Грейд ${GRADE_LABEL[session.claimed_grade]} пока не подтверждён`}
+            </h2>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <CategoryBadge category={category} long />
               {strength !== null && <span className="tabular font-mono text-sm text-ink">сила результата {strength}/100</span>}
             </div>
             <p className="mt-3 text-sm text-ink-muted">
-              {r.assigned_grade
+              {voided
+                ? "Категория, которую дал этот тест, снята. Подробности — в решении модератора ниже."
+                : r.assigned_grade
                 ? "Категория присвоена — работодатели уже могут найти вас в поиске."
                 : d.grade_measured
                   ? `По результату уровень соответствует ${GRADE_LABEL[d.grade_measured]}. Неудачная попытка не понижает уже присвоенный грейд.`
@@ -380,10 +408,12 @@ function Result({ session }: { session: AssessmentSession }) {
       {r.needs_review && (
         <Alert tone="warning" title="Результат требует подтверждения" icon={<ShieldAlert className="size-5 text-warning" aria-hidden />}>
           {session.proctoring
-            ? "Ответы выглядят нетипично — верные на сложных заданиях и неверные на простых, — и во время теста были уходы со вкладки или вставка текста. Администратор может попросить подтвердить результат."
-            : "Ответы выглядят нетипично: верные на сложных заданиях и неверные на простых. Мы можем попросить подтвердить результат."}
+            ? "Ответы выглядят нетипично — верные на сложных заданиях и неверные на простых, — и во время теста были уходы со вкладки или вставка текста. Модератор посмотрит тест и примет решение — оно появится здесь."
+            : "Ответы выглядят нетипично: верные на сложных заданиях и неверные на простых. Модератор посмотрит тест и примет решение — оно появится здесь."}
         </Alert>
       )}
+
+      {session.review && <ModeratorDecision review={session.review} grade={session.claimed_grade} />}
 
       <ProctoringResultCard session={session} />
 

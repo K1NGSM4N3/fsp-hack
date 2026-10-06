@@ -1,0 +1,63 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT company_id, title, status AS \"status: VacancyStatus\",\n                  flagged_at IS NOT NULL AS \"flagged!\", trust_reviewed_at IS NOT NULL AS \"reviewed!\",\n                  unpublished_at IS NOT NULL AS \"unpublished!\"\n           FROM vacancies WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "status: VacancyStatus",
+        "type_info": {
+          "Custom": {
+            "name": "vacancy_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "published",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "flagged!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "reviewed!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "unpublished!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1cf6f2c52090af05aaf04df33f1f6f71a1ace26312c7f549c3e961641253436e"
+}

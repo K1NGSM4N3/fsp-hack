@@ -1,0 +1,124 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT co.id AS company_id, co.name, u.created_at AS owner_created_at, co.verified_domain,\n                  CASE WHEN co.invitations_frozen_until > now() THEN co.invitations_frozen_until END\n                      AS frozen_until,\n                  co.trust_reviewed_at,\n                  greatest(rep.latest, inv.latest_flag, inv.latest_bad_decline, vac.latest) AS signal_at,\n                  rep.complaints AS \"complaints!\", inv.declines AS \"declines!\",\n                  inv.bad_declines AS \"bad_declines!\", inv.invitations AS \"invitations!\",\n                  inv.withdrawn AS \"withdrawn!\", inv.closed AS \"closed!\",\n                  inv.answered AS \"answered!\", inv.accepted AS \"accepted!\",\n                  inv.salary_flags + vac.salary_flags AS \"salary_flags!\",\n                  vac.own_duplicates AS \"own_duplicates!\", vac.copies AS \"copies!\"\n           FROM companies co\n           JOIN users u ON u.id = co.owner_user_id\n           CROSS JOIN LATERAL (\n               SELECT count(*) FILTER (WHERE i.status = 'declined'\n                                         AND i.responded_at >= now() - interval '90 days') AS declines,\n                      count(*) FILTER (WHERE i.status = 'declined'\n                                         AND i.responded_at >= now() - interval '90 days'\n                                         AND i.decline_reason IN ('salary', 'company')) AS bad_declines,\n                      count(*) FILTER (WHERE i.created_at >= now() - interval '90 days') AS invitations,\n                      count(*) FILTER (WHERE i.created_at >= now() - interval '90 days'\n                                         AND i.status = 'withdrawn') AS withdrawn,\n                      count(*) FILTER (WHERE i.created_at >= now() - interval '90 days'\n                                         AND i.status IN ('accepted', 'declined', 'expired')) AS closed,\n                      count(*) FILTER (WHERE i.created_at >= now() - interval '90 days'\n                                         AND i.status IN ('accepted', 'declined')) AS answered,\n                      count(*) FILTER (WHERE i.status = 'accepted'\n                                         AND i.responded_at >= now() - interval '180 days') AS accepted,\n                      count(*) FILTER (WHERE i.created_at >= now() - interval '90 days'\n                                         AND i.trust_flags <> '[]'\n                                         AND i.trust_review IS DISTINCT FROM 'dismissed') AS salary_flags,\n                      max(i.created_at) FILTER (WHERE i.created_at >= now() - interval '90 days'\n                                         AND i.trust_flags <> '[]'\n                                         AND i.trust_review IS DISTINCT FROM 'dismissed') AS latest_flag,\n                      max(i.responded_at) FILTER (WHERE i.status = 'declined'\n                                         AND i.responded_at >= now() - interval '90 days'\n                                         AND i.decline_reason IN ('salary', 'company')) AS latest_bad_decline\n               FROM invitations i\n               WHERE i.company_id = co.id\n           ) inv\n           CROSS JOIN LATERAL (\n               SELECT count(*) FILTER (WHERE jsonb_path_exists(v.trust_flags,\n                          '$[*] ? (@.kind == \"salary_above_market\" || @.kind == \"salary_wide_range\")')) AS salary_flags,\n                      count(*) FILTER (WHERE jsonb_path_exists(v.trust_flags,\n                          '$[*] ? (@.kind == \"duplicate_own\")')) AS own_duplicates,\n                      count(*) FILTER (WHERE jsonb_path_exists(v.trust_flags,\n                          '$[*] ? (@.kind == \"copy_of_other\")')) AS copies,\n                      max(v.flagged_at) AS latest\n               FROM vacancies v\n               WHERE v.company_id = co.id AND v.flagged_at >= now() - interval '90 days'\n                 AND v.trust_review IS DISTINCT FROM 'dismissed'\n           ) vac\n           CROSS JOIN LATERAL (\n               SELECT count(DISTINCT r.reporter_user_id) AS complaints, max(r.created_at) AS latest\n               FROM reports r\n               JOIN users ru ON ru.id = r.reporter_user_id AND ru.role = 'candidate'\n               WHERE r.resolution IS DISTINCT FROM 'dismissed'\n                 AND r.created_at >= now() - interval '90 days'\n                 AND ((r.target_kind = 'company' AND r.target_id = co.id)\n                   OR (r.target_kind = 'vacancy'\n                       AND r.target_id IN (SELECT id FROM vacancies WHERE company_id = co.id))\n                   OR (r.target_kind = 'invitation'\n                       AND r.target_id IN (SELECT id FROM invitations WHERE company_id = co.id)))\n           ) rep\n           WHERE $1::uuid IS NULL OR co.id = $1\n           ORDER BY co.created_at, co.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner_created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "verified_domain",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "frozen_until",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "trust_reviewed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "signal_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "complaints!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "declines!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "bad_declines!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "invitations!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 11,
+        "name": "withdrawn!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "closed!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 13,
+        "name": "answered!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 14,
+        "name": "accepted!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 15,
+        "name": "salary_flags!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 16,
+        "name": "own_duplicates!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 17,
+        "name": "copies!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      null,
+      true,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c048d940ad71a030074f1f9cbc68a9131f0f5373705f9ed7c4cf4628b6c13444"
+}

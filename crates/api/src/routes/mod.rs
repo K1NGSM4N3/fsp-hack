@@ -13,6 +13,7 @@ pub mod integrations;
 pub mod invitations;
 pub mod market;
 pub mod me;
+pub mod moderation;
 pub mod needs;
 pub mod proctoring;
 pub mod reports;

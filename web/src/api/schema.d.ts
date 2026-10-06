@@ -4,6 +4,91 @@
  */
 
 export interface paths {
+    "/api/v1/admin/antifake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Anti-fake queue: flagged companies, vacancies and invitations with open complaints, oldest first */
+        get: operations["trust_queue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/antifake/actions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Act on an anti-fake item: dismiss, take a vacancy down, freeze the company's invitations, restore */
+        post: operations["trust_act"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/log": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Audit log of moderation, newest first: decisions, anti-fake actions and recording views */
+        get: operations["audit_log"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The overview: what waits in each queue and what moderators did this week */
+        get: operations["overview"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/proctoring": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Proctoring queue: finished sessions oldest first */
+        get: operations["proctoring_queue"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/proctoring/{session_id}": {
         parameters: {
             query?: never;
@@ -11,10 +96,27 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Proctoring of any session with its event log, for a dispute (admin) */
-        get: operations["admin_session"];
+        /** A session for review: result, person-fit, answers and integrity events on one timeline, video */
+        get: operations["session_review"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/proctoring/{session_id}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Decide on a session: confirm the result, annul it, or order a retest with the camera */
+        post: operations["decide"];
         delete?: never;
         options?: never;
         head?: never;
@@ -28,8 +130,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Play any session's recording for a dispute (admin); every access is logged */
-        get: operations["admin_recording"];
+        /**
+         * Play any session's recording; every view is written to the audit log before the video is sent
+         * @description `HEAD` answers whether the recording can be played without sending it, so it is not a view
+         *     and is not logged.
+         */
+        get: operations["session_recording"];
         put?: never;
         post?: never;
         delete?: never;
@@ -45,7 +151,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Flagged companies, vacancies and invitations with their reasons (moderation) */
+        /** Flagged companies, vacancies and invitations with their reasons, not yet reviewed (moderation) */
         get: operations["moderation"];
         put?: never;
         post?: never;
@@ -1811,20 +1917,6 @@ export interface components {
         ActiveInput: {
             active: boolean;
         };
-        AdminProctoringView: {
-            /** Format: uuid */
-            session_id: string;
-            /** Format: uuid */
-            candidate_id: string;
-            summary: components["schemas"]["ProctoringSummary"];
-            /** @description Person-fit flag of the answers (`l_z` below −2). */
-            aberrant?: boolean | null;
-            /** Format: double */
-            person_fit_lz?: number | null;
-            /** @description «Требует подтверждения»: the person-fit flag and integrity events together. */
-            needs_confirmation: boolean;
-            events: components["schemas"]["EventView"][];
-        };
         /** @enum {string} */
         AgeBracket: "adult" | "minor";
         AgeRecord: {
@@ -1931,7 +2023,7 @@ export interface components {
             measured_grade?: components["schemas"]["Grade"] | null;
             /** Format: int32 */
             items_count: number;
-            /** @description This test assigned the category. */
+            /** @description This test assigned the category, and no moderator annulled it. */
             assigned: boolean;
             /**
              * Format: double
@@ -1944,6 +2036,9 @@ export interface components {
             /** Format: date-time */
             finished_at?: string | null;
             proctoring?: components["schemas"]["ProctoringSummary"] | null;
+            review?: components["schemas"]["SessionModeration"] | null;
+            /** @description When a moderator played the recording. */
+            recording_views: string[];
         };
         AssessmentResult: {
             decision: components["schemas"]["Decision"];
@@ -1988,9 +2083,29 @@ export interface components {
             current?: components["schemas"]["CurrentItem"] | null;
             result?: components["schemas"]["AssessmentResult"] | null;
             proctoring?: components["schemas"]["ProctoringSummary"] | null;
+            review?: components["schemas"]["SessionModeration"] | null;
+            /**
+             * @description Every time a moderator played this recording. Each view is logged, and the candidate
+             *     sees the same dates.
+             */
+            recording_views: string[];
         };
         /** @enum {string} */
         AssessmentStatus: "in_progress" | "passed" | "failed" | "expired";
+        /** @description What the test did to the candidate's category and what a decision would change. */
+        AssignmentState: {
+            /** Format: date-time */
+            assigned_at?: string | null;
+            /** Format: date-time */
+            annulled_at?: string | null;
+            /**
+             * @description The assignment is in force and no later one replaced it: annulling it changes the
+             *     category employers see.
+             */
+            current: boolean;
+            current_category?: components["schemas"]["Category"] | null;
+            current_category_name?: string | null;
+        };
         AtsApplication: {
             /** Format: uuid */
             id: string;
@@ -2113,6 +2228,31 @@ export interface components {
             latency_ms: number;
             error?: string | null;
         };
+        AuditEntry: {
+            /** Format: uuid */
+            id: string;
+            /** Format: date-time */
+            at: string;
+            /** Format: uuid */
+            moderator_id: string;
+            /** @description The moderator's login email; `null` once the account is deleted. */
+            moderator?: string | null;
+            action: components["schemas"]["ModerationAction"];
+            target_kind: components["schemas"]["ModerationTarget"];
+            /** Format: uuid */
+            target_id: string;
+            /** @description What the target was called when the action happened: a title, a company, a category. */
+            target_label?: string | null;
+            candidate_code?: string | null;
+            company_name?: string | null;
+            comment?: string | null;
+            /** @description Specifics in words: the freeze term, complaints closed, the category restored. */
+            details: string[];
+        };
+        AuditPage: {
+            items: components["schemas"]["AuditEntry"][];
+            next_cursor?: string | null;
+        };
         BankItem: {
             candidate: components["schemas"]["CandidateCard"];
             /**
@@ -2165,6 +2305,12 @@ export interface components {
             /** Format: int64 */
             tasks_done: number;
             proctoring?: components["schemas"]["ProctoringBadge"] | null;
+            /**
+             * @description «Результат подтверждён»: a moderator reviewed the test behind the current category and
+             *     confirmed it. The decision itself, the comment and the video stay with the moderator and
+             *     the candidate.
+             */
+            result_confirmed: boolean;
             /**
              * @description Under 18 (registered as 14–17, legal representative's consent given): show a neutral
              *     «14–17 лет». The birth date itself never reaches employers.
@@ -2307,6 +2453,19 @@ export interface components {
             contact_phone?: string | null;
             contact_telegram?: string | null;
         };
+        CompanyRef: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            level?: components["schemas"]["TrustLevel"] | null;
+            /**
+             * Format: int64
+             * @description Invitations per 7 days right now.
+             */
+            quota?: number | null;
+            /** Format: date-time */
+            frozen_until?: string | null;
+        };
         CompanyResponse: components["schemas"]["CompanyProfile"] & {
             /** Format: uuid */
             id: string;
@@ -2319,6 +2478,15 @@ export interface components {
             /** Format: uuid */
             id: string;
             name: string;
+        };
+        ComplaintView: {
+            target_kind: components["schemas"]["TrustItemKind"];
+            /** Format: uuid */
+            target_id: string;
+            reason: string;
+            reason_ru: string;
+            /** @description The candidate's own words; the reporter is not shown. */
+            comment?: string | null;
         };
         ConsentDocument: {
             /** Format: uuid */
@@ -2428,6 +2596,17 @@ export interface components {
             aberrant: boolean;
             /** Format: int32 */
             items_administered: number;
+        };
+        DecisionInput: {
+            decision: components["schemas"]["ReviewDecision"];
+            /** @description Up to 2000 characters. The candidate reads it in the test history. */
+            comment: string;
+        };
+        DecisionView: {
+            decision: components["schemas"]["ReviewDecision"];
+            comment: string;
+            /** Format: date-time */
+            decided_at: string;
         };
         /** @enum {string} */
         DeclineReason: "salary" | "stack" | "format" | "company" | "not_looking" | "other";
@@ -2587,15 +2766,6 @@ export interface components {
         EventLevel: "regional" | "interregional" | "national" | "international";
         /** @enum {string} */
         EventType: "invitation.sent" | "invitation.viewed" | "invitation.accepted" | "invitation.declined" | "invitation.expired" | "invitation.withdrawn" | "application.created" | "application.status_changed" | "contacts.opened" | "integration.test";
-        EventView: {
-            kind: components["schemas"]["IntegrityEvent"];
-            /** Format: date-time */
-            at: string;
-            /** Format: int32 */
-            item_seq?: number | null;
-            /** Format: int32 */
-            duration_ms?: number | null;
-        };
         ExperienceEntry: {
             company: string;
             position: string;
@@ -2699,6 +2869,12 @@ export interface components {
             session_id?: string | null;
             /** Format: date-time */
             assigned_at: string;
+            /**
+             * Format: date-time
+             * @description A moderator annulled the test behind it: the entry stays in the history, the category
+             *     no longer comes from it.
+             */
+            annulled_at?: string | null;
         };
         GrantConsent: {
             /**
@@ -2939,6 +3115,14 @@ export interface components {
             /** Format: date-time */
             available_at: string;
             label: string;
+            /** @description It will need the camera when it opens. */
+            camera_required: boolean;
+        };
+        LogCounters: {
+            /** Format: int64 */
+            actions_week: number;
+            /** Format: int64 */
+            recording_views_week: number;
         };
         LoginRequest: {
             email: string;
@@ -2993,12 +3177,31 @@ export interface components {
             /** @description Gets a letter once you confirm your own email. */
             guardian: components["schemas"]["GuardianContact"];
         };
+        /** @enum {string} */
+        ModerationAction: "confirm_result" | "annul_result" | "order_retest" | "view_recording" | "dismiss" | "unpublish_vacancy" | "freeze_invitations" | "restore";
+        /** @description A moderator's decision that changed something for the company. */
+        ModerationNotice: {
+            action: components["schemas"]["ModerationAction"];
+            /** Format: date-time */
+            at: string;
+            /** @description What happened, in words. */
+            text: string;
+            /** @description The moderator's explanation. */
+            comment?: string | null;
+        };
+        ModerationOverview: {
+            proctoring: components["schemas"]["ProctoringCounters"];
+            antifake: components["schemas"]["TrustCounters"];
+            log: components["schemas"]["LogCounters"];
+        };
         ModerationQueue: {
             /** @description Companies with at least one negative signal, lowest quota first. */
             companies: components["schemas"]["FlaggedCompany"][];
             vacancies: components["schemas"]["FlaggedVacancy"][];
             invitations: components["schemas"]["FlaggedInvitation"][];
         };
+        /** @enum {string} */
+        ModerationTarget: "session" | "vacancy" | "invitation" | "company" | "complaint";
         MyApplication: {
             /** Format: uuid */
             id: string;
@@ -3097,6 +3300,10 @@ export interface components {
             grade: components["schemas"]["Grade"];
             kind: components["schemas"]["AttemptKind"];
             label: string;
+            /** @description The retest a moderator ordered: open now, outside the usual windows. */
+            ordered_retest: boolean;
+            /** @description After a retest ordered with the camera: this test starts only with the camera on. */
+            camera_required: boolean;
         };
         /** @enum {string} */
         OnboardingStep: "profile" | "survey" | "assessment" | "done";
@@ -3458,6 +3665,29 @@ export interface components {
             /** Format: int64 */
             salary_expectation?: number | null;
         };
+        /** @description The person-fit statistic and the pattern behind it. */
+        PersonFit: {
+            /** Format: double */
+            lz?: number | null;
+            /** Format: double */
+            threshold: number;
+            aberrant: boolean;
+            /**
+             * Format: int32
+             * @description Items harder than θ̂ answered right, of all the items harder than θ̂.
+             */
+            harder_correct: number;
+            /** Format: int32 */
+            harder_total: number;
+            /**
+             * Format: int32
+             * @description Items easier than θ̂ answered wrong, of all the items easier than θ̂.
+             */
+            easier_wrong: number;
+            /** Format: int32 */
+            easier_total: number;
+            summary: string;
+        };
         /**
          * @description Serialized as slugs; also accepts places as numbers (`1`, `"2"`) from the registry.
          * @enum {string}
@@ -3515,6 +3745,22 @@ export interface components {
              * @description `consent.id` from `GET /candidate/proctoring`; required with `camera = true`.
              */
             consent_document_id?: string | null;
+        };
+        ProctoringCounters: {
+            /**
+             * Format: int64
+             * @description Undecided sessions flagged «требует подтверждения».
+             */
+            needs_review: number;
+            /**
+             * Format: int64
+             * @description Undecided sessions with tab leaves, pastes or fullscreen exits.
+             */
+            remarks: number;
+            /** Format: int64 */
+            with_video: number;
+            /** Format: int64 */
+            decided_week: number;
         };
         /** @enum {string} */
         ProctoringMode: "optional" | "off";
@@ -3606,6 +3852,36 @@ export interface components {
             /** Format: date-time */
             published_at?: string | null;
         };
+        QueuePage: {
+            items: components["schemas"]["QueueSession"][];
+            /** @description Pass as `cursor` for the next page; `null` on the last one. */
+            next_cursor?: string | null;
+        };
+        QueueSession: {
+            /** Format: uuid */
+            session_id: string;
+            /** @description Anonymous code «K-XXXXXX»: the moderator does not need the name. */
+            candidate_code: string;
+            category: components["schemas"]["Category"];
+            category_name: string;
+            attempt_kind: components["schemas"]["AttemptKind"];
+            status: components["schemas"]["AssessmentStatus"];
+            /** Format: date-time */
+            finished_at: string;
+            /** Format: int64 */
+            duration_secs: number;
+            /** Format: double */
+            person_fit_lz?: number | null;
+            aberrant: boolean;
+            needs_review: boolean;
+            video: components["schemas"]["VideoState"];
+            remarks: components["schemas"]["Remarks"];
+            /** @description The grade this test assigned is in force (not voided). */
+            result_in_force: boolean;
+            decision?: components["schemas"]["ReviewDecision"] | null;
+            /** Format: date-time */
+            decided_at?: string | null;
+        };
         /** @enum {string} */
         Rank: "youth" | "third" | "second" | "first" | "cms" | "ms";
         ReasonCount: {
@@ -3645,6 +3921,19 @@ export interface components {
             /** @description Stages the company's hiring system reported after acceptance. */
             outcomes: components["schemas"]["HiringOutcome"][];
         };
+        RecordingInfo: {
+            video: components["schemas"]["VideoState"];
+            /** @description `GET …/recording` should play it (files may still be missing on this server). */
+            playable: boolean;
+            /** Format: date-time */
+            delete_after?: string | null;
+            /** @description Every time a moderator played it; the candidate sees the same dates. */
+            views: components["schemas"]["RecordingView"][];
+        };
+        RecordingView: {
+            /** Format: date-time */
+            at: string;
+        };
         RefreshResponse: {
             access_token: string;
             /** Format: int64 */
@@ -3671,6 +3960,19 @@ export interface components {
             applied: boolean;
             /** @description Accepted invitation or own application: `/employer/candidates/{id}/contacts` will answer. */
             contacts_available: boolean;
+        };
+        Remarks: {
+            /** Format: int64 */
+            left_test: number;
+            /** Format: int64 */
+            pastes: number;
+            /** Format: int64 */
+            fullscreen_exits: number;
+            /**
+             * Format: int64
+             * @description Camera lost or recording failed: technical, not behaviour.
+             */
+            technical: number;
         };
         ReportCreated: {
             /** Format: uuid */
@@ -3713,6 +4015,55 @@ export interface components {
             /** Format: date-time */
             uploaded_at: string;
         };
+        ReviewAnswer: {
+            /**
+             * Format: int32
+             * @description 0-based; integrity events name the item on screen by this number.
+             */
+            seq: number;
+            title: string;
+            topic?: components["schemas"]["Topic"] | null;
+            topic_ru?: string | null;
+            /** Format: int32 */
+            level: number;
+            /**
+             * Format: float
+             * @description IRT difficulty `b` on the specialization's θ scale.
+             */
+            difficulty?: number | null;
+            correct: boolean;
+            timed_out: boolean;
+            /** Format: int32 */
+            elapsed_ms: number;
+            /** Format: date-time */
+            shown_at: string;
+            /** Format: date-time */
+            answered_at: string;
+            /** Format: double */
+            theta_after: number;
+        };
+        /**
+         * @description The moderator's decision on a finished session.
+         * @enum {string}
+         */
+        ReviewDecision: "confirm" | "annul" | "retest";
+        ReviewEvent: {
+            kind: components["schemas"]["IntegrityEvent"];
+            /** Format: date-time */
+            at: string;
+            /** Format: int32 */
+            duration_ms?: number | null;
+            /**
+             * Format: int32
+             * @description The item on screen: as the browser reported it, or by time when it did not.
+             */
+            item_seq?: number | null;
+            /**
+             * Format: int64
+             * @description From the start of the test.
+             */
+            offset_ms: number;
+        };
         ReviewInput: {
             /**
              * Format: int32
@@ -3720,6 +4071,20 @@ export interface components {
              */
             rating: number;
             comment?: string | null;
+        };
+        ReviewResult: {
+            /** Format: double */
+            theta?: number | null;
+            /** Format: double */
+            se?: number | null;
+            measured_grade?: components["schemas"]["Grade"] | null;
+            /**
+             * Format: double
+             * @description θ cut of the claimed grade.
+             */
+            cut: number;
+            /** Format: float */
+            test_strength?: number | null;
         };
         /** @enum {string} */
         Role: "candidate" | "employer" | "admin";
@@ -3797,6 +4162,39 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             events?: components["schemas"]["StatusEvent"][] | null;
+        };
+        /** @description A moderator's decision on the session, as the candidate reads it. */
+        SessionModeration: {
+            decision: components["schemas"]["ReviewDecision"];
+            /** @description Written by the moderator for the candidate. */
+            comment: string;
+            /** Format: date-time */
+            decided_at: string;
+        };
+        SessionReview: {
+            /** Format: uuid */
+            session_id: string;
+            candidate_code: string;
+            category: components["schemas"]["Category"];
+            category_name: string;
+            attempt_kind: components["schemas"]["AttemptKind"];
+            status: components["schemas"]["AssessmentStatus"];
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            finished_at?: string | null;
+            result: components["schemas"]["ReviewResult"];
+            assignment: components["schemas"]["AssignmentState"];
+            person_fit: components["schemas"]["PersonFit"];
+            /** @description «Требует подтверждения» as the candidate saw it before any decision. */
+            flagged: boolean;
+            proctoring?: components["schemas"]["ProctoringSummary"] | null;
+            recording: components["schemas"]["RecordingInfo"];
+            answers: components["schemas"]["ReviewAnswer"][];
+            events: components["schemas"]["ReviewEvent"][];
+            decision?: components["schemas"]["DecisionView"] | null;
+            /** @description Decisions possible right now. */
+            allowed: components["schemas"]["ReviewDecision"][];
         };
         SessionUser: {
             /** Format: uuid */
@@ -4039,8 +4437,92 @@ export interface components {
             /** Format: int32 */
             correct: number;
         };
+        /**
+         * @description What a moderator does with an item of the anti-fake queue.
+         * @enum {string}
+         */
+        TrustAction: "dismiss" | "unpublish" | "freeze" | "restore";
+        TrustActionInput: {
+            kind: components["schemas"]["TrustItemKind"];
+            /** Format: uuid */
+            id: string;
+            action: components["schemas"]["TrustAction"];
+            /** @description Up to 2000 characters. The company sees it on its «Доверие и квота» page. */
+            comment: string;
+            /**
+             * Format: int32
+             * @description `freeze` only: 1–90 days.
+             */
+            days?: number | null;
+        };
+        TrustActionResult: {
+            /** Format: uuid */
+            company_id?: string | null;
+            /**
+             * Format: int64
+             * @description Complaints this action closed: the one acted on and those it answers.
+             */
+            complaints_resolved: number;
+            /** Format: date-time */
+            frozen_until?: string | null;
+        };
+        TrustCounters: {
+            /**
+             * Format: int64
+             * @description Companies with negative signals waiting for a look.
+             */
+            companies: number;
+            /** Format: int64 */
+            vacancies: number;
+            /** Format: int64 */
+            invitations: number;
+            /** Format: int64 */
+            complaints: number;
+            /** Format: int64 */
+            unpublished_vacancies: number;
+            /** Format: int64 */
+            frozen_companies: number;
+        };
+        TrustItem: {
+            kind: components["schemas"]["TrustItemKind"];
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: date-time
+             * @description When it entered the queue (or the sanction started).
+             */
+            at: string;
+            title: string;
+            company?: components["schemas"]["CompanyRef"] | null;
+            /** @description Why it is here, in words. */
+            reasons: string[];
+            vacancy_status?: components["schemas"]["VacancyStatus"] | null;
+            salary?: components["schemas"]["SalaryRange"] | null;
+            /**
+             * Format: int64
+             * @description Open complaints about this vacancy.
+             */
+            open_complaints: number;
+            complaint?: components["schemas"]["ComplaintView"] | null;
+            /**
+             * Format: date-time
+             * @description Sanctions view: the freeze ends then.
+             */
+            until?: string | null;
+            /** @description What can be done with it now. */
+            actions: components["schemas"]["TrustAction"][];
+        };
+        /**
+         * @description The kind of item an anti-fake action targets.
+         * @enum {string}
+         */
+        TrustItemKind: "company" | "vacancy" | "invitation" | "complaint";
         /** @enum {string} */
-        TrustLevel: "low" | "new" | "standard" | "high";
+        TrustLevel: "frozen" | "low" | "new" | "standard" | "high";
+        TrustPage: {
+            items: components["schemas"]["TrustItem"][];
+            next_cursor?: string | null;
+        };
         TrustReason: {
             kind: components["schemas"]["TrustReasonKind"];
             /**
@@ -4051,9 +4533,19 @@ export interface components {
             text: string;
         };
         /** @enum {string} */
-        TrustReasonKind: "domain" | "account_age" | "accepted" | "complaints" | "bad_declines" | "withdrawals" | "no_answers" | "salary_flags" | "own_duplicates" | "copies";
+        TrustReasonKind: "domain" | "account_age" | "accepted" | "complaints" | "bad_declines" | "withdrawals" | "no_answers" | "salary_flags" | "own_duplicates" | "copies" | "frozen";
         TrustStatus: {
             level: components["schemas"]["TrustLevel"];
+            /**
+             * Format: date-time
+             * @description Invitations frozen by a moderator until then; the quota is 0 meanwhile.
+             */
+            frozen_until?: string | null;
+            /**
+             * @description Moderator decisions about the company, its vacancies, invitations and complaints about
+             *     them, newest first.
+             */
+            moderation: components["schemas"]["ModerationNotice"][];
             /**
              * Format: int64
              * @description Invitations allowed per 7 days right now.
@@ -4122,6 +4614,12 @@ export interface components {
             updated_at: string;
             /** Format: int64 */
             applications: number;
+            /**
+             * Format: date-time
+             * @description Taken down by a moderator: publishing again is refused (409 `vacancy_unpublished`); the
+             *     reason is on the «Доверие и квота» page.
+             */
+            unpublished_by_moderator_at?: string | null;
         };
         VacancyInput: {
             title: string;
@@ -4139,6 +4637,11 @@ export interface components {
         VerifyEmailRequest: {
             token: string;
         };
+        /**
+         * @description How the session's video stands.
+         * @enum {string}
+         */
+        VideoState: "off" | "declined" | "kept" | "purged";
         /** @enum {string} */
         WarningKind: "salary_above_market" | "salary_wide_range" | "duplicate_own" | "copy_of_other";
         /**
@@ -4194,7 +4697,303 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    admin_session: {
+    trust_queue: {
+        parameters: {
+            query?: {
+                view?: ("open" | "sanctions") | null;
+                /** @description Only this kind of item. */
+                kind?: ("company" | "vacancy" | "invitation" | "complaint") | null;
+                cursor?: string | null;
+                /** @description 1–100, 30 by default. */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustPage"];
+                };
+            };
+            /** @description `invalid_query` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: moderators only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    trust_act: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrustActionInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustActionResult"];
+                };
+            };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: moderators only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No such item */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `action_not_applicable`: nothing left to dismiss, the vacancy is not published, the complaint is closed, nothing to restore */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `comment`, `days`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    audit_log: {
+        parameters: {
+            query?: {
+                action?: ("confirm_result" | "annul_result" | "order_retest" | "view_recording" | "dismiss" | "unpublish_vacancy" | "freeze_invitations" | "restore") | null;
+                target_kind?: ("session" | "vacancy" | "invitation" | "company" | "complaint") | null;
+                /** @description Only this moderator's actions. */
+                moderator_id?: string | null;
+                /**
+                 * @description A session, vacancy, invitation, company or complaint, or a candidate or company the
+                 *     actions concern.
+                 */
+                subject?: string | null;
+                cursor?: string | null;
+                /** @description 1–100, 30 by default. */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditPage"];
+                };
+            };
+            /** @description `invalid_query` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: moderators only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    overview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModerationOverview"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: moderators only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    proctoring_queue: {
+        parameters: {
+            query?: {
+                filter?: ("needs_review" | "remarks" | "video") | null;
+                /** @description `next_cursor` of the previous page. */
+                cursor?: string | null;
+                /** @description 1–100, 30 by default. */
+                limit?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["QueuePage"];
+                };
+            };
+            /** @description `invalid_query`: unknown filter or a cursor not from `next_cursor` */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: moderators only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    session_review: {
         parameters: {
             query?: never;
             header?: never;
@@ -4210,7 +5009,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AdminProctoringView"];
+                    "application/json": components["schemas"]["SessionReview"];
                 };
             };
             /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
@@ -4231,7 +5030,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `wrong_role` */
+            /** @description `wrong_role`: moderators only */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4250,7 +5049,103 @@ export interface operations {
             };
         };
     };
-    admin_recording: {
+    decide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DecisionInput"];
+            };
+        };
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SessionReview"];
+                };
+            };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `wrong_role`: moderators only */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `already_decided`, `session_not_finished`, `nothing_to_annul` (the test assigned no grade or it is void already), `retest_not_applicable` (a later test replaced this result), `proctoring_off` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `comment` empty or longer than 2000 characters; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    session_recording: {
         parameters: {
             query?: never;
             header?: never;
@@ -4287,7 +5182,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `wrong_role` */
+            /** @description `wrong_role`: moderators only */
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -4296,7 +5191,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `not_found`, `recording_unavailable` */
+            /** @description `not_found`, `recording_unavailable`: no camera, deleted after retention, or the files are missing */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4812,7 +5707,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade), `attempt_not_allowed`, `already_assigned` */
+            /** @description `assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade, or after a moderator annulled a result at it), `attempt_not_allowed`, `already_assigned`, `camera_required` (a moderator ordered a retest with the camera: a test at that grade or above starts only with `proctoring.camera = true`) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7476,7 +8371,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available`; `company_profile_required` */
+            /** @description `invitation_quota_exceeded`, `invitations_frozen` (a moderator froze the company's invitations; `detail` names the date), `invitation_already_active`, `candidate_not_available`; `company_profile_required` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -9108,7 +10003,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `company_profile_required` */
+            /** @description `company_profile_required`; `vacancy_unpublished` — a moderator took the vacancy down, it can be edited but not published */
             409: {
                 headers: {
                     [name: string]: unknown;

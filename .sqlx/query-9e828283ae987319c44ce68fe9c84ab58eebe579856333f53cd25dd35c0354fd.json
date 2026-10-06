@@ -1,0 +1,72 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.id, r.target_kind, r.target_id, r.reason, r.comment, r.created_at AS at,\n                  co.id AS \"company_id?\", co.name AS \"company_name?\",\n                  coalesce(v.title, i.title) AS target_title\n           FROM reports r\n           LEFT JOIN vacancies v ON r.target_kind = 'vacancy' AND v.id = r.target_id\n           LEFT JOIN invitations i ON r.target_kind = 'invitation' AND i.id = r.target_id\n           LEFT JOIN companies co ON co.id = CASE r.target_kind\n                                               WHEN 'vacancy' THEN v.company_id\n                                               WHEN 'invitation' THEN i.company_id\n                                               ELSE r.target_id\n                                             END\n           WHERE r.resolved_at IS NULL\n             AND ($1::timestamptz IS NULL OR (r.created_at, r.id) > ($1, $2))\n           ORDER BY r.created_at, r.id\n           LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "target_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "target_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "company_id?",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 7,
+        "name": "company_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "target_title",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      null
+    ]
+  },
+  "hash": "9e828283ae987319c44ce68fe9c84ab58eebe579856333f53cd25dd35c0354fd"
+}

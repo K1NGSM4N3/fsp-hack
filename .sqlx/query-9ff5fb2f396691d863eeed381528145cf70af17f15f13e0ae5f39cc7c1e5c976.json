@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT v.id, v.title, v.description, v.specialization, v.grade, v.skills, v.salary_min,\n                  v.salary_max, v.work_format, v.city, v.status AS \"status: VacancyStatus\",\n                  v.published_at, v.created_at, v.updated_at,\n                  (SELECT count(*) FROM applications a\n                    WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS \"applications!\"\n           FROM vacancies v\n           WHERE v.company_id = $1\n           ORDER BY v.created_at DESC",
+  "query": "SELECT v.id, v.title, v.description, v.specialization, v.grade, v.skills, v.salary_min,\n                  v.salary_max, v.work_format, v.city, v.status AS \"status: VacancyStatus\",\n                  v.published_at, v.created_at, v.updated_at,\n                  (SELECT count(*) FROM applications a\n                    WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS \"applications!\",\n                  v.unpublished_at\n           FROM vacancies v\n           WHERE v.company_id = $1\n           ORDER BY v.created_at DESC",
   "describe": {
     "columns": [
       {
@@ -88,6 +88,11 @@
         "ordinal": 14,
         "name": "applications!",
         "type_info": "Int8"
+      },
+      {
+        "ordinal": 15,
+        "name": "unpublished_at",
+        "type_info": "Timestamptz"
       }
     ],
     "parameters": {
@@ -110,8 +115,9 @@
       true,
       false,
       false,
-      null
+      null,
+      true
     ]
   },
-  "hash": "ee58603365c001db4df0128d7f715df9fbf3d942f52fb3935d3e13df0c483bc4"
+  "hash": "9ff5fb2f396691d863eeed381528145cf70af17f15f13e0ae5f39cc7c1e5c976"
 }

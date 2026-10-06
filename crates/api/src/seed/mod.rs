@@ -1,9 +1,12 @@
 //! Deterministic demo data: companies with needs and vacancies, a few hundred categorized
-//! candidates (some linked to FSP, most with a proctored test), demo logins. Runs once on an
-//! empty database.
+//! candidates (some linked to FSP, most with a proctored test), the moderation queues, demo
+//! logins. Runs once on an empty database.
 
 mod corpus;
 mod demo;
+mod moderation;
+
+pub use moderation::{DEMO_DISPUTED_EMAIL, DEMO_MODERATOR_EMAIL};
 
 use catalog::{Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
@@ -57,6 +60,13 @@ pub struct SeedReport {
     /// 14–17-year-olds whose representative confirmed the consent / has not answered yet.
     pub minors_confirmed: usize,
     pub minors_pending: usize,
+    /// Tests waiting for the moderator: flagged with events, flagged without proctoring data,
+    /// remarks only; flagged vacancies and open complaints.
+    pub review_flagged: usize,
+    pub review_unproctored: usize,
+    pub review_remarks: usize,
+    pub flagged_vacancies: usize,
+    pub complaints: usize,
 }
 
 struct Account {
@@ -544,7 +554,10 @@ pub async fn seed_sized(
     let mut rng = ChaCha8Rng::seed_from_u64(42);
     let mut proctoring_rng = ChaCha8Rng::seed_from_u64(PROCTORING_SEED);
     let mut minors_rng = ChaCha8Rng::seed_from_u64(MINORS_SEED);
+    let mut moderation_rng = ChaCha8Rng::seed_from_u64(moderation::MODERATION_SEED);
     let mut juniors: Vec<Junior> = Vec::new();
+    let mut reviewables: Vec<moderation::Reviewable> = Vec::new();
+    let mut everyone: Vec<Uuid> = Vec::new();
     let now = Utc::now();
     let mut tx = pool.begin().await?;
 
@@ -888,6 +901,7 @@ pub async fn seed_sized(
             for skill in &verified {
                 db::candidates::insert_candidate_skill(&mut *tx, acc.id, skill, "test").await?;
             }
+            let mut remarks = false;
             if let Some(p) = seed_proctoring(
                 &mut tx,
                 &mut proctoring_rng,
@@ -904,7 +918,19 @@ pub async fn seed_sized(
                     with_video += 1;
                 }
                 with_remarks += usize::from(p.remarks);
+                remarks = p.remarks;
             }
+            if let Some((_, _, _, session, finished)) = assigned
+                && n != 0
+            {
+                reviewables.push(moderation::Reviewable {
+                    candidate: acc.id,
+                    session,
+                    finished,
+                    remarks,
+                });
+            }
+            everyone.push(acc.id);
             if let Some((g, theta, se, session_id, at)) = assigned {
                 let reason = if g > claimed { "upgrade" } else { "placement" };
                 db::grades::insert_grade_assignment(
@@ -960,6 +986,39 @@ pub async fn seed_sized(
             n += 1;
         }
     }
+    let minors: Vec<Uuid> = Specialization::ALL
+        .iter()
+        .filter_map(|spec| juniors.iter().find(|j| j.spec == *spec))
+        .map(|j| j.id)
+        .collect();
+    reviewables.retain(|r| !minors.contains(&r.candidate));
+    let mut review = moderation::ModerationReport::default();
+    moderation::seed_moderator(&mut tx, crypto, &hash, now).await?;
+    let reviewed = moderation::seed_reviews(
+        &mut tx,
+        crypto,
+        &mut moderation_rng,
+        &reviewables,
+        &mut review,
+    )
+    .await?;
+    let reporters: Vec<Uuid> = everyone
+        .iter()
+        .copied()
+        .skip(1)
+        .filter(|id| !reviewed.contains(id) && !minors.contains(id))
+        .step_by(7)
+        .take(3)
+        .collect();
+    moderation::seed_trust(
+        &mut tx,
+        &mut moderation_rng,
+        &companies,
+        &reporters,
+        now,
+        &mut review,
+    )
+    .await?;
     let (minors_confirmed, minors_pending) =
         seed_minors(&mut tx, crypto, &mut minors_rng, &juniors, now).await?;
     tx.commit().await?;
@@ -972,5 +1031,10 @@ pub async fn seed_sized(
         with_remarks,
         minors_confirmed,
         minors_pending,
+        review_flagged: review.flagged_with_events,
+        review_unproctored: review.flagged_without_proctoring,
+        review_remarks: review.remarks_only,
+        flagged_vacancies: review.flagged_vacancies,
+        complaints: review.complaints,
     }))
 }

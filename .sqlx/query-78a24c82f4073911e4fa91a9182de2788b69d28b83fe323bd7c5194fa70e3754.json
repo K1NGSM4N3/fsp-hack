@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE companies SET invitations_frozen_at = $2, invitations_frozen_until = $3\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "78a24c82f4073911e4fa91a9182de2788b69d28b83fe323bd7c5194fa70e3754"
+}

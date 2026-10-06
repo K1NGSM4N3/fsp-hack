@@ -222,6 +222,10 @@ function HistoryCard() {
                   <AssessmentStatusBadge status={s.status} />
                   {s.proctoring && <ProctoringMark summary={s.proctoring} />}
                   {s.result?.needs_review && <Badge tone="warning">требует подтверждения</Badge>}
+                  {s.review?.decision === "confirm" && <Badge tone="success">подтверждён модератором</Badge>}
+                  {s.review?.decision === "annul" && <Badge tone="danger">аннулирован модератором</Badge>}
+                  {s.review?.decision === "retest" && <Badge tone="warning">пересдача с видеозаписью</Badge>}
+                  {s.recording_views.length > 0 && <Badge tone="muted">запись смотрел модератор</Badge>}
                   <span className="text-sm text-ink-muted">{ATTEMPT_KIND_LABEL[s.attempt_kind]}</span>
                 </span>
                 <span className="flex items-center gap-3 text-sm text-ink-subtle">
@@ -245,9 +249,10 @@ function HistoryCard() {
           <ul className="space-y-1.5 text-sm">
             {assigned.map((h, i) => (
               <li key={i} className="flex flex-wrap items-center justify-between gap-2">
-                <span className="text-ink">
+                <span className={h.annulled_at ? "text-ink-subtle line-through" : "text-ink"}>
                   {GRADE_LABEL[h.grade]} · {h.reason}
                 </span>
+                {h.annulled_at && <Badge tone="danger">аннулировано {formatDate(h.annulled_at)}</Badge>}
                 <span className="text-ink-subtle">{formatDate(h.assigned_at)}</span>
               </li>
             ))}

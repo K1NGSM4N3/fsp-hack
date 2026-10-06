@@ -542,6 +542,7 @@ function demoAssessments(now: Date): MockAssessment[] {
         finished_at: at(54, -31),
         min_items: 8,
         max_items: 20,
+        recording_views: [],
         result: {
           decision: { passed: false, theta: 0.64, se: 0.27, grade_measured: "middle", confident_above_next: false, person_fit_lz: 0.4, aberrant: false, items_administered: 14 },
           test_strength: null,
@@ -571,6 +572,7 @@ function demoAssessments(now: Date): MockAssessment[] {
         finished_at: at(54, -9),
         min_items: 8,
         max_items: 20,
+        recording_views: [],
         result: {
           decision: { passed: true, theta: 0.62, se: 0.24, grade_measured: "middle", confident_above_next: false, person_fit_lz: 0.6, aberrant: false, items_administered: 10 },
           test_strength: 0.62,

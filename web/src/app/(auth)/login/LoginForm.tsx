@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, LogIn, UserRound } from "lucide-react";
+import { Building2, LogIn, ShieldCheck, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState, type ChangeEvent, type FormEvent } from "react";
@@ -31,8 +31,10 @@ function validate(v: Values): Errors {
   return errors;
 }
 
+const HOME: Record<Me["role"], string> = { candidate: "/candidate", employer: "/employer", admin: "/admin" };
+
 function destination(me: Me | undefined, next: string | null): string {
-  const home = me?.role === "employer" ? "/employer" : "/candidate";
+  const home = me ? HOME[me.role] : "/candidate";
   if (next && next.startsWith(home)) return next;
   if (next && next.startsWith("/vacancies")) return next;
   return home;
@@ -133,13 +135,18 @@ export function LoginForm() {
         <div className="rounded-card border border-dashed border-line-strong p-4">
           <p className="text-sm font-medium text-ink">Демо-аккаунты</p>
           <p className="mt-1 text-xs text-ink-subtle">Пароль {DEMO_PASSWORD}. {USE_MOCKS ? "Данные живут в этом браузере." : "Доступны, если API запущен с SEED_DEMO=true."}</p>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <div className={USE_MOCKS ? "mt-3 grid gap-2 sm:grid-cols-2" : "mt-3 grid gap-2 sm:grid-cols-3"}>
             <Button variant="soft" size="sm" icon={<UserRound className="size-4" aria-hidden />} onClick={() => demo("candidate@demo.fsp")} disabled={login.isPending}>
               Соискатель
             </Button>
             <Button variant="soft" size="sm" icon={<Building2 className="size-4" aria-hidden />} onClick={() => demo("employer@demo.fsp")} disabled={login.isPending}>
               Компания
             </Button>
+            {!USE_MOCKS && (
+              <Button variant="soft" size="sm" icon={<ShieldCheck className="size-4" aria-hidden />} onClick={() => demo("moderator@demo.fsp")} disabled={login.isPending}>
+                Модератор
+              </Button>
+            )}
           </div>
         </div>
       )}

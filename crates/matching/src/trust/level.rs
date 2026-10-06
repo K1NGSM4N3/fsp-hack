@@ -67,12 +67,16 @@ pub struct TrustSignals {
     pub salary_flags: u16,
     pub own_duplicates: u16,
     pub copies: u16,
+    /// A moderator froze the company's invitations until this moment (unix seconds).
+    pub frozen_until: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum TrustLevel {
+    /// A moderator froze invitations: the quota is 0 until the freeze ends.
+    Frozen,
     /// Negative signals took the quota down to the base or below.
     Low,
     /// Under a month on the platform, nothing negative.
@@ -96,6 +100,8 @@ pub enum TrustReasonKind {
     SalaryFlags,
     OwnDuplicates,
     Copies,
+    /// Invitations frozen by a moderator.
+    Frozen,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -143,6 +149,14 @@ fn percent(x: f32) -> u32 {
 
 fn n(x: u16) -> usize {
     usize::from(x)
+}
+
+/// `DD.MM.YYYY` in UTC, like the dates in the API's problem details.
+fn ru_date(unix: i64) -> String {
+    time::OffsetDateTime::from_unix_timestamp(unix).map_or_else(
+        |_| String::new(),
+        |t| format!("{:02}.{:02}.{}", t.day(), u8::from(t.month()), t.year()),
+    )
 }
 
 pub fn assess(s: &TrustSignals, now_unix: i64) -> TrustAssessment {
@@ -271,10 +285,10 @@ pub fn assess(s: &TrustSignals, now_unix: i64) -> TrustAssessment {
         .map(|r| r.points.max(0))
         .sum::<i16>()
         .min(MAX_BONUS);
-    let penalty: i16 = reasons.iter().map(|r| r.points.min(0)).sum();
-    let quota = (BASE_QUOTA + bonus + penalty).clamp(MIN_QUOTA, MAX_QUOTA);
+    let mut penalty: i16 = reasons.iter().map(|r| r.points.min(0)).sum();
+    let mut quota = (BASE_QUOTA + bonus + penalty).clamp(MIN_QUOTA, MAX_QUOTA);
     let negative = penalty < 0;
-    let level = if negative && quota <= BASE_QUOTA {
+    let mut level = if negative && quota <= BASE_QUOTA {
         TrustLevel::Low
     } else if quota >= MAX_QUOTA {
         TrustLevel::High
@@ -332,6 +346,25 @@ pub fn assess(s: &TrustSignals, now_unix: i64) -> TrustAssessment {
     if bonus >= MAX_BONUS || quota >= MAX_QUOTA {
         advice.truncate(growth_from);
     }
+    // The freeze is a moderator's decision, not a signal: it takes the whole quota, below the
+    // floor of 5 that protects a company from heuristics.
+    if let Some(until) = s.frozen_until.filter(|&u| u > now_unix) {
+        reasons.push(TrustReason {
+            kind: TrustReasonKind::Frozen,
+            points: -quota,
+            text: format!("Модератор приостановил приглашения до {}", ru_date(until)),
+        });
+        penalty -= quota;
+        quota = 0;
+        level = TrustLevel::Frozen;
+        advice.insert(
+            0,
+            format!(
+                "Приглашения снова станут доступны {}. Решение и комментарий модератора — в разделе «Решения модератора».",
+                ru_date(until)
+            ),
+        );
+    }
 
     TrustAssessment {
         level,
@@ -362,6 +395,7 @@ pub fn quota_rule() -> Vec<String> {
             percent(NO_ANSWER_SHARE)
         ),
         format!("Квота не опускается ниже {MIN_QUOTA}: одна ошибка не останавливает работу."),
+        "Модератор может приостановить приглашения на срок до 90 дней: на это время квота — 0, причина и срок видны здесь же.".into(),
     ]
 }
 
@@ -492,6 +526,41 @@ mod tests {
         assert_eq!(a.quota, a.base + a.bonus + a.penalty);
         assert_eq!(a.quota, 15);
         assert!(a.reasons.iter().all(|r| !r.text.is_empty()));
+    }
+
+    #[test]
+    fn freeze_takes_the_whole_quota_until_it_ends() {
+        let mut s = company(120);
+        s.domain_verified = true;
+        s.frozen_until = Some(NOW + 7 * DAY);
+        let a = assess(&s, NOW);
+        assert_eq!((a.level, a.quota), (TrustLevel::Frozen, 0));
+        let freeze = a
+            .reasons
+            .iter()
+            .find(|r| r.kind == TrustReasonKind::Frozen)
+            .unwrap();
+        assert_eq!(freeze.points, -30);
+        assert!(
+            freeze
+                .text
+                .starts_with("Модератор приостановил приглашения до ")
+        );
+        assert!(a.has_negative());
+        assert!(a.advice[0].starts_with("Приглашения снова станут доступны"));
+
+        s.complaints = 7;
+        assert_eq!(assess(&s, NOW).quota, 0, "below the floor of 5");
+
+        s.frozen_until = Some(NOW);
+        let after = assess(&s, NOW);
+        assert_eq!(after.quota, 5);
+        assert!(
+            after
+                .reasons
+                .iter()
+                .all(|r| r.kind != TrustReasonKind::Frozen)
+        );
     }
 
     #[test]

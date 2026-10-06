@@ -376,6 +376,7 @@ export const ATTEMPT_KIND_HINT: Record<AttemptKind, string> = {
 };
 
 export const TRUST_LEVEL_LABEL: Record<TrustLevel, string> = {
+  frozen: "Приглашения приостановлены",
   high: "Высокий уровень доверия",
   standard: "Обычный уровень доверия",
   new: "Новая компания",
@@ -383,6 +384,7 @@ export const TRUST_LEVEL_LABEL: Record<TrustLevel, string> = {
 };
 
 export const TRUST_LEVEL_HINT: Record<TrustLevel, string> = {
+  frozen: "Модератор приостановил отправку приглашений. Квота вернётся, когда закончится срок, — причина и комментарий ниже, в «Решениях модератора».",
   high: "Полная квота. Кандидаты откликаются на ваши предложения — так и держим.",
   standard: "Квота растёт с подтверждённым доменом, временем на платформе и принятыми приглашениями.",
   new: "Так начинает любая компания: квота вырастет сама, по мере работы на платформе.",

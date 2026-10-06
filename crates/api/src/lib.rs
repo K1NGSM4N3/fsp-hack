@@ -16,6 +16,7 @@ pub mod integrations;
 pub mod kv;
 pub mod mail;
 pub mod metrics;
+pub mod moderation;
 pub mod pdf;
 pub mod pool;
 pub mod proctoring;
@@ -81,6 +82,7 @@ use crate::{http_cache::Policy, state::AppState};
         (name = "Валидация", description = "Проверка подбора на своих данных: ваш набор «вакансия – кандидат» через рабочий подбор и базовую линию, метрики по разметке"),
         (name = "trust", description = "Антифейк: уровень доверия и квота компании, проверка вилки и дублей вакансий, очередь модерации"),
         (name = "integrations", description = "Кабинет работодателя: вебхук в ATS компании, журнал доставок, API-ключи"),
+        (name = "Модерация", description = "Кабинет модератора (роль `admin`, в интерфейсе — «Модератор»): очередь разбора тестов с видеозаписью и решениями, очередь антифейка и жалоб с действиями, журнал аудита. Каждое действие и каждый просмотр записи теста пишутся в журнал. Списки — с курсором `cursor` / `next_cursor`"),
         (name = "Интеграции ATS", description = "API для ATS работодателя. Доступ — только API-ключом компании: `Authorization: Bearer fsp_live_…`, cookie и JWT здесь не принимаются. Лимит — 120 запросов в минуту на ключ. События приходят вебхуком (тело — схема `WebhookEvent`, подпись — заголовок `FSP-Signature: t=…,v1=HMAC-SHA256(secret, t + \".\" + body)`), здесь — опрос, профиль кандидата после согласия, этапы найма и импорт вакансий"),
     ),
     components(schemas(integrations::events::WebhookEvent))
@@ -151,7 +153,7 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
         .nest("/fsp", routes::fsp::router())
         .nest(
             "/admin",
-            routes::proctoring::admin_router().merge(routes::trust::admin_router()),
+            routes::moderation::router().merge(routes::trust::admin_router()),
         )
         .merge(listing_routes().layer(middleware::from_fn_with_state(
             Policy::Listing,

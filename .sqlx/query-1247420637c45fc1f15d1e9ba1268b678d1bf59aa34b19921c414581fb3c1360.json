@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT specialization, grade, theta, assigned_at\n         FROM grade_assignments\n         WHERE candidate_id = $1 AND annulled_at IS NULL\n         ORDER BY assigned_at DESC, id DESC\n         LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 3,
+        "name": "assigned_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1247420637c45fc1f15d1e9ba1268b678d1bf59aa34b19921c414581fb3c1360"
+}

@@ -373,3 +373,139 @@ pub async fn seed_login_email(
     .await
     .map(|r| r.rows_affected())
 }
+
+/// Demo moderation queue: the person-fit flag of a seeded session, with the state whose answers
+/// were reshaped to the aberrant pattern.
+pub async fn seed_review_flag(
+    db: impl PgExecutor<'_>,
+    session_id: Uuid,
+    person_fit_lz: f64,
+    aberrant: bool,
+    state: &Value,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "UPDATE assessment_sessions SET person_fit_lz = $2, aberrant = $3, state = $4 WHERE id = $1",
+        session_id,
+        person_fit_lz,
+        aberrant,
+        state,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+pub async fn seed_session_state(
+    db: impl PgExecutor<'_>,
+    session_id: Uuid,
+) -> Result<Value, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT state FROM assessment_sessions WHERE id = $1",
+        session_id
+    )
+    .fetch_one(db)
+    .await
+}
+
+pub async fn seed_response_correct(
+    db: impl PgExecutor<'_>,
+    session_id: Uuid,
+    seq: i32,
+    correct: bool,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "UPDATE assessment_responses SET correct = $3 WHERE session_id = $1 AND seq = $2",
+        session_id,
+        seq,
+        correct,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+/// A session as if taken with proctoring off: no camera step, no events.
+pub async fn seed_drop_proctoring(
+    db: impl PgExecutor<'_>,
+    session_id: Uuid,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "DELETE FROM proctoring_sessions WHERE session_id = $1",
+        session_id
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+#[derive(Debug, Clone)]
+pub struct SeedVacancy {
+    pub id: Uuid,
+    pub title: String,
+    pub specialization: String,
+    pub grade: String,
+    pub salary_min: i64,
+    pub salary_max: i64,
+}
+
+pub async fn seed_company_vacancies(
+    db: impl PgExecutor<'_>,
+    company_id: Uuid,
+) -> Result<Vec<SeedVacancy>, sqlx::Error> {
+    sqlx::query_as!(
+        SeedVacancy,
+        "SELECT id, title, specialization, grade, salary_min, salary_max
+         FROM vacancies WHERE company_id = $1 ORDER BY created_at, id",
+        company_id,
+    )
+    .fetch_all(db)
+    .await
+}
+
+pub async fn seed_vacancy_flags(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+    salary: (i64, i64),
+    flags: &Value,
+    flagged_at: DateTime<Utc>,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "UPDATE vacancies SET salary_min = $2, salary_max = $3, trust_flags = $4, flagged_at = $5
+         WHERE id = $1",
+        id,
+        salary.0,
+        salary.1,
+        flags,
+        flagged_at,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+pub struct SeedReport<'a> {
+    pub id: Uuid,
+    pub reporter_user_id: Uuid,
+    pub target_kind: &'a str,
+    pub target_id: Uuid,
+    pub reason: &'a str,
+    pub comment: &'a str,
+    pub created_at: DateTime<Utc>,
+}
+
+pub async fn seed_report(db: impl PgExecutor<'_>, r: &SeedReport<'_>) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO reports (id, reporter_user_id, target_kind, target_id, reason, comment, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)",
+        r.id,
+        r.reporter_user_id,
+        r.target_kind,
+        r.target_id,
+        r.reason,
+        r.comment,
+        r.created_at,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}

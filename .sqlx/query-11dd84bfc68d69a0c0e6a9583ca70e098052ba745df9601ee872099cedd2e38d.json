@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.specialization, s.claimed_grade AS grade, r.decided_at\n         FROM session_reviews r\n         JOIN assessment_sessions s ON s.id = r.session_id\n         WHERE r.candidate_id = $1 AND r.decision = 'retest'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "decided_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "11dd84bfc68d69a0c0e6a9583ca70e098052ba745df9601ee872099cedd2e38d"
+}

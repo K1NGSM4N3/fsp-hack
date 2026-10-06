@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT c.user_id AS \"user_id!\", c.public_code AS \"public_code!\", c.full_name_enc,\n                  c.show_name AS \"show_name!\", c.show_fsp AS \"show_fsp!\",\n                  c.show_experience AS \"show_experience!\", c.city, c.relocation AS \"relocation!\",\n                  c.work_formats AS \"work_formats!\", c.salary_expectation_min, c.about AS \"about!\",\n                  c.experience_years, c.roles AS \"roles!\", c.soft_skills AS \"soft_skills!\",\n                  c.industries AS \"industries!\", c.experience AS \"experience!\",\n                  c.search_status AS \"search_status!: SearchStatus\", c.specialization, c.grade, c.theta,\n                  c.category_assigned_at, c.last_activity_at AS \"last_activity_at!\",\n                  f.achievements AS \"achievements?\",\n                  sk.skills AS \"skills!\", sk.sources AS \"skill_sources!\",\n                  ta.task_rating, ta.tasks_done AS \"tasks_done!\",\n                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS \"minor!\",\n                  vis.published AS \"published!\",\n                  (SELECT i.status FROM invitations i WHERE i.company_id = $1 AND i.candidate_id = c.user_id\n                    ORDER BY i.created_at DESC LIMIT 1) AS \"invitation_status?: InvitationStatus\",\n                  (SELECT true FROM applications a JOIN vacancies v ON v.id = a.vacancy_id\n                    WHERE a.candidate_id = c.user_id AND v.company_id = $1\n                      AND a.status <> 'withdrawn' LIMIT 1) IS NOT NULL AS \"applied!\",\n                  pb.camera AS \"proctoring_camera?\", pb.chunks AS \"proctoring_chunks?\",\n                  pb.tab_hidden AS \"tab_hidden?\", pb.window_blur AS \"window_blur?\",\n                  pb.fullscreen_exit AS \"fullscreen_exit?\", pb.paste AS \"paste?\",\n                  pb.camera_lost AS \"camera_lost?\", pb.recording_failed AS \"recording_failed?\"\n           FROM candidates c\n           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id\n           CROSS JOIN LATERAL (\n               SELECT coalesce(array_agg(s.skill ORDER BY s.skill, s.source), '{}') AS skills,\n                      coalesce(array_agg(s.source ORDER BY s.skill, s.source), '{}') AS sources\n               FROM candidate_skills s\n               WHERE s.candidate_id = c.user_id AND (s.source <> 'fsp' OR c.show_fsp)\n           ) sk\n           CROSS JOIN LATERAL (\n               SELECT (avg(a.rating) FILTER (WHERE a.status = 'reviewed'))::real AS task_rating,\n                      count(*) FILTER (WHERE a.status IN ('submitted', 'reviewed')) AS tasks_done\n               FROM task_assignments a\n               WHERE a.candidate_id = c.user_id\n           ) ta\n           CROSS JOIN LATERAL (\n               SELECT EXISTS (SELECT 1 FROM published_candidates p WHERE p.user_id = c.user_id) AS published\n           ) vis\n           LEFT JOIN LATERAL (\n               SELECT p.camera,\n                      (SELECT count(*) FROM proctoring_chunks pc WHERE pc.session_id = p.session_id) AS chunks,\n                      count(e.kind) FILTER (WHERE e.kind = 'tab_hidden') AS tab_hidden,\n                      count(e.kind) FILTER (WHERE e.kind = 'window_blur') AS window_blur,\n                      count(e.kind) FILTER (WHERE e.kind = 'fullscreen_exit') AS fullscreen_exit,\n                      count(e.kind) FILTER (WHERE e.kind = 'paste') AS paste,\n                      count(e.kind) FILTER (WHERE e.kind = 'camera_lost') AS camera_lost,\n                      count(e.kind) FILTER (WHERE e.kind = 'recording_failed') AS recording_failed\n               FROM (SELECT g.session_id FROM grade_assignments g\n                     WHERE g.candidate_id = c.user_id\n                     ORDER BY g.assigned_at DESC LIMIT 1) latest\n               JOIN proctoring_sessions p ON p.session_id = latest.session_id\n               LEFT JOIN proctoring_events e ON e.session_id = p.session_id\n               GROUP BY p.session_id\n           ) pb ON true\n           WHERE c.user_id = ANY ((SELECT $2::uuid[])::uuid[])",
+  "query": "SELECT c.user_id AS \"user_id!\", c.public_code AS \"public_code!\", c.full_name_enc,\n                  c.show_name AS \"show_name!\", c.show_fsp AS \"show_fsp!\",\n                  c.show_experience AS \"show_experience!\", c.city, c.relocation AS \"relocation!\",\n                  c.work_formats AS \"work_formats!\", c.salary_expectation_min, c.about AS \"about!\",\n                  c.experience_years, c.roles AS \"roles!\", c.soft_skills AS \"soft_skills!\",\n                  c.industries AS \"industries!\", c.experience AS \"experience!\",\n                  c.search_status AS \"search_status!: SearchStatus\", c.specialization, c.grade, c.theta,\n                  c.category_assigned_at, c.last_activity_at AS \"last_activity_at!\",\n                  f.achievements AS \"achievements?\",\n                  sk.skills AS \"skills!\", sk.sources AS \"skill_sources!\",\n                  ta.task_rating, ta.tasks_done AS \"tasks_done!\",\n                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS \"minor!\",\n                  vis.published AS \"published!\",\n                  (SELECT i.status FROM invitations i WHERE i.company_id = $1 AND i.candidate_id = c.user_id\n                    ORDER BY i.created_at DESC LIMIT 1) AS \"invitation_status?: InvitationStatus\",\n                  (SELECT true FROM applications a JOIN vacancies v ON v.id = a.vacancy_id\n                    WHERE a.candidate_id = c.user_id AND v.company_id = $1\n                      AND a.status <> 'withdrawn' LIMIT 1) IS NOT NULL AS \"applied!\",\n                  latest.confirmed AS \"result_confirmed?\",\n                  pb.camera AS \"proctoring_camera?\", pb.chunks AS \"proctoring_chunks?\",\n                  pb.tab_hidden AS \"tab_hidden?\", pb.window_blur AS \"window_blur?\",\n                  pb.fullscreen_exit AS \"fullscreen_exit?\", pb.paste AS \"paste?\",\n                  pb.camera_lost AS \"camera_lost?\", pb.recording_failed AS \"recording_failed?\"\n           FROM candidates c\n           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id\n           CROSS JOIN LATERAL (\n               SELECT coalesce(array_agg(s.skill ORDER BY s.skill, s.source), '{}') AS skills,\n                      coalesce(array_agg(s.source ORDER BY s.skill, s.source), '{}') AS sources\n               FROM candidate_skills s\n               WHERE s.candidate_id = c.user_id AND (s.source <> 'fsp' OR c.show_fsp)\n           ) sk\n           CROSS JOIN LATERAL (\n               SELECT (avg(a.rating) FILTER (WHERE a.status = 'reviewed'))::real AS task_rating,\n                      count(*) FILTER (WHERE a.status IN ('submitted', 'reviewed')) AS tasks_done\n               FROM task_assignments a\n               WHERE a.candidate_id = c.user_id\n           ) ta\n           CROSS JOIN LATERAL (\n               SELECT EXISTS (SELECT 1 FROM published_candidates p WHERE p.user_id = c.user_id) AS published\n           ) vis\n           LEFT JOIN LATERAL (\n               SELECT g.session_id,\n                      EXISTS (SELECT 1 FROM session_reviews r\n                               WHERE r.session_id = g.session_id AND r.decision = 'confirm') AS confirmed\n               FROM grade_assignments g\n               WHERE g.candidate_id = c.user_id AND g.annulled_at IS NULL\n               ORDER BY g.assigned_at DESC, g.id DESC\n               LIMIT 1\n           ) latest ON true\n           LEFT JOIN LATERAL (\n               SELECT p.camera,\n                      (SELECT count(*) FROM proctoring_chunks pc WHERE pc.session_id = p.session_id) AS chunks,\n                      count(e.kind) FILTER (WHERE e.kind = 'tab_hidden') AS tab_hidden,\n                      count(e.kind) FILTER (WHERE e.kind = 'window_blur') AS window_blur,\n                      count(e.kind) FILTER (WHERE e.kind = 'fullscreen_exit') AS fullscreen_exit,\n                      count(e.kind) FILTER (WHERE e.kind = 'paste') AS paste,\n                      count(e.kind) FILTER (WHERE e.kind = 'camera_lost') AS camera_lost,\n                      count(e.kind) FILTER (WHERE e.kind = 'recording_failed') AS recording_failed\n               FROM proctoring_sessions p\n               LEFT JOIN proctoring_events e ON e.session_id = p.session_id\n               WHERE p.session_id = latest.session_id\n               GROUP BY p.session_id\n           ) pb ON true\n           WHERE c.user_id = ANY ((SELECT $2::uuid[])::uuid[])",
   "describe": {
     "columns": [
       {
@@ -185,41 +185,46 @@
       },
       {
         "ordinal": 31,
-        "name": "proctoring_camera?",
+        "name": "result_confirmed?",
         "type_info": "Bool"
       },
       {
         "ordinal": 32,
+        "name": "proctoring_camera?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 33,
         "name": "proctoring_chunks?",
         "type_info": "Int8"
       },
       {
-        "ordinal": 33,
+        "ordinal": 34,
         "name": "tab_hidden?",
         "type_info": "Int8"
       },
       {
-        "ordinal": 34,
+        "ordinal": 35,
         "name": "window_blur?",
         "type_info": "Int8"
       },
       {
-        "ordinal": 35,
+        "ordinal": 36,
         "name": "fullscreen_exit?",
         "type_info": "Int8"
       },
       {
-        "ordinal": 36,
+        "ordinal": 37,
         "name": "paste?",
         "type_info": "Int8"
       },
       {
-        "ordinal": 37,
+        "ordinal": 38,
         "name": "camera_lost?",
         "type_info": "Int8"
       },
       {
-        "ordinal": 38,
+        "ordinal": 39,
         "name": "recording_failed?",
         "type_info": "Int8"
       }
@@ -269,8 +274,9 @@
       true,
       true,
       true,
+      true,
       true
     ]
   },
-  "hash": "04c31d2a1bd3f055267b186af34a7efcf065bd88f7835e43fbc6325d525c31ad"
+  "hash": "972b90d2122815108617ec6258231f64fbb672663e2c0a8e89b15a9f8dde091c"
 }

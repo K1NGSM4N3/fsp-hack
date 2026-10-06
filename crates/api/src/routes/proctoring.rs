@@ -1,6 +1,6 @@
 //! Proctoring endpoints (architecture.md §5.6): the options for the proctoring step, video chunk
-//! upload, integrity events and playback. The candidate reaches only their own sessions, the
-//! admin any session for a dispute; nothing here is routed to employers.
+//! upload, integrity events and playback of the candidate's own recording. The moderator's view
+//! of any session lives in `routes::moderation`; nothing here is routed to employers.
 
 use assessment::IntegrityEvent;
 use assessment::proctoring::{self as rules, ChunkAdmission, ChunkError};
@@ -17,13 +17,10 @@ use uuid::Uuid;
 
 use super::catalog::ConsentDocument;
 use crate::{
-    auth::{AdminUser, CandidateUser},
+    auth::CandidateUser,
     error::{ApiError, ApiResult, Problem},
     extract::{Json, Path, RawBody},
-    proctoring::{
-        self, CONSENT_KIND, LIMITS, MAX_BATCH, MAX_EVENTS, ProctoringMode, ProctoringSummary,
-        TAIL_SECS,
-    },
+    proctoring::{self, CONSENT_KIND, LIMITS, MAX_BATCH, MAX_EVENTS, ProctoringMode, TAIL_SECS},
     state::AppState,
 };
 
@@ -47,12 +44,6 @@ fn chunk_too_large() -> ApiError {
         "chunk_too_large",
         "Фрагмент записи больше 1 МиБ",
     )
-}
-
-pub fn admin_router() -> OpenApiRouter<AppState> {
-    OpenApiRouter::new()
-        .routes(routes!(admin_session))
-        .routes(routes!(admin_recording))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -300,7 +291,12 @@ async fn post_events(
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn recording(state: &AppState, s: &db::proctoring::Summary) -> ApiResult<Response> {
+/// The chunks of a recording that can be played, every one of them on disk; 404
+/// `recording_unavailable` otherwise.
+pub(crate) async fn playable_chunks(
+    state: &AppState,
+    s: &db::proctoring::Summary,
+) -> ApiResult<Vec<db::proctoring::Chunk>> {
     let chunks = if s.purged_at.is_some() {
         Vec::new()
     } else {
@@ -318,6 +314,14 @@ async fn recording(state: &AppState, s: &db::proctoring::Summary) -> ApiResult<R
             "Видеозаписи нет: тест прошёл без камеры, запись не началась или уже удалена",
         ));
     }
+    Ok(chunks)
+}
+
+pub(crate) fn stream_recording(
+    state: &AppState,
+    s: &db::proctoring::Summary,
+    chunks: Vec<db::proctoring::Chunk>,
+) -> Response {
     let length: i64 = chunks.iter().map(|c| i64::from(c.size)).sum();
     let body = proctoring::recording_body(
         state.recordings.clone(),
@@ -331,7 +335,7 @@ async fn recording(state: &AppState, s: &db::proctoring::Summary) -> ApiResult<R
         .as_deref()
         .and_then(|m| HeaderValue::from_str(m).ok())
         .unwrap_or(HeaderValue::from_static("video/webm"));
-    Ok((
+    (
         [
             (header::CONTENT_TYPE, mime),
             (header::CONTENT_LENGTH, HeaderValue::from(length)),
@@ -346,7 +350,7 @@ async fn recording(state: &AppState, s: &db::proctoring::Summary) -> ApiResult<R
         ],
         body,
     )
-        .into_response())
+        .into_response()
 }
 
 /// Play the candidate's own recording: chunks decrypted and streamed in order
@@ -366,92 +370,8 @@ async fn own_recording(
     let s = db::proctoring::summary(&state.pool, id, Some(user.id))
         .await?
         .ok_or_else(ApiError::not_found)?;
-    recording(&state, &s).await
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct EventView {
-    pub kind: IntegrityEvent,
-    pub at: DateTime<Utc>,
-    pub item_seq: Option<i16>,
-    pub duration_ms: Option<i32>,
-}
-
-#[derive(Serialize, ToSchema)]
-pub struct AdminProctoringView {
-    pub session_id: Uuid,
-    pub candidate_id: Uuid,
-    pub summary: ProctoringSummary,
-    /// Person-fit flag of the answers (`l_z` below −2).
-    pub aberrant: Option<bool>,
-    pub person_fit_lz: Option<f64>,
-    /// «Требует подтверждения»: the person-fit flag and integrity events together.
-    pub needs_confirmation: bool,
-    pub events: Vec<EventView>,
-}
-
-/// Proctoring of any session with its event log, for a dispute (admin)
-#[utoipa::path(get, path = "/proctoring/{session_id}", tag = "proctoring",
-    params(("session_id" = Uuid, Path)),
-    responses(
-        (status = 200, body = AdminProctoringView),
-        (status = 403, description = "`wrong_role`", body = Problem),
-        (status = 404, body = Problem),
-    ),
-    security(("cookie" = []), ("bearer" = [])))]
-async fn admin_session(
-    State(state): State<AppState>,
-    user: AdminUser,
-    Path(session_id): Path<Uuid>,
-) -> ApiResult<Json<AdminProctoringView>> {
-    let s = db::proctoring::summary(&state.pool, session_id, None)
-        .await?
-        .ok_or_else(ApiError::not_found)?;
-    let session = db::assessment::session_state(&state.pool, session_id, s.candidate_id)
-        .await?
-        .ok_or_else(ApiError::not_found)?;
-    let in_progress = session.status == db::types::AssessmentStatus::InProgress;
-    let f = proctoring::facts(&s, in_progress);
-    let events = db::proctoring::events(&state.pool, session_id).await?;
-    tracing::info!(admin = %user.id, session = %session_id, "proctoring log opened");
-    Ok(Json(AdminProctoringView {
-        session_id,
-        candidate_id: s.candidate_id,
-        summary: proctoring::summary_view(&s, &f, state.config.proctoring.retention_days),
-        aberrant: session.aberrant,
-        person_fit_lz: session.person_fit_lz,
-        needs_confirmation: rules::needs_confirmation(session.aberrant.unwrap_or(false), &f.counts),
-        events: events
-            .into_iter()
-            .map(|e| EventView {
-                kind: proctoring::from_db(e.kind),
-                at: e.occurred_at,
-                item_seq: e.item_seq,
-                duration_ms: e.duration_ms,
-            })
-            .collect(),
-    }))
-}
-
-/// Play any session's recording for a dispute (admin); every access is logged
-#[utoipa::path(get, path = "/proctoring/{session_id}/recording", tag = "proctoring",
-    params(("session_id" = Uuid, Path)),
-    responses(
-        (status = 200, content_type = "video/webm", body = Vec<u8>),
-        (status = 403, description = "`wrong_role`", body = Problem),
-        (status = 404, description = "`not_found`, `recording_unavailable`", body = Problem),
-    ),
-    security(("cookie" = []), ("bearer" = [])))]
-async fn admin_recording(
-    State(state): State<AppState>,
-    user: AdminUser,
-    Path(session_id): Path<Uuid>,
-) -> ApiResult<Response> {
-    let s = db::proctoring::summary(&state.pool, session_id, None)
-        .await?
-        .ok_or_else(ApiError::not_found)?;
-    tracing::info!(admin = %user.id, session = %session_id, candidate = %s.candidate_id, "proctoring recording opened");
-    recording(&state, &s).await
+    let chunks = playable_chunks(&state, &s).await?;
+    Ok(stream_recording(&state, &s, chunks))
 }
 
 #[cfg(test)]

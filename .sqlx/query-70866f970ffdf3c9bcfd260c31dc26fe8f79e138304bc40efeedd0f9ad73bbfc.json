@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT v.id, v.company_id, co.name AS company_name, v.title,\n                  v.status AS \"status: VacancyStatus\", v.salary_min, v.salary_max, v.trust_flags,\n                  v.flagged_at AS \"flagged_at!\"\n           FROM vacancies v\n           JOIN companies co ON co.id = v.company_id\n           WHERE v.flagged_at IS NOT NULL\n           ORDER BY v.flagged_at DESC\n           LIMIT $1",
+  "query": "SELECT v.id, v.company_id, co.name AS company_name, v.title,\n                  v.status AS \"status: VacancyStatus\", v.salary_min, v.salary_max, v.trust_flags,\n                  v.flagged_at AS \"at!\",\n                  (SELECT count(*) FROM reports r\n                    WHERE r.target_kind = 'vacancy' AND r.target_id = v.id\n                      AND r.resolved_at IS NULL) AS \"complaints!\"\n           FROM vacancies v\n           JOIN companies co ON co.id = v.company_id\n           WHERE v.flagged_at IS NOT NULL AND v.trust_reviewed_at IS NULL\n             AND ($1::timestamptz IS NULL OR (v.flagged_at, v.id) > ($1, $2))\n           ORDER BY v.flagged_at, v.id\n           LIMIT $3",
   "describe": {
     "columns": [
       {
@@ -56,12 +56,19 @@
       },
       {
         "ordinal": 8,
-        "name": "flagged_at!",
+        "name": "at!",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "complaints!",
+        "type_info": "Int8"
       }
     ],
     "parameters": {
       "Left": [
+        "Timestamptz",
+        "Uuid",
         "Int8"
       ]
     },
@@ -74,8 +81,9 @@
       false,
       false,
       false,
-      true
+      true,
+      null
     ]
   },
-  "hash": "ff9d88e3b5ad51829630460045662ebcb3919ab3250630dc8ea1762d5c481a63"
+  "hash": "70866f970ffdf3c9bcfd260c31dc26fe8f79e138304bc40efeedd0f9ad73bbfc"
 }

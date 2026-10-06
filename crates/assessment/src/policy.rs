@@ -58,6 +58,15 @@ pub enum Outcome {
     /// Left unfinished until it expired. Counts exactly like a failure: otherwise walking away
     /// from a test that goes badly would dodge every retry window.
     Abandoned,
+    /// A moderator annulled the result. The attempt never assigns, and `at` is the moment of the
+    /// decision rather than of the test: it blocks its grade like a failure counted from the
+    /// decision, so a slow review cannot hand back an immediate retake, and the category falls
+    /// back to the previous assignment with that assignment's own cooldown.
+    Annulled,
+    /// Voided like [`Outcome::Annulled`], with a retest ordered under the camera: the same attempt
+    /// may be taken again right away while nothing else has happened in the specialization since
+    /// the decision ([`GradePolicy::ordered_retest`]).
+    RetestOrdered,
 }
 
 /// What a single session attempted and how it ended.
@@ -70,7 +79,8 @@ pub struct Attempt {
     pub outcome: Outcome,
     /// Whether this attempt changed the candidate's active category.
     pub assigned: bool,
-    /// When it ended: the last answer, or the moment an abandoned session expired.
+    /// When it ended: the last answer, the moment an abandoned session expired, or the
+    /// moderator's decision that voided the result.
     pub at: i64,
 }
 
@@ -277,6 +287,22 @@ impl GradePolicy {
         self.check_kind(spec, attempts, kind, Some(grade), now)
     }
 
+    /// The retest a moderator ordered: the voided attempt once more, same grade and kind, open at
+    /// once and outside every window while it is still the latest attempt in the specialization.
+    /// Taking any other test first gives it up, and the voided attempt then counts like an
+    /// annulled one.
+    pub fn ordered_retest(
+        &self,
+        spec: Specialization,
+        attempts: &[Attempt],
+    ) -> Option<AllowedAttempt> {
+        let last = *self.history(spec, attempts).last()?;
+        (last.outcome == Outcome::RetestOrdered).then_some(AllowedAttempt {
+            grade: last.grade,
+            kind: last.kind,
+        })
+    }
+
     fn check_kind(
         &self,
         spec: Specialization,
@@ -285,6 +311,12 @@ impl GradePolicy {
         grade: Option<Grade>,
         now: i64,
     ) -> Result<AllowedAttempt, PolicyError> {
+        if let Some(retest) = self.ordered_retest(spec, attempts)
+            && retest.kind == kind
+            && grade.is_none_or(|g| g == retest.grade)
+        {
+            return Ok(retest);
+        }
         let history = self.history(spec, attempts);
         let stage = self.stage(spec, attempts);
         let mut wait = Wait::default();
@@ -486,6 +518,50 @@ impl GradePolicy {
             && last.unsuccessful();
         failed_upgrade.then(|| last.at + self.config.retry_upgrade())
     }
+}
+
+/// A retest a moderator ordered under the camera ([`Outcome::RetestOrdered`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CameraOrder {
+    pub specialization: Specialization,
+    pub grade: Grade,
+    /// The decision, unix seconds.
+    pub at: i64,
+}
+
+/// A test as far as the camera order cares.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CameraTest {
+    pub specialization: Specialization,
+    pub grade: Grade,
+    pub started: i64,
+    pub camera: bool,
+    /// Ended passed or failed. An abandoned test settles nothing.
+    pub completed: bool,
+}
+
+/// Whether a test at `grade` must be taken with the camera. An order stands until a test at its
+/// grade or above, started after the order with the camera, ends with a result: abandoning that
+/// test and returning after the retry window must not lift it, and aiming a grade higher must not
+/// dodge it. A lower grade is a weaker claim and stays free.
+pub fn camera_required(
+    orders: &[CameraOrder],
+    tests: &[CameraTest],
+    spec: Specialization,
+    grade: Grade,
+) -> bool {
+    orders
+        .iter()
+        .filter(|o| o.specialization == spec && grade >= o.grade)
+        .any(|o| {
+            !tests.iter().any(|t| {
+                t.specialization == spec
+                    && t.grade >= o.grade
+                    && t.started >= o.at
+                    && t.camera
+                    && t.completed
+            })
+        })
 }
 
 #[cfg(test)]
@@ -1183,6 +1259,304 @@ mod tests {
                 available_at: T0 + 30 * DAY + 3600
             })
         );
+    }
+
+    fn voided(grade: Grade, kind: AttemptKind, outcome: Outcome, decided: i64) -> Attempt {
+        Attempt {
+            outcome,
+            ..attempt(grade, kind, true, false, decided)
+        }
+    }
+
+    #[test]
+    fn annulled_placement_leaves_the_candidate_unplaced() {
+        let p = policy();
+        let decided = T0 + 2 * DAY;
+        let history = [voided(
+            Grade::Middle,
+            AttemptKind::Placement,
+            Outcome::Annulled,
+            decided,
+        )];
+        assert_eq!(p.current_grade(Backend, &history), None);
+        for grade in [Grade::Middle, Grade::Senior] {
+            assert_eq!(
+                p.check(
+                    Backend,
+                    &history,
+                    AttemptKind::Placement,
+                    grade,
+                    decided + DAY
+                ),
+                Err(PolicyError::RetryBlocked {
+                    available_at: decided + 30 * DAY
+                })
+            );
+        }
+        let down = p
+            .check(
+                Backend,
+                &history,
+                AttemptKind::PlacementStepDown,
+                Grade::Junior,
+                decided + 60,
+            )
+            .unwrap();
+        assert_eq!(down.grade, Grade::Junior);
+        assert_eq!(p.ordered_retest(Backend, &history), None);
+    }
+
+    /// The window runs from the decision: a review that took 40 days does not hand back an
+    /// immediate retake.
+    #[test]
+    fn annulment_blocks_its_grade_from_the_decision() {
+        let p = policy();
+        let decided = T0 + 40 * DAY;
+        let history = [voided(
+            Grade::Middle,
+            AttemptKind::Placement,
+            Outcome::Annulled,
+            decided,
+        )];
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Placement,
+                Grade::Middle,
+                T0 + 41 * DAY
+            ),
+            Err(PolicyError::RetryBlocked {
+                available_at: T0 + 70 * DAY
+            })
+        );
+        assert!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Placement,
+                Grade::Middle,
+                T0 + 70 * DAY
+            )
+            .is_ok()
+        );
+    }
+
+    /// Junior since T0, Middle by an upgrade at T0 + 100 days, annulled at T0 + 101 days: Junior is
+    /// current again and its own 90-day window (long over) governs changes, not the window of
+    /// the voided Middle assignment, which would have run to T0 + 190 days.
+    #[test]
+    fn annulled_upgrade_restores_the_previous_grade_and_its_cooldown() {
+        let p = policy();
+        let decided = T0 + 101 * DAY;
+        let history = [
+            attempt(Grade::Junior, AttemptKind::Placement, true, true, T0),
+            voided(
+                Grade::Middle,
+                AttemptKind::Upgrade,
+                Outcome::Annulled,
+                decided,
+            ),
+        ];
+        assert_eq!(p.current_grade(Backend, &history), Some(Grade::Junior));
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Upgrade,
+                Grade::Middle,
+                decided + DAY
+            ),
+            Err(PolicyError::RetryBlocked {
+                available_at: decided + 30 * DAY
+            })
+        );
+        assert!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Upgrade,
+                Grade::Middle,
+                decided + 30 * DAY
+            )
+            .is_ok()
+        );
+        assert!(decided + 30 * DAY < T0 + 190 * DAY);
+    }
+
+    /// A voided assignment that a later one already replaced: the current grade stays.
+    #[test]
+    fn annulling_a_superseded_assignment_keeps_the_current_grade() {
+        let p = policy();
+        let history = [
+            attempt(Grade::Junior, AttemptKind::Placement, true, true, T0),
+            attempt(
+                Grade::Senior,
+                AttemptKind::Upgrade,
+                true,
+                true,
+                T0 + 200 * DAY,
+            ),
+            voided(
+                Grade::Middle,
+                AttemptKind::Upgrade,
+                Outcome::Annulled,
+                T0 + 201 * DAY,
+            ),
+        ];
+        assert_eq!(p.current_grade(Backend, &history), Some(Grade::Senior));
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Downgrade,
+                Grade::Middle,
+                T0 + 300 * DAY
+            )
+            .map(|a| a.grade),
+            Ok(Grade::Middle)
+        );
+    }
+
+    #[test]
+    fn ordered_retest_is_open_right_away() {
+        let p = policy();
+        let decided = T0 + 3 * DAY;
+        let history = [voided(
+            Grade::Middle,
+            AttemptKind::Placement,
+            Outcome::RetestOrdered,
+            decided,
+        )];
+        assert_eq!(
+            p.ordered_retest(Backend, &history),
+            Some(AllowedAttempt {
+                grade: Grade::Middle,
+                kind: AttemptKind::Placement
+            })
+        );
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Placement,
+                Grade::Middle,
+                decided + 60
+            )
+            .map(|a| a.grade),
+            Ok(Grade::Middle)
+        );
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Placement,
+                Grade::Senior,
+                decided + 60
+            ),
+            Err(PolicyError::RetryBlocked {
+                available_at: decided + 30 * DAY
+            }),
+            "the retest does not open other grades"
+        );
+
+        let upgrade = [
+            attempt(Grade::Junior, AttemptKind::Placement, true, true, T0),
+            voided(
+                Grade::Middle,
+                AttemptKind::Upgrade,
+                Outcome::RetestOrdered,
+                T0 + 101 * DAY,
+            ),
+        ];
+        assert_eq!(p.current_grade(Backend, &upgrade), Some(Grade::Junior));
+        assert!(
+            p.check(
+                Backend,
+                &upgrade,
+                AttemptKind::Upgrade,
+                Grade::Middle,
+                T0 + 101 * DAY + 60
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn another_test_first_gives_up_the_ordered_retest() {
+        let p = policy();
+        let decided = T0 + 3 * DAY;
+        let history = [
+            voided(
+                Grade::Middle,
+                AttemptKind::Placement,
+                Outcome::RetestOrdered,
+                decided,
+            ),
+            attempt(
+                Grade::Junior,
+                AttemptKind::PlacementStepDown,
+                true,
+                true,
+                decided + 3600,
+            ),
+        ];
+        assert_eq!(p.ordered_retest(Backend, &history), None);
+        assert_eq!(p.current_grade(Backend, &history), Some(Grade::Junior));
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::PlacementUpgrade,
+                Grade::Middle,
+                decided + 2 * 3600
+            ),
+            Err(PolicyError::RetryBlocked {
+                available_at: decided + 30 * DAY
+            })
+        );
+    }
+
+    #[test]
+    fn camera_order_covers_its_grade_and_above_until_a_completed_camera_test() {
+        let order = [CameraOrder {
+            specialization: Backend,
+            grade: Grade::Middle,
+            at: T0,
+        }];
+        let test = |grade, started, camera, completed| CameraTest {
+            specialization: Backend,
+            grade,
+            started,
+            camera,
+            completed,
+        };
+        assert!(!camera_required(&order, &[], Backend, Grade::Junior));
+        assert!(camera_required(&order, &[], Backend, Grade::Middle));
+        assert!(camera_required(&order, &[], Backend, Grade::Senior));
+        assert!(!camera_required(
+            &order,
+            &[],
+            catalog::Specialization::Qa,
+            Grade::Senior
+        ));
+        for unsettled in [
+            test(Grade::Middle, T0 + 60, true, false),
+            test(Grade::Middle, T0 + 60, false, true),
+            test(Grade::Middle, T0 - 60, true, true),
+            test(Grade::Junior, T0 + 60, true, true),
+        ] {
+            assert!(
+                camera_required(&order, &[unsettled], Backend, Grade::Middle),
+                "{unsettled:?}"
+            );
+        }
+        for settled in [
+            test(Grade::Middle, T0 + 60, true, true),
+            test(Grade::Senior, T0 + 60, true, true),
+        ] {
+            assert!(!camera_required(&order, &[settled], Backend, Grade::Middle));
+        }
     }
 
     #[test]

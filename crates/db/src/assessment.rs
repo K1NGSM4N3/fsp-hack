@@ -3,7 +3,7 @@ use serde_json::Value;
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::types::AssessmentStatus;
+use crate::types::{AssessmentStatus, ReviewDecision};
 
 #[derive(Debug, Clone)]
 pub struct SessionForUpdate {
@@ -35,7 +35,12 @@ pub struct CandidateSession {
     pub items_count: i32,
     pub started_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
+    /// Assigned the grade, and no moderator voided that assignment.
     pub assigned: bool,
+    /// `None` when the session ran with proctoring off.
+    pub camera: Option<bool>,
+    pub review: Option<ReviewDecision>,
+    pub reviewed_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
@@ -58,6 +63,11 @@ pub struct SessionState {
     pub started_at: DateTime<Utc>,
     pub finished_at: Option<DateTime<Utc>>,
     pub assigned: bool,
+    /// The grade assignment of this session was voided by a moderator.
+    pub annulled: bool,
+    pub review: Option<ReviewDecision>,
+    pub review_comment: Option<String>,
+    pub reviewed_at: Option<DateTime<Utc>>,
 }
 
 pub struct NewSession<'a> {
@@ -266,8 +276,13 @@ pub async fn candidate_sessions(
                   s.status AS "status: AssessmentStatus", s.theta, s.se, s.measured_grade,
                   s.confident_above_next, s.person_fit_lz, s.aberrant, s.items_count, s.started_at,
                   s.finished_at,
-                  EXISTS (SELECT 1 FROM grade_assignments g WHERE g.session_id = s.id) AS "assigned!"
+                  EXISTS (SELECT 1 FROM grade_assignments g
+                           WHERE g.session_id = s.id AND g.annulled_at IS NULL) AS "assigned!",
+                  p.camera AS "camera?", r.decision AS "review?: ReviewDecision",
+                  r.decided_at AS "reviewed_at?"
            FROM assessment_sessions s
+           LEFT JOIN proctoring_sessions p ON p.session_id = s.id
+           LEFT JOIN session_reviews r ON r.session_id = s.id
            WHERE s.candidate_id = $1
            ORDER BY s.started_at DESC"#,
         candidate_id,
@@ -287,8 +302,14 @@ pub async fn session_state(
                   s.status AS "status: AssessmentStatus", s.state, s.current_item,
                   s.current_item_deadline, s.theta, s.se, s.measured_grade, s.confident_above_next,
                   s.person_fit_lz, s.aberrant, s.items_count, s.started_at, s.finished_at,
-                  EXISTS (SELECT 1 FROM grade_assignments g WHERE g.session_id = s.id) AS "assigned!"
+                  EXISTS (SELECT 1 FROM grade_assignments g
+                           WHERE g.session_id = s.id AND g.annulled_at IS NULL) AS "assigned!",
+                  EXISTS (SELECT 1 FROM grade_assignments g
+                           WHERE g.session_id = s.id AND g.annulled_at IS NOT NULL) AS "annulled!",
+                  r.decision AS "review?: ReviewDecision", r.comment AS "review_comment?",
+                  r.decided_at AS "reviewed_at?"
            FROM assessment_sessions s
+           LEFT JOIN session_reviews r ON r.session_id = s.id
            WHERE s.id = $1 AND s.candidate_id = $2"#,
         id,
         candidate_id,

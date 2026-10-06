@@ -44,6 +44,8 @@ pub struct CompanyVacancy {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub applications: i64,
+    /// Taken down by a moderator: publishing is refused until restored.
+    pub unpublished_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Clone)]
@@ -145,6 +147,7 @@ pub async fn insert_vacancy(
     .map(|r| r.rows_affected())
 }
 
+/// 0 when there is no such vacancy, or a moderator took it down and `status` would publish it.
 pub async fn update_vacancy(
     db: impl PgExecutor<'_>,
     id: Uuid,
@@ -159,7 +162,8 @@ pub async fn update_vacancy(
              published_at = CASE WHEN $10 = 'published'::vacancy_status AND published_at IS NULL
                                  THEN now() ELSE published_at END,
              updated_at = now()
-         WHERE id = $11 AND company_id = $12",
+         WHERE id = $11 AND company_id = $12
+           AND (unpublished_at IS NULL OR $10 <> 'published'::vacancy_status)",
         v.title,
         v.description,
         v.specialization,
@@ -188,7 +192,8 @@ pub async fn company_vacancies(
                   v.salary_max, v.work_format, v.city, v.status AS "status: VacancyStatus",
                   v.published_at, v.created_at, v.updated_at,
                   (SELECT count(*) FROM applications a
-                    WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS "applications!"
+                    WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS "applications!",
+                  v.unpublished_at
            FROM vacancies v
            WHERE v.company_id = $1
            ORDER BY v.created_at DESC"#,
@@ -209,7 +214,8 @@ pub async fn company_vacancy(
                   v.salary_max, v.work_format, v.city, v.status AS "status: VacancyStatus",
                   v.published_at, v.created_at, v.updated_at,
                   (SELECT count(*) FROM applications a
-                    WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS "applications!"
+                    WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS "applications!",
+                  v.unpublished_at
            FROM vacancies v
            WHERE v.company_id = $1 AND v.id = $2"#,
         company_id,

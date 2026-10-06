@@ -1,0 +1,152 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id, a.moderator_id, u.email_enc AS \"moderator_email_enc?\",\n                  a.action AS \"action: ModerationAction\", a.target_kind AS \"target_kind: ModerationTarget\",\n                  a.target_id, c.public_code AS \"candidate_code?\", a.company_id,\n                  co.name AS \"company_name?\", a.comment, a.details, a.at\n           FROM moderation_actions a\n           LEFT JOIN users u ON u.id = a.moderator_id\n           LEFT JOIN candidates c ON c.user_id = a.candidate_id\n           LEFT JOIN companies co ON co.id = a.company_id\n           WHERE ($1::moderation_action IS NULL OR a.action = $1)\n             AND ($2::moderation_target IS NULL OR a.target_kind = $2)\n             AND ($3::uuid IS NULL OR a.moderator_id = $3)\n             AND ($4::uuid IS NULL OR a.target_id = $4 OR a.candidate_id = $4 OR a.company_id = $4)\n             AND ($5::timestamptz IS NULL OR (a.at, a.id) < ($5, $6))\n           ORDER BY a.at DESC, a.id DESC\n           LIMIT $7",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "moderator_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "moderator_email_enc?",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "action: ModerationAction",
+        "type_info": {
+          "Custom": {
+            "name": "moderation_action",
+            "kind": {
+              "Enum": [
+                "confirm_result",
+                "annul_result",
+                "order_retest",
+                "view_recording",
+                "dismiss",
+                "unpublish_vacancy",
+                "freeze_invitations",
+                "restore"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "target_kind: ModerationTarget",
+        "type_info": {
+          "Custom": {
+            "name": "moderation_target",
+            "kind": {
+              "Enum": [
+                "session",
+                "vacancy",
+                "invitation",
+                "company",
+                "complaint"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "target_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "candidate_code?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "company_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "details",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 11,
+        "name": "at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "moderation_action",
+            "kind": {
+              "Enum": [
+                "confirm_result",
+                "annul_result",
+                "order_retest",
+                "view_recording",
+                "dismiss",
+                "unpublish_vacancy",
+                "freeze_invitations",
+                "restore"
+              ]
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "moderation_target",
+            "kind": {
+              "Enum": [
+                "session",
+                "vacancy",
+                "invitation",
+                "company",
+                "complaint"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Uuid",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "0e0d2d75a2ede13af6141c21ba719b7b5f5e7a49b37b6a83a2d81031412f2fda"
+}

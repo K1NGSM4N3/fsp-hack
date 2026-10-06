@@ -1,0 +1,172 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.specialization, s.claimed_grade, s.attempt_kind,\n                  s.status AS \"status: AssessmentStatus\", s.state, s.current_item,\n                  s.current_item_deadline, s.theta, s.se, s.measured_grade, s.confident_above_next,\n                  s.person_fit_lz, s.aberrant, s.items_count, s.started_at, s.finished_at,\n                  EXISTS (SELECT 1 FROM grade_assignments g\n                           WHERE g.session_id = s.id AND g.annulled_at IS NULL) AS \"assigned!\",\n                  EXISTS (SELECT 1 FROM grade_assignments g\n                           WHERE g.session_id = s.id AND g.annulled_at IS NOT NULL) AS \"annulled!\",\n                  r.decision AS \"review?: ReviewDecision\", r.comment AS \"review_comment?\",\n                  r.decided_at AS \"reviewed_at?\"\n           FROM assessment_sessions s\n           LEFT JOIN session_reviews r ON r.session_id = s.id\n           WHERE s.id = $1 AND s.candidate_id = $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "claimed_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "attempt_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: AssessmentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "assessment_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "passed",
+                "failed",
+                "expired"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "state",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "current_item",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "current_item_deadline",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 9,
+        "name": "se",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "measured_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "confident_above_next",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "person_fit_lz",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 13,
+        "name": "aberrant",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 14,
+        "name": "items_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 15,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "finished_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 17,
+        "name": "assigned!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 18,
+        "name": "annulled!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 19,
+        "name": "review?: ReviewDecision",
+        "type_info": {
+          "Custom": {
+            "name": "review_decision",
+            "kind": {
+              "Enum": [
+                "confirm",
+                "annul",
+                "retest"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "review_comment?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
+        "name": "reviewed_at?",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      null,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "94b847599541ea2652dc8e59eee40ff0f43a084299d9d9070fc13c07eaee98fc"
+}

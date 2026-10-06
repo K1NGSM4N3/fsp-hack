@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE assessment_sessions SET person_fit_lz = $2, aberrant = $3, state = $4 WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8",
+        "Bool",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1b84f12c83e714b579fe746afe2649da979de1edc35264bfba7b746b34b4f3ce"
+}

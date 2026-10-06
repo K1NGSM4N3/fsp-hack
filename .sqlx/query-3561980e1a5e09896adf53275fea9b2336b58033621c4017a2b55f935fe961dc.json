@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE invitations SET trust_review = $2, trust_reviewed_at = $3\n         WHERE id = $1 AND trust_flags <> '[]' AND trust_reviewed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "flag_review",
+            "kind": {
+              "Enum": [
+                "dismissed",
+                "upheld"
+              ]
+            }
+          }
+        },
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3561980e1a5e09896adf53275fea9b2336b58033621c4017a2b55f935fe961dc"
+}
