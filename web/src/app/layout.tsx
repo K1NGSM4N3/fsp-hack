@@ -5,9 +5,9 @@ import "./globals.css";
 import { MotionFlag } from "@/components/motion/MotionFlag";
 
 const onest = Onest({ subsets: ["latin", "cyrillic"], variable: "--font-onest", display: "swap" });
-// Mono is only for eyebrows, codes and sums: no preload, so it never competes with Onest, CSS and JS for the first
-// bytes. Listing the weights in use makes Google serve a narrower variable file (52 KB instead of 68 KB for 3 subsets).
-const jetbrains = JetBrains_Mono({ weight: ["400", "500", "600", "700"], subsets: ["latin", "cyrillic"], variable: "--font-jetbrains", display: "swap", preload: false });
+// Preloaded: otherwise the CSS-discovered mono file is fetched late at top priority and delays first paint.
+// Listing the weights in use makes Google serve a narrower variable file (52 KB instead of 68 KB for 3 subsets).
+const jetbrains = JetBrains_Mono({ weight: ["400", "500", "600", "700"], subsets: ["latin", "cyrillic"], variable: "--font-jetbrains", display: "swap" });
 
 export const metadata: Metadata = {
   title: { default: "ФСП Таланты: компании пишут первыми и сразу называют зарплату", template: "%s · ФСП Таланты" },
