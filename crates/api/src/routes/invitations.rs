@@ -176,7 +176,7 @@ fn validate(req: &SendInvitation) -> ApiResult<()> {
         (status = 201, body = SentInvitation),
         (status = 200, description = "Повтор по Idempotency-Key", body = SentInvitation),
         (status = 404, description = "Кандидат не найден или скрыт", body = Problem),
-        (status = 409, description = "`invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available`; `company_profile_required`", body = Problem),
+        (status = 409, description = "`invitation_quota_exceeded`, `invitations_frozen` (a moderator froze the company's invitations; `detail` names the date), `invitation_already_active`, `candidate_not_available`; `company_profile_required`", body = Problem),
         (status = 422, body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
@@ -224,7 +224,18 @@ async fn send(
         }
     };
 
-    let quota = trust::weekly_quota(&state.pool, company).await?;
+    let (assessment, signals) = trust::company_assessment(&state.pool, company).await?;
+    if let Some(until) = signals.frozen_until {
+        return Err(ApiError::conflict(
+            "invitations_frozen",
+            format!(
+                "Модератор приостановил приглашения до {}",
+                until.format("%d.%m.%Y")
+            ),
+        )
+        .with_detail("Причина и комментарий модератора — в разделе «Доверие и квота»"));
+    }
+    let quota = i64::from(assessment.quota);
     let since = Utc::now() - Duration::days(7);
     let sent = db::invitations::company_invitations_since(&state.pool, company, since).await?;
     if sent >= quota {

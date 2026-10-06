@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id, i.company_id, co.name AS company_name, i.title, i.salary_min, i.salary_max,\n                  i.trust_flags, i.created_at AS at\n           FROM invitations i\n           JOIN companies co ON co.id = i.company_id\n           WHERE i.trust_flags <> '[]' AND i.trust_reviewed_at IS NULL\n             AND ($1::timestamptz IS NULL OR (i.created_at, i.id) > ($1, $2))\n           ORDER BY i.created_at, i.id\n           LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "company_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "salary_max",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "trust_flags",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "8e30d404e6060988e1578f38f168822486bb7be4dccc4aec5bd2bb8bd21460c7"
+}

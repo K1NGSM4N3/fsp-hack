@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE assessment_responses SET correct = $3 WHERE session_id = $1 AND seq = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Bool"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "07d536e6fa8f7bde81e73e61b914ebaf73bd1159079fd523dfb39788dc1feb77"
+}

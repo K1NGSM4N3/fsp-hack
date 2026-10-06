@@ -59,10 +59,12 @@ docker compose -f deploy/compose.yml --profile full up -d --build   # то же 
 | Работодатели с подтверждённым доменом | `hr@pixel-manufactura.example`, `hr@oblakostroy.example`, `hr@medsignal.example`, `it-hr@logplus.example`, `career@shield-key.example` |
 | Кандидат | `candidate@demo.fsp`, `cand1@demo.fsp` … `cand239@demo.fsp` (один из номеров вместо этого входит как `minor@demo.fsp`) |
 | Кандидат 14–17 лет, ждёт согласия законного представителя | `minor@demo.fsp` |
+| Кандидат, чей тест ждёт решения модератора (тоже один из номеров `cand…`) | `review@demo.fsp` |
+| Модератор: разбор спорных тестов, антифейк и жалобы, журнал (кабинет `/admin`) | `moderator@demo.fsp` |
 | Участник ФСП (вход в ФСП ID на Keycloak) | `fsp-000001` … `fsp-000010` |
 
 Администратор Keycloak — `admin` / `admin` (`KC_BOOTSTRAP_ADMIN_*` в `.env`), Grafana — `admin` / `admin`.
-Роль `admin` платформы (очередь модерации, разбор видеозаписей) регистрацией не выдаётся и демо-аккаунта не имеет.
+Роль модератора (`admin` в API) регистрацией не выдаётся — только в базе; в демо это `moderator@demo.fsp`. В его очередях сразу есть работа: семь тестов на разбор, две вакансии с отметками антифейка и три жалобы.
 
 ## Локальная разработка без Docker
 

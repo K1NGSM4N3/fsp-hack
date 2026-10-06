@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT i.id, i.company_id, co.name AS company_name, i.title, i.salary_min, i.salary_max,\n                  i.trust_flags, i.created_at\n           FROM invitations i\n           JOIN companies co ON co.id = i.company_id\n           WHERE i.trust_flags <> '[]'\n           ORDER BY i.created_at DESC\n           LIMIT $1",
+  "query": "SELECT v.id, v.company_id, co.name AS company_name, v.title, v.salary_min, v.salary_max,\n                  v.trust_flags, v.unpublished_at AS \"at!\"\n           FROM vacancies v\n           JOIN companies co ON co.id = v.company_id\n           WHERE v.unpublished_at IS NOT NULL\n             AND ($1::timestamptz IS NULL OR (v.unpublished_at, v.id) > ($1, $2))\n           ORDER BY v.unpublished_at, v.id\n           LIMIT $3",
   "describe": {
     "columns": [
       {
@@ -40,12 +40,14 @@
       },
       {
         "ordinal": 7,
-        "name": "created_at",
+        "name": "at!",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
+        "Timestamptz",
+        "Uuid",
         "Int8"
       ]
     },
@@ -57,8 +59,8 @@
       false,
       false,
       false,
-      false
+      true
     ]
   },
-  "hash": "554f08e1d810da385f028db1c88fe999c3c0dcdb1ea89a5104d84b3693f85e93"
+  "hash": "e3d3212ec9b08846621cf250ca9ceac3c426a6c4cfc91ce70e8b36fd98c897b5"
 }

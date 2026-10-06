@@ -6,13 +6,20 @@ use uuid::Uuid;
 use crate::types::VacancyStatus;
 
 /// Raw counters behind `matching::trust::TrustSignals`. Windows: 90 days for behaviour and flags,
-/// 180 days for accepted invitations; complaints only from candidates, unresolved.
+/// 180 days for accepted invitations; complaints only from candidates and not dismissed by a
+/// moderator; flags a moderator dismissed do not count.
 #[derive(Debug, Clone)]
 pub struct CompanySignals {
     pub company_id: Uuid,
     pub name: String,
     pub owner_created_at: DateTime<Utc>,
     pub verified_domain: Option<String>,
+    /// Invitations frozen by a moderator until this moment (only while it is in the future).
+    pub frozen_until: Option<DateTime<Utc>>,
+    /// When a moderator last took the company off the queue.
+    pub trust_reviewed_at: Option<DateTime<Utc>>,
+    /// The newest dated signal: a complaint, a flag, a decline «зарплата» or «компания».
+    pub signal_at: Option<DateTime<Utc>>,
     pub complaints: i64,
     pub declines: i64,
     pub bad_declines: i64,
@@ -92,6 +99,10 @@ pub async fn company_signals(
     sqlx::query_as!(
         CompanySignals,
         r#"SELECT co.id AS company_id, co.name, u.created_at AS owner_created_at, co.verified_domain,
+                  CASE WHEN co.invitations_frozen_until > now() THEN co.invitations_frozen_until END
+                      AS frozen_until,
+                  co.trust_reviewed_at,
+                  greatest(rep.latest, inv.latest_flag, inv.latest_bad_decline, vac.latest) AS signal_at,
                   rep.complaints AS "complaints!", inv.declines AS "declines!",
                   inv.bad_declines AS "bad_declines!", inv.invitations AS "invitations!",
                   inv.withdrawn AS "withdrawn!", inv.closed AS "closed!",
@@ -116,7 +127,14 @@ pub async fn company_signals(
                       count(*) FILTER (WHERE i.status = 'accepted'
                                          AND i.responded_at >= now() - interval '180 days') AS accepted,
                       count(*) FILTER (WHERE i.created_at >= now() - interval '90 days'
-                                         AND i.trust_flags <> '[]') AS salary_flags
+                                         AND i.trust_flags <> '[]'
+                                         AND i.trust_review IS DISTINCT FROM 'dismissed') AS salary_flags,
+                      max(i.created_at) FILTER (WHERE i.created_at >= now() - interval '90 days'
+                                         AND i.trust_flags <> '[]'
+                                         AND i.trust_review IS DISTINCT FROM 'dismissed') AS latest_flag,
+                      max(i.responded_at) FILTER (WHERE i.status = 'declined'
+                                         AND i.responded_at >= now() - interval '90 days'
+                                         AND i.decline_reason IN ('salary', 'company')) AS latest_bad_decline
                FROM invitations i
                WHERE i.company_id = co.id
            ) inv
@@ -126,15 +144,18 @@ pub async fn company_signals(
                       count(*) FILTER (WHERE jsonb_path_exists(v.trust_flags,
                           '$[*] ? (@.kind == "duplicate_own")')) AS own_duplicates,
                       count(*) FILTER (WHERE jsonb_path_exists(v.trust_flags,
-                          '$[*] ? (@.kind == "copy_of_other")')) AS copies
+                          '$[*] ? (@.kind == "copy_of_other")')) AS copies,
+                      max(v.flagged_at) AS latest
                FROM vacancies v
                WHERE v.company_id = co.id AND v.flagged_at >= now() - interval '90 days'
+                 AND v.trust_review IS DISTINCT FROM 'dismissed'
            ) vac
            CROSS JOIN LATERAL (
-               SELECT count(DISTINCT r.reporter_user_id) AS complaints
+               SELECT count(DISTINCT r.reporter_user_id) AS complaints, max(r.created_at) AS latest
                FROM reports r
                JOIN users ru ON ru.id = r.reporter_user_id AND ru.role = 'candidate'
-               WHERE r.resolved_at IS NULL AND r.created_at >= now() - interval '90 days'
+               WHERE r.resolution IS DISTINCT FROM 'dismissed'
+                 AND r.created_at >= now() - interval '90 days'
                  AND ((r.target_kind = 'company' AND r.target_id = co.id)
                    OR (r.target_kind = 'vacancy'
                        AND r.target_id IN (SELECT id FROM vacancies WHERE company_id = co.id))
@@ -278,7 +299,8 @@ pub async fn company_signatures(
     .await
 }
 
-/// Replaces the flags; `flagged_at` keeps the first flagging time until the flags clear.
+/// Replaces the flags; `flagged_at` keeps the first flagging time until the flags clear. Flags
+/// that changed since a moderator dismissed them go back to the queue.
 pub async fn set_vacancy_flags(
     db: impl PgExecutor<'_>,
     id: Uuid,
@@ -287,7 +309,9 @@ pub async fn set_vacancy_flags(
     sqlx::query!(
         "UPDATE vacancies
          SET trust_flags = $2,
-             flagged_at = CASE WHEN $2 = '[]'::jsonb THEN NULL ELSE coalesce(flagged_at, now()) END
+             flagged_at = CASE WHEN $2 = '[]'::jsonb THEN NULL ELSE coalesce(flagged_at, now()) END,
+             trust_review = CASE WHEN trust_flags = $2 THEN trust_review END,
+             trust_reviewed_at = CASE WHEN trust_flags = $2 THEN trust_reviewed_at END
          WHERE id = $1",
         id,
         flags,
@@ -335,7 +359,7 @@ pub async fn flagged_vacancies(
                   v.flagged_at AS "flagged_at!"
            FROM vacancies v
            JOIN companies co ON co.id = v.company_id
-           WHERE v.flagged_at IS NOT NULL
+           WHERE v.flagged_at IS NOT NULL AND v.trust_reviewed_at IS NULL
            ORDER BY v.flagged_at DESC
            LIMIT $1"#,
         limit,
@@ -354,7 +378,7 @@ pub async fn flagged_invitations(
                   i.trust_flags, i.created_at
            FROM invitations i
            JOIN companies co ON co.id = i.company_id
-           WHERE i.trust_flags <> '[]'
+           WHERE i.trust_flags <> '[]' AND i.trust_reviewed_at IS NULL
            ORDER BY i.created_at DESC
            LIMIT $1"#,
         limit,

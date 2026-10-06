@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE vacancies\n         SET status = 'published', unpublished_at = NULL, updated_at = now(),\n             published_at = coalesce(published_at, now()),\n             trust_review = CASE WHEN flagged_at IS NULL THEN trust_review ELSE 'dismissed' END,\n             trust_reviewed_at = CASE WHEN flagged_at IS NULL THEN trust_reviewed_at ELSE $2 END\n         WHERE id = $1 AND unpublished_at IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3b359533d827fb822a56dba2a2a7fc1ac4c69efe0dd23c63d114ff79bfe42b00"
+}

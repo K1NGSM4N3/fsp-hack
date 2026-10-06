@@ -1,5 +1,6 @@
-//! Trust and anti-fake (X-1): the employer's own trust level and quota with reasons, soft checks
-//! while filling a vacancy or an invitation, and the moderation list for administrators.
+//! Trust and anti-fake (X-1): the employer's own trust level and quota with reasons and the
+//! moderator's decisions about the company, soft checks while filling a vacancy or an
+//! invitation, and the flagged list for moderators.
 
 use axum::extract::State;
 use catalog::{Category, Grade, Specialization};
@@ -19,9 +20,13 @@ use crate::{
     dto::{SalaryRange, VacancyStatus},
     error::{ApiError, ApiResult, Problem, Validator},
     extract::{Json, Query},
+    moderation::{self, ModerationAction},
     state::AppState,
     trust,
 };
+
+/// Moderator decisions shown on the trust page.
+const NOTICES: i64 = 50;
 
 const MODERATION_LIMIT: i64 = 200;
 
@@ -71,9 +76,25 @@ pub struct DomainStatus {
     pub hint: String,
 }
 
+/// A moderator's decision that changed something for the company.
+#[derive(Serialize, ToSchema)]
+pub struct ModerationNotice {
+    pub action: ModerationAction,
+    pub at: DateTime<Utc>,
+    /// What happened, in words.
+    pub text: String,
+    /// The moderator's explanation.
+    pub comment: Option<String>,
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct TrustStatus {
     pub level: TrustLevel,
+    /// Invitations frozen by a moderator until then; the quota is 0 meanwhile.
+    pub frozen_until: Option<DateTime<Utc>>,
+    /// Moderator decisions about the company, its vacancies, invitations and complaints about
+    /// them, newest first.
+    pub moderation: Vec<ModerationNotice>,
     /// Invitations allowed per 7 days right now.
     pub quota_limit: i64,
     pub quota_used: i64,
@@ -108,7 +129,20 @@ async fn trust_status(
     let check = trust::refresh_domain(&state.pool, &state.crypto, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    let (a, _) = trust::company_assessment(&state.pool, company).await?;
+    let (a, row) = trust::company_assessment(&state.pool, company).await?;
+    let moderation = db::moderation::company_outcomes(&state.pool, company, NOTICES)
+        .await?
+        .into_iter()
+        .map(|o| {
+            let action = ModerationAction::from(o.action);
+            ModerationNotice {
+                text: moderation::company_notice(action, o.target_kind.into(), &o.details),
+                action,
+                at: o.at,
+                comment: o.comment,
+            }
+        })
+        .collect();
     let used = db::invitations::company_invitations_since(
         &state.pool,
         company,
@@ -117,6 +151,8 @@ async fn trust_status(
     .await?;
     Ok(Json(TrustStatus {
         level: a.level,
+        frozen_until: row.frozen_until,
+        moderation,
         quota_limit: i64::from(a.quota),
         quota_used: used,
         quota_base: i64::from(a.base),
@@ -309,8 +345,8 @@ fn reasons(flags: serde_json::Value) -> ApiResult<Vec<String>> {
     Ok(flags.iter().map(TrustFlag::moderator_text).collect())
 }
 
-/// Flagged companies, vacancies and invitations with their reasons (moderation)
-#[utoipa::path(get, path = "/trust", tag = "trust",
+/// Flagged companies, vacancies and invitations with their reasons, not yet reviewed (moderation)
+#[utoipa::path(get, path = "/trust", tag = "Модерация",
     responses(
         (status = 200, body = ModerationQueue),
         (status = 403, description = "`wrong_role`", body = Problem),

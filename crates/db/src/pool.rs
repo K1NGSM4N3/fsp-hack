@@ -72,6 +72,9 @@ pub struct CandidateCard {
     pub invitation_status: Option<InvitationStatus>,
     /// Applied to one of the company's vacancies and did not withdraw.
     pub applied: bool,
+    /// A moderator confirmed the result of the test behind the current category; `None`
+    /// without a category.
+    pub result_confirmed: Option<bool>,
     /// Proctoring of the test behind the current category; `None` when it was not proctored.
     pub proctoring_camera: Option<bool>,
     pub proctoring_chunks: Option<i64>,
@@ -208,6 +211,7 @@ pub async fn candidate_cards(
                   EXISTS (SELECT 1 FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
                            WHERE v.company_id = $1 AND a.candidate_id = c.user_id
                              AND a.status <> 'withdrawn') AS "applied!",
+                  latest.confirmed AS "result_confirmed?",
                   pb.camera AS "proctoring_camera?", pb.chunks AS "proctoring_chunks?",
                   pb.tab_hidden AS "tab_hidden?", pb.window_blur AS "window_blur?",
                   pb.fullscreen_exit AS "fullscreen_exit?", pb.paste AS "paste?",
@@ -230,6 +234,15 @@ pub async fn candidate_cards(
                SELECT EXISTS (SELECT 1 FROM published_candidates p WHERE p.user_id = c.user_id) AS published
            ) vis
            LEFT JOIN LATERAL (
+               SELECT g.session_id,
+                      EXISTS (SELECT 1 FROM session_reviews r
+                               WHERE r.session_id = g.session_id AND r.decision = 'confirm') AS confirmed
+               FROM grade_assignments g
+               WHERE g.candidate_id = c.user_id AND g.annulled_at IS NULL
+               ORDER BY g.assigned_at DESC, g.id DESC
+               LIMIT 1
+           ) latest ON true
+           LEFT JOIN LATERAL (
                SELECT p.camera,
                       (SELECT count(*) FROM proctoring_chunks pc WHERE pc.session_id = p.session_id) AS chunks,
                       count(e.kind) FILTER (WHERE e.kind = 'tab_hidden') AS tab_hidden,
@@ -238,11 +251,9 @@ pub async fn candidate_cards(
                       count(e.kind) FILTER (WHERE e.kind = 'paste') AS paste,
                       count(e.kind) FILTER (WHERE e.kind = 'camera_lost') AS camera_lost,
                       count(e.kind) FILTER (WHERE e.kind = 'recording_failed') AS recording_failed
-               FROM (SELECT g.session_id FROM grade_assignments g
-                     WHERE g.candidate_id = c.user_id
-                     ORDER BY g.assigned_at DESC LIMIT 1) latest
-               JOIN proctoring_sessions p ON p.session_id = latest.session_id
+               FROM proctoring_sessions p
                LEFT JOIN proctoring_events e ON e.session_id = p.session_id
+               WHERE p.session_id = latest.session_id
                GROUP BY p.session_id
            ) pb ON true
            WHERE c.user_id = ANY ((SELECT $2::uuid[])::uuid[])"#,

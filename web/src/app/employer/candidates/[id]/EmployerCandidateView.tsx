@@ -126,7 +126,7 @@ export function EmployerCandidateView({ id, needId }: { id: string; needId: stri
             {c.minor && <MinorBadge />}
             {c.search_status === "active" && <Badge tone="success">{SEARCH_STATUS_LABEL.active}</Badge>}
             {status && <InvitationStatusBadge status={status} />}
-            <ProctoringBadge badge={c.proctoring} />
+            <ProctoringBadge badge={c.proctoring} confirmed={c.result_confirmed} />
           </span>
         }
         title={candidateTitle(c)}

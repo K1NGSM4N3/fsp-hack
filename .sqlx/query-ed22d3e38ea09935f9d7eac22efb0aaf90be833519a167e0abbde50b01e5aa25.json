@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE reports\n         SET resolved_at = $5, resolution = $2, resolution_comment = $3, resolved_by = $4\n         WHERE resolved_at IS NULL\n           AND ((target_kind = 'company' AND target_id = $1)\n             OR (target_kind = 'invitation'\n                 AND target_id IN (SELECT id FROM invitations WHERE company_id = $1)))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ed22d3e38ea09935f9d7eac22efb0aaf90be833519a167e0abbde50b01e5aa25"
+}

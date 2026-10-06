@@ -8,7 +8,7 @@ import type { AssessmentSession } from "@/api/types";
 import { Button, Card, CardHeader } from "@/components/ui";
 import { proctoringRemarks, proctoringStatusText } from "@/features/employer/components/ProctoringBadge";
 import { qk } from "@/features/keys";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import { remarksForCandidate, useProctor } from "./ui";
 
 /**
@@ -82,6 +82,7 @@ export function ProctoringResultCard({ session }: { session: AssessmentSession }
   const remarks = remarksForCandidate(s.events);
   const employerSees = [
     proctoringStatusText(s.status),
+    session.review?.decision === "confirm" && session.result?.assigned_grade ? "Результат подтверждён" : null,
     proctoringRemarks({ left_test: s.events.tab_hidden + s.events.window_blur, pastes: s.events.paste, fullscreen_exits: s.events.fullscreen_exit }),
   ].filter(Boolean);
   const video = s.status === "recorded" || s.status === "recording" || (s.status === "interrupted" && s.playable);
@@ -125,6 +126,11 @@ export function ProctoringResultCard({ session }: { session: AssessmentSession }
           {s.delete_after && !s.purged && <p className="mt-2 text-xs text-ink-subtle">Запись удалим {formatDate(s.delete_after)}</p>}
         </div>
       </div>
+      {session.recording_views.length > 0 && (
+        <p className="mt-4 rounded-control bg-canvas p-3 text-xs text-ink-muted">
+          Запись теста просмотрена модератором: {session.recording_views.map((at) => formatDateTime(at)).join(", ")}. Каждый просмотр записывается в журнал.
+        </p>
+      )}
       {s.playable &&
         (open ? (
           <Player sessionId={session.id} />

@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT action AS \"action: ModerationAction\", target_kind AS \"target_kind: ModerationTarget\",\n                  comment, details, at\n           FROM moderation_actions\n           WHERE company_id = $1 AND action <> 'view_recording'\n             AND NOT (action = 'dismiss' AND target_kind = 'company')\n           ORDER BY at DESC, id DESC\n           LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "action: ModerationAction",
+        "type_info": {
+          "Custom": {
+            "name": "moderation_action",
+            "kind": {
+              "Enum": [
+                "confirm_result",
+                "annul_result",
+                "order_retest",
+                "view_recording",
+                "dismiss",
+                "unpublish_vacancy",
+                "freeze_invitations",
+                "restore"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "target_kind: ModerationTarget",
+        "type_info": {
+          "Custom": {
+            "name": "moderation_target",
+            "kind": {
+              "Enum": [
+                "session",
+                "vacancy",
+                "invitation",
+                "company",
+                "complaint"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "details",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "8cfab658e2e13b6de8ec370ac1680deafe89f8df6a7d7510e31658996d32ae30"
+}

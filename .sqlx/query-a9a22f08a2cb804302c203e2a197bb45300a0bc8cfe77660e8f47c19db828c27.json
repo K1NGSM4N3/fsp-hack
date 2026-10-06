@@ -1,0 +1,26 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE vacancies SET trust_review = $2, trust_reviewed_at = $3\n         WHERE id = $1 AND flagged_at IS NOT NULL AND trust_reviewed_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "flag_review",
+            "kind": {
+              "Enum": [
+                "dismissed",
+                "upheld"
+              ]
+            }
+          }
+        },
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "a9a22f08a2cb804302c203e2a197bb45300a0bc8cfe77660e8f47c19db828c27"
+}

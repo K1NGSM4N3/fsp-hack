@@ -97,6 +97,7 @@ function Step() {
 
   const o = options.data;
   const doc = o.mode === "optional" ? (o.consent ?? null) : null;
+  const cameraRequired = Boolean(c.available.find((x) => x.grade === grade)?.camera_required);
   const go = (camera: boolean) => {
     setError(null);
     if (fullscreen && document.fullscreenEnabled && !document.fullscreenElement) {
@@ -123,7 +124,13 @@ function Step() {
       back={{ href: "/candidate/assessment", label: "Тестирование" }}
       eyebrow={<CategoryBadge category={{ specialization: spec, grade }} size="sm" />}
       title={doc ? "Видеозапись во время теста" : `Тест на ${GRADE_LABEL[grade]}`}
-      description={doc ? "Камера помогает подтвердить, что тест пройден самостоятельно. Это по желанию: без камеры тест засчитывается так же." : undefined}
+      description={
+        doc
+          ? cameraRequired
+            ? "Модератор назначил пересдачу с видеозаписью: этот тест начнётся только с включённой камерой. Решение и комментарий модератора — в истории тестов."
+            : "Камера помогает подтвердить, что тест пройден самостоятельно. Это по желанию: без камеры тест засчитывается так же."
+          : undefined
+      }
     />
   );
 
@@ -151,7 +158,7 @@ function Step() {
     {
       icon: <Eye className="size-4" aria-hidden />,
       title: "Кто увидит",
-      text: "Вы и администратор — только если результат придётся перепроверить. Работодатели видео не получают: им видна лишь отметка «Тест с видеозаписью».",
+      text: "Вы и модератор — только если результат придётся перепроверить; каждый его просмотр виден вам в истории тестов. Работодатели видео не получают: им видна лишь отметка «Тест с видеозаписью».",
     },
     { icon: <Clock className="size-4" aria-hidden />, title: "Сколько храним", text: `${days} в зашифрованном виде, потом удаляем сами. Удалить раньше — отозвать согласие в настройках.` },
   ];
@@ -210,12 +217,17 @@ function Step() {
             <Button size="lg" icon={<Video className="size-5" aria-hidden />} disabled={Boolean(blocker)} loading={start.isPending} onClick={() => go(true)}>
               Начать с видеозаписью
             </Button>
-            <Button size="lg" variant="secondary" disabled={start.isPending} onClick={() => go(false)}>
-              Продолжить без камеры
-            </Button>
+            {!cameraRequired && (
+              <Button size="lg" variant="secondary" disabled={start.isPending} onClick={() => go(false)}>
+                Продолжить без камеры
+              </Button>
+            )}
           </div>
           <p className="mt-3 text-xs text-ink-subtle">
-            {blocker ? `${blocker}. ` : ""}Без камеры у результата будет отметка «без видеозаписи» — её увидят работодатели.
+            {blocker ? `${blocker}. ` : ""}
+            {cameraRequired
+              ? "Без камеры этот тест не начнётся: так модератор сможет подтвердить результат."
+              : "Без камеры у результата будет отметка «без видеозаписи» — её увидят работодатели."}
           </p>
         </Card>
       </div>

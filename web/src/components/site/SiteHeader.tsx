@@ -14,7 +14,7 @@ import { SITE_NAV } from "./nav";
 
 function AuthActions({ role, stacked = false, onNavigate }: { role: Me["role"] | null; stacked?: boolean; onNavigate?: () => void }) {
   if (role) {
-    const href = role === "employer" ? "/employer" : "/candidate";
+    const href = role === "employer" ? "/employer" : role === "admin" ? "/admin" : "/candidate";
     return (
       <Link
         href={href}

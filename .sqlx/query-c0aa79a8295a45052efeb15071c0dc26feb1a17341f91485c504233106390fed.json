@@ -1,0 +1,81 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.id, v.company_id, co.name AS company_name, v.title,\n                  v.status AS \"status: VacancyStatus\", v.salary_min, v.salary_max, v.trust_flags,\n                  v.flagged_at AS \"flagged_at!\"\n           FROM vacancies v\n           JOIN companies co ON co.id = v.company_id\n           WHERE v.flagged_at IS NOT NULL AND v.trust_reviewed_at IS NULL\n           ORDER BY v.flagged_at DESC\n           LIMIT $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "company_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: VacancyStatus",
+        "type_info": {
+          "Custom": {
+            "name": "vacancy_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "published",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "salary_max",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "trust_flags",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 8,
+        "name": "flagged_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "c0aa79a8295a45052efeb15071c0dc26feb1a17341f91485c504233106390fed"
+}

@@ -24,6 +24,8 @@ pub struct GradeHistory {
     pub session_id: Option<Uuid>,
     pub reason: String,
     pub assigned_at: DateTime<Utc>,
+    /// Voided by a moderator; the row stays in the history.
+    pub annulled_at: Option<DateTime<Utc>>,
 }
 
 pub async fn insert_grade_assignment(
@@ -79,7 +81,7 @@ pub async fn grade_history(
 ) -> Result<Vec<GradeHistory>, sqlx::Error> {
     sqlx::query_as!(
         GradeHistory,
-        "SELECT id, specialization, grade, theta, se, session_id, reason, assigned_at
+        "SELECT id, specialization, grade, theta, se, session_id, reason, assigned_at, annulled_at
          FROM grade_assignments
          WHERE candidate_id = $1
          ORDER BY assigned_at DESC",

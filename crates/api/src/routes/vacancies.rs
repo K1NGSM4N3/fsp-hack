@@ -81,6 +81,9 @@ pub struct Vacancy {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub applications: i64,
+    /// Taken down by a moderator: publishing again is refused (409 `vacancy_unpublished`); the
+    /// reason is on the «Доверие и квота» page.
+    pub unpublished_by_moderator_at: Option<DateTime<Utc>>,
 }
 
 macro_rules! vacancy_from_row {
@@ -104,6 +107,7 @@ macro_rules! vacancy_from_row {
             created_at: r.created_at,
             updated_at: r.updated_at,
             applications: r.applications,
+            unpublished_by_moderator_at: r.unpublished_at,
         }
     }};
 }
@@ -233,7 +237,7 @@ async fn get_own(
 #[utoipa::path(put, path = "/vacancies/{id}", tag = "vacancies",
     params(("id" = Uuid, Path)),
     request_body = VacancyInput,
-    responses((status = 200, body = Vacancy), (status = 404, body = Problem), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
+    responses((status = 200, body = Vacancy), (status = 404, body = Problem), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`; `vacancy_unpublished` — a moderator took the vacancy down, it can be edited but not published", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn update(
     State(state): State<AppState>,
@@ -247,7 +251,18 @@ async fn update(
     let updated =
         db::vacancies::update_vacancy(&state.pool, id, company, status, &fields(&v)).await?;
     if updated == 0 {
-        return Err(ApiError::not_found());
+        return Err(
+            match db::vacancies::company_vacancy(&state.pool, company, id).await? {
+                Some(row) if row.unpublished_at.is_some() => ApiError::conflict(
+                    "vacancy_unpublished",
+                    "Вакансию снял с публикации модератор",
+                )
+                .with_detail(
+                    "Её можно править, но не публиковать. Причина — в разделе «Доверие и квота»",
+                ),
+                _ => ApiError::not_found(),
+            },
+        );
     }
     check_trust(&state, company, id, &v).await?;
     let row = db::vacancies::company_vacancy(&state.pool, company, id)

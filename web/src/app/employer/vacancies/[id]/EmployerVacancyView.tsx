@@ -6,10 +6,10 @@ import { useState } from "react";
 import type { EmployerApplicationStatus, IncomingApplication } from "@/api/types";
 import { CategoryBadge } from "@/components/domain/Category";
 import { ApplicationStatusBadge, VacancyStatusBadge } from "@/components/domain/StatusBadges";
-import { Button, EmptyState, ErrorAlert, PageHeader, PageSkeleton, SkeletonCard, Tabs, useToast } from "@/components/ui";
+import { Alert, Button, EmptyState, ErrorAlert, PageHeader, PageSkeleton, SkeletonCard, Tabs, useToast } from "@/components/ui";
 import { useOwnVacancy, useSetApplicationStatus, useVacancyApplications } from "@/features/employer/hooks";
 import { VacancyForm } from "@/features/employer/components/VacancyForm";
-import { formatRelative } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
 
 type View = "applications" | "edit";
 
@@ -75,6 +75,20 @@ export function EmployerVacancyView({ id }: { id: string }) {
   return (
     <div className="max-w-4xl">
       <PageHeader back={{ href: "/employer/vacancies", label: "Вакансии" }} eyebrow={<VacancyStatusBadge status={v.status} />} title={v.title} />
+      {v.unpublished_by_moderator_at && (
+        <Alert
+          tone="danger"
+          title={`Вакансию снял с публикации модератор ${formatDate(v.unpublished_by_moderator_at)}`}
+          className="mb-6"
+          action={
+            <Link href="/employer/trust" className="text-sm font-medium text-primary hover:underline">
+              Причина — в разделе «Доверие и квота»
+            </Link>
+          }
+        >
+          Её можно править, но не опубликовать снова, пока модератор не вернёт её. Отклики сохранились.
+        </Alert>
+      )}
       <Tabs<View>
         ariaLabel="Раздел вакансии"
         value={view}

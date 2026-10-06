@@ -10,13 +10,567 @@
     "version": "1.0.0"
   },
   "paths": {
+    "/api/v1/admin/antifake": {
+      "get": {
+        "tags": [
+          "Модерация"
+        ],
+        "summary": "Anti-fake queue: flagged companies, vacancies and invitations with open complaints, oldest first",
+        "operationId": "trust_queue",
+        "parameters": [
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "open",
+                    "sanctions"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "description": "Only this kind of item.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "description": "The kind of item an anti-fake action targets.",
+                  "enum": [
+                    "company",
+                    "vacancy",
+                    "invitation",
+                    "complaint"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100, 30 by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: moderators only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/antifake/actions": {
+      "post": {
+        "tags": [
+          "Модерация"
+        ],
+        "summary": "Act on an anti-fake item: dismiss, take a vacancy down, freeze the company's invitations, restore",
+        "operationId": "trust_act",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TrustActionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TrustActionResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: moderators only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such item",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`action_not_applicable`: nothing left to dismiss, the vacancy is not published, the complaint is closed, nothing to restore",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `comment`, `days`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/log": {
+      "get": {
+        "tags": [
+          "Модерация"
+        ],
+        "summary": "Audit log of moderation, newest first: decisions, anti-fake actions and recording views",
+        "operationId": "audit_log",
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "confirm_result",
+                    "annul_result",
+                    "order_retest",
+                    "view_recording",
+                    "dismiss",
+                    "unpublish_vacancy",
+                    "freeze_invitations",
+                    "restore"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "target_kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "session",
+                    "vacancy",
+                    "invitation",
+                    "company",
+                    "complaint"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "moderator_id",
+            "in": "query",
+            "description": "Only this moderator's actions.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "subject",
+            "in": "query",
+            "description": "A session, vacancy, invitation, company or complaint, or a candidate or company the\nactions concern.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "uuid"
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100, 30 by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: moderators only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/overview": {
+      "get": {
+        "tags": [
+          "Модерация"
+        ],
+        "summary": "The overview: what waits in each queue and what moderators did this week",
+        "operationId": "overview",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModerationOverview"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: moderators only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/admin/proctoring": {
+      "get": {
+        "tags": [
+          "Модерация"
+        ],
+        "summary": "Proctoring queue: finished sessions oldest first",
+        "operationId": "proctoring_queue",
+        "parameters": [
+          {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "enum": [
+                    "needs_review",
+                    "remarks",
+                    "video"
+                  ]
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` of the previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100, 30 by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QueuePage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query`: unknown filter or a cursor not from `next_cursor`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: moderators only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/proctoring/{session_id}": {
       "get": {
         "tags": [
-          "proctoring"
+          "Модерация"
         ],
-        "summary": "Proctoring of any session with its event log, for a dispute (admin)",
-        "operationId": "admin_session",
+        "summary": "A session for review: result, person-fit, answers and integrity events on one timeline, video",
+        "operationId": "session_review",
         "parameters": [
           {
             "name": "session_id",
@@ -33,7 +587,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AdminProctoringView"
+                  "$ref": "#/components/schemas/SessionReview"
                 }
               }
             }
@@ -59,7 +613,7 @@
             }
           },
           "403": {
-            "description": "`wrong_role`",
+            "description": "`wrong_role`: moderators only",
             "content": {
               "application/json": {
                 "schema": {
@@ -88,13 +642,142 @@
         ]
       }
     },
+    "/api/v1/admin/proctoring/{session_id}/decision": {
+      "post": {
+        "tags": [
+          "Модерация"
+        ],
+        "summary": "Decide on a session: confirm the result, annul it, or order a retest with the camera",
+        "operationId": "decide",
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionReview"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "`wrong_role`: moderators only",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`already_decided`, `session_not_finished`, `nothing_to_annul` (the test assigned no grade or it is void already), `retest_not_applicable` (a later test replaced this result), `proctoring_off`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `comment` empty or longer than 2000 characters; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "cookie": []
+          },
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/proctoring/{session_id}/recording": {
       "get": {
         "tags": [
-          "proctoring"
+          "Модерация"
         ],
-        "summary": "Play any session's recording for a dispute (admin); every access is logged",
-        "operationId": "admin_recording",
+        "summary": "Play any session's recording; every view is written to the audit log before the video is sent",
+        "description": "`HEAD` answers whether the recording can be played without sending it, so it is not a view\nand is not logged.",
+        "operationId": "session_recording",
         "parameters": [
           {
             "name": "session_id",
@@ -142,7 +825,7 @@
             }
           },
           "403": {
-            "description": "`wrong_role`",
+            "description": "`wrong_role`: moderators only",
             "content": {
               "application/json": {
                 "schema": {
@@ -152,7 +835,7 @@
             }
           },
           "404": {
-            "description": "`not_found`, `recording_unavailable`",
+            "description": "`not_found`, `recording_unavailable`: no camera, deleted after retention, or the files are missing",
             "content": {
               "application/json": {
                 "schema": {
@@ -175,9 +858,9 @@
     "/api/v1/admin/trust": {
       "get": {
         "tags": [
-          "trust"
+          "Модерация"
         ],
-        "summary": "Flagged companies, vacancies and invitations with their reasons (moderation)",
+        "summary": "Flagged companies, vacancies and invitations with their reasons, not yet reviewed (moderation)",
         "operationId": "moderation",
         "responses": {
           "200": {
@@ -771,7 +1454,7 @@
             }
           },
           "409": {
-            "description": "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade), `attempt_not_allowed`, `already_assigned`",
+            "description": "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade, or after a moderator annulled a result at it), `attempt_not_allowed`, `already_assigned`, `camera_required` (a moderator ordered a retest with the camera: a test at that grade or above starts only with `proctoring.camera = true`)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4483,7 +5166,7 @@
             }
           },
           "409": {
-            "description": "`invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available`; `company_profile_required`",
+            "description": "`invitation_quota_exceeded`, `invitations_frozen` (a moderator froze the company's invitations; `detail` names the date), `invitation_already_active`, `candidate_not_available`; `company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -6691,7 +7374,7 @@
             }
           },
           "409": {
-            "description": "`company_profile_required`",
+            "description": "`company_profile_required`; `vacancy_unpublished` — a moderator took the vacancy down, it can be edited but not published",
             "content": {
               "application/json": {
                 "schema": {
@@ -8856,53 +9539,6 @@
           }
         }
       },
-      "AdminProctoringView": {
-        "type": "object",
-        "required": [
-          "session_id",
-          "candidate_id",
-          "summary",
-          "needs_confirmation",
-          "events"
-        ],
-        "properties": {
-          "session_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "candidate_id": {
-            "type": "string",
-            "format": "uuid"
-          },
-          "summary": {
-            "$ref": "#/components/schemas/ProctoringSummary"
-          },
-          "aberrant": {
-            "type": [
-              "boolean",
-              "null"
-            ],
-            "description": "Person-fit flag of the answers (`l_z` below −2)."
-          },
-          "person_fit_lz": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "format": "double"
-          },
-          "needs_confirmation": {
-            "type": "boolean",
-            "description": "«Требует подтверждения»: the person-fit flag and integrity events together."
-          },
-          "events": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EventView"
-            }
-          }
-        }
-      },
       "AgeBracket": {
         "type": "string",
         "enum": [
@@ -9215,7 +9851,8 @@
           "status",
           "items_count",
           "assigned",
-          "started_at"
+          "started_at",
+          "recording_views"
         ],
         "properties": {
           "id": {
@@ -9264,7 +9901,7 @@
           },
           "assigned": {
             "type": "boolean",
-            "description": "This test assigned the category."
+            "description": "This test assigned the category, and no moderator annulled it."
           },
           "person_fit_lz": {
             "type": [
@@ -9301,6 +9938,25 @@
                 "type": "null"
               }
             ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SessionModeration",
+                "description": "A moderator's decision on the result, with the comment."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recording_views": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "When a moderator played the recording."
           }
         }
       },
@@ -9371,7 +10027,8 @@
           "status",
           "answered",
           "min_items",
-          "max_items"
+          "max_items",
+          "recording_views"
         ],
         "properties": {
           "id": {
@@ -9449,6 +10106,25 @@
                 "type": "null"
               }
             ]
+          },
+          "review": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SessionModeration",
+                "description": "The moderator's decision on a disputed result: confirmed, annulled (the category it gave\nis removed), or annulled with a retest under the camera."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recording_views": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "description": "Every time a moderator played this recording. Each view is logged, and the candidate\nsees the same dates."
           }
         }
       },
@@ -9460,6 +10136,50 @@
           "failed",
           "expired"
         ]
+      },
+      "AssignmentState": {
+        "type": "object",
+        "description": "What the test did to the candidate's category and what a decision would change.",
+        "required": [
+          "current"
+        ],
+        "properties": {
+          "assigned_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "annulled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "current": {
+            "type": "boolean",
+            "description": "The assignment is in force and no later one replaced it: annulling it changes the\ncategory employers see."
+          },
+          "current_category": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Category",
+                "description": "The candidate's category right now."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_category_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "AtsApplication": {
         "type": "object",
@@ -9902,6 +10622,101 @@
           }
         }
       },
+      "AuditEntry": {
+        "type": "object",
+        "required": [
+          "id",
+          "at",
+          "moderator_id",
+          "action",
+          "target_kind",
+          "target_id",
+          "details"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "moderator_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "moderator": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The moderator's login email; `null` once the account is deleted."
+          },
+          "action": {
+            "$ref": "#/components/schemas/ModerationAction"
+          },
+          "target_kind": {
+            "$ref": "#/components/schemas/ModerationTarget"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "target_label": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "What the target was called when the action happened: a title, a company, a category."
+          },
+          "candidate_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "company_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "details": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Specifics in words: the freeze term, complaints closed, the category restored."
+          }
+        }
+      },
+      "AuditPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditEntry"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "BankItem": {
         "type": "object",
         "required": [
@@ -9957,6 +10772,7 @@
           "search_status",
           "last_activity_at",
           "tasks_done",
+          "result_confirmed",
           "minor",
           "relation"
         ],
@@ -10107,6 +10923,10 @@
                 "type": "null"
               }
             ]
+          },
+          "result_confirmed": {
+            "type": "boolean",
+            "description": "«Результат подтверждён»: a moderator reviewed the test behind the current category and\nconfirmed it. The decision itself, the comment and the video stay with the moderator and\nthe candidate."
           },
           "minor": {
             "type": "boolean",
@@ -10689,6 +11509,47 @@
           }
         }
       },
+      "CompanyRef": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "level": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TrustLevel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "quota": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "description": "Invitations per 7 days right now."
+          },
+          "frozen_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "CompanyResponse": {
         "allOf": [
           {
@@ -10733,6 +11594,37 @@
           },
           "name": {
             "type": "string"
+          }
+        }
+      },
+      "ComplaintView": {
+        "type": "object",
+        "required": [
+          "target_kind",
+          "target_id",
+          "reason",
+          "reason_ru"
+        ],
+        "properties": {
+          "target_kind": {
+            "$ref": "#/components/schemas/TrustItemKind"
+          },
+          "target_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "reason_ru": {
+            "type": "string"
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The candidate's own words; the reporter is not shown."
           }
         }
       },
@@ -11082,6 +11974,42 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "DecisionInput": {
+        "type": "object",
+        "required": [
+          "decision",
+          "comment"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Up to 2000 characters. The candidate reads it in the test history."
+          }
+        }
+      },
+      "DecisionView": {
+        "type": "object",
+        "required": [
+          "decision",
+          "comment",
+          "decided_at"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "comment": {
+            "type": "string"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -11662,36 +12590,6 @@
           "integration.test"
         ]
       },
-      "EventView": {
-        "type": "object",
-        "required": [
-          "kind",
-          "at"
-        ],
-        "properties": {
-          "kind": {
-            "$ref": "#/components/schemas/IntegrityEvent"
-          },
-          "at": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "item_seq": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32"
-          },
-          "duration_ms": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int32"
-          }
-        }
-      },
       "ExperienceEntry": {
         "type": "object",
         "required": [
@@ -12017,6 +12915,14 @@
           "assigned_at": {
             "type": "string",
             "format": "date-time"
+          },
+          "annulled_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "A moderator annulled the test behind it: the entry stays in the history, the category\nno longer comes from it."
           }
         }
       },
@@ -12811,7 +13717,8 @@
           "kind",
           "reason",
           "available_at",
-          "label"
+          "label",
+          "camera_required"
         ],
         "properties": {
           "grade": {
@@ -12829,6 +13736,27 @@
           },
           "label": {
             "type": "string"
+          },
+          "camera_required": {
+            "type": "boolean",
+            "description": "It will need the camera when it opens."
+          }
+        }
+      },
+      "LogCounters": {
+        "type": "object",
+        "required": [
+          "actions_week",
+          "recording_views_week"
+        ],
+        "properties": {
+          "actions_week": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "recording_views_week": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -12998,6 +13926,67 @@
           }
         }
       },
+      "ModerationAction": {
+        "type": "string",
+        "enum": [
+          "confirm_result",
+          "annul_result",
+          "order_retest",
+          "view_recording",
+          "dismiss",
+          "unpublish_vacancy",
+          "freeze_invitations",
+          "restore"
+        ]
+      },
+      "ModerationNotice": {
+        "type": "object",
+        "description": "A moderator's decision that changed something for the company.",
+        "required": [
+          "action",
+          "at",
+          "text"
+        ],
+        "properties": {
+          "action": {
+            "$ref": "#/components/schemas/ModerationAction"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "text": {
+            "type": "string",
+            "description": "What happened, in words."
+          },
+          "comment": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The moderator's explanation."
+          }
+        }
+      },
+      "ModerationOverview": {
+        "type": "object",
+        "required": [
+          "proctoring",
+          "antifake",
+          "log"
+        ],
+        "properties": {
+          "proctoring": {
+            "$ref": "#/components/schemas/ProctoringCounters"
+          },
+          "antifake": {
+            "$ref": "#/components/schemas/TrustCounters"
+          },
+          "log": {
+            "$ref": "#/components/schemas/LogCounters"
+          }
+        }
+      },
       "ModerationQueue": {
         "type": "object",
         "required": [
@@ -13026,6 +14015,16 @@
             }
           }
         }
+      },
+      "ModerationTarget": {
+        "type": "string",
+        "enum": [
+          "session",
+          "vacancy",
+          "invitation",
+          "company",
+          "complaint"
+        ]
       },
       "MyApplication": {
         "type": "object",
@@ -13397,7 +14396,9 @@
         "required": [
           "grade",
           "kind",
-          "label"
+          "label",
+          "ordered_retest",
+          "camera_required"
         ],
         "properties": {
           "grade": {
@@ -13408,6 +14409,14 @@
           },
           "label": {
             "type": "string"
+          },
+          "ordered_retest": {
+            "type": "boolean",
+            "description": "The retest a moderator ordered: open now, outside the usual windows."
+          },
+          "camera_required": {
+            "type": "boolean",
+            "description": "After a retest ordered with the camera: this test starts only with the camera on."
           }
         }
       },
@@ -14701,6 +15710,60 @@
           }
         }
       },
+      "PersonFit": {
+        "type": "object",
+        "description": "The person-fit statistic and the pattern behind it.",
+        "required": [
+          "threshold",
+          "aberrant",
+          "harder_correct",
+          "harder_total",
+          "easier_wrong",
+          "easier_total",
+          "summary"
+        ],
+        "properties": {
+          "lz": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "threshold": {
+            "type": "number",
+            "format": "double"
+          },
+          "aberrant": {
+            "type": "boolean"
+          },
+          "harder_correct": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Items harder than θ̂ answered right, of all the items harder than θ̂.",
+            "minimum": 0
+          },
+          "harder_total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "easier_wrong": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Items easier than θ̂ answered wrong, of all the items easier than θ̂.",
+            "minimum": 0
+          },
+          "easier_total": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      },
       "Place": {
         "type": "string",
         "description": "Serialized as slugs; also accepts places as numbers (`1`, `\"2\"`) from the registry.",
@@ -14842,6 +15905,35 @@
             ],
             "format": "uuid",
             "description": "`consent.id` from `GET /candidate/proctoring`; required with `camera = true`."
+          }
+        }
+      },
+      "ProctoringCounters": {
+        "type": "object",
+        "required": [
+          "needs_review",
+          "remarks",
+          "with_video",
+          "decided_week"
+        ],
+        "properties": {
+          "needs_review": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Undecided sessions flagged «требует подтверждения»."
+          },
+          "remarks": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Undecided sessions with tab leaves, pastes or fullscreen exits."
+          },
+          "with_video": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "decided_week": {
+            "type": "integer",
+            "format": "int64"
           }
         }
       },
@@ -15183,6 +16275,115 @@
           }
         }
       },
+      "QueuePage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/QueueSession"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` for the next page; `null` on the last one."
+          }
+        }
+      },
+      "QueueSession": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "candidate_code",
+          "category",
+          "category_name",
+          "attempt_kind",
+          "status",
+          "finished_at",
+          "duration_secs",
+          "aberrant",
+          "needs_review",
+          "video",
+          "remarks",
+          "result_in_force"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_code": {
+            "type": "string",
+            "description": "Anonymous code «K-XXXXXX»: the moderator does not need the name."
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "category_name": {
+            "type": "string"
+          },
+          "attempt_kind": {
+            "$ref": "#/components/schemas/AttemptKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssessmentStatus"
+          },
+          "finished_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duration_secs": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "person_fit_lz": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "aberrant": {
+            "type": "boolean"
+          },
+          "needs_review": {
+            "type": "boolean"
+          },
+          "video": {
+            "$ref": "#/components/schemas/VideoState"
+          },
+          "remarks": {
+            "$ref": "#/components/schemas/Remarks"
+          },
+          "result_in_force": {
+            "type": "boolean",
+            "description": "The grade this test assigned is in force (not voided)."
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReviewDecision"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "decided_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
       "Rank": {
         "type": "string",
         "enum": [
@@ -15345,6 +16546,49 @@
           }
         }
       },
+      "RecordingInfo": {
+        "type": "object",
+        "required": [
+          "video",
+          "playable",
+          "views"
+        ],
+        "properties": {
+          "video": {
+            "$ref": "#/components/schemas/VideoState"
+          },
+          "playable": {
+            "type": "boolean",
+            "description": "`GET …/recording` should play it (files may still be missing on this server)."
+          },
+          "delete_after": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "views": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecordingView"
+            },
+            "description": "Every time a moderator played it; the candidate sees the same dates."
+          }
+        }
+      },
+      "RecordingView": {
+        "type": "object",
+        "required": [
+          "at"
+        ],
+        "properties": {
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
       "RefreshResponse": {
         "type": "object",
         "required": [
@@ -15457,6 +16701,34 @@
           "contacts_available": {
             "type": "boolean",
             "description": "Accepted invitation or own application: `/employer/candidates/{id}/contacts` will answer."
+          }
+        }
+      },
+      "Remarks": {
+        "type": "object",
+        "required": [
+          "left_test",
+          "pastes",
+          "fullscreen_exits",
+          "technical"
+        ],
+        "properties": {
+          "left_test": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "pastes": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "fullscreen_exits": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "technical": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Camera lost or recording failed: technical, not behaviour."
           }
         }
       },
@@ -15587,6 +16859,129 @@
           }
         }
       },
+      "ReviewAnswer": {
+        "type": "object",
+        "required": [
+          "seq",
+          "title",
+          "level",
+          "correct",
+          "timed_out",
+          "elapsed_ms",
+          "shown_at",
+          "answered_at",
+          "theta_after"
+        ],
+        "properties": {
+          "seq": {
+            "type": "integer",
+            "format": "int32",
+            "description": "0-based; integrity events name the item on screen by this number.",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          },
+          "topic": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Topic"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "topic_ru": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "level": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "difficulty": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float",
+            "description": "IRT difficulty `b` on the specialization's θ scale."
+          },
+          "correct": {
+            "type": "boolean"
+          },
+          "timed_out": {
+            "type": "boolean"
+          },
+          "elapsed_ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "shown_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "answered_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "theta_after": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
+      "ReviewDecision": {
+        "type": "string",
+        "description": "The moderator's decision on a finished session.",
+        "enum": [
+          "confirm",
+          "annul",
+          "retest"
+        ]
+      },
+      "ReviewEvent": {
+        "type": "object",
+        "required": [
+          "kind",
+          "at",
+          "offset_ms"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/IntegrityEvent"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "duration_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "item_seq": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "The item on screen: as the browser reported it, or by time when it did not.",
+            "minimum": 0
+          },
+          "offset_ms": {
+            "type": "integer",
+            "format": "int64",
+            "description": "From the start of the test."
+          }
+        }
+      },
       "ReviewInput": {
         "type": "object",
         "required": [
@@ -15603,6 +16998,50 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ReviewResult": {
+        "type": "object",
+        "required": [
+          "cut"
+        ],
+        "properties": {
+          "theta": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "se": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "measured_grade": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Grade"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "cut": {
+            "type": "number",
+            "format": "double",
+            "description": "θ cut of the claimed grade."
+          },
+          "test_strength": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
           }
         }
       },
@@ -15912,6 +17351,136 @@
             "items": {
               "$ref": "#/components/schemas/StatusEvent"
             }
+          }
+        }
+      },
+      "SessionModeration": {
+        "type": "object",
+        "description": "A moderator's decision on the session, as the candidate reads it.",
+        "required": [
+          "decision",
+          "comment",
+          "decided_at"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/ReviewDecision"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Written by the moderator for the candidate."
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SessionReview": {
+        "type": "object",
+        "required": [
+          "session_id",
+          "candidate_code",
+          "category",
+          "category_name",
+          "attempt_kind",
+          "status",
+          "started_at",
+          "result",
+          "assignment",
+          "person_fit",
+          "flagged",
+          "recording",
+          "answers",
+          "events",
+          "allowed"
+        ],
+        "properties": {
+          "session_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "candidate_code": {
+            "type": "string"
+          },
+          "category": {
+            "$ref": "#/components/schemas/Category"
+          },
+          "category_name": {
+            "type": "string"
+          },
+          "attempt_kind": {
+            "$ref": "#/components/schemas/AttemptKind"
+          },
+          "status": {
+            "$ref": "#/components/schemas/AssessmentStatus"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finished_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "result": {
+            "$ref": "#/components/schemas/ReviewResult"
+          },
+          "assignment": {
+            "$ref": "#/components/schemas/AssignmentState"
+          },
+          "person_fit": {
+            "$ref": "#/components/schemas/PersonFit"
+          },
+          "flagged": {
+            "type": "boolean",
+            "description": "«Требует подтверждения» as the candidate saw it before any decision."
+          },
+          "proctoring": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ProctoringSummary",
+                "description": "`None` when the session ran with proctoring off."
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "recording": {
+            "$ref": "#/components/schemas/RecordingInfo"
+          },
+          "answers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewAnswer"
+            }
+          },
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewEvent"
+            }
+          },
+          "decision": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/DecisionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "allowed": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReviewDecision"
+            },
+            "description": "Decisions possible right now."
           }
         }
       },
@@ -16312,7 +17881,7 @@
             "oneOf": [
               {
                 "$ref": "#/components/schemas/ProctoringChoice",
-                "description": "Choice made on the proctoring step. Omitted while proctoring is optional, the test runs\nwithout video and is marked so."
+                "description": "Choice made on the proctoring step. Omitted while proctoring is optional, the test runs\nwithout video and is marked so — unless a moderator ordered a retest with the camera\n(409 `camera_required`)."
               },
               {
                 "type": "null"
@@ -16782,14 +18351,251 @@
           }
         }
       },
+      "TrustAction": {
+        "type": "string",
+        "description": "What a moderator does with an item of the anti-fake queue.",
+        "enum": [
+          "dismiss",
+          "unpublish",
+          "freeze",
+          "restore"
+        ]
+      },
+      "TrustActionInput": {
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "action",
+          "comment"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TrustItemKind"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "action": {
+            "$ref": "#/components/schemas/TrustAction"
+          },
+          "comment": {
+            "type": "string",
+            "description": "Up to 2000 characters. The company sees it on its «Доверие и квота» page."
+          },
+          "days": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "`freeze` only: 1–90 days.",
+            "minimum": 0
+          }
+        }
+      },
+      "TrustActionResult": {
+        "type": "object",
+        "required": [
+          "complaints_resolved"
+        ],
+        "properties": {
+          "company_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "complaints_resolved": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Complaints this action closed: the one acted on and those it answers.",
+            "minimum": 0
+          },
+          "frozen_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          }
+        }
+      },
+      "TrustCounters": {
+        "type": "object",
+        "required": [
+          "companies",
+          "vacancies",
+          "invitations",
+          "complaints",
+          "unpublished_vacancies",
+          "frozen_companies"
+        ],
+        "properties": {
+          "companies": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Companies with negative signals waiting for a look."
+          },
+          "vacancies": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "invitations": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "complaints": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "unpublished_vacancies": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "frozen_companies": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "TrustItem": {
+        "type": "object",
+        "required": [
+          "kind",
+          "id",
+          "at",
+          "title",
+          "reasons",
+          "open_complaints",
+          "actions"
+        ],
+        "properties": {
+          "kind": {
+            "$ref": "#/components/schemas/TrustItemKind"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it entered the queue (or the sanction started)."
+          },
+          "title": {
+            "type": "string"
+          },
+          "company": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/CompanyRef"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reasons": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Why it is here, in words."
+          },
+          "vacancy_status": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/VacancyStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "salary": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/SalaryRange"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "open_complaints": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Open complaints about this vacancy."
+          },
+          "complaint": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ComplaintView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Sanctions view: the freeze ends then."
+          },
+          "actions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrustAction"
+            },
+            "description": "What can be done with it now."
+          }
+        }
+      },
+      "TrustItemKind": {
+        "type": "string",
+        "description": "The kind of item an anti-fake action targets.",
+        "enum": [
+          "company",
+          "vacancy",
+          "invitation",
+          "complaint"
+        ]
+      },
       "TrustLevel": {
         "type": "string",
         "enum": [
+          "frozen",
           "low",
           "new",
           "standard",
           "high"
         ]
+      },
+      "TrustPage": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TrustItem"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
       },
       "TrustReason": {
         "type": "object",
@@ -16824,13 +18630,15 @@
           "no_answers",
           "salary_flags",
           "own_duplicates",
-          "copies"
+          "copies",
+          "frozen"
         ]
       },
       "TrustStatus": {
         "type": "object",
         "required": [
           "level",
+          "moderation",
           "quota_limit",
           "quota_used",
           "quota_base",
@@ -16846,6 +18654,21 @@
         "properties": {
           "level": {
             "$ref": "#/components/schemas/TrustLevel"
+          },
+          "frozen_until": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Invitations frozen by a moderator until then; the quota is 0 meanwhile."
+          },
+          "moderation": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModerationNotice"
+            },
+            "description": "Moderator decisions about the company, its vacancies, invitations and complaints about\nthem, newest first."
           },
           "quota_limit": {
             "type": "integer",
@@ -17032,6 +18855,14 @@
           "applications": {
             "type": "integer",
             "format": "int64"
+          },
+          "unpublished_by_moderator_at": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Taken down by a moderator: publishing again is refused (409 `vacancy_unpublished`); the\nreason is on the «Доверие и квота» page."
           }
         }
       },
@@ -17100,6 +18931,16 @@
             "type": "string"
           }
         }
+      },
+      "VideoState": {
+        "type": "string",
+        "description": "How the session's video stands.",
+        "enum": [
+          "off",
+          "declined",
+          "kept",
+          "purged"
+        ]
       },
       "WarningKind": {
         "type": "string",
@@ -17302,6 +19143,10 @@
     {
       "name": "integrations",
       "description": "Кабинет работодателя: вебхук в ATS компании, журнал доставок, API-ключи"
+    },
+    {
+      "name": "Модерация",
+      "description": "Кабинет модератора (роль `admin`, в интерфейсе — «Модератор»): очередь разбора тестов с видеозаписью и решениями, очередь антифейка и жалоб с действиями, журнал аудита. Каждое действие и каждый просмотр записи теста пишутся в журнал. Списки — с курсором `cursor` / `next_cursor`"
     },
     {
       "name": "Интеграции ATS",

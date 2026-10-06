@@ -44,7 +44,7 @@ export function ShortlistCard({ item, need, onPin, onDismiss, onInvite, busy }: 
           {!item.in_current && <Badge tone="muted">Вне текущих условий</Badge>}
           {status && <InvitationStatusBadge status={status} />}
           {c.relation.applied && <Badge tone="success">Откликнулся</Badge>}
-          <ProctoringBadge badge={c.proctoring} />
+          <ProctoringBadge badge={c.proctoring} confirmed={c.result_confirmed} />
         </>
       }
       footer={

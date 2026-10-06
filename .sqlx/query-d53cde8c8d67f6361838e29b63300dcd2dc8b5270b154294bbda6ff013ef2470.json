@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE reports\n         SET resolved_at = $5, resolution = $2, resolution_comment = $3, resolved_by = $4\n         WHERE id = $1 AND resolved_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d53cde8c8d67f6361838e29b63300dcd2dc8b5270b154294bbda6ff013ef2470"
+}

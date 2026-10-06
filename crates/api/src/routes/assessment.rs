@@ -5,7 +5,7 @@
 use assessment::{
     ABANDON_AFTER_SECS, Answer, AttemptKind, Decision, GradePolicy, ItemRef, ItemView, Outcome,
     PolicyError, SessionState, TestPlan, Topic,
-    policy::{AllowedAttempt, Attempt, PolicyConfig},
+    policy::{AllowedAttempt, Attempt, CameraOrder, CameraTest, PolicyConfig},
 };
 use axum::{
     extract::State,
@@ -25,6 +25,7 @@ use crate::{
     dto::AssessmentStatus,
     error::{ApiError, ApiResult, InternalError, Problem},
     extract::{Json, Path, Query},
+    moderation::ReviewDecision,
     proctoring::{self, ProctoringMode, ProctoringSummary},
     skills,
     state::AppState,
@@ -108,13 +109,31 @@ struct History {
     /// The latest passed test measured above the claimed grade or with high confidence: only
     /// then is the immediate upgrade test offered (T-5 "справился уверенно").
     upgrade_earned: bool,
+    /// Retests a moderator ordered under the camera, and the tests that may have settled them.
+    camera_orders: Vec<CameraOrder>,
+    camera_tests: Vec<CameraTest>,
+}
+
+impl History {
+    fn camera_required(&self, spec: Specialization, grade: Grade) -> bool {
+        assessment::policy::camera_required(&self.camera_orders, &self.camera_tests, spec, grade)
+    }
+}
+
+/// A result a moderator voided: annulled, or annulled with a retest ordered.
+fn voided(review: Option<db::types::ReviewDecision>) -> Option<Outcome> {
+    match review {
+        Some(db::types::ReviewDecision::Annul) => Some(Outcome::Annulled),
+        Some(db::types::ReviewDecision::Retest) => Some(Outcome::RetestOrdered),
+        Some(db::types::ReviewDecision::Confirm) | None => None,
+    }
 }
 
 async fn history(pool: &PgPool, candidate: Uuid) -> ApiResult<History> {
     let rows = db::assessment::candidate_sessions(pool, candidate).await?;
     let upgrade_earned = rows
         .iter()
-        .find(|r| r.status == db::types::AssessmentStatus::Passed)
+        .find(|r| r.status == db::types::AssessmentStatus::Passed && voided(r.review).is_none())
         .is_some_and(|r| {
             let above = r
                 .measured_grade
@@ -125,28 +144,57 @@ async fn history(pool: &PgPool, candidate: Uuid) -> ApiResult<History> {
             above || r.confident_above_next.unwrap_or(false)
         });
     let mut out = Vec::with_capacity(rows.len());
+    let mut camera_orders = Vec::new();
+    let mut camera_tests = Vec::with_capacity(rows.len());
     for r in rows.into_iter().rev() {
+        let specialization: Specialization = r.specialization.parse()?;
+        let grade: Grade = r.claimed_grade.parse()?;
+        let completed = matches!(
+            r.status,
+            db::types::AssessmentStatus::Passed | db::types::AssessmentStatus::Failed
+        );
+        camera_tests.push(CameraTest {
+            specialization,
+            grade,
+            started: r.started_at.timestamp(),
+            camera: r.camera == Some(true),
+            completed,
+        });
         // There is no platform-fault ending: the test never waits on the camera or the upload
         // («запись прервалась» only marks the result), so `expired` always means the candidate
         // stopped answering.
-        let outcome = match r.status {
+        let finished = match r.status {
             db::types::AssessmentStatus::Passed => Outcome::Passed,
             db::types::AssessmentStatus::Failed => Outcome::Failed,
             db::types::AssessmentStatus::Expired => Outcome::Abandoned,
             db::types::AssessmentStatus::InProgress => continue,
         };
+        // A voided result counts from the moderator's decision (assessment::policy::Outcome).
+        let (outcome, at) = match (voided(r.review), r.reviewed_at) {
+            (Some(outcome), Some(decided)) => (outcome, decided),
+            _ => (finished, r.finished_at.unwrap_or(r.started_at)),
+        };
+        if outcome == Outcome::RetestOrdered {
+            camera_orders.push(CameraOrder {
+                specialization,
+                grade,
+                at: at.timestamp(),
+            });
+        }
         out.push(Attempt {
-            specialization: r.specialization.parse()?,
-            grade: r.claimed_grade.parse()?,
+            specialization,
+            grade,
             kind: parse_kind(&r.attempt_kind),
             outcome,
             assigned: r.assigned,
-            at: r.finished_at.unwrap_or(r.started_at).timestamp(),
+            at: at.timestamp(),
         });
     }
     Ok(History {
         attempts: out,
         upgrade_earned,
+        camera_orders,
+        camera_tests,
     })
 }
 
@@ -155,6 +203,10 @@ pub struct Offer {
     pub grade: Grade,
     pub kind: AttemptKind,
     pub label: String,
+    /// The retest a moderator ordered: open now, outside the usual windows.
+    pub ordered_retest: bool,
+    /// After a retest ordered with the camera: this test starts only with the camera on.
+    pub camera_required: bool,
 }
 
 /// Why a test is not available yet; the same codes `POST /candidate/assessments` answers with.
@@ -176,6 +228,8 @@ pub struct LockedOffer {
     pub reason: LockReason,
     pub available_at: DateTime<Utc>,
     pub label: String,
+    /// It will need the camera when it opens.
+    pub camera_required: bool,
 }
 
 #[derive(Default)]
@@ -193,6 +247,11 @@ fn pick(
     grade: Grade,
     now: i64,
 ) -> Result<AllowedAttempt, (AttemptKind, PolicyError)> {
+    if let Some(retest) = p.ordered_retest(spec, &history.attempts)
+        && retest.grade == grade
+    {
+        return Ok(retest);
+    }
     let current = p.current_grade(spec, &history.attempts);
     let mut refusal = (AttemptKind::Placement, PolicyError::NotAllowed);
     for kind in candidate_kinds(current, grade, history.upgrade_earned) {
@@ -217,14 +276,25 @@ fn pick(
 fn offers(state: &AppState, spec: Specialization, history: &History, now: i64) -> Offers {
     let p = policy(state);
     let current = p.current_grade(spec, &history.attempts);
+    let retest = p.ordered_retest(spec, &history.attempts);
     let mut out = Offers::default();
     for grade in Grade::ALL.iter().copied().filter(|g| Some(*g) != current) {
+        let camera_required = history.camera_required(spec, grade);
         match pick(&p, spec, history, grade, now) {
-            Ok(a) => out.available.push(Offer {
-                grade: a.grade,
-                kind: a.kind,
-                label: format!("{}: {}", kind_ru(a.kind), a.grade.name_ru()),
-            }),
+            Ok(a) => {
+                let ordered_retest = retest == Some(a);
+                out.available.push(Offer {
+                    grade: a.grade,
+                    kind: a.kind,
+                    label: if ordered_retest {
+                        format!("Пересдача с видеозаписью: {}", a.grade.name_ru())
+                    } else {
+                        format!("{}: {}", kind_ru(a.kind), a.grade.name_ru())
+                    },
+                    ordered_retest,
+                    camera_required,
+                });
+            }
             Err((kind, e)) => {
                 let reason = match e {
                     PolicyError::ChangeCooldown { .. } => LockReason::GradeChangeCooldown,
@@ -238,6 +308,7 @@ fn offers(state: &AppState, spec: Specialization, history: &History, now: i64) -
                         reason,
                         available_at: at(available_at),
                         label: format!("{}: {}", kind_ru(kind), grade.name_ru()),
+                        camera_required,
                     });
                 }
             }
@@ -325,6 +396,15 @@ pub struct AssessmentResult {
     pub locked: Vec<LockedOffer>,
 }
 
+/// A moderator's decision on the session, as the candidate reads it.
+#[derive(Serialize, ToSchema)]
+pub struct SessionModeration {
+    pub decision: ReviewDecision,
+    /// Written by the moderator for the candidate.
+    pub comment: String,
+    pub decided_at: DateTime<Utc>,
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct AssessmentSession {
     pub id: Uuid,
@@ -341,6 +421,12 @@ pub struct AssessmentSession {
     pub result: Option<AssessmentResult>,
     /// `None` when the session ran with proctoring off.
     pub proctoring: Option<ProctoringSummary>,
+    /// The moderator's decision on a disputed result: confirmed, annulled (the category it gave
+    /// is removed), or annulled with a retest under the camera.
+    pub review: Option<SessionModeration>,
+    /// Every time a moderator played this recording. Each view is logged, and the candidate
+    /// sees the same dates.
+    pub recording_views: Vec<DateTime<Utc>>,
 }
 
 fn load_state(v: serde_json::Value) -> ApiResult<SessionState> {
@@ -384,7 +470,8 @@ pub struct StartInput {
     pub specialization: Specialization,
     pub grade: Grade,
     /// Choice made on the proctoring step. Omitted while proctoring is optional, the test runs
-    /// without video and is marked so.
+    /// without video and is marked so — unless a moderator ordered a retest with the camera
+    /// (409 `camera_required`).
     #[serde(default)]
     pub proctoring: Option<ProctoringChoice>,
 }
@@ -402,7 +489,7 @@ pub struct ProctoringChoice {
     request_body = StartInput,
     responses(
         (status = 201, body = AssessmentSession),
-        (status = 409, description = "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade), `attempt_not_allowed`, `already_assigned`", body = Problem),
+        (status = 409, description = "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade, or after a moderator annulled a result at it), `attempt_not_allowed`, `already_assigned`, `camera_required` (a moderator ordered a retest with the camera: a test at that grade or above starts only with `proctoring.camera = true`)", body = Problem),
         (status = 422, description = "`validation_failed`: `proctoring.consent_document_id` missing or not the current version", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
@@ -460,6 +547,17 @@ async fn start_session(
     .map_err(|(_, e)| policy_problem(e))?;
 
     let camera = input.proctoring.as_ref().is_some_and(|p| p.camera);
+    if state.config.proctoring.mode == ProctoringMode::Optional
+        && !camera
+        && history.camera_required(input.specialization, input.grade)
+    {
+        return Err(
+            ApiError::conflict("camera_required", "Этот тест нужно пройти с видеозаписью")
+                .with_detail(
+                    "Модератор назначил пересдачу с видеозаписью: включите камеру на шаге перед тестом",
+                ),
+        );
+    }
     let consent_doc = match state.config.proctoring.mode {
         ProctoringMode::Optional if camera => {
             let doc = db::consents::current_document(&state.pool, proctoring::CONSENT_KIND)
@@ -709,15 +807,16 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
             };
             let history = history(&state.pool, candidate).await?;
             let next = offers(state, spec, &history, Utc::now().timestamp());
+            let flagged = match &proctoring {
+                Some((_, counts)) => {
+                    assessment::proctoring::needs_confirmation(decision.aberrant, counts)
+                }
+                None => decision.aberrant,
+            };
             Some(AssessmentResult {
                 test_strength: Some(matching::test_strength(claimed, theta as f32)),
                 assigned_grade: r.assigned.then_some(claimed),
-                needs_review: match &proctoring {
-                    Some((_, counts)) => {
-                        assessment::proctoring::needs_confirmation(decision.aberrant, counts)
-                    }
-                    None => decision.aberrant,
-                },
+                needs_review: flagged && r.review.is_none(),
                 topics: topic_results(&s),
                 offers: next.available,
                 locked: next.locked,
@@ -725,6 +824,10 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
             })
         }
         _ => None,
+    };
+    let recording_views = match &proctoring {
+        Some(_) => db::moderation::recording_views(&state.pool, id).await?,
+        None => Vec::new(),
     };
     Ok(AssessmentSession {
         id: r.id,
@@ -740,6 +843,15 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
         current,
         result,
         proctoring: proctoring.map(|(summary, _)| summary),
+        review: match (r.review, r.review_comment, r.reviewed_at) {
+            (Some(d), Some(comment), Some(decided_at)) => Some(SessionModeration {
+                decision: d.into(),
+                comment,
+                decided_at,
+            }),
+            _ => None,
+        },
+        recording_views,
     })
 }
 
@@ -887,6 +999,9 @@ pub struct GradeHistoryEntry {
     pub theta: f64,
     pub session_id: Option<Uuid>,
     pub assigned_at: DateTime<Utc>,
+    /// A moderator annulled the test behind it: the entry stays in the history, the category
+    /// no longer comes from it.
+    pub annulled_at: Option<DateTime<Utc>>,
 }
 
 pub(crate) async fn grade_history_views(
@@ -903,6 +1018,7 @@ pub(crate) async fn grade_history_views(
             theta: g.theta,
             session_id: g.session_id,
             assigned_at: g.assigned_at,
+            annulled_at: g.annulled_at,
         });
     }
     Ok(out)

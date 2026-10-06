@@ -1,15 +1,15 @@
 "use client";
 
-import { ArrowRight, Globe, Lightbulb, Minus, Plus, ShieldCheck } from "lucide-react";
+import { ArrowRight, Gavel, Globe, Lightbulb, Minus, PauseCircle, Plus, ShieldCheck } from "lucide-react";
 import Link from "next/link";
 import type { TrustLevel, TrustReason, TrustStatus } from "@/api/types";
-import { Badge, type BadgeTone, Card, CardHeader, ErrorAlert, PageHeader, PageSkeleton, ProgressBar } from "@/components/ui";
+import { Alert, Badge, type BadgeTone, Card, CardHeader, ErrorAlert, PageHeader, PageSkeleton, ProgressBar } from "@/components/ui";
 import { useTrustStatus } from "@/features/employer/hooks";
 import { cn } from "@/lib/cn";
-import { plural } from "@/lib/format";
+import { formatDate, formatDateTime, plural } from "@/lib/format";
 import { TRUST_LEVEL_HINT, TRUST_LEVEL_LABEL } from "@/lib/labels";
 
-const LEVEL_TONE: Record<TrustLevel, BadgeTone> = { high: "success", standard: "primary", new: "neutral", low: "warning" };
+const LEVEL_TONE: Record<TrustLevel, BadgeTone> = { frozen: "danger", high: "success", standard: "primary", new: "neutral", low: "warning" };
 
 function signed(n: number): string {
   return n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : "0";
@@ -29,7 +29,7 @@ function QuotaCard({ t }: { t: TrustStatus }) {
         {t.quota_limit}
         <span className="ml-2 text-lg font-medium text-ink-subtle">из {t.quota_max} возможных</span>
       </p>
-      <ProgressBar value={t.quota_limit} max={t.quota_max} size="md" tone={t.level === "low" ? "warning" : "primary"} className="mt-4" label="Квота от максимальной" />
+      <ProgressBar value={t.quota_limit} max={t.quota_max} size="md" tone={t.level === "low" || t.level === "frozen" ? "warning" : "primary"} className="mt-4" label="Квота от максимальной" />
       <p className="mt-3 text-sm text-ink-muted">{TRUST_LEVEL_HINT[t.level]}</p>
       <dl className="mt-6 grid grid-cols-3 gap-3 border-t border-line pt-5 text-sm">
         <div>
@@ -142,6 +142,32 @@ function DomainCard({ t }: { t: TrustStatus }) {
   );
 }
 
+function ModerationCard({ t }: { t: TrustStatus }) {
+  if (!t.moderation.length) return null;
+  return (
+    <Card>
+      <CardHeader
+        title={
+          <span className="flex items-center gap-2">
+            <Gavel className="size-5 text-primary" aria-hidden />
+            Решения модератора
+          </span>
+        }
+        description="Что модератор решил по жалобам и отметкам о вашей компании, вакансиях и приглашениях. Авторов жалоб мы не называем."
+      />
+      <ul className="divide-y divide-line">
+        {t.moderation.map((n, i) => (
+          <li key={`${n.at}-${i}`} className="py-3 first:pt-0 last:pb-0">
+            <p className="text-sm font-medium text-ink">{n.text}</p>
+            {n.comment && <p className="mt-1 text-sm whitespace-pre-line text-ink-muted">Комментарий модератора: {n.comment}</p>}
+            <p className="mt-1 text-xs text-ink-subtle">{formatDateTime(n.at)}</p>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
+
 function RuleCard({ t }: { t: TrustStatus }) {
   return (
     <Card>
@@ -173,8 +199,14 @@ export default function TrustPage() {
         <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
       ) : (
         <div className="grid gap-6 lg:grid-cols-[1fr_1.15fr]">
+          {q.data.frozen_until && (
+            <Alert tone="danger" title={`Приглашения приостановлены до ${formatDate(q.data.frozen_until)}`} icon={<PauseCircle className="size-5 text-accent-strong" aria-hidden />} className="lg:col-span-2">
+              Модератор приостановил отправку приглашений: квота на это время — 0. Вакансии, отклики и уже отправленные приглашения работают как обычно. Причина — в «Решениях модератора».
+            </Alert>
+          )}
           <div className="min-w-0 space-y-6">
             <QuotaCard t={q.data} />
+            <ModerationCard t={q.data} />
             <DomainCard t={q.data} />
           </div>
           <div className="min-w-0 space-y-6">

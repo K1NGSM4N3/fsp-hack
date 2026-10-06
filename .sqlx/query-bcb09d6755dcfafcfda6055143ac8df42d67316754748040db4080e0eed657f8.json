@@ -1,0 +1,36 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE vacancies\n         SET title = $1, description = $2, specialization = $3, grade = $4, skills = $5,\n             salary_min = $6, salary_max = $7, work_format = $8, city = $9, status = $10,\n             published_at = CASE WHEN $10 = 'published'::vacancy_status AND published_at IS NULL\n                                 THEN now() ELSE published_at END,\n             updated_at = now()\n         WHERE id = $11 AND company_id = $12\n           AND (unpublished_at IS NULL OR $10 <> 'published'::vacancy_status)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text",
+        "Text",
+        "Text",
+        "TextArray",
+        "Int8",
+        "Int8",
+        "Text",
+        "Text",
+        {
+          "Custom": {
+            "name": "vacancy_status",
+            "kind": {
+              "Enum": [
+                "draft",
+                "published",
+                "closed"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "bcb09d6755dcfafcfda6055143ac8df42d67316754748040db4080e0eed657f8"
+}

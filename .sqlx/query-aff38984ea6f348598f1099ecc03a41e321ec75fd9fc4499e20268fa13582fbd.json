@@ -1,0 +1,156 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id AS session_id, c.public_code, s.specialization, s.claimed_grade, s.attempt_kind,\n                  s.status AS \"status: AssessmentStatus\", s.started_at,\n                  s.finished_at AS \"finished_at!\", s.aberrant, s.person_fit_lz,\n                  p.camera AS \"camera?\", (p.purged_at IS NOT NULL) AS \"purged?\",\n                  ev.left_test AS \"left_test!\", ev.pastes AS \"pastes!\",\n                  ev.fullscreen_exits AS \"fullscreen_exits!\", ev.technical AS \"technical!\",\n                  EXISTS (SELECT 1 FROM grade_assignments g\n                           WHERE g.session_id = s.id AND g.annulled_at IS NULL) AS \"assigned!\",\n                  r.decision AS \"decision?: ReviewDecision\", r.decided_at AS \"decided_at?\"\n           FROM assessment_sessions s\n           JOIN candidates c ON c.user_id = s.candidate_id\n           LEFT JOIN proctoring_sessions p ON p.session_id = s.id\n           LEFT JOIN session_reviews r ON r.session_id = s.id\n           CROSS JOIN LATERAL (\n               SELECT count(*) FILTER (WHERE e.kind IN ('tab_hidden', 'window_blur')) AS left_test,\n                      count(*) FILTER (WHERE e.kind = 'paste') AS pastes,\n                      count(*) FILTER (WHERE e.kind = 'fullscreen_exit') AS fullscreen_exits,\n                      count(*) FILTER (WHERE e.kind IN ('camera_lost', 'recording_failed')) AS technical\n               FROM proctoring_events e\n               WHERE e.session_id = s.id\n           ) ev\n           WHERE s.status IN ('passed', 'failed') AND s.finished_at IS NOT NULL\n             AND ($2::timestamptz IS NULL OR (s.finished_at, s.id) > ($2, $3))\n             AND CASE $1::text\n                   WHEN 'needs_review' THEN r.session_id IS NULL AND coalesce(s.aberrant, false)\n                        AND (p.session_id IS NULL OR ev.left_test + ev.pastes + ev.fullscreen_exits > 0)\n                   WHEN 'remarks' THEN r.session_id IS NULL\n                        AND ev.left_test + ev.pastes + ev.fullscreen_exits > 0\n                   ELSE coalesce(p.camera, false)\n                 END\n           ORDER BY s.finished_at, s.id\n           LIMIT $4",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "claimed_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "attempt_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "status: AssessmentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "assessment_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "passed",
+                "failed",
+                "expired"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "finished_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "aberrant",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "person_fit_lz",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "camera?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "purged?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 12,
+        "name": "left_test!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 13,
+        "name": "pastes!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 14,
+        "name": "fullscreen_exits!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 15,
+        "name": "technical!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 16,
+        "name": "assigned!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 17,
+        "name": "decision?: ReviewDecision",
+        "type_info": {
+          "Custom": {
+            "name": "review_decision",
+            "kind": {
+              "Enum": [
+                "confirm",
+                "annul",
+                "retest"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "decided_at?",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      false,
+      false
+    ]
+  },
+  "hash": "aff38984ea6f348598f1099ecc03a41e321ec75fd9fc4499e20268fa13582fbd"
+}

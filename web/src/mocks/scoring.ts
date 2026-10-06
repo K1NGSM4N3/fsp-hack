@@ -103,6 +103,7 @@ export function toCard(c: MockCandidate, now: Date, relation: RelationInfo): Can
     last_activity_at: c.last_active_at,
     task_rating: null,
     tasks_done: 0,
+    result_confirmed: false,
     minor: false,
     relation,
   };

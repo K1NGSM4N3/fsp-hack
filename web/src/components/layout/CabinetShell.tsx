@@ -22,14 +22,14 @@ export interface NavItem {
 }
 
 interface CabinetShellProps {
-  role: Extract<Role, "candidate" | "employer">;
+  role: Role;
   nav: NavItem[];
   children: ReactNode;
 }
 
-const ROLE_HOME: Record<string, string> = { candidate: "/candidate", employer: "/employer" };
-const ROLE_LABEL: Record<string, string> = { candidate: "Соискатель", employer: "Компания" };
-const ROLE_CABINET: Record<string, string> = { candidate: "Кабинет соискателя", employer: "Кабинет компании" };
+const ROLE_HOME: Record<Role, string> = { candidate: "/candidate", employer: "/employer", admin: "/admin" };
+const ROLE_LABEL: Record<Role, string> = { candidate: "Соискатель", employer: "Компания", admin: "Модератор" };
+const ROLE_CABINET: Record<Role, string> = { candidate: "Кабинет соискателя", employer: "Кабинет компании", admin: "Кабинет модератора" };
 
 function isActive(item: NavItem, pathname: string) {
   return item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);

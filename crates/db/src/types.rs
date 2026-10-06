@@ -103,3 +103,41 @@ pub enum HiringStage {
     Hired,
     Rejected,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "review_decision", rename_all = "snake_case")]
+pub enum ReviewDecision {
+    Confirm,
+    Annul,
+    Retest,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "moderation_action", rename_all = "snake_case")]
+pub enum ModerationAction {
+    ConfirmResult,
+    AnnulResult,
+    OrderRetest,
+    ViewRecording,
+    Dismiss,
+    UnpublishVacancy,
+    FreezeInvitations,
+    Restore,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "moderation_target", rename_all = "snake_case")]
+pub enum ModerationTarget {
+    Session,
+    Vacancy,
+    Invitation,
+    Company,
+    Complaint,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "flag_review", rename_all = "snake_case")]
+pub enum FlagReview {
+    Dismissed,
+    Upheld,
+}

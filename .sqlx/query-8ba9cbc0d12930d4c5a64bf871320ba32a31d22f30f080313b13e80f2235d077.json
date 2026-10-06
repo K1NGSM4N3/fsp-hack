@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT r.template_id\n         FROM assessment_responses r\n         JOIN grade_assignments g ON g.session_id = r.session_id\n         WHERE g.candidate_id = $1 AND g.annulled_at IS NULL AND r.correct",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "template_id",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "8ba9cbc0d12930d4c5a64bf871320ba32a31d22f30f080313b13e80f2235d077"
+}

@@ -37,6 +37,7 @@ pub fn signals(row: &db::trust::CompanySignals) -> TrustSignals {
         salary_flags: count(row.salary_flags),
         own_duplicates: count(row.own_duplicates),
         copies: count(row.copies),
+        frozen_until: row.frozen_until.map(|t| t.timestamp()),
     }
 }
 
@@ -50,11 +51,6 @@ pub async fn company_assessment(
         .next()
         .ok_or(sqlx::Error::RowNotFound)?;
     Ok((assess(&signals(&row), Utc::now().timestamp()), row))
-}
-
-/// Invitations the company may send in 7 days.
-pub async fn weekly_quota(pool: &PgPool, company: Uuid) -> ApiResult<i64> {
-    Ok(i64::from(company_assessment(pool, company).await?.0.quota))
 }
 
 /// Re-checks the owner's login email against the website and stores the verified domain.

@@ -16,7 +16,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
 use super::{
-    assessment::{GradeHistoryEntry, grade_history_views, parse_kind},
+    assessment::{GradeHistoryEntry, SessionModeration, grade_history_views, parse_kind},
     candidate_profile::{Privacy, ProfileResponse, access_log, load_profile},
     company::{CompanyResponse, company_view},
     fsp::{FspStatus, load_status},
@@ -171,7 +171,7 @@ pub struct AssessmentRecord {
     pub se: Option<f64>,
     pub measured_grade: Option<Grade>,
     pub items_count: i32,
-    /// This test assigned the category.
+    /// This test assigned the category, and no moderator annulled it.
     pub assigned: bool,
     /// Person-fit statistic `l_z` and whether it flagged an aberrant pattern.
     pub person_fit_lz: Option<f64>,
@@ -180,6 +180,10 @@ pub struct AssessmentRecord {
     pub finished_at: Option<DateTime<Utc>>,
     /// Video recording summary and integrity events; the video is not part of the export.
     pub proctoring: Option<ProctoringSummary>,
+    /// A moderator's decision on the result, with the comment.
+    pub review: Option<SessionModeration>,
+    /// When a moderator played the recording.
+    pub recording_views: Vec<DateTime<Utc>>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -201,6 +205,8 @@ pub struct EmployerData {
 
 async fn assessments(state: &AppState, candidate: Uuid) -> ApiResult<Vec<AssessmentRecord>> {
     let rows = db::assessment::candidate_sessions(&state.pool, candidate).await?;
+    let reviews = db::moderation::candidate_reviews(&state.pool, candidate).await?;
+    let views = db::moderation::candidate_recording_views(&state.pool, candidate).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         let status = AssessmentStatus::from(r.status);
@@ -226,6 +232,19 @@ async fn assessments(state: &AppState, candidate: Uuid) -> ApiResult<Vec<Assessm
             started_at: r.started_at,
             finished_at: r.finished_at,
             proctoring,
+            review: reviews
+                .iter()
+                .find(|v| v.session_id == r.id)
+                .map(|v| SessionModeration {
+                    decision: v.decision.into(),
+                    comment: v.comment.clone(),
+                    decided_at: v.decided_at,
+                }),
+            recording_views: views
+                .iter()
+                .filter(|v| v.session_id == r.id)
+                .map(|v| v.at)
+                .collect(),
         });
     }
     Ok(out)

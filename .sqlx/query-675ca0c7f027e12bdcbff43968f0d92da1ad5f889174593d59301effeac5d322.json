@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, invitations_frozen_at AS \"at!\", invitations_frozen_until AS \"until!\"\n           FROM companies\n           WHERE invitations_frozen_until > now() AND invitations_frozen_at IS NOT NULL\n             AND ($1::timestamptz IS NULL OR (invitations_frozen_at, id) > ($1, $2))\n           ORDER BY invitations_frozen_at, id\n           LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "until!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "675ca0c7f027e12bdcbff43968f0d92da1ad5f889174593d59301effeac5d322"
+}

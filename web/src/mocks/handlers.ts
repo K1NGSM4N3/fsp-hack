@@ -615,7 +615,7 @@ function offersFor(c: MockCandidate): T.Offer[] {
   const t = now();
   return GRADES.flatMap((grade) => {
     const kind = attemptFor(c, grade, t);
-    return kind ? [{ grade, kind, label: `${KIND_RU[kind]}: ${GRADE_LABEL[grade]}` }] : [];
+    return kind ? [{ grade, kind, label: `${KIND_RU[kind]}: ${GRADE_LABEL[grade]}`, ordered_retest: false, camera_required: false }] : [];
   });
 }
 
@@ -743,6 +743,7 @@ export async function startAssessment(body: T.StartInput): Promise<T.AssessmentS
       finished_at: null,
       min_items: MOCK_ITEMS_MIN,
       max_items: MOCK_ITEMS_MAX,
+      recording_views: [],
       result: null,
     },
     candidate_id: cand.id,
@@ -1822,6 +1823,8 @@ export async function getTrustStatus(): Promise<T.TrustStatus> {
   const quota = quotaInfo(company.id);
   return {
     level: "high",
+    frozen_until: null,
+    moderation: [],
     quota_limit: INVITATION_QUOTA,
     quota_used: quota.used,
     quota_base: 10,

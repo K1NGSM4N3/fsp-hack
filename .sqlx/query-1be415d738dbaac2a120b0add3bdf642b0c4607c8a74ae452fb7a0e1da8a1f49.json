@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE reports\n         SET resolved_at = $5, resolution = $2, resolution_comment = $3, resolved_by = $4\n         WHERE target_kind = 'vacancy' AND target_id = $1 AND resolved_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text",
+        "Uuid",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "1be415d738dbaac2a120b0add3bdf642b0c4607c8a74ae452fb7a0e1da8a1f49"
+}

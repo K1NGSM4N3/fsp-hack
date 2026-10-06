@@ -73,6 +73,11 @@ async fn main() -> Result<(), StartupError> {
                 with_remarks = r.with_remarks,
                 minors_confirmed = r.minors_confirmed,
                 minors_pending = r.minors_pending,
+                review_flagged = r.review_flagged,
+                review_unproctored = r.review_unproctored,
+                review_remarks = r.review_remarks,
+                flagged_vacancies = r.flagged_vacancies,
+                complaints = r.complaints,
                 "demo data seeded"
             ),
             Ok(None) => tracing::info!("demo data already present"),

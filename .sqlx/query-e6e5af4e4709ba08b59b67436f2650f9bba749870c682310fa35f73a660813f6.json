@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE vacancies\n         SET trust_flags = $2,\n             flagged_at = CASE WHEN $2 = '[]'::jsonb THEN NULL ELSE coalesce(flagged_at, now()) END,\n             trust_review = CASE WHEN trust_flags = $2 THEN trust_review END,\n             trust_reviewed_at = CASE WHEN trust_flags = $2 THEN trust_reviewed_at END\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "e6e5af4e4709ba08b59b67436f2650f9bba749870c682310fa35f73a660813f6"
+}

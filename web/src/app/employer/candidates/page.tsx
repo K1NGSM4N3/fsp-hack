@@ -224,7 +224,7 @@ function SearchView() {
                       candidate={c}
                       href={`/employer/candidates/${c.id}${needId ? `?need=${needId}` : ""}`}
                       highlightSkills={skills}
-                      badges={<ProctoringBadge badge={c.proctoring} />}
+                      badges={<ProctoringBadge badge={c.proctoring} confirmed={c.result_confirmed} />}
                       aside={
                         typeof score === "number" ? (
                           <ScoreRing score={score} />
