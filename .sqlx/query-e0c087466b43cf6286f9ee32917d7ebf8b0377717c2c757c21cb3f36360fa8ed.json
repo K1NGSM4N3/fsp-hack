@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT level, quota FROM company_trust_seen WHERE company_id = $1 FOR UPDATE",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "level",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "quota",
+        "type_info": "Int2"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "e0c087466b43cf6286f9ee32917d7ebf8b0377717c2c757c21cb3f36360fa8ed"
+}

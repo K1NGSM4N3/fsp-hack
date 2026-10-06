@@ -103,3 +103,12 @@ pub enum HiringStage {
     Hired,
     Rejected,
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "notification_email_status", rename_all = "snake_case")]
+pub enum NotificationEmailStatus {
+    Pending,
+    Sent,
+    Failed,
+    Skipped,
+}

@@ -41,6 +41,7 @@ async fn start() -> String {
             retention_days: 90,
         },
         integrations: IntegrationsConfig::default(),
+        notifications: Default::default(),
         seed_demo: false,
         seed_per_spec: 40,
         log_json: false,

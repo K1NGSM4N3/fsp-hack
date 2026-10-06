@@ -1,0 +1,24 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO notification_settings (user_id, email_off) VALUES ($1, $2)\n         ON CONFLICT (user_id) DO UPDATE\n         SET email_off = (notification_settings.email_off | $2) & ~$3::int4, updated_at = now()\n         RETURNING email_off",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email_off",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int4"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "abb804efa7743f213492495f26a300533218c90f805e054910c670e084487cc6"
+}

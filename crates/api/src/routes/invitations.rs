@@ -25,6 +25,7 @@ use crate::{
         events::{EventType, Outbox, expire_invitations},
         outcomes::{HiringOutcome, OutcomeIndex},
     },
+    notify::{NotificationKind, Notifier},
     state::AppState,
     trust,
 };
@@ -278,6 +279,9 @@ async fn send(
     Outbox::new(&state)
         .invitation(&mut tx, EventType::InvitationSent, id)
         .await?;
+    Notifier::new(&state)
+        .invitation(&mut tx, NotificationKind::InvitationReceived, id)
+        .await?;
     tx.commit().await?;
     trust::flag_invitation(&state.pool, id, category, (req.salary.min, req.salary.max)).await?;
     let row = db::invitations::employer_invitation(&state.pool, company, id)
@@ -325,6 +329,7 @@ async fn get_sent(
         .ok_or_else(ApiError::not_found)?;
     let mut inv = sent_from_row!(row);
     inv.events = Some(events(&state.pool, id).await?);
+    db::notifications::mark_subject_read(&state.pool, user.id, id).await?;
     Ok(Json(inv))
 }
 
@@ -367,6 +372,9 @@ async fn withdraw(
     .await?;
     Outbox::new(&state)
         .invitation(&mut tx, EventType::InvitationWithdrawn, id)
+        .await?;
+    Notifier::new(&state)
+        .invitation(&mut tx, NotificationKind::InvitationWithdrawn, id)
         .await?;
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -631,6 +639,7 @@ async fn get_received(
             .invitation(&mut tx, EventType::InvitationViewed, id)
             .await?;
     }
+    db::notifications::mark_subject_read(&mut *tx, user.id, id).await?;
     tx.commit().await?;
     let row = db::invitations::candidate_invitation(&state.pool, user.id, id)
         .await?
@@ -669,12 +678,19 @@ async fn respond(
     db::invitations::insert_invitation_event(&mut *tx, Uuid::now_v7(), id, status, Some(user.id))
         .await?;
     db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
-    let kind = if status == db::types::InvitationStatus::Accepted {
-        EventType::InvitationAccepted
+    let (kind, note) = if status == db::types::InvitationStatus::Accepted {
+        (
+            EventType::InvitationAccepted,
+            NotificationKind::InvitationAccepted,
+        )
     } else {
-        EventType::InvitationDeclined
+        (
+            EventType::InvitationDeclined,
+            NotificationKind::InvitationDeclined,
+        )
     };
     Outbox::new(state).invitation(&mut tx, kind, id).await?;
+    Notifier::new(state).invitation(&mut tx, note, id).await?;
     tx.commit().await?;
     let row = db::invitations::candidate_invitation(&state.pool, user.id, id)
         .await?

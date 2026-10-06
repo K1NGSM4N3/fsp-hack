@@ -4,6 +4,7 @@
 
 mod corpus;
 mod demo;
+mod notifications;
 
 use catalog::{Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
@@ -57,6 +58,8 @@ pub struct SeedReport {
     /// 14–17-year-olds whose representative confirmed the consent / has not answered yet.
     pub minors_confirmed: usize,
     pub minors_pending: usize,
+    /// Demo bell items of `candidate@demo.fsp` and `employer@demo.fsp`.
+    pub notifications: usize,
 }
 
 struct Account {
@@ -962,6 +965,7 @@ pub async fn seed_sized(
     }
     let (minors_confirmed, minors_pending) =
         seed_minors(&mut tx, crypto, &mut minors_rng, &juniors, now).await?;
+    let notifications = notifications::seed_notifications(&mut tx, crypto, &companies, now).await?;
     tx.commit().await?;
     Ok(Some(SeedReport {
         companies: companies.len(),
@@ -972,5 +976,6 @@ pub async fn seed_sized(
         with_remarks,
         minors_confirmed,
         minors_pending,
+        notifications,
     }))
 }

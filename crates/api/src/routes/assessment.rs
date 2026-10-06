@@ -25,6 +25,7 @@ use crate::{
     dto::AssessmentStatus,
     error::{ApiError, ApiResult, InternalError, Problem},
     extract::{Json, Path, Query},
+    notify::Notifier,
     proctoring::{self, ProctoringMode, ProctoringSummary},
     skills,
     state::AppState,
@@ -544,7 +545,7 @@ async fn start_session(
 }
 
 /// Records one outcome and either schedules the next item or finishes the session
-/// (assigning the grade and test-confirmed skills on a pass). `true` when a grade was assigned.
+/// (assigning the grade and test-confirmed skills on a pass). `Some(passed)` when it finished.
 async fn advance(
     tx: &mut PgConnection,
     candidate: Uuid,
@@ -553,7 +554,7 @@ async fn advance(
     item: ItemRef,
     answer: Option<&Answer>,
     now: DateTime<Utc>,
-) -> ApiResult<bool> {
+) -> ApiResult<Option<bool>> {
     let deadline = row.current_item_deadline.unwrap_or(now);
     let timed_out = now > deadline + Duration::seconds(DEADLINE_GRACE_SECS);
     let correct = !timed_out && answer.is_some_and(|a| assessment::check(&item, a));
@@ -647,7 +648,7 @@ async fn advance(
                 }
             }
         }
-        return Ok(d.passed);
+        return Ok(Some(d.passed));
     }
     let next =
         assessment::next_item(session).ok_or_else(|| corrupt("no next item before decision"))?;
@@ -662,7 +663,24 @@ async fn advance(
         row.id,
     )
     .await?;
-    Ok(false)
+    Ok(None)
+}
+
+/// «Категория присвоена» or «тест не пройден», in the transaction that finished the session.
+async fn notify_finished(
+    state: &AppState,
+    tx: &mut PgConnection,
+    candidate: Uuid,
+    row: &db::assessment::SessionForUpdate,
+    finished: Option<bool>,
+) -> ApiResult<()> {
+    if let Some(passed) = finished {
+        let category = Category::new(row.specialization.parse()?, row.claimed_grade.parse()?);
+        Notifier::new(state)
+            .assessment(&mut *tx, candidate, row.id, category, passed)
+            .await?;
+    }
+    Ok(())
 }
 
 async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<AssessmentSession> {
@@ -803,7 +821,9 @@ async fn current_item(
     {
         let mut session = load_state(row.state.clone())?;
         let item: ItemRef = serde_json::from_value(item.clone()).map_err(corrupt)?;
-        graded = advance(&mut tx, user.id, &row, &mut session, item, None, now).await?;
+        let finished = advance(&mut tx, user.id, &row, &mut session, item, None, now).await?;
+        notify_finished(&state, &mut tx, user.id, &row, finished).await?;
+        graded = finished == Some(true);
     }
     tx.commit().await?;
     if graded {
@@ -861,7 +881,7 @@ async fn answer(
         .transpose()
         .map_err(corrupt)?
         .ok_or_else(|| corrupt("no current item"))?;
-    let graded = advance(
+    let finished = advance(
         &mut tx,
         user.id,
         &row,
@@ -871,9 +891,10 @@ async fn answer(
         Utc::now(),
     )
     .await?;
+    notify_finished(&state, &mut tx, user.id, &row, finished).await?;
     db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
     tx.commit().await?;
-    if graded {
+    if finished == Some(true) {
         state.candidates.invalidate().await;
     }
     Ok(Json(view(&state, user.id, id).await?))

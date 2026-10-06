@@ -29,6 +29,7 @@ pub struct Config {
     pub grade_change_cooldown_days: i64,
     pub proctoring: ProctoringConfig,
     pub integrations: IntegrationsConfig,
+    pub notifications: NotifyConfig,
     pub seed_demo: bool,
     /// Candidates per specialization in the demo seed; raised only for load tests.
     pub seed_per_spec: usize,
@@ -65,6 +66,30 @@ pub struct IntegrationsConfig {
     /// Outbox polling period; `None` uses the dispatcher default.
     pub dispatch_interval: Option<std::time::Duration>,
     pub demo: Option<DemoIntegration>,
+}
+
+/// Email side of notifications (architecture.md §13); the defaults are the production rule.
+#[derive(Clone, Debug)]
+pub struct NotifyConfig {
+    /// An item waits this long for others to join its letter (`NOTIFY_EMAIL_HOLD_SECS`).
+    pub hold: std::time::Duration,
+    /// At most one letter per recipient in this interval (`NOTIFY_EMAIL_GAP_SECS`).
+    pub min_gap: std::time::Duration,
+    /// At most this many letters per recipient in 24 hours (`NOTIFY_EMAIL_DAILY_CAP`).
+    pub daily_cap: u32,
+    /// How often the email dispatcher looks for work (`NOTIFY_INTERVAL_MS`).
+    pub interval: std::time::Duration,
+}
+
+impl Default for NotifyConfig {
+    fn default() -> Self {
+        Self {
+            hold: std::time::Duration::from_secs(120),
+            min_gap: std::time::Duration::from_secs(600),
+            daily_cap: 10,
+            interval: std::time::Duration::from_secs(5),
+        }
+    }
 }
 
 /// Connects the demo company to the ATS mock at startup: the key and the secret come from
@@ -217,6 +242,23 @@ impl Config {
             }),
         };
 
+        let defaults = NotifyConfig::default();
+        let notifications = NotifyConfig {
+            hold: std::time::Duration::from_secs(parsed(
+                "NOTIFY_EMAIL_HOLD_SECS",
+                defaults.hold.as_secs(),
+            )?),
+            min_gap: std::time::Duration::from_secs(parsed(
+                "NOTIFY_EMAIL_GAP_SECS",
+                defaults.min_gap.as_secs(),
+            )?),
+            daily_cap: parsed("NOTIFY_EMAIL_DAILY_CAP", defaults.daily_cap)?,
+            interval: std::time::Duration::from_millis(parsed(
+                "NOTIFY_INTERVAL_MS",
+                defaults.interval.as_millis() as u64,
+            )?),
+        };
+
         Ok(Self {
             bind: parsed("API_BIND", SocketAddr::from(([0, 0, 0, 0], 8000)))?,
             database_url: var("DATABASE_URL").ok_or(ConfigError::Missing("DATABASE_URL"))?,
@@ -236,6 +278,7 @@ impl Config {
             grade_change_cooldown_days: parsed("GRADE_CHANGE_COOLDOWN_DAYS", 90)?,
             proctoring,
             integrations,
+            notifications,
             seed_demo: flag("SEED_DEMO", false),
             seed_per_spec: parsed("SEED_CANDIDATES_PER_SPEC", crate::seed::CANDIDATES_PER_SPEC)?,
             database_pool_size: parsed("DATABASE_POOL_SIZE", crate::db::POOL_SIZE)?,

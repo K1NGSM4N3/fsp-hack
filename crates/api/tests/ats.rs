@@ -67,6 +67,7 @@ impl Api {
                 dispatch_interval: Some(StdDuration::from_millis(50)),
                 demo: None,
             },
+            notifications: Default::default(),
             seed_demo: false,
             seed_per_spec: 40,
             log_json: false,

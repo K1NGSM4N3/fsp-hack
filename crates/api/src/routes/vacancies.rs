@@ -21,6 +21,7 @@ use crate::{
         events::{EventType, Outbox},
         outcomes::{HiringOutcome, OutcomeIndex},
     },
+    notify::Notifier,
     skills,
     state::AppState,
     trust,
@@ -336,6 +337,9 @@ async fn set_application_status(
         Outbox::new(&state)
             .application(&mut tx, EventType::ApplicationStatusChanged, id)
             .await?;
+        Notifier::new(&state)
+            .application(&mut tx, id, input.status)
+            .await?;
     }
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
@@ -528,6 +532,9 @@ async fn apply(
     db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
     Outbox::new(&state)
         .application(&mut tx, EventType::ApplicationCreated, id)
+        .await?;
+    Notifier::new(&state)
+        .application(&mut tx, id, ApplicationStatus::Sent)
         .await?;
     tx.commit().await?;
     let app = my_apps(&state.pool, user.id)

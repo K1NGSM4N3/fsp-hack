@@ -166,6 +166,7 @@ async fn delete_me(
         }
         Role::Admin => {}
     }
+    db::notifications::delete_user_data(&mut tx, user.id).await?;
     // The users row stays as an anonymized tombstone: audit logs keep pointing at a real id.
     let tombstone = sha256(format!("deleted:{}:{}", user.id, Uuid::now_v7()).as_bytes());
     db::users::anonymize_user(&mut *tx, &tombstone, user.id).await?;

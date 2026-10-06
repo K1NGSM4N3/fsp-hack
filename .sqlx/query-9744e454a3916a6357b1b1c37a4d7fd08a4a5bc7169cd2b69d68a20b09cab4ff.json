@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT coalesce((SELECT email_off FROM notification_settings WHERE user_id = $1), 0)\n                  AS \"email_off!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "email_off!",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9744e454a3916a6357b1b1c37a4d7fd08a4a5bc7169cd2b69d68a20b09cab4ff"
+}

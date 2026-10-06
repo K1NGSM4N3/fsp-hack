@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO notification_settings (user_id, email_off)\n         SELECT id, $2 FROM users WHERE id = $1 AND deleted_at IS NULL\n         ON CONFLICT (user_id) DO UPDATE\n         SET email_off = notification_settings.email_off | EXCLUDED.email_off, updated_at = now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6697eb22034cf7ccc06a5afcd644ac246f83cba7e4acf64ce2871523fd19eb38"
+}

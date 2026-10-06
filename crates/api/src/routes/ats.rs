@@ -27,6 +27,7 @@ use crate::{
         keys::{ApiClient, Scope},
         outcomes::{HiringOutcome, OutcomeIndex},
     },
+    notify::Notifier,
     state::AppState,
 };
 
@@ -377,8 +378,9 @@ async fn ats_outcome(
             },
         ));
     }
+    let mut tx = state.pool.begin().await?;
     let stored = db::integrations::upsert_outcome(
-        &state.pool,
+        &mut *tx,
         &db::integrations::NewOutcome {
             id: Uuid::now_v7(),
             company_id: client.company_id,
@@ -392,6 +394,18 @@ async fn ats_outcome(
         },
     )
     .await?;
+    if stored.inserted {
+        Notifier::new(&state)
+            .hiring_stage(
+                &mut tx,
+                input.invitation_id,
+                input.application_id,
+                input.stage,
+                reason,
+            )
+            .await?;
+    }
+    tx.commit().await?;
     let status = if stored.inserted {
         StatusCode::CREATED
     } else {

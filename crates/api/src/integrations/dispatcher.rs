@@ -14,7 +14,10 @@ use super::{
     open_secret, signature,
     webhook::{Attempt, SignedRequest, WebhookSender},
 };
-use crate::crypto::Crypto;
+use crate::{
+    crypto::Crypto,
+    notify::{Notifier, WebhookNote},
+};
 
 /// Delay after the n-th failed attempt: about 1 m, 5 m, 30 m, 2 h, then every 12 h until the
 /// 24-hour window closes — six attempts in total for an endpoint that stays down.
@@ -27,6 +30,9 @@ pub const RETENTION_DAYS: i64 = 30;
 const PURGE_EVERY: StdDuration = StdDuration::from_secs(3_600);
 /// After a rotation the old secret keeps signing for this long.
 pub const ROTATION_OVERLAP_HOURS: i64 = 24;
+/// The company hears about a failing webhook once an event has failed this many times in a row
+/// (about 36 minutes of failures), at most once a day.
+pub const ALERT_AFTER_FAILURES: u16 = 3;
 
 pub fn backoff(failed_attempts: u16) -> Duration {
     let i = usize::from(failed_attempts.max(1) - 1).min(SCHEDULE_SECS.len() - 1);
@@ -54,6 +60,7 @@ pub struct Dispatcher {
     pub crypto: Arc<Crypto>,
     pub sender: WebhookSender,
     pub interval: StdDuration,
+    pub notifier: Notifier,
 }
 
 impl Dispatcher {
@@ -68,7 +75,13 @@ impl Dispatcher {
             crypto,
             sender,
             interval: interval.unwrap_or(DEFAULT_INTERVAL),
+            notifier: Notifier::default(),
         }
+    }
+
+    pub fn with_notifier(mut self, notifier: Notifier) -> Self {
+        self.notifier = notifier;
+        self
     }
 
     pub fn spawn(self) -> tokio::task::JoinHandle<()> {
@@ -178,6 +191,20 @@ impl Dispatcher {
         } else {
             let error = attempt.error.as_deref().unwrap_or("Ошибка доставки");
             let failed = u16::try_from(e.attempts).unwrap_or(0).saturating_add(1);
+            if failed >= ALERT_AFTER_FAILURES {
+                self.notifier
+                    .webhook_failing(
+                        &mut *tx,
+                        e.company_id,
+                        WebhookNote {
+                            event_type: e.event_type.clone(),
+                            error: error.to_owned(),
+                            failed_attempts: i16::try_from(failed).unwrap_or(i16::MAX),
+                        },
+                        Utc::now(),
+                    )
+                    .await?;
+            }
             match next_step(failed, Utc::now(), e.deadline_at) {
                 Next::RetryAt(at) => {
                     db::integrations::schedule_retry(&mut *tx, e.id, at, error).await?;

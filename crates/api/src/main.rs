@@ -9,6 +9,7 @@ use api::{
     integrations::{dispatcher::Dispatcher, webhook::WebhookSender},
     kv::{Kv, KvError},
     mail::{MailError, Mailer},
+    notify::{Notifier, email::EmailDispatcher},
     proctoring::{ProctoringMode, RecordingStore},
     state::{AppState, Services},
 };
@@ -73,6 +74,7 @@ async fn main() -> Result<(), StartupError> {
                 with_remarks = r.with_remarks,
                 minors_confirmed = r.minors_confirmed,
                 minors_pending = r.minors_pending,
+                notifications = r.notifications,
                 "demo data seeded"
             ),
             Ok(None) => tracing::info!("demo data already present"),
@@ -115,6 +117,7 @@ async fn main() -> Result<(), StartupError> {
         webhooks.clone(),
         config.integrations.dispatch_interval,
     )
+    .with_notifier(Notifier::from_config(&config.notifications))
     .spawn();
 
     let kv = Kv::connect(config.valkey_url.as_deref()).await?;
@@ -145,6 +148,9 @@ async fn main() -> Result<(), StartupError> {
         }
         Err(e) => tracing::warn!(error = %e, "fsp skill backfill failed"),
     }
+
+    EmailDispatcher::new(&state).spawn();
+    api::notify::sweep::spawn(&state);
 
     let listener = tokio::net::TcpListener::bind(state.config.bind).await?;
     tracing::info!(addr = %state.config.bind, "listening");

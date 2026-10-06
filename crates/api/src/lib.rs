@@ -16,6 +16,7 @@ pub mod integrations;
 pub mod kv;
 pub mod mail;
 pub mod metrics;
+pub mod notify;
 pub mod pdf;
 pub mod pool;
 pub mod proctoring;
@@ -81,6 +82,7 @@ use crate::{http_cache::Policy, state::AppState};
         (name = "Валидация", description = "Проверка подбора на своих данных: ваш набор «вакансия – кандидат» через рабочий подбор и базовую линию, метрики по разметке"),
         (name = "trust", description = "Антифейк: уровень доверия и квота компании, проверка вилки и дублей вакансий, очередь модерации"),
         (name = "integrations", description = "Кабинет работодателя: вебхук в ATS компании, журнал доставок, API-ключи"),
+        (name = "Уведомления", description = "Лента уведомлений кабинета, счётчик непрочитанных, настройки писем по видам и отписка в один клик по ссылке из письма. В письмах компаниям нет ФИО и контактов кандидата — только анонимный код"),
         (name = "Интеграции ATS", description = "API для ATS работодателя. Доступ — только API-ключом компании: `Authorization: Bearer fsp_live_…`, cookie и JWT здесь не принимаются. Лимит — 120 запросов в минуту на ключ. События приходят вебхуком (тело — схема `WebhookEvent`, подпись — заголовок `FSP-Signature: t=…,v1=HMAC-SHA256(secret, t + \".\" + body)`), здесь — опрос, профиль кандидата после согласия, этапы найма и импорт вакансий"),
     ),
     components(schemas(integrations::events::WebhookEvent))
@@ -121,7 +123,12 @@ impl Modify for SecuritySchemes {
 pub fn api_v1() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .nest("/auth", auth::routes::router())
-        .nest("/me", routes::me::router().merge(routes::export::router()))
+        .nest(
+            "/me",
+            routes::me::router()
+                .merge(routes::export::router())
+                .merge(routes::notifications::me_router()),
+        )
         .nest(
             "/candidate",
             routes::candidate_profile::router()
@@ -165,6 +172,7 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
             )),
         )
         .merge(routes::reports::router())
+        .merge(routes::notifications::public_router())
         .merge(static_routes().layer(middleware::from_fn_with_state(
             Policy::Static,
             http_cache::public,

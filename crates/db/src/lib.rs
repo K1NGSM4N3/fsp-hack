@@ -14,6 +14,7 @@ pub mod invitations;
 pub mod market;
 pub mod me;
 pub mod needs;
+pub mod notifications;
 pub mod pool;
 pub mod proctoring;
 pub mod reports;

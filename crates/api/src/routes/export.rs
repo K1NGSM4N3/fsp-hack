@@ -22,6 +22,7 @@ use super::{
     fsp::{FspStatus, load_status},
     invitations::{ReceivedInvitation, SentInvitation, received_views, sent_views},
     needs::{HiringNeed, company_need_views},
+    notifications::NotificationExport,
     survey::{SurveyResponse, survey_views},
     tasks::{EmployerTask, MyTask, company_task_views, load_my_tasks},
     vacancies::{MyApplication, Vacancy, company_vacancy_views, my_apps},
@@ -53,6 +54,8 @@ pub struct DataExport {
     pub consents: Vec<ConsentRecord>,
     pub candidate: Option<CandidateData>,
     pub employer: Option<EmployerData>,
+    /// The feed, email settings per kind and the letters sent.
+    pub notifications: NotificationExport,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -308,6 +311,7 @@ pub async fn build(state: &AppState, user: AuthUser, now: DateTime<Utc>) -> ApiR
             age_bracket: r.age_bracket.map(AgeBracket::from),
         })
         .collect();
+    let notifications = super::notifications::export(state, user).await?;
     let (candidate, employer) = match user.role {
         Role::Candidate => (Some(candidate_data(state, user).await?), None),
         Role::Employer => (None, Some(employer_data(state, user.id).await?)),
@@ -327,13 +331,15 @@ pub async fn build(state: &AppState, user: AuthUser, now: DateTime<Utc>) -> ApiR
         consents,
         candidate,
         employer,
+        notifications,
     })
 }
 
 /// Download everything the platform stores about you as a JSON file (ст. 14 152-ФЗ): account,
 /// consents with the declared age, profile, age (birth date and legal representative for 14–17),
 /// tests with summaries, category history, invitations, applications, who opened your contacts,
-/// proctoring summaries; for an employer — the account and the company's data
+/// proctoring summaries; for an employer — the account and the company's data; for both —
+/// notifications, email settings and the letters sent
 #[utoipa::path(get, path = "/export", tag = "account",
     responses(
         (status = 200, description = "JSON attachment `fsp-talents-<date>.json`", body = DataExport, content_type = "application/json",
