@@ -113,10 +113,24 @@ impl Api {
     }
 
     async fn call(&self, method: Method, path: &str, token: &str, body: Option<Value>) -> Reply {
+        self.call_with(method, path, token, body, &[]).await
+    }
+
+    async fn call_with(
+        &self,
+        method: Method,
+        path: &str,
+        token: &str,
+        body: Option<Value>,
+        headers: &[(&str, &str)],
+    ) -> Reply {
         let mut req = self
             .http
             .request(method, format!("{}/api/v1{path}", self.base))
             .bearer_auth(token);
+        for (name, value) in headers {
+            req = req.header(*name, *value);
+        }
         if let Some(b) = body {
             req = req.json(&b);
         }
@@ -530,8 +544,7 @@ async fn invitation_flags_and_domain_badge(pool: PgPool) {
         .call(Method::GET, "/candidate/invitations", &ct, None)
         .await;
     let by_id = |id: Uuid| {
-        inbox
-            .body
+        inbox.body["items"]
             .as_array()
             .unwrap()
             .iter()
@@ -665,4 +678,282 @@ async fn demo_seed_has_six_needs_with_plans_and_shortlists(pool: PgPool) {
             .unwrap()
             .is_empty()
     );
+}
+
+fn vacancy_body(title: &str) -> Value {
+    json!({
+        "title": title,
+        "description": "Платёжный шлюз: Go, PostgreSQL, Kafka. Команда из пяти человек.",
+        "specialization": "backend",
+        "grade": "middle",
+        "skills": ["go", "postgresql"],
+        "salary": { "min": 250000, "max": 320000 },
+        "work_format": "remote",
+        "city": null,
+        "status": "published",
+    })
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn a_double_click_makes_one_vacancy(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let (hr, company) = api.employer("hr@example.ru", None).await;
+    let post = async |key: &str| {
+        api.call_with(
+            Method::POST,
+            "/employer/vacancies",
+            &hr,
+            Some(vacancy_body("Go-разработчик в платёжную команду")),
+            &[("Idempotency-Key", key)],
+        )
+        .await
+    };
+    let first = post("vac-1").await;
+    assert_eq!(first.status, StatusCode::CREATED, "{}", first.body);
+    let again = post("vac-1").await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.body);
+    assert_eq!(again.body["id"], first.body["id"]);
+
+    let (a, b) = tokio::join!(post("vac-2"), post("vac-2"));
+    let mut statuses = [a.status, b.status];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::OK, StatusCode::CREATED]);
+    assert_eq!(
+        a.body["id"], b.body["id"],
+        "the same click sent twice at once"
+    );
+
+    let rows: i64 = sqlx::query_scalar("SELECT count(*) FROM vacancies WHERE company_id = $1")
+        .bind(company)
+        .fetch_one(api.pool())
+        .await
+        .unwrap();
+    assert_eq!(rows, 2, "one vacancy per key");
+    assert!(
+        !api.flags(&first.body)
+            .await
+            .contains(&"duplicate_own".to_owned()),
+        "a retry is not a duplicate"
+    );
+
+    let long = "k".repeat(101);
+    let r = api
+        .call_with(
+            Method::POST,
+            "/employer/vacancies",
+            &hr,
+            Some(vacancy_body("Ещё одна")),
+            &[("Idempotency-Key", long.as_str())],
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(r.body["errors"]["idempotency_key"].is_array(), "{}", r.body);
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn one_open_complaint_per_person_and_target(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let (_, company) = api.employer("hr@example.ru", None).await;
+    let anna = api.candidate("anna@example.ru", None).await;
+    let boris = api.candidate("boris@example.ru", None).await;
+    let (at, bt) = (
+        api.token(anna, Role::Candidate),
+        api.token(boris, Role::Candidate),
+    );
+    let report = async |token: &str, reason: &str| {
+        api.call(
+            Method::POST,
+            "/reports",
+            token,
+            Some(json!({ "target_kind": "company", "target_id": company, "reason": reason })),
+        )
+        .await
+    };
+    let first = report(&at, "spam").await;
+    assert_eq!(first.status, StatusCode::CREATED, "{}", first.body);
+    assert_eq!(first.body["already_open"], false);
+    let again = report(&at, "abuse").await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.body);
+    assert_eq!(again.body["id"], first.body["id"]);
+    assert_eq!(again.body["already_open"], true);
+    let (x, y) = tokio::join!(report(&bt, "spam"), report(&bt, "spam"));
+    assert_eq!(
+        x.body["id"], y.body["id"],
+        "a double click from another person"
+    );
+    let open: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM reports WHERE target_id = $1 AND resolved_at IS NULL",
+    )
+    .bind(company)
+    .fetch_one(api.pool())
+    .await
+    .unwrap();
+    assert_eq!(open, 2, "one per person");
+
+    sqlx::query(
+        "UPDATE reports SET resolved_at = now(), resolution = 'dismissed' WHERE reporter_user_id = $1",
+    )
+    .bind(anna)
+    .execute(api.pool())
+    .await
+    .unwrap();
+    let after = report(&at, "spam").await;
+    assert_eq!(
+        after.status,
+        StatusCode::CREATED,
+        "a resolved complaint does not block a new one"
+    );
+    assert_ne!(after.body["id"], first.body["id"]);
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn invitation_lists_page_by_cursor_and_filter_by_status(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let (hr, _) = api.employer("hr@example.ru", None).await;
+    let mut cands = Vec::new();
+    for i in 0..5 {
+        let c = api.candidate(&format!("c{i}@example.ru"), None).await;
+        let r = api.invite(&hr, c, (250_000, 320_000)).await;
+        assert_eq!(r.status, StatusCode::CREATED, "{}", r.body);
+        cands.push((c, r.body["id"].as_str().unwrap().to_owned()));
+    }
+    let (c0, inv0) = &cands[0];
+    let ct = api.token(*c0, Role::Candidate);
+    let r = api
+        .call(
+            Method::POST,
+            &format!("/candidate/invitations/{inv0}/accept"),
+            &ct,
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+
+    let mut seen = Vec::new();
+    let mut cursor: Option<String> = None;
+    let mut pages = 0;
+    loop {
+        let path = match &cursor {
+            Some(c) => format!("/employer/invitations?limit=2&cursor={c}"),
+            None => "/employer/invitations?limit=2".to_owned(),
+        };
+        let r = api.call(Method::GET, &path, &hr, None).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+        pages += 1;
+        for i in r.body["items"].as_array().unwrap() {
+            seen.push(i["id"].as_str().unwrap().to_owned());
+        }
+        assert_eq!(
+            r.body["by_status"].as_array().unwrap().len(),
+            2,
+            "counts on every page"
+        );
+        match r.body["next_cursor"].as_str() {
+            Some(c) => cursor = Some(c.to_owned()),
+            None => break,
+        }
+    }
+    assert_eq!(pages, 3);
+    let newest_first: Vec<String> = cands.iter().rev().map(|(_, id)| id.clone()).collect();
+    assert_eq!(seen, newest_first, "every invitation once, newest first");
+
+    let r = api
+        .call(
+            Method::GET,
+            "/employer/invitations?status=accepted",
+            &hr,
+            None,
+        )
+        .await;
+    let only: Vec<&str> = r.body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(only, [inv0.as_str()]);
+    let mut counts: Vec<(String, i64)> = r.body["by_status"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["status"].as_str().unwrap().to_owned(),
+                c["count"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    counts.sort();
+    assert_eq!(counts, [("accepted".to_owned(), 1), ("sent".to_owned(), 4)]);
+    let r = api
+        .call(
+            Method::GET,
+            "/employer/invitations?status=sent,viewed&limit=100",
+            &hr,
+            None,
+        )
+        .await;
+    assert_eq!(r.body["items"].as_array().unwrap().len(), 4);
+    let r = api
+        .call(Method::GET, "/employer/invitations?status=lost", &hr, None)
+        .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.body["code"], "invalid_query");
+
+    let mut inbox = Vec::new();
+    for i in 0..3 {
+        let (other, _) = api.employer(&format!("boss{i}@example{i}.ru"), None).await;
+        let r = api.invite(&other, *c0, (260_000, 330_000)).await;
+        assert_eq!(r.status, StatusCode::CREATED, "{}", r.body);
+        inbox.push(r.body["id"].as_str().unwrap().to_owned());
+    }
+    let r = api
+        .call(
+            Method::GET,
+            "/candidate/invitations?status=sent,viewed&limit=2",
+            &ct,
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    let page: Vec<&str> = r.body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(page, [inbox[2].as_str(), inbox[1].as_str()]);
+    let next = r.body["next_cursor"].as_str().unwrap().to_owned();
+    let r = api
+        .call(
+            Method::GET,
+            &format!("/candidate/invitations?status=sent,viewed&limit=2&cursor={next}"),
+            &ct,
+            None,
+        )
+        .await;
+    assert_eq!(r.body["items"][0]["id"], inbox[0].as_str());
+    assert_eq!(r.body["next_cursor"], Value::Null);
+    let r = api
+        .call(
+            Method::GET,
+            "/candidate/invitations?status=accepted",
+            &ct,
+            None,
+        )
+        .await;
+    assert_eq!(r.body["items"][0]["id"], inv0.as_str());
+    let mut counts: Vec<(String, i64)> = r.body["by_status"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|c| {
+            (
+                c["status"].as_str().unwrap().to_owned(),
+                c["count"].as_i64().unwrap(),
+            )
+        })
+        .collect();
+    counts.sort();
+    assert_eq!(counts, [("accepted".to_owned(), 1), ("sent".to_owned(), 3)]);
 }

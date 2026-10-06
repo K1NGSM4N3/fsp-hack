@@ -484,7 +484,13 @@ async fn start_session(
         now + chrono::Duration::days(REFRESH_TTL_DAYS),
     )
     .await?;
-    let jar = session_cookies(jar, access.clone(), refresh, state.config.cookie_secure);
+    let jar = session_cookies(
+        jar,
+        access.clone(),
+        now.timestamp() + super::jwt::ACCESS_TTL_SECS,
+        refresh,
+        state.config.cookie_secure,
+    );
     Ok((jar, access))
 }
 

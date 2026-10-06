@@ -11,6 +11,7 @@ import { Alert, Button, Dialog, Field, Input, MoneyInput, ProgressBar, Select, T
 import { SalaryHint } from "@/features/employer/components/SalaryHint";
 import { useCompany, useInvitationStats, useNeeds, useOwnVacancies, useSendInvitation } from "@/features/employer/hooks";
 import { WORK_FORMAT_LABEL, WORK_FORMATS } from "@/lib/labels";
+import { newIdempotencyKey } from "@/lib/idempotency";
 
 export interface InviteTarget {
   id: string;
@@ -56,7 +57,7 @@ function InviteForm({ target, need, onClose, onSent }: { target: InviteTarget; n
   const needs = useNeeds();
   const vacancies = useOwnVacancies();
   const send = useSendInvitation();
-  const [key] = useState(() => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now())));
+  const [key] = useState(newIdempotencyKey);
   const [draft, setDraft] = useState<Draft>(() => ({
     title: need?.title ?? "",
     message: need ? `Здравствуйте! ${need.description || need.title}\n\nБудем рады рассказать подробнее.` : "",

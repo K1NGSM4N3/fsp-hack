@@ -41,6 +41,19 @@ const now = () => new Date();
 const nowIso = () => new Date().toISOString();
 const addDays = (iso: string | Date, days: number) => new Date(new Date(iso).getTime() + days * DAY);
 
+/** Index cursors: opaque to the pages, like the API's keyset ones. */
+export function pageOf<X>(all: X[], cursor: string | null | undefined, limit: number): { items: X[]; next_cursor: string | null } {
+  const start = Math.max(0, Number(cursor ?? 0) || 0);
+  const end = start + Math.max(1, limit);
+  return { items: all.slice(start, end), next_cursor: end < all.length ? String(end) : null };
+}
+
+function statusCounts(list: { status: T.InvitationStatus }[]): T.InvitationStatusCount[] {
+  const counts = new Map<T.InvitationStatus, number>();
+  for (const i of list) counts.set(i.status, (counts.get(i.status) ?? 0) + 1);
+  return [...counts].map(([status, count]) => ({ status, count }));
+}
+
 function delay(min = 120, max = 380): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, min + Math.random() * (max - min)));
 }
@@ -943,15 +956,17 @@ function ownInvitation(id: string): { inv: MockInvitation; cand: MockCandidate }
   return { inv, cand };
 }
 
-export async function listReceivedInvitations(): Promise<T.ReceivedInvitation[]> {
+export async function listReceivedInvitations(query: T.InvitationListQuery = {}): Promise<T.ReceivedInvitationPage> {
   await delay();
   const { cand } = requireCandidate();
   refreshInvitationStatuses();
   persist();
-  return getDb()
+  const mine = getDb()
     .invitations.filter((i) => i.candidate_id === cand.id)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map(receivedDto);
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const wanted = mine.filter((i) => !query.status?.length || query.status.includes(i.status));
+  const page = pageOf(wanted, query.cursor, query.limit ?? 30);
+  return { items: page.items.map(receivedDto), next_cursor: page.next_cursor, by_status: statusCounts(mine) };
 }
 
 export async function getReceivedInvitation(id: T.Uuid): Promise<T.ReceivedInvitation> {
@@ -1697,15 +1712,17 @@ function sentDto(inv: MockInvitation, withEvents = false): T.SentInvitation {
   };
 }
 
-export async function listSentInvitations(): Promise<T.SentInvitation[]> {
+export async function listSentInvitations(query: T.InvitationListQuery = {}): Promise<T.SentInvitationPage> {
   await delay();
   const { company } = requireEmployer();
   refreshInvitationStatuses();
   persist();
-  return getDb()
+  const sent = getDb()
     .invitations.filter((i) => i.company_id === company.id)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at))
-    .map((i) => sentDto(i));
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
+  const wanted = sent.filter((i) => !query.status?.length || query.status.includes(i.status));
+  const page = pageOf(wanted, query.cursor, query.limit ?? 30);
+  return { items: page.items.map((i) => sentDto(i)), next_cursor: page.next_cursor, by_status: statusCounts(sent) };
 }
 
 function quotaInfo(companyId: string) {
@@ -1884,10 +1901,12 @@ export async function listOwnVacancies(): Promise<T.Vacancy[]> {
     .map(vacancyDto);
 }
 
-export async function createVacancy(body: T.VacancyInput): Promise<T.Vacancy> {
+export async function createVacancy(body: T.VacancyInput, idempotencyKey: string): Promise<T.Vacancy> {
   await delay(300, 500);
   const { company } = requireEmployer();
   validateVacancy(body);
+  const existing = getDb().vacancies.find((v) => v.company_id === company.id && v.idempotency_key === idempotencyKey);
+  if (existing) return vacancyDto(existing);
   const at = nowIso();
   const v: MockVacancy = {
     id: newId(),
@@ -1904,6 +1923,7 @@ export async function createVacancy(body: T.VacancyInput): Promise<T.Vacancy> {
     published_at: body.status === "published" ? at : null,
     created_at: at,
     updated_at: at,
+    idempotency_key: idempotencyKey,
   };
   getDb().vacancies.push(v);
   persist();
@@ -1933,11 +1953,11 @@ export async function updateVacancy(id: T.Uuid, body: T.VacancyInput): Promise<T
   return vacancyDto(v);
 }
 
-export async function listVacancyApplications(id: T.Uuid): Promise<T.IncomingApplication[]> {
+export async function listVacancyApplications(id: T.Uuid, cursor?: string | null): Promise<T.ApplicationPage> {
   await delay();
   ownVacancy(id);
   const db = getDb();
-  return db.applications
+  const all = db.applications
     .filter((a) => a.vacancy_id === id)
     .sort((a, b) => b.created_at.localeCompare(a.created_at))
     .map((a): T.IncomingApplication => {
@@ -1953,6 +1973,7 @@ export async function listVacancyApplications(id: T.Uuid): Promise<T.IncomingApp
         updated_at: a.updated_at,
       };
     });
+  return pageOf(all, cursor, 30);
 }
 
 export async function setApplicationStatus(id: T.Uuid, status: T.EmployerApplicationStatus): Promise<void> {
@@ -2010,11 +2031,11 @@ export async function setTaskActive(id: T.Uuid, active: boolean): Promise<void> 
   persist();
 }
 
-export async function listTaskSubmissions(id: T.Uuid): Promise<T.TaskSubmission[]> {
+export async function listTaskSubmissions(id: T.Uuid, cursor?: string | null): Promise<T.SubmissionPage> {
   await delay();
   ownTask(id);
   const db = getDb();
-  return db.task_assignments
+  const all = db.task_assignments
     .filter((a) => a.task_id === id && (a.status === "submitted" || a.status === "reviewed"))
     .sort((a, b) => (b.submitted_at ?? "").localeCompare(a.submitted_at ?? ""))
     .map((a): T.TaskSubmission => {
@@ -2031,6 +2052,7 @@ export async function listTaskSubmissions(id: T.Uuid): Promise<T.TaskSubmission[
         submitted_at: a.submitted_at,
       };
     });
+  return pageOf(all, cursor, 30);
 }
 
 export async function reviewTaskSubmission(id: T.Uuid, submissionId: T.Uuid, body: T.ReviewInput): Promise<void> {
@@ -2114,11 +2136,16 @@ export async function applyToVacancy(id: T.Uuid, body: T.ApplyInput): Promise<T.
   return dto;
 }
 
-export async function createReport(body: T.ReportInput): Promise<void> {
+export async function createReport(body: T.ReportInput): Promise<T.ReportCreated> {
   await delay();
-  sessionUser();
-  getDb().reports.push({ target: body.target_kind, target_id: body.target_id, reason: body.comment ? `${body.reason}: ${body.comment}` : body.reason, at: nowIso() });
+  const user = sessionUser();
+  const reports = getDb().reports;
+  const open = reports.find((r) => r.user_id === user.id && r.target === body.target_kind && r.target_id === body.target_id);
+  if (open?.id) return { id: open.id, already_open: true };
+  const id = newId();
+  reports.push({ id, user_id: user.id, target: body.target_kind, target_id: body.target_id, reason: body.comment ? `${body.reason}: ${body.comment}` : body.reason, at: nowIso() });
   persist();
+  return { id, already_open: false };
 }
 
 export * from "./integrations";

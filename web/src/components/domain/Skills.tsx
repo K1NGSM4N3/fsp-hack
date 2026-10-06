@@ -82,7 +82,8 @@ export function SkillInput({ value, onChange, placeholder = "Начните вв
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const search = useSkillSearch(query, open);
-  const options = useMemo(() => (search.data ?? []).filter((s) => !value.includes(s.slug)).slice(0, 8), [search.data, value]);
+  const typed = query.trim().length > 0;
+  const options = useMemo(() => (typed ? (search.data ?? []) : []).filter((s) => !value.includes(s.slug)).slice(0, 8), [typed, search.data, value]);
 
   const add = (slug: string) => {
     if (!value.includes(slug) && value.length < max) onChange([...value, slug]);

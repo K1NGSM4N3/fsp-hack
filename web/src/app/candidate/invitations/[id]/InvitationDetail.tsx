@@ -185,22 +185,22 @@ export function InvitationDetail({ id }: { id: string }) {
             <p className="text-sm text-ink-subtle">Зарплата</p>
             <SalaryRange salary={inv.salary} size="xl" className="mt-1 block" label="Зарплата" />
             <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">
-              <div className="flex items-start gap-2.5">
-                <MapPin className="mt-0.5 size-4 shrink-0 text-ink-subtle" aria-hidden />
-                <div>
-                  <dt className="text-ink-subtle">Формат</dt>
-                  <dd className="text-ink">
-                    {inv.work_format ? WORK_FORMAT_LABEL[inv.work_format] : "Обсуждается"}
-                    {inv.company_city && inv.work_format !== "remote" ? `, ${inv.company_city}` : ""}
-                  </dd>
-                </div>
+              <div className="relative pl-6.5">
+                <dt className="text-ink-subtle">
+                  <MapPin className="absolute top-0.5 left-0 size-4 text-ink-subtle" aria-hidden />
+                  Формат
+                </dt>
+                <dd className="text-ink">
+                  {inv.work_format ? WORK_FORMAT_LABEL[inv.work_format] : "Обсуждается"}
+                  {inv.company_city && inv.work_format !== "remote" ? `, ${inv.company_city}` : ""}
+                </dd>
               </div>
-              <div className="flex items-start gap-2.5">
-                <Phone className="mt-0.5 size-4 shrink-0 text-ink-subtle" aria-hidden />
-                <div>
-                  <dt className="text-ink-subtle">Как связаться с компанией</dt>
-                  <dd className="font-medium break-words text-ink">{inv.contact}</dd>
-                </div>
+              <div className="relative pl-6.5">
+                <dt className="text-ink-subtle">
+                  <Phone className="absolute top-0.5 left-0 size-4 text-ink-subtle" aria-hidden />
+                  Как связаться с компанией
+                </dt>
+                <dd className="font-medium break-words text-ink">{inv.contact}</dd>
               </div>
             </dl>
 

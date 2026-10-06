@@ -937,6 +937,7 @@ async fn minor_is_published_only_with_the_representatives_consent(pool: PgPool) 
             work_format: "remote",
             city: None,
         },
+        None,
     )
     .await
     .unwrap();
@@ -1710,7 +1711,7 @@ async fn warm_cards_follow_task_submissions_and_reviews(pool: PgPool) {
             None,
         )
         .await;
-    let submission = r.body[0]["id"].as_str().unwrap().to_owned();
+    let submission = r.body["items"][0]["id"].as_str().unwrap().to_owned();
     let r = api
         .call(
             Method::POST,
@@ -1722,6 +1723,130 @@ async fn warm_cards_follow_task_submissions_and_reviews(pool: PgPool) {
     assert_eq!(r.status, StatusCode::NO_CONTENT, "{}", r.body);
     let r = api.call(Method::GET, &profile, Some(&et), None).await;
     assert_eq!(r.body["candidate"]["task_rating"], 5.0);
+}
+
+async fn pages(api: &Api, et: &str, path: &str) -> Vec<Vec<String>> {
+    let mut out = Vec::new();
+    let mut cursor: Option<String> = None;
+    loop {
+        let url = match &cursor {
+            Some(c) => format!("{path}?limit=2&cursor={c}"),
+            None => format!("{path}?limit=2"),
+        };
+        let r = api.call(Method::GET, &url, Some(et), None).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+        out.push(
+            r.body["items"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|i| i["candidate_code"].as_str().unwrap().to_owned())
+                .collect(),
+        );
+        match r.body["next_cursor"].as_str() {
+            Some(c) => cursor = Some(c.to_owned()),
+            None => return out,
+        }
+    }
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn applications_and_task_answers_page_newest_first(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let (hr, _) = api.employer("hr@example.ru").await;
+    let et = api.token(hr, Role::Employer);
+    let r = api
+        .call(
+            Method::POST,
+            "/employer/vacancies",
+            Some(&et),
+            Some(json!({
+                "title": "Go-разработчик",
+                "description": "Платежи",
+                "specialization": "backend",
+                "grade": "middle",
+                "skills": ["go"],
+                "salary": { "min": 250000, "max": 320000 },
+                "work_format": "remote",
+                "city": null,
+                "status": "published",
+            })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.body);
+    let vacancy = r.body["id"].as_str().unwrap().to_owned();
+    let r = api
+        .call(
+            Method::POST,
+            "/employer/tasks",
+            Some(&et),
+            Some(json!({
+                "title": "Кеш",
+                "body": "Как бы вы кешировали карточки кандидатов?",
+                "kind": "approach",
+                "specialization": "backend",
+                "grades": ["middle"],
+            })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.body);
+    let task = r.body["id"].as_str().unwrap().to_owned();
+
+    let mut codes = Vec::new();
+    for name in ["anna01", "boris1", "vera01"] {
+        let c = api.candidate(&format!("{name}@example.ru")).await;
+        let ct = api.token(c, Role::Candidate);
+        let r = api
+            .call(
+                Method::POST,
+                &format!("/vacancies/{vacancy}/applications"),
+                Some(&ct),
+                Some(json!({ "cover_letter": "" })),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::CREATED, "{}", r.body);
+        let r = api
+            .call(Method::GET, "/candidate/tasks", Some(&ct), None)
+            .await;
+        let assignment = r.body[0]["id"].as_str().unwrap().to_owned();
+        let r = api
+            .call(
+                Method::POST,
+                &format!("/candidate/tasks/{assignment}/submit"),
+                Some(&ct),
+                Some(json!({ "answer": "Снимок в памяти и поколение" })),
+            )
+            .await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+        codes.push(format!("K-{name}"));
+    }
+    let newest_first = vec![
+        vec![codes[2].clone(), codes[1].clone()],
+        vec![codes[0].clone()],
+    ];
+    assert_eq!(
+        pages(
+            &api,
+            &et,
+            &format!("/employer/vacancies/{vacancy}/applications")
+        )
+        .await,
+        newest_first
+    );
+    assert_eq!(
+        pages(&api, &et, &format!("/employer/tasks/{task}/submissions")).await,
+        newest_first
+    );
+    let r = api
+        .call(
+            Method::GET,
+            &format!("/employer/tasks/{task}/submissions?cursor=12_x"),
+            Some(&et),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.body["code"], "invalid_query");
 }
 
 /// The company of an employer is cached; deleting the account must end it for every session at
@@ -1776,6 +1901,7 @@ async fn cache_control_by_route(pool: PgPool) {
             work_format: "remote",
             city: None,
         },
+        None,
     )
     .await
     .unwrap();

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT i.id, i.company_id, co.name AS company_name, co.description AS company_description,\n                  co.industry AS company_industry, co.city AS company_city,\n                  co.website AS company_website, co.verified_domain AS company_verified_domain,\n                  i.vacancy_id, i.title, i.message, i.salary_min,\n                  i.salary_max, i.work_format, i.contact, i.status AS \"status: InvitationStatus\",\n                  i.decline_reason, i.decline_comment, i.created_at, i.viewed_at, i.responded_at,\n                  i.expires_at\n           FROM invitations i\n           JOIN companies co ON co.id = i.company_id\n           WHERE i.candidate_id = $1\n           ORDER BY i.created_at DESC",
+  "query": "SELECT i.id, i.candidate_id, c.public_code, c.specialization, c.grade, i.need_id,\n                  i.vacancy_id, i.title, i.message, i.salary_min, i.salary_max, i.work_format,\n                  i.contact, i.status AS \"status: InvitationStatus\", i.decline_reason,\n                  i.decline_comment, i.created_at, i.viewed_at, i.responded_at, i.expires_at\n           FROM invitations i\n           JOIN candidates c ON c.user_id = i.candidate_id\n           WHERE i.company_id = $1\n             AND (cardinality($2::invitation_status[]) = 0 OR i.status = ANY($2))\n             AND ($3::timestamptz IS NULL OR (i.created_at, i.id) < ($3, $4::uuid))\n           ORDER BY i.created_at DESC, i.id DESC\n           LIMIT $5",
   "describe": {
     "columns": [
       {
@@ -10,76 +10,66 @@
       },
       {
         "ordinal": 1,
-        "name": "company_id",
+        "name": "candidate_id",
         "type_info": "Uuid"
       },
       {
         "ordinal": 2,
-        "name": "company_name",
+        "name": "public_code",
         "type_info": "Text"
       },
       {
         "ordinal": 3,
-        "name": "company_description",
+        "name": "specialization",
         "type_info": "Text"
       },
       {
         "ordinal": 4,
-        "name": "company_industry",
+        "name": "grade",
         "type_info": "Text"
       },
       {
         "ordinal": 5,
-        "name": "company_city",
-        "type_info": "Text"
+        "name": "need_id",
+        "type_info": "Uuid"
       },
       {
         "ordinal": 6,
-        "name": "company_website",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 7,
-        "name": "company_verified_domain",
-        "type_info": "Text"
-      },
-      {
-        "ordinal": 8,
         "name": "vacancy_id",
         "type_info": "Uuid"
       },
       {
-        "ordinal": 9,
+        "ordinal": 7,
         "name": "title",
         "type_info": "Text"
       },
       {
-        "ordinal": 10,
+        "ordinal": 8,
         "name": "message",
         "type_info": "Text"
       },
       {
-        "ordinal": 11,
+        "ordinal": 9,
         "name": "salary_min",
         "type_info": "Int8"
       },
       {
-        "ordinal": 12,
+        "ordinal": 10,
         "name": "salary_max",
         "type_info": "Int8"
       },
       {
-        "ordinal": 13,
+        "ordinal": 11,
         "name": "work_format",
         "type_info": "Text"
       },
       {
-        "ordinal": 14,
+        "ordinal": 12,
         "name": "contact",
         "type_info": "Text"
       },
       {
-        "ordinal": 15,
+        "ordinal": 13,
         "name": "status: InvitationStatus",
         "type_info": {
           "Custom": {
@@ -98,47 +88,70 @@
         }
       },
       {
-        "ordinal": 16,
+        "ordinal": 14,
         "name": "decline_reason",
         "type_info": "Text"
       },
       {
-        "ordinal": 17,
+        "ordinal": 15,
         "name": "decline_comment",
         "type_info": "Text"
       },
       {
-        "ordinal": 18,
+        "ordinal": 16,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 19,
+        "ordinal": 17,
         "name": "viewed_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 20,
+        "ordinal": 18,
         "name": "responded_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 21,
+        "ordinal": 19,
         "name": "expires_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Uuid"
+        "Uuid",
+        {
+          "Custom": {
+            "name": "invitation_status[]",
+            "kind": {
+              "Array": {
+                "Custom": {
+                  "name": "invitation_status",
+                  "kind": {
+                    "Enum": [
+                      "sent",
+                      "viewed",
+                      "accepted",
+                      "declined",
+                      "expired",
+                      "withdrawn"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "Timestamptz",
+        "Uuid",
+        "Int8"
       ]
     },
     "nullable": [
       false,
       false,
       false,
-      false,
-      true,
       true,
       true,
       true,
@@ -158,5 +171,5 @@
       false
     ]
   },
-  "hash": "98be41cd6ec0c2de57b4ef73f3a62afa9cbd222f2a1ee9214e2aebfd96e240c4"
+  "hash": "f67c36496de9ea1b4b4a1e2a5add8158dbe158b913bfa0a67dfbe5027012823d"
 }

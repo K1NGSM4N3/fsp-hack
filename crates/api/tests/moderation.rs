@@ -696,6 +696,25 @@ async fn annulled_upgrade_restores_the_previous_grade_and_its_window(pool: PgPoo
             .is_empty(),
         "the Junior test was not touched"
     );
+
+    sqlx::query("UPDATE candidates SET public_code = 'K-7Q3M2X' WHERE user_id = $1")
+        .bind(cand)
+        .execute(api.pool())
+        .await
+        .unwrap();
+    let by_code = api.log(&moderator, "subject=%20k-7q3m2x%20").await;
+    assert_eq!(
+        by_code.len(),
+        1,
+        "the code, typed loosely, finds the candidate's actions"
+    );
+    assert_eq!(by_code[0]["candidate_code"], "K-7Q3M2X");
+    assert!(api.log(&moderator, "subject=K-ZZZZZZ").await.is_empty());
+    let r = api
+        .call(Method::GET, "/admin/log?subject=nobody", &moderator, None)
+        .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.body["code"], "invalid_query");
 }
 
 #[sqlx::test(migrations = "../../db/migrations")]

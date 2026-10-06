@@ -9,7 +9,8 @@ export const VACANCY_PAGE_SIZE = 6;
 export const qk = {
   me: ["me"] as const,
   catalog: ["catalog"] as const,
-  skills: (q: string) => ["skills", q] as const,
+  skills: (q: string) => ["skills", "search", q] as const,
+  typicalSkills: (specialization: string) => ["skills", "typical", specialization] as const,
   consents: ["consents", "current"] as const,
   myConsents: ["consents", "mine"] as const,
 
@@ -20,6 +21,9 @@ export const qk = {
   assessments: ["candidate", "assessments"] as const,
   assessment: (id: string) => ["candidate", "assessments", id] as const,
   received: ["candidate", "invitations"] as const,
+  receivedLists: ["candidate", "invitations", "list"] as const,
+  receivedPages: (status: string) => ["candidate", "invitations", "list", "pages", status] as const,
+  receivedSummary: ["candidate", "invitations", "list", "summary"] as const,
   receivedOne: (id: string) => ["candidate", "invitations", id] as const,
   market: ["candidate", "market"] as const,
   myApplications: ["candidate", "applications"] as const,
@@ -40,6 +44,7 @@ export const qk = {
   candidate: (id: string, needId?: string | null) => ["employer", "candidate", id, needId ?? null] as const,
   contacts: (id: string) => ["employer", "candidate", id, "contacts"] as const,
   sent: ["employer", "invitations"] as const,
+  sentPages: (status: string) => ["employer", "invitations", "list", status] as const,
   sentOne: (id: string) => ["employer", "invitations", id] as const,
   stats: ["employer", "invitations", "stats"] as const,
   ownVacancies: ["employer", "vacancies"] as const,
@@ -51,6 +56,7 @@ export const qk = {
   submissions: (taskId: string) => ["employer", "tasks", taskId, "submissions"] as const,
   integrations: ["employer", "integrations"] as const,
   deliveries: ["employer", "integrations", "deliveries"] as const,
+  deliveryPages: (status: string) => ["employer", "integrations", "deliveries", status] as const,
   apiKeys: ["employer", "integrations", "keys"] as const,
 
   notifications: ["notifications"] as const,

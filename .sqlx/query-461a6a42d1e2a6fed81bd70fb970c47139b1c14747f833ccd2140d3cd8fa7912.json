@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.id, a.candidate_id, c.public_code, c.specialization, c.grade,\n                  a.status AS \"status: TaskAssignmentStatus\", a.answer, a.rating, a.review_comment,\n                  a.submitted_at\n           FROM task_assignments a\n           JOIN tasks t ON t.id = a.task_id\n           JOIN candidates c ON c.user_id = a.candidate_id\n           WHERE t.id = $1 AND t.company_id = $2 AND a.status IN ('submitted', 'reviewed')\n           ORDER BY a.submitted_at DESC",
+  "query": "SELECT a.id, a.candidate_id, c.public_code, c.specialization, c.grade,\n                  a.status AS \"status: TaskAssignmentStatus\", a.answer, a.rating, a.review_comment,\n                  a.submitted_at\n           FROM task_assignments a\n           JOIN tasks t ON t.id = a.task_id\n           JOIN candidates c ON c.user_id = a.candidate_id\n           WHERE t.id = $1 AND t.company_id = $2 AND a.status IN ('submitted', 'reviewed')\n             AND a.submitted_at IS NOT NULL\n             AND ($3::timestamptz IS NULL OR (a.submitted_at, a.id) < ($3, $4::uuid))\n           ORDER BY a.submitted_at DESC, a.id DESC\n           LIMIT $5",
   "describe": {
     "columns": [
       {
@@ -70,7 +70,10 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
       ]
     },
     "nullable": [
@@ -86,5 +89,5 @@
       true
     ]
   },
-  "hash": "b4da3b64e0102a7ca2786e4c56288970ce2df00789bd86d75f76e4a96846a9a8"
+  "hash": "461a6a42d1e2a6fed81bd70fb970c47139b1c14747f833ccd2140d3cd8fa7912"
 }

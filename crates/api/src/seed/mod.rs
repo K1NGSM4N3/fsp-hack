@@ -615,6 +615,7 @@ pub async fn seed_sized(
                 work_format: v.work_format,
                 city: Some(corpus::COMPANIES[v.company].city),
             },
+            None,
         )
         .await?;
         if v.company == demo::DEMO_COMPANY {

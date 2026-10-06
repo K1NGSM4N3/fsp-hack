@@ -21,29 +21,34 @@ async function search(q: string, specialization?: Specialization): Promise<Skill
   }
 }
 
-/** Falls back to the bundled dictionary when the API is unreachable. */
+/**
+ * The server matches case- and space-insensitively, so «Go», «go» and «go » share one key and one request. An empty query
+ * asks nothing: without a specialization the API has no list to give. Falls back to the bundled dictionary when the
+ * API is unreachable.
+ */
 export function useSkillSearch(q: string, enabled = true) {
+  const key = q.trim().toLowerCase();
   return useQuery({
-    queryKey: qk.skills(q),
-    queryFn: () => search(q),
-    enabled,
+    queryKey: qk.skills(key),
+    queryFn: () => search(key),
+    enabled: enabled && key.length > 0,
     staleTime: 5 * 60_000,
     placeholderData: keepPreviousData,
   });
 }
 
+const typical = (s: Specialization) => ({ queryKey: qk.typicalSkills(s), queryFn: () => search("", s), staleTime: Infinity });
+
 export function useTypicalSkills(specialization: Specialization | null) {
   return useQuery({
-    queryKey: ["skills", "typical", specialization],
+    queryKey: qk.typicalSkills(specialization ?? "none"),
     queryFn: () => search("", specialization ?? undefined),
     enabled: Boolean(specialization),
     staleTime: Infinity,
   });
 }
 
-/** Warms the slug → name cache so stored slugs render with API display names. */
+/** Warms the slug → name cache so stored slugs render with API display names; the same keys as `useTypicalSkills`. */
 export function useSkillNamePreload() {
-  useQueries({
-    queries: SPECIALIZATIONS.map((s) => ({ queryKey: ["skills", "typical", s], queryFn: () => search("", s), staleTime: Infinity })),
-  });
+  useQueries({ queries: SPECIALIZATIONS.map(typical) });
 }

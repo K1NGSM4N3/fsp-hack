@@ -61,14 +61,28 @@ pub struct ProctoringConfig {
     pub retention_days: i64,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct IntegrationsConfig {
     /// Hosts a webhook may reach over plain http and on private addresses (the ATS mock in
     /// compose). Empty in production: https to public addresses only.
     pub webhook_dev_hosts: Vec<String>,
     /// Outbox polling period; `None` uses the dispatcher default.
     pub dispatch_interval: Option<std::time::Duration>,
+    /// The ATS invitations feed returns only changes older than this (`ATS_POLL_LAG_SECS`), so a
+    /// transaction still committing is never jumped over.
+    pub poll_lag: std::time::Duration,
     pub demo: Option<DemoIntegration>,
+}
+
+impl Default for IntegrationsConfig {
+    fn default() -> Self {
+        Self {
+            webhook_dev_hosts: Vec::new(),
+            dispatch_interval: None,
+            poll_lag: std::time::Duration::from_secs(5),
+            demo: None,
+        }
+    }
 }
 
 /// Email side of notifications (architecture.md §13); the defaults are the production rule.
@@ -236,6 +250,10 @@ impl Config {
                         })
                 })
                 .transpose()?,
+            poll_lag: std::time::Duration::from_secs(parsed(
+                "ATS_POLL_LAG_SECS",
+                IntegrationsConfig::default().poll_lag.as_secs(),
+            )?),
             demo: var("ATS_DEMO_API_KEY").map(|api_key| DemoIntegration {
                 owner_email: var("ATS_DEMO_OWNER_EMAIL")
                     .unwrap_or_else(|| "employer@demo.fsp".into()),

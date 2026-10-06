@@ -1,11 +1,12 @@
 "use client";
 
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/endpoints";
 import type {
   CandidateSearchParams,
   CompanyProfile,
   EmployerApplicationStatus,
+  InvitationStatus,
   NeedInput,
   ReviewInput,
   SalaryCheckQuery,
@@ -16,6 +17,7 @@ import type {
   TaskInput,
   VacancyInput,
 } from "@/api/types";
+import { newIdempotencyKey } from "@/lib/idempotency";
 import { fresh, qk } from "../keys";
 
 export function useTrustStatus() {
@@ -143,8 +145,16 @@ export function useCandidateContacts(id: string, enabled: boolean) {
   return useQuery({ queryKey: qk.contacts(id), queryFn: () => api.getCandidateContacts(id), enabled, staleTime: Infinity, retry: false });
 }
 
-export function useSentInvitations() {
-  return useQuery({ queryKey: qk.sent, queryFn: api.listSentInvitations, ...fresh.live });
+/** One status tab of the sent invitations, a page at a time; the counts by status come with every page. */
+export function useSentInvitationPages(status: InvitationStatus[]) {
+  return useInfiniteQuery({
+    queryKey: qk.sentPages(status.join(",")),
+    queryFn: ({ pageParam }) => api.listSentInvitations({ status, cursor: pageParam, limit: 20 }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? null,
+    placeholderData: keepPreviousData,
+    ...fresh.live,
+  });
 }
 
 export function useSentInvitation(id: string) {
@@ -188,10 +198,11 @@ export function useOwnVacancy(id: string) {
   return useQuery({ queryKey: qk.ownVacancy(id), queryFn: () => api.getOwnVacancy(id), ...fresh.detail });
 }
 
-export function useSaveVacancy(id?: string) {
+/** `key` — the form's `Idempotency-Key`: made once per new-vacancy form, so a double click creates one vacancy. */
+export function useSaveVacancy(id?: string, key?: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: VacancyInput) => (id ? api.updateVacancy(id, body) : api.createVacancy(body)),
+    mutationFn: (body: VacancyInput) => (id ? api.updateVacancy(id, body) : api.createVacancy(body, key ?? newIdempotencyKey())),
     onSuccess: (v) => {
       qc.setQueryData(qk.ownVacancy(v.id), v);
       void qc.invalidateQueries({ queryKey: qk.ownVacancies });
@@ -202,7 +213,13 @@ export function useSaveVacancy(id?: string) {
 }
 
 export function useVacancyApplications(vacancyId: string) {
-  return useQuery({ queryKey: qk.applications(vacancyId), queryFn: () => api.listVacancyApplications(vacancyId), ...fresh.live });
+  return useInfiniteQuery({
+    queryKey: qk.applications(vacancyId),
+    queryFn: ({ pageParam }) => api.listVacancyApplications(vacancyId, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? null,
+    ...fresh.live,
+  });
 }
 
 export function useSetApplicationStatus(vacancyId: string) {
@@ -234,7 +251,14 @@ export function useSetTaskActive() {
 }
 
 export function useTaskSubmissions(taskId: string, enabled = true) {
-  return useQuery({ queryKey: qk.submissions(taskId), queryFn: () => api.listTaskSubmissions(taskId), enabled, ...fresh.live });
+  return useInfiniteQuery({
+    queryKey: qk.submissions(taskId),
+    queryFn: ({ pageParam }) => api.listTaskSubmissions(taskId, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? null,
+    enabled,
+    ...fresh.live,
+  });
 }
 
 export function useReviewSubmission(taskId: string) {

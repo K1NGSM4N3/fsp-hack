@@ -54,9 +54,10 @@ export function ReportButton({ targetKind, targetId }: { targetKind: ReportInput
                 report.mutate(
                   { target_kind: targetKind, target_id: targetId, reason: picked, comment: comment.trim() || null },
                   {
-                    onSuccess: () => {
+                    onSuccess: (r) => {
                       close();
-                      toast.success("Жалоба отправлена");
+                      if (r.already_open) toast.success("Жалоба уже у модератора", "Вы жаловались на это раньше, она ждёт решения — повторная не нужна");
+                      else toast.success("Жалоба отправлена");
                     },
                     onError: (e) => toast.error(isApiError(e) ? e.title : "Не удалось отправить жалобу"),
                   },

@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT a.id, a.candidate_id, c.public_code, c.specialization, c.grade, c.theta,\n                  a.cover_letter, a.status AS \"status: ApplicationStatus\", a.created_at, a.updated_at\n           FROM applications a\n           JOIN vacancies v ON v.id = a.vacancy_id\n           JOIN candidates c ON c.user_id = a.candidate_id\n           WHERE v.id = $1 AND v.company_id = $2 AND a.status <> 'withdrawn'\n           ORDER BY a.created_at DESC",
+  "query": "SELECT a.id, a.candidate_id, c.public_code, c.specialization, c.grade, c.theta,\n                  a.cover_letter, a.status AS \"status: ApplicationStatus\", a.created_at, a.updated_at\n           FROM applications a\n           JOIN vacancies v ON v.id = a.vacancy_id\n           JOIN candidates c ON c.user_id = a.candidate_id\n           WHERE v.id = $1 AND v.company_id = $2 AND a.status <> 'withdrawn'\n             AND ($3::timestamptz IS NULL OR (a.created_at, a.id) < ($3, $4::uuid))\n           ORDER BY a.created_at DESC, a.id DESC\n           LIMIT $5",
   "describe": {
     "columns": [
       {
@@ -70,7 +70,10 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid"
+        "Uuid",
+        "Timestamptz",
+        "Uuid",
+        "Int8"
       ]
     },
     "nullable": [
@@ -86,5 +89,5 @@
       false
     ]
   },
-  "hash": "3b183b59afa3f517f05761bc451249cf787fdf15aa54fcbf74837c4b4225757a"
+  "hash": "115ee4efe30fc8f8f600751262cf9cd893b3c63b90dd259960664f0e727eb676"
 }

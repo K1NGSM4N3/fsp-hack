@@ -58,6 +58,7 @@ function StartCard() {
   const start = useStartAssessment();
   const options = useProctoringOptions();
   const [picked, setPicked] = useState<Grade | null>(null);
+  const [changing, setChanging] = useState(false);
   const [error, setError] = useState<{ title: string; detail: string | null } | null>(null);
 
   if (category.isPending) return <SkeletonCard lines={5} />;
@@ -72,8 +73,10 @@ function StartCard() {
   const lockFor = (g: Grade) => c.locked.find((o) => o.grade === g);
   const nextLock = [...c.locked].sort((a, b) => a.available_at.localeCompare(b.available_at))[0];
   const allowed = GRADES.filter((g) => offerFor(g));
-  const fallback = allowed.find((g) => g === preselect) ?? allowed.find((g) => g === c.claimed_grade_in_survey) ?? allowed[0];
+  const chosen = allowed.find((g) => g === preselect) ?? allowed.find((g) => g === c.claimed_grade_in_survey) ?? null;
+  const fallback = chosen ?? allowed[0];
   const grade = picked && offerFor(picked) ? picked : (fallback ?? null);
+  const showPicker = chosen === null || changing;
   const specialization = c.specialization;
   const note = (g: Grade) => {
     const offer = offerFor(g);
@@ -107,29 +110,49 @@ function StartCard() {
               : "Попробуйте позже."}
         </Alert>
       ) : (
-        <FieldSet legend="Выберите грейд">
-          <RadioCards<Grade>
-            name="grade"
-            columns={3}
-            value={grade}
-            onChange={(g) => {
-              setPicked(g);
-              setError(null);
-            }}
-            options={GRADES.map((g) => ({
-              value: g,
-              disabled: !offerFor(g),
-              title: (
-                <span className="flex items-center gap-2">
-                  {GRADE_LABEL[g]}
-                  {c.category?.grade === g && <span className="rounded bg-success-50 px-1.5 py-0.5 text-xs font-medium text-success">текущий</span>}
-                </span>
-              ),
-              description: GRADE_HINT[g],
-              aside: <span className={offerFor(g) ? "mt-2 block text-xs text-primary-strong" : "mt-2 block text-xs text-ink-subtle"}>{note(g)}</span>,
-            }))}
-          />
-        </FieldSet>
+        <>
+          {chosen && grade && (
+            <div className="mb-5 flex flex-col gap-3 rounded-control border border-primary-200 bg-primary-50/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div aria-live="polite">
+                <p className="text-xs text-ink-subtle">{grade === chosen ? "Грейд для теста — вы выбрали его в опросе" : "Грейд для теста"}</p>
+                <p className="mt-0.5 text-lg font-semibold text-ink">{GRADE_LABEL[grade]}</p>
+                <p className="text-sm text-ink-muted">{note(grade)}</p>
+              </div>
+              {allowed.length > 1 && (
+                <Button variant="secondary" size="sm" aria-expanded={changing} aria-controls="grade-picker" onClick={() => setChanging((v) => !v)}>
+                  {changing ? "Скрыть выбор" : "Изменить грейд"}
+                </Button>
+              )}
+            </div>
+          )}
+          {showPicker && (
+            <div id="grade-picker">
+              <FieldSet legend="Выберите грейд">
+                <RadioCards<Grade>
+                  name="grade"
+                  columns={3}
+                  value={grade}
+                  onChange={(g) => {
+                    setPicked(g);
+                    setError(null);
+                  }}
+                  options={GRADES.map((g) => ({
+                    value: g,
+                    disabled: !offerFor(g),
+                    title: (
+                      <span className="flex items-center gap-2">
+                        {GRADE_LABEL[g]}
+                        {c.category?.grade === g && <span className="rounded bg-success-50 px-1.5 py-0.5 text-xs font-medium text-success">текущий</span>}
+                      </span>
+                    ),
+                    description: GRADE_HINT[g],
+                    aside: <span className={offerFor(g) ? "mt-2 block text-xs text-primary-strong" : "mt-2 block text-xs text-ink-subtle"}>{note(g)}</span>,
+                  }))}
+                />
+              </FieldSet>
+            </div>
+          )}
+        </>
       )}
       {error && (
         <Alert tone="danger" title={error.title} className="mt-5">

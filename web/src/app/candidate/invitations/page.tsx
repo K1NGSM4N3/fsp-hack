@@ -3,22 +3,22 @@
 import { Building2, Clock, Inbox, MapPin } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import type { ReceivedInvitation } from "@/api/types";
+import type { InvitationStatus, ReceivedInvitation } from "@/api/types";
 import { SalaryRange } from "@/components/domain/Category";
 import { DomainBadge } from "@/components/domain/DomainBadge";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
-import { ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, tabPanelProps } from "@/components/ui";
-import { useReceivedInvitations } from "@/features/candidate/hooks";
+import { ButtonLink, EmptyState, ErrorAlert, LoadMore, PageHeader, SkeletonCard, Tabs, tabPanelProps } from "@/components/ui";
+import { useReceivedInvitationPages } from "@/features/candidate/hooks";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
 import { WORK_FORMAT_LABEL } from "@/lib/labels";
 
 type Filter = "active" | "accepted" | "archive";
 
-const FILTERS: Record<Filter, (i: ReceivedInvitation) => boolean> = {
-  active: (i) => i.status === "sent" || i.status === "viewed",
-  accepted: (i) => i.status === "accepted",
-  archive: (i) => i.status === "declined" || i.status === "expired" || i.status === "withdrawn",
+const FILTERS: Record<Filter, InvitationStatus[]> = {
+  active: ["sent", "viewed"],
+  accepted: ["accepted"],
+  archive: ["declined", "expired", "withdrawn"],
 };
 
 function InvitationRow({ inv }: { inv: ReceivedInvitation }) {
@@ -71,10 +71,12 @@ function InvitationRow({ inv }: { inv: ReceivedInvitation }) {
 }
 
 export default function InvitationsPage() {
-  const q = useReceivedInvitations();
   const [filter, setFilter] = useState<Filter>("active");
-  const data = q.data ?? [];
-  const list = data.filter(FILTERS[filter]);
+  const q = useReceivedInvitationPages(FILTERS[filter]);
+  const byStatus = q.data?.pages[0]?.by_status ?? [];
+  const count = (f: Filter) => byStatus.filter((c) => FILTERS[f].includes(c.status)).reduce((n, c) => n + c.count, 0);
+  const total = byStatus.reduce((n, c) => n + c.count, 0);
+  const list = q.isPlaceholderData ? [] : (q.data?.pages.flatMap((p) => p.items) ?? []);
   return (
     <div>
       <PageHeader title="Приглашения" description="Компании приходят с вилкой и описанием задачи. Контакты откроются им, только если вы примете приглашение." />
@@ -85,13 +87,13 @@ export default function InvitationsPage() {
         onChange={setFilter}
         className="mb-6"
         items={[
-          { value: "active", label: "Ждут ответа", count: data.filter(FILTERS.active).length },
-          { value: "accepted", label: "Принятые", count: data.filter(FILTERS.accepted).length },
-          { value: "archive", label: "Архив", count: data.filter(FILTERS.archive).length },
+          { value: "active", label: "Ждут ответа", count: count("active") },
+          { value: "accepted", label: "Принятые", count: count("accepted") },
+          { value: "archive", label: "Архив", count: count("archive") },
         ]}
       />
       <div {...tabPanelProps("invitations", filter)}>
-        {q.isPending ? (
+        {q.isPending || q.isPlaceholderData ? (
           <div className="space-y-3">
             <SkeletonCard lines={2} />
             <SkeletonCard lines={2} />
@@ -103,18 +105,21 @@ export default function InvitationsPage() {
             icon={<Inbox className="size-5" aria-hidden />}
             title={filter === "active" ? "Новых приглашений нет" : "Здесь пока пусто"}
             description={
-              data.length === 0
+              total === 0
                 ? "Компании находят соискателей по подтверждённой категории. Пройдите тест, привяжите ФСП ID и держите статус «Активно ищу» — так вас увидят чаще."
                 : "Загляните на другие вкладки."
             }
-            action={data.length === 0 ? <ButtonLink href="/candidate/settings" variant="secondary">Настроить статус поиска</ButtonLink> : undefined}
+            action={total === 0 ? <ButtonLink href="/candidate/settings" variant="secondary">Настроить статус поиска</ButtonLink> : undefined}
           />
         ) : (
-          <ul className="space-y-3">
-            {list.map((inv) => (
-              <InvitationRow key={inv.id} inv={inv} />
-            ))}
-          </ul>
+          <>
+            <ul className="space-y-3">
+              {list.map((inv) => (
+                <InvitationRow key={inv.id} inv={inv} />
+              ))}
+            </ul>
+            <LoadMore key={filter} pager={q} loaded={list.length} noun="Приглашения" />
+          </>
         )}
       </div>
     </div>

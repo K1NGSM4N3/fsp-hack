@@ -10,6 +10,7 @@ export { Alert, EmptyState, PageSkeleton, ProgressBar, Skeleton, SkeletonCard, S
 export { Field, FieldSet, focusFirstError } from "./Field";
 export { FormActions, FormStatus } from "./FormActions";
 export { Input, MoneyInput, Select, Textarea } from "./Input";
+export { LoadMore } from "./LoadMore";
 export { Markdown } from "./Markdown";
 export { PageHeader } from "./PageHeader";
 export { ErrorAlert, QueryState, errorText } from "./QueryState";

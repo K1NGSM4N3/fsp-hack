@@ -170,6 +170,12 @@ impl NotificationKind {
         }
     }
 
+    /// Goes out as soon as its hold ends, whatever the gap since the last letter: an invitation
+    /// is the reason the candidate is here. The daily cap still holds.
+    pub const fn skips_gap(self) -> bool {
+        matches!(self, NotificationKind::InvitationReceived)
+    }
+
     /// The settings row and the unsubscribe page name the kind this way.
     pub const fn title(self) -> &'static str {
         match self {

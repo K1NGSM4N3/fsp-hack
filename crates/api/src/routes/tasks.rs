@@ -16,7 +16,8 @@ use crate::{
     auth::{CandidateUser, EmployerUser},
     dto::{TaskStatus, parse_slugs},
     error::{ApiError, ApiResult, Problem, Validator},
-    extract::{Json, Path},
+    extract::{Json, Path, Query},
+    page::{self, CursorPage, PageQuery},
     skills,
     state::AppState,
 };
@@ -235,16 +236,25 @@ pub struct Submission {
     pub submitted_at: Option<DateTime<Utc>>,
 }
 
-/// Anonymous submissions to a task (a strong one is a reason to send an invitation)
+/// Anonymous submissions to a task, newest first (a strong one is a reason to send an
+/// invitation). Keyset pagination: pass `next_cursor` as `cursor`
 #[utoipa::path(get, path = "/tasks/{id}/submissions", tag = "tasks",
-    params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vec<Submission>), (status = 404, description = "No such task of this company", body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
+    params(("id" = Uuid, Path), PageQuery),
+    responses(
+        (status = 200, body = CursorPage<Submission>),
+        (status = 400, description = "`invalid_query` — `cursor` не из ответа", body = Problem),
+        (status = 404, description = "No such task of this company", body = Problem),
+        (status = 409, description = "`company_profile_required`", body = Problem),
+    ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn submissions(
     State(state): State<AppState>,
     user: EmployerUser,
     Path(id): Path<Uuid>,
-) -> ApiResult<Json<Vec<Submission>>> {
+    Query(q): Query<PageQuery>,
+) -> ApiResult<Json<CursorPage<Submission>>> {
+    let before = page::decode(q.cursor.as_deref())?;
+    let limit = page::limit(q.limit, page::DEFAULT, page::MAX);
     let company = company_id(&state, user.id).await?;
     if !db::tasks::company_tasks(&state.pool, company)
         .await?
@@ -253,7 +263,9 @@ async fn submissions(
     {
         return Err(ApiError::not_found());
     }
-    let rows = db::tasks::task_submissions(&state.pool, id, company).await?;
+    let rows = db::tasks::task_submissions(&state.pool, id, company, before, limit + 1).await?;
+    let (rows, next_cursor) =
+        page::split(rows, limit, |r| (r.submitted_at.unwrap_or_default(), r.id));
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(Submission {
@@ -271,7 +283,10 @@ async fn submissions(
             submitted_at: r.submitted_at,
         });
     }
-    Ok(Json(out))
+    Ok(Json(CursorPage {
+        items: out,
+        next_cursor,
+    }))
 }
 
 #[derive(Deserialize, ToSchema)]

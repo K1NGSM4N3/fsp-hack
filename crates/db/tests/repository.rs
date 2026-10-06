@@ -101,12 +101,13 @@ async fn one_active_invitation_per_company_and_candidate(pool: PgPool) {
     db::invitations::insert_invitation(&pool, &invitation(company_id, candidate_id))
         .await
         .unwrap();
-    let statuses: Vec<InvitationStatus> = db::invitations::employer_invitations(&pool, company_id)
-        .await
-        .unwrap()
-        .into_iter()
-        .map(|i| i.status)
-        .collect();
+    let statuses: Vec<InvitationStatus> =
+        db::invitations::employer_invitations(&pool, company_id, &[], None, 100)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|i| i.status)
+            .collect();
     assert_eq!(statuses.len(), 2);
     assert!(statuses.contains(&InvitationStatus::Sent));
     assert!(statuses.contains(&InvitationStatus::Withdrawn));

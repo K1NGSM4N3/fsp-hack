@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::types::{ApplicationStatus, VacancyStatus};
+use crate::types::{ApplicationStatus, Cursor, VacancyStatus};
 
 pub struct VacancyFields<'a> {
     pub title: &'a str,
@@ -116,6 +116,7 @@ pub struct VacancyApplication {
     pub updated_at: DateTime<Utc>,
 }
 
+/// A repeated `idempotency_key` of the company is a unique violation.
 pub async fn insert_vacancy(
     db: impl PgExecutor<'_>,
     id: Uuid,
@@ -123,11 +124,13 @@ pub async fn insert_vacancy(
     status: VacancyStatus,
     published_at: Option<DateTime<Utc>>,
     v: &VacancyFields<'_>,
+    idempotency_key: Option<&str>,
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
         "INSERT INTO vacancies (id, company_id, title, description, specialization, grade, skills,
-                                salary_min, salary_max, work_format, city, status, published_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)",
+                                salary_min, salary_max, work_format, city, status, published_at,
+                                idempotency_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)",
         id,
         company_id,
         v.title,
@@ -141,10 +144,25 @@ pub async fn insert_vacancy(
         v.city,
         status as VacancyStatus,
         published_at,
+        idempotency_key,
     )
     .execute(db)
     .await
     .map(|r| r.rows_affected())
+}
+
+pub async fn vacancy_by_idempotency_key(
+    db: impl PgExecutor<'_>,
+    company_id: Uuid,
+    idempotency_key: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT id FROM vacancies WHERE company_id = $1 AND idempotency_key = $2",
+        company_id,
+        idempotency_key,
+    )
+    .fetch_optional(db)
+    .await
 }
 
 /// 0 when there is no such vacancy, or a moderator took it down and `status` would publish it.
@@ -349,10 +367,13 @@ pub async fn withdraw_application(
     .map(|r| r.rows_affected())
 }
 
+/// Newest first, keyset-paginated on `(created_at, id)`.
 pub async fn vacancy_applications(
     db: impl PgExecutor<'_>,
     vacancy_id: Uuid,
     company_id: Uuid,
+    before: Option<Cursor>,
+    limit: i64,
 ) -> Result<Vec<VacancyApplication>, sqlx::Error> {
     sqlx::query_as!(
         VacancyApplication,
@@ -362,9 +383,14 @@ pub async fn vacancy_applications(
            JOIN vacancies v ON v.id = a.vacancy_id
            JOIN candidates c ON c.user_id = a.candidate_id
            WHERE v.id = $1 AND v.company_id = $2 AND a.status <> 'withdrawn'
-           ORDER BY a.created_at DESC"#,
+             AND ($3::timestamptz IS NULL OR (a.created_at, a.id) < ($3, $4::uuid))
+           ORDER BY a.created_at DESC, a.id DESC
+           LIMIT $5"#,
         vacancy_id,
         company_id,
+        before.map(|c| c.at),
+        before.map(|c| c.id),
+        limit,
     )
     .fetch_all(db)
     .await

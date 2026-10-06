@@ -39,6 +39,10 @@ struct Reply {
 
 impl Api {
     async fn start(pool: PgPool, dispatch: bool) -> Self {
+        Self::start_with(pool, dispatch, StdDuration::ZERO).await
+    }
+
+    async fn start_with(pool: PgPool, dispatch: bool, poll_lag: StdDuration) -> Self {
         let config = Config {
             bind: ([127, 0, 0, 1], 0).into(),
             database_url: String::new(),
@@ -66,6 +70,7 @@ impl Api {
             integrations: IntegrationsConfig {
                 webhook_dev_hosts: vec!["127.0.0.1".into()],
                 dispatch_interval: Some(StdDuration::from_millis(50)),
+                poll_lag,
                 demo: None,
             },
             notifications: Default::default(),
@@ -269,7 +274,7 @@ impl Api {
 
     /// Decrypted outbox payloads of the company, oldest first.
     async fn outbox(&self, company: Uuid) -> Vec<Value> {
-        let mut events = db::integrations::company_events(self.pool(), company, 100)
+        let mut events = db::integrations::company_events(self.pool(), company, None, None, 100)
             .await
             .unwrap();
         events.reverse();
@@ -839,6 +844,268 @@ async fn vacancy_import_creates_a_need(pool: PgPool) {
     assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn a_repeated_import_returns_the_need_it_made(pool: PgPool) {
+    let api = Api::start(pool, false).await;
+    let (et, _) = api.employer("hr6@example.ru").await;
+    let key = api.key(&et, &["needs:write"]).await;
+    let body = json!({
+        "external_id": "hh-98765432",
+        "title": "Backend-разработчик (Go)",
+        "text": "Go, PostgreSQL, Kafka. Зарплата от 300 000 до 400 000 ₽, удалённо.",
+    });
+    let first = api
+        .call(
+            Method::POST,
+            "/integrations/needs",
+            Some(&key),
+            Some(body.clone()),
+        )
+        .await;
+    assert_eq!(first.status, StatusCode::CREATED, "{}", first.body);
+    assert_eq!(first.body["external_id"], "hh-98765432");
+    let id = first.body["need_id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        first.headers[header::LOCATION],
+        format!("/api/v1/employer/needs/{id}")
+    );
+
+    let mut retry = body.clone();
+    retry["text"] = json!("Текст поменялся, но это та же вакансия ATS");
+    let again = api
+        .call(Method::POST, "/integrations/needs", Some(&key), Some(retry))
+        .await;
+    assert_eq!(again.status, StatusCode::OK, "{}", again.body);
+    assert_eq!(again.body["need_id"], id.as_str());
+    assert_eq!(again.body["title"], "Backend-разработчик (Go)");
+    assert_eq!(
+        again.body["salary"],
+        json!({ "min": 300000, "max": 400000 })
+    );
+
+    let mut concurrent = body.clone();
+    concurrent["external_id"] = json!("hh-11111111");
+    let (a, b) = tokio::join!(
+        api.call(
+            Method::POST,
+            "/integrations/needs",
+            Some(&key),
+            Some(concurrent.clone())
+        ),
+        api.call(
+            Method::POST,
+            "/integrations/needs",
+            Some(&key),
+            Some(concurrent.clone())
+        ),
+    );
+    let mut statuses = [a.status, b.status];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::OK, StatusCode::CREATED]);
+    assert_eq!(a.body["need_id"], b.body["need_id"], "one need for both");
+    let needs: i64 = sqlx::query_scalar("SELECT count(*) FROM hiring_needs")
+        .fetch_one(api.pool())
+        .await
+        .unwrap();
+    assert_eq!(needs, 2);
+
+    let r = api
+        .call(
+            Method::POST,
+            "/integrations/needs",
+            Some(&key),
+            Some(json!({ "external_id": "x".repeat(201), "text": "Go" })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(r.body["errors"]["external_id"].is_array(), "{}", r.body);
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn the_delivery_log_pages_newest_first(pool: PgPool) {
+    let api = Api::start(pool, false).await;
+    let (et, _) = api.employer("hr9@example.ru").await;
+    api.webhook(&et, "http://127.0.0.1:9/hook").await;
+    for name in ["anna", "boris", "vera"] {
+        let c = api.candidate(&format!("{name}@example.ru"), "Имя").await;
+        api.invite(&et, c).await;
+    }
+    let mut ids = Vec::new();
+    let mut cursor: Option<String> = None;
+    let mut pages = 0;
+    loop {
+        let path = match &cursor {
+            Some(c) => format!("/employer/integrations/deliveries?limit=2&cursor={c}"),
+            None => "/employer/integrations/deliveries?limit=2".to_owned(),
+        };
+        let r = api.call(Method::GET, &path, Some(&et), None).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+        pages += 1;
+        for d in r.body["items"].as_array().unwrap() {
+            assert_eq!(d["event_type"], "invitation.sent");
+            ids.push(d["event_id"].as_str().unwrap().to_owned());
+        }
+        match r.body["next_cursor"].as_str() {
+            Some(c) => cursor = Some(c.to_owned()),
+            None => break,
+        }
+    }
+    assert_eq!(pages, 2);
+    let r = api
+        .call(
+            Method::GET,
+            "/employer/integrations/deliveries?status=delivered",
+            Some(&et),
+            None,
+        )
+        .await;
+    assert_eq!(
+        r.body["items"],
+        json!([]),
+        "nothing delivered to a dead address"
+    );
+    let r = api
+        .call(
+            Method::GET,
+            "/employer/integrations/deliveries?status=pending",
+            Some(&et),
+            None,
+        )
+        .await;
+    assert_eq!(r.body["items"].as_array().unwrap().len(), 3);
+    let mut sorted = ids.clone();
+    sorted.sort();
+    sorted.reverse();
+    assert_eq!(ids, sorted, "newest first, each event once");
+    sorted.dedup();
+    assert_eq!(sorted.len(), 3);
+}
+
+async fn poll(api: &Api, key: &str, cursor: Option<&str>) -> (Vec<String>, String) {
+    let path = match cursor {
+        Some(c) => format!("/integrations/invitations?cursor={c}"),
+        None => "/integrations/invitations".to_owned(),
+    };
+    let r = api.call(Method::GET, &path, Some(key), None).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    let items = r.body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| {
+            format!(
+                "{}:{}",
+                i["invitation"]["id"].as_str().unwrap(),
+                i["invitation"]["status"].as_str().unwrap()
+            )
+        })
+        .collect();
+    (
+        items,
+        r.body["next_cursor"]
+            .as_str()
+            .unwrap_or_default()
+            .to_owned(),
+    )
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn polling_never_skips_a_change_that_commits_late(pool: PgPool) {
+    let api = Api::start(pool, false).await;
+    let (et, _) = api.employer("hr7@example.ru").await;
+    let key = api.key(&et, &["invitations:read"]).await;
+    let first = api.candidate("anna@example.ru", "Анна").await;
+    let second = api.candidate("boris@example.ru", "Борис").await;
+    let x = api.invite(&et, first).await;
+    let y = api.invite(&et, second).await;
+    sqlx::query("UPDATE invitations SET created_at = created_at - interval '1 hour'")
+        .execute(api.pool())
+        .await
+        .unwrap();
+    let (items, cursor) = poll(&api, &key, None).await;
+    assert_eq!(items, [format!("{x}:sent"), format!("{y}:sent")]);
+
+    // Two candidates open their invitations. The first transaction starts earlier, so its change
+    // is stamped earlier, but it commits after the second one and after a poll.
+    let mut slow = api.pool().begin().await.unwrap();
+    sqlx::query("UPDATE invitations SET status = 'viewed', viewed_at = now() WHERE id = $1")
+        .bind(x)
+        .execute(&mut *slow)
+        .await
+        .unwrap();
+    tokio::time::sleep(StdDuration::from_millis(50)).await;
+    let mut fast = api.pool().begin().await.unwrap();
+    sqlx::query("UPDATE invitations SET status = 'viewed', viewed_at = now() WHERE id = $1")
+        .bind(y)
+        .execute(&mut *fast)
+        .await
+        .unwrap();
+    fast.commit().await.unwrap();
+
+    let (items, held) = poll(&api, &key, Some(&cursor)).await;
+    assert!(
+        items.is_empty(),
+        "the committed change waits behind the one still in flight: {items:?}"
+    );
+    assert_eq!(held, cursor, "an empty page keeps the cursor");
+
+    slow.commit().await.unwrap();
+    let (items, after) = poll(&api, &key, Some(&cursor)).await;
+    assert_eq!(
+        items,
+        [format!("{x}:viewed"), format!("{y}:viewed")],
+        "both changes, in the order they were stamped"
+    );
+    let (items, _) = poll(&api, &key, Some(&after)).await;
+    assert!(items.is_empty());
+
+    let r = api
+        .call(
+            Method::GET,
+            "/integrations/invitations?cursor=nope",
+            Some(&key),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.body["code"], "invalid_query");
+}
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn polling_holds_back_the_last_seconds(pool: PgPool) {
+    let api = Api::start_with(pool, false, StdDuration::from_secs(1)).await;
+    let (et, _) = api.employer("hr8@example.ru").await;
+    let key = api.key(&et, &["invitations:read"]).await;
+    let cand = api.candidate("vera@example.ru", "Вера").await;
+    let inv = api.invite(&et, cand).await;
+    let (items, cursor) = poll(&api, &key, None).await;
+    assert!(items.is_empty(), "younger than the lag: {items:?}");
+    assert!(cursor.is_empty(), "no cursor before the first item");
+    tokio::time::sleep(StdDuration::from_millis(1_200)).await;
+    let (items, cursor) = poll(&api, &key, None).await;
+    assert_eq!(items, [format!("{inv}:sent")]);
+
+    let r = api
+        .call(Method::GET, "/integrations/invitations", Some(&key), None)
+        .await;
+    let since = r.body["next_since"].as_str().unwrap().to_owned();
+    let r = api
+        .call(
+            Method::GET,
+            &format!("/integrations/invitations?since={since}"),
+            Some(&key),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.body["items"], json!([]), "the old `since` still works");
+    let handed = r.body["next_cursor"].as_str().unwrap().to_owned();
+    let (items, _) = poll(&api, &key, Some(&handed)).await;
+    assert!(items.is_empty(), "and hands over a cursor to switch to");
+    let (items, _) = poll(&api, &key, Some(&cursor)).await;
+    assert!(items.is_empty());
+}
+
 async fn wait_for(mock: &ats_mock::AppState, event_type: &str) -> ats_mock::Entry {
     for _ in 0..150 {
         let found = mock.entries().into_iter().find(|e| {
@@ -941,8 +1208,8 @@ async fn round_trip_through_the_ats_mock(pool: PgPool) {
             None,
         )
         .await;
-    let delivered = r
-        .body
+    assert_eq!(r.body["next_cursor"], Value::Null, "one page");
+    let delivered = r.body["items"]
         .as_array()
         .unwrap()
         .iter()
@@ -980,7 +1247,7 @@ async fn round_trip_through_the_ats_mock(pool: PgPool) {
     let r = api
         .call(Method::GET, "/candidate/invitations", Some(&ct), None)
         .await;
-    let outcomes = &r.body[0]["outcomes"];
+    let outcomes = &r.body["items"][0]["outcomes"];
     assert_eq!(outcomes[0]["stage"], "interview");
     assert_eq!(outcomes[0]["reason"], "Зовём на техническое интервью");
 

@@ -145,6 +145,7 @@ export interface MockVacancy {
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  idempotency_key?: string;
 }
 
 export interface MockApplication {
@@ -234,7 +235,7 @@ export interface MockDb {
   tasks: MockTask[];
   task_assignments: MockTaskAssignment[];
   contact_log: { candidate_id: string; company_id: string; basis: "invitation" | "application"; at: string }[];
-  reports: { target: string; target_id: string; reason: string; at: string }[];
+  reports: { id?: string; user_id?: string; target: string; target_id: string; reason: string; at: string }[];
 }
 
 const STORAGE_KEY = "fsp-mock-db";

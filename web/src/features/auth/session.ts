@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { accessExpired, checkClockAfterRefresh } from "@/api/session-hint";
 import type { Me } from "@/api/types";
 
 /** Same as `discard` in the API client: a `no-store` response must be read or cancelled to free its connection. */
@@ -22,12 +23,17 @@ async function fetchMe(): Promise<Me | null> {
     return null;
   }
   if (!((await marker.json()) as { signedIn: boolean }).signedIn) return null;
+  const refresh = async () => {
+    const refreshed = await fetch(REFRESH, { ...init, method: "POST" });
+    release(refreshed);
+    if (refreshed.ok) checkClockAfterRefresh();
+    return refreshed.ok;
+  };
+  if (accessExpired() && !(await refresh())) return null;
   let res = await fetch(ME, init);
   if (res.status === 401) {
     release(res);
-    const refreshed = await fetch(REFRESH, { ...init, method: "POST" });
-    release(refreshed);
-    if (!refreshed.ok) return null;
+    if (!(await refresh())) return null;
     res = await fetch(ME, init);
   }
   if (res.ok) return (await res.json()) as Me;

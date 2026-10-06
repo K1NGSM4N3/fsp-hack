@@ -5,7 +5,9 @@ use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::types::{ApplicationStatus, HiringStage, IntegrationEventStatus, InvitationStatus};
+use crate::types::{
+    ApplicationStatus, Cursor, HiringStage, IntegrationEventStatus, InvitationStatus,
+};
 
 #[derive(Debug, Clone)]
 pub struct Webhook {
@@ -479,9 +481,12 @@ pub async fn cancel_pending_events(
     .map(|r| r.rows_affected())
 }
 
+/// The delivery log, newest first, keyset-paginated on `(created_at, id)`.
 pub async fn company_events(
     db: impl PgExecutor<'_>,
     company_id: Uuid,
+    status: Option<IntegrationEventStatus>,
+    before: Option<Cursor>,
     limit: i64,
 ) -> Result<Vec<EventRow>, sqlx::Error> {
     sqlx::query_as!(
@@ -490,9 +495,14 @@ pub async fn company_events(
                   next_attempt_at, delivered_at, last_error
            FROM integration_events
            WHERE company_id = $1
-           ORDER BY created_at DESC
-           LIMIT $2"#,
+             AND ($2::integration_event_status IS NULL OR status = $2)
+             AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4::uuid))
+           ORDER BY created_at DESC, id DESC
+           LIMIT $5"#,
         company_id,
+        status as Option<IntegrationEventStatus>,
+        before.map(|c| c.at),
+        before.map(|c| c.id),
         limit,
     )
     .fetch_all(db)
@@ -743,12 +753,20 @@ pub async fn expire_stale_invitations(
     .await
 }
 
-/// Polling alternative to webhooks: the company's invitations changed after `since`, oldest first.
+/// Polling alternative to webhooks: the company's invitations whose status changed after the
+/// cursor, oldest first.
+///
+/// Status changes are stamped with `now()` of their transaction, that is its start, and become
+/// visible only at commit. A transaction that started earlier but commits after a poll would land
+/// behind a cursor that already moved past it, so the page stops at a horizon: `lag_secs` before
+/// now, and never later than the start of the oldest transaction of this database that is still
+/// writing. Rows past the horizon come on the next poll.
 pub async fn polled_invitations(
     db: impl PgExecutor<'_>,
     company_id: Uuid,
     status: Option<InvitationStatus>,
-    since: Option<DateTime<Utc>>,
+    after: Option<Cursor>,
+    lag_secs: f64,
     limit: i64,
 ) -> Result<Vec<InvitationSnapshot>, sqlx::Error> {
     sqlx::query_as!(
@@ -768,12 +786,19 @@ pub async fn polled_invitations(
                WHERE i.company_id = $1
            ) t
            WHERE ($2::invitation_status IS NULL OR status = $2)
-             AND ($3::timestamptz IS NULL OR updated_at > $3)
+             AND ($3::timestamptz IS NULL OR (updated_at, id) > ($3, $4::uuid))
+             AND updated_at < least(
+                 now() - make_interval(secs => $5),
+                 (SELECT min(xact_start) FROM pg_stat_activity
+                  WHERE datname = current_database() AND backend_xid IS NOT NULL
+                    AND pid <> pg_backend_pid()))
            ORDER BY updated_at, id
-           LIMIT $4"#,
+           LIMIT $6"#,
         company_id,
         status as Option<InvitationStatus>,
-        since,
+        after.map(|c| c.at),
+        after.map(|c| c.id),
+        lag_secs,
         limit,
     )
     .fetch_all(db)

@@ -515,7 +515,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Incoming invitations */
+        /** Incoming invitations, newest first. Keyset pagination: pass `next_cursor` as `cursor` */
         get: operations["list_received"];
         put?: never;
         post?: never;
@@ -973,7 +973,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Recent integration events with the per-attempt delivery log */
+        /**
+         * Integration events with the per-attempt delivery log, newest first. Keyset pagination: pass
+         *     `next_cursor` as `cursor`
+         */
         get: operations["list_deliveries"];
         put?: never;
         post?: never;
@@ -1100,7 +1103,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Invitations sent by the company */
+        /** Invitations sent by the company, newest first. Keyset pagination: pass `next_cursor` as `cursor` */
         get: operations["list_sent"];
         put?: never;
         /** Send an invitation to a candidate (salary range is mandatory, vacancy is optional) */
@@ -1344,7 +1347,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Anonymous submissions to a task (a strong one is a reason to send an invitation) */
+        /**
+         * Anonymous submissions to a task, newest first (a strong one is a reason to send an
+         *     invitation). Keyset pagination: pass `next_cursor` as `cursor`
+         */
         get: operations["submissions"];
         put?: never;
         post?: never;
@@ -1398,7 +1404,10 @@ export interface paths {
         /** Company vacancies */
         get: operations["list_own"];
         put?: never;
-        /** Create a vacancy (salary range is mandatory) */
+        /**
+         * Create a vacancy (salary range is mandatory). With `Idempotency-Key` a repeated click or
+         *     retry returns the vacancy already created instead of a duplicate
+         */
         post: operations["create"];
         delete?: never;
         options?: never;
@@ -1448,7 +1457,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Applications to a vacancy. Contacts of applicants are available via `/employer/candidates/{id}/contacts`. */
+        /**
+         * Applications to a vacancy, newest first. Contacts of applicants are available via
+         *     `/employer/candidates/{id}/contacts`. Keyset pagination: pass `next_cursor` as `cursor`
+         */
         get: operations["list_applications"];
         put?: never;
         post?: never;
@@ -1670,7 +1682,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Polling alternative to webhooks: invitations whose status changed after `since`, oldest first */
+        /**
+         * Polling alternative to webhooks: invitations whose status changed after `cursor`, oldest
+         *     first. Changes of the last few seconds come on the next call, so a change still being saved is
+         *     never skipped
+         */
         get: operations["ats_invitations"];
         put?: never;
         post?: never;
@@ -1691,7 +1707,7 @@ export interface paths {
         put?: never;
         /**
          * Import a vacancy from the ATS: the text is parsed into a hiring need; the shortlist is built
-         *     when the need is opened in the cabinet
+         *     when the need is opened in the cabinet. With `external_id` the call is safe to retry
          */
         post: operations["ats_import_need"];
         delete?: never;
@@ -1929,7 +1945,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Report a fake vacancy, a misleading invitation or an abusive company */
+        /**
+         * Report a fake vacancy, a misleading invitation or an abusive company. One open complaint per
+         *     person and target: a repeat returns the open one
+         */
         post: operations["create_report"];
         delete?: never;
         options?: never;
@@ -2319,8 +2338,14 @@ export interface components {
         AtsInvitationPage: {
             items: components["schemas"]["AtsInvitationItem"][];
             /**
+             * @description Pass as `cursor` on the next call. An empty page repeats the cursor it was asked with:
+             *     keep polling with it. A full page (`limit` items) means more are waiting — call again at once.
+             */
+            next_cursor?: string | null;
+            /**
              * Format: date-time
-             * @description Cursor for the next call; `null` when the page is empty.
+             * @description Deprecated: `updated_at` of the last item, for clients still on `since`; `null` when the
+             *     page is empty.
              */
             next_since?: string | null;
         };
@@ -2691,6 +2716,68 @@ export interface components {
             item: components["schemas"]["ItemView"];
             /** Format: date-time */
             deadline: string;
+        };
+        /** @description A page of a list, newest first. */
+        CursorPage_DeliveryView: {
+            items: {
+                /** Format: uuid */
+                event_id: string;
+                event_type: components["schemas"]["EventType"];
+                status: components["schemas"]["DeliveryStatus"];
+                /** Format: date-time */
+                created_at: string;
+                /**
+                 * Format: date-time
+                 * @description For `pending`: when the next attempt is due.
+                 */
+                next_attempt_at?: string | null;
+                /** Format: date-time */
+                delivered_at?: string | null;
+                last_error?: string | null;
+                /** @description Every HTTP attempt, oldest first. */
+                attempts: components["schemas"]["AttemptView"][];
+            }[];
+            /** @description Pass as `cursor` for the next page; `null` on the last one. */
+            next_cursor?: string | null;
+        };
+        /** @description A page of a list, newest first. */
+        CursorPage_IncomingApplication: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                candidate_id: string;
+                candidate_code: string;
+                candidate_category?: components["schemas"]["Category"] | null;
+                cover_letter: string;
+                status: components["schemas"]["ApplicationStatus"];
+                /** Format: date-time */
+                created_at: string;
+                /** Format: date-time */
+                updated_at: string;
+            }[];
+            /** @description Pass as `cursor` for the next page; `null` on the last one. */
+            next_cursor?: string | null;
+        };
+        /** @description A page of a list, newest first. */
+        CursorPage_Submission: {
+            items: {
+                /** Format: uuid */
+                id: string;
+                /** Format: uuid */
+                candidate_id: string;
+                candidate_code: string;
+                candidate_category?: components["schemas"]["Category"] | null;
+                status: components["schemas"]["TaskStatus"];
+                answer?: string | null;
+                /** Format: int32 */
+                rating?: number | null;
+                review_comment?: string | null;
+                /** Format: date-time */
+                submitted_at?: string | null;
+            }[];
+            /** @description Pass as `cursor` for the next page; `null` on the last one. */
+            next_cursor?: string | null;
         };
         DataExport: {
             /** @description File format; a new number means an incompatible change. */
@@ -3156,6 +3243,7 @@ export interface components {
         ImportedNeed: {
             /** Format: uuid */
             need_id: string;
+            external_id?: string | null;
             /** @description Page of the need with the shortlist in the employer cabinet. */
             shortlist_url: string;
             title: string;
@@ -3449,6 +3537,7 @@ export interface components {
         };
         /**
          * @example {
+         *       "external_id": "hh-98765432",
          *       "salary": {
          *         "max": 450000,
          *         "min": 350000
@@ -3458,6 +3547,11 @@ export interface components {
          *     }
          */
         NeedImport: {
+            /**
+             * @description The vacancy id in your ATS, up to 200 characters. A repeat with the same `external_id`
+             *     creates nothing and returns the need imported first (200) — safe to retry.
+             */
+            external_id?: string | null;
             /** @description Vacancy title in the ATS; the first line of `text` if absent. */
             title?: string | null;
             /** @description Vacancy text as is: the parser finds specialization, grade, stack, salary and format. */
@@ -4192,6 +4286,13 @@ export interface components {
             /** @description Stages the company's hiring system reported after acceptance. */
             outcomes: components["schemas"]["HiringOutcome"][];
         };
+        ReceivedInvitationPage: {
+            items: components["schemas"]["ReceivedInvitation"][];
+            /** @description Pass as `cursor` for the next page; `null` on the last one. */
+            next_cursor?: string | null;
+            /** @description How many invitations of each status you have, whatever the filter. */
+            by_status: components["schemas"]["StatusCount"][];
+        };
         RecordingInfo: {
             video: components["schemas"]["VideoState"];
             /** @description `GET …/recording` should play it (files may still be missing on this server). */
@@ -4264,6 +4365,11 @@ export interface components {
         ReportCreated: {
             /** Format: uuid */
             id: string;
+            /**
+             * @description You already have an open complaint about this target: it is returned, nothing new was
+             *     written.
+             */
+            already_open: boolean;
         };
         /**
          * @example {
@@ -4472,6 +4578,13 @@ export interface components {
             /** Format: date-time */
             expires_at: string;
             events?: components["schemas"]["StatusEvent"][] | null;
+        };
+        SentInvitationPage: {
+            items: components["schemas"]["SentInvitation"][];
+            /** @description Pass as `cursor` for the next page; `null` on the last one. */
+            next_cursor?: string | null;
+            /** @description How many invitations of each status the company has, whatever the filter. */
+            by_status: components["schemas"]["StatusCount"][];
         };
         /** @description A moderator's decision on the session, as the candidate reads it. */
         SessionModeration: {
@@ -5222,7 +5335,7 @@ export interface operations {
                 moderator_id?: string | null;
                 /**
                  * @description A session, vacancy, invitation, company or complaint, or a candidate or company the
-                 *     actions concern.
+                 *     actions concern: its id, or a candidate's anonymous code «K-XXXXXX».
                  */
                 subject?: string | null;
                 cursor?: string | null;
@@ -5243,7 +5356,7 @@ export interface operations {
                     "application/json": components["schemas"]["AuditPage"];
                 };
             };
-            /** @description `invalid_query` */
+            /** @description `invalid_query` — `cursor` не из ответа или `subject` не id и не код кандидата */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -6865,7 +6978,14 @@ export interface operations {
     };
     list_received: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Comma-separated statuses to keep, e.g. `sent,viewed`; all by default. */
+                status?: string | null;
+                /** @description `next_cursor` of the previous page. */
+                cursor?: string | null;
+                /** @description 1–100, 30 by default. */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -6877,7 +6997,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReceivedInvitation"][];
+                    "application/json": components["schemas"]["ReceivedInvitationPage"];
+                };
+            };
+            /** @description `invalid_query` — неизвестный статус или `cursor` не из ответа */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `unauthorized`: no session or it has expired */
@@ -8477,6 +8606,10 @@ export interface operations {
     list_deliveries: {
         parameters: {
             query?: {
+                /** @description Only events in this status. */
+                status?: components["schemas"]["DeliveryStatus"] | null;
+                /** @description `next_cursor` of the previous page. */
+                cursor?: string | null;
                 /** @description Default 50, at most 200. */
                 limit?: number | null;
             };
@@ -8491,10 +8624,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeliveryView"][];
+                    "application/json": components["schemas"]["CursorPage_DeliveryView"];
                 };
             };
-            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            /** @description `invalid_query` — `cursor` не из ответа */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -9058,7 +9191,14 @@ export interface operations {
     };
     list_sent: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Comma-separated statuses to keep, e.g. `sent,viewed`; all by default. */
+                status?: string | null;
+                /** @description `next_cursor` of the previous page. */
+                cursor?: string | null;
+                /** @description 1–100, 30 by default. */
+                limit?: number | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -9070,7 +9210,16 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SentInvitation"][];
+                    "application/json": components["schemas"]["SentInvitationPage"];
+                };
+            };
+            /** @description `invalid_query` — неизвестный статус или `cursor` не из ответа */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `unauthorized`: no session or it has expired */
@@ -10498,7 +10647,12 @@ export interface operations {
     };
     submissions: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `next_cursor` of the previous page. */
+                cursor?: string | null;
+                /** @description 1–100, 30 by default. */
+                limit?: number | null;
+            };
             header?: never;
             path: {
                 id: string;
@@ -10512,10 +10666,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Submission"][];
+                    "application/json": components["schemas"]["CursorPage_Submission"];
                 };
             };
-            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            /** @description `invalid_query` — `cursor` не из ответа; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -10752,7 +10906,13 @@ export interface operations {
     create: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description До 100 символов, в пределах компании. Повтор с тем же ключом — и одновременная отправка — вернёт уже созданную вакансию
+                 * @example vac-2026-10-07-0001
+                 */
+                "Idempotency-Key"?: string | null;
+            };
             path?: never;
             cookie?: never;
         };
@@ -10762,6 +10922,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Повтор по Idempotency-Key: вакансия уже создана */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Vacancy"];
+                };
+            };
             201: {
                 headers: {
                     /** @description `/api/v1/employer/vacancies/{id}` */
@@ -10826,7 +10995,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            /** @description `validation_failed`; `idempotency_key` — длиннее 100 символов; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -11086,7 +11255,12 @@ export interface operations {
     };
     list_applications: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description `next_cursor` of the previous page. */
+                cursor?: string | null;
+                /** @description 1–100, 30 by default. */
+                limit?: number | null;
+            };
             header?: never;
             path: {
                 id: string;
@@ -11100,10 +11274,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IncomingApplication"][];
+                    "application/json": components["schemas"]["CursorPage_IncomingApplication"];
                 };
             };
-            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            /** @description `invalid_query` — `cursor` не из ответа; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -11952,10 +12126,9 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["InvitationStatus"] | null;
-                /**
-                 * @description RFC 3339; only invitations whose status changed after this moment. Pass `next_since` from
-                 *     the previous page.
-                 */
+                /** @description `next_cursor` of the previous call; without it the feed starts from the first invitation. */
+                cursor?: string | null;
+                /** @description Deprecated, use `cursor`. RFC 3339: invitations whose status changed after this moment. */
                 since?: string | null;
                 /** @description Default 50, at most 200. */
                 limit?: number | null;
@@ -11974,7 +12147,7 @@ export interface operations {
                     "application/json": components["schemas"]["AtsInvitationPage"];
                 };
             };
-            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            /** @description `invalid_query` — `cursor` не из ответа */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -12024,8 +12197,19 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Потребность с этим `external_id` уже импортирована — она и возвращается */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportedNeed"];
+                };
+            };
             201: {
                 headers: {
+                    /** @description `/api/v1/employer/needs/{id}` */
+                    Location?: string;
                     [name: string]: unknown;
                 };
                 content: {
@@ -12077,7 +12261,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Нет текста, не распознана специализация или вилка; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            /** @description Нет текста, не распознана специализация или вилка; `external_id` длиннее 200 символов; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -12847,6 +13031,15 @@ export interface operations {
             };
         };
         responses: {
+            /** @description Жалоба на этот объект уже ждёт модератора — она и возвращается */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReportCreated"];
+                };
+            };
             201: {
                 headers: {
                     [name: string]: unknown;

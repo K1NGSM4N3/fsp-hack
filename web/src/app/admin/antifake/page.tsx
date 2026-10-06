@@ -3,12 +3,12 @@
 import { Building2, FileText, MailWarning, MessageSquareWarning, PauseCircle } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { isApiError } from "@/api/client";
-import type { TrustAction, TrustItem, TrustItemKind, TrustView } from "@/api/admin";
+import type { CompanyRef, TrustAction, TrustItem, TrustItemKind, TrustView } from "@/api/admin";
 import { SalaryRange } from "@/components/domain/Category";
-import { Alert, Badge, Button, Card, Dialog, EmptyState, ErrorAlert, Field, Input, PageHeader, SkeletonCard, Tabs, Textarea, ToggleChip, tabPanelProps, useToast } from "@/components/ui";
+import { Alert, Badge, Button, Card, Dialog, EmptyState, ErrorAlert, Field, Input, LoadMore, PageHeader, SkeletonCard, Tabs, Textarea, ToggleChip, tabPanelProps, useToast } from "@/components/ui";
 import { useOverview, useTrustAction, useTrustQueue } from "@/features/admin/hooks";
 import { ITEM_KIND_LABEL, TRUST_ACTION_LABEL, trustActionEffect } from "@/features/admin/labels";
-import { formatDate, formatDateTime } from "@/lib/format";
+import { formatDate, formatDateTime, pluralize } from "@/lib/format";
 import { TRUST_LEVEL_LABEL } from "@/lib/labels";
 
 const KINDS: TrustItemKind[] = ["complaint", "vacancy", "invitation", "company"];
@@ -93,8 +93,23 @@ function ActionDialog({ pending, onClose }: { pending: Pending | null; onClose: 
   );
 }
 
-function Item({ item, onAct }: { item: TrustItem; onAct: (a: TrustAction) => void }) {
+function CompanyLine({ c, name }: { c: CompanyRef; name: boolean }) {
+  return (
+    <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
+      {[name ? c.name : null, c.level ? TRUST_LEVEL_LABEL[c.level] : null, typeof c.quota === "number" ? `квота ${c.quota} в неделю` : null].filter(Boolean).join(" · ")}
+      {c.frozen_until && (
+        <span className="inline-flex items-center gap-1 text-accent-strong">
+          <PauseCircle className="size-3.5" aria-hidden />
+          приглашения на паузе до {formatDate(c.frozen_until)}
+        </span>
+      )}
+    </p>
+  );
+}
+
+function Item({ item, onAct, grouped }: { item: TrustItem; onAct: (a: TrustAction) => void; grouped: boolean }) {
   const c = item.company;
+  const Title = grouped ? "h3" : "h2";
   return (
     <Card>
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -107,20 +122,8 @@ function Item({ item, onAct }: { item: TrustItem; onAct: (a: TrustAction) => voi
             {item.open_complaints > 0 && <Badge tone="warning">жалоб: {item.open_complaints}</Badge>}
             <span className="text-xs text-ink-subtle">{item.until ? `с ${formatDate(item.at)} до ${formatDate(item.until)}` : formatDateTime(item.at)}</span>
           </div>
-          <h2 className="mt-2 text-base font-semibold text-ink">{item.title}</h2>
-          {c && (
-            <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-ink-muted">
-              {[item.kind !== "company" ? c.name : null, c.level ? TRUST_LEVEL_LABEL[c.level] : null, typeof c.quota === "number" ? `квота ${c.quota} в неделю` : null]
-                .filter(Boolean)
-                .join(" · ")}
-              {c.frozen_until && (
-                <span className="inline-flex items-center gap-1 text-accent-strong">
-                  <PauseCircle className="size-3.5" aria-hidden />
-                  приглашения на паузе до {formatDate(c.frozen_until)}
-                </span>
-              )}
-            </p>
-          )}
+          <Title className="mt-2 text-base font-semibold text-ink">{item.title}</Title>
+          {c && !grouped && <CompanyLine c={c} name={item.kind !== "company"} />}
         </div>
         {item.salary && <SalaryRange salary={item.salary} size="sm" label="Вилка" />}
       </div>
@@ -157,6 +160,7 @@ function Queue({ view, kind }: { view: TrustView; kind: TrustItemKind | null }) 
   if (q.isPending) return <SkeletonCard lines={4} />;
   if (q.isError) return <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />;
   const items = q.data.pages.flatMap((p) => p.items);
+  const groups = byCompany(items);
   if (!items.length)
     return (
       <EmptyState
@@ -165,20 +169,55 @@ function Queue({ view, kind }: { view: TrustView; kind: TrustItemKind | null }) 
       />
     );
   return (
-    <div className="space-y-4">
-      {items.map((item) => (
-        <Item key={`${item.kind}-${item.id}`} item={item} onAct={(action) => setPending({ item, action })} />
-      ))}
-      {q.hasNextPage && (
-        <div className="text-center">
-          <Button variant="secondary" loading={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()}>
-            Показать ещё
-          </Button>
-        </div>
+    <div className="space-y-8">
+      {groups.map((g) =>
+        g.company ? (
+          <section key={g.key} aria-labelledby={`company-${g.key}`} className="space-y-3">
+            <header className="flex flex-wrap items-end justify-between gap-2 border-b border-line pb-2">
+              <div className="min-w-0">
+                <h2 id={`company-${g.key}`} className="flex items-center gap-2 text-lg font-semibold tracking-tight text-ink">
+                  <Building2 className="size-4 text-ink-subtle" aria-hidden />
+                  {g.company.name}
+                </h2>
+                <CompanyLine c={g.company} name={false} />
+              </div>
+              <Badge tone="neutral">{pluralize(g.items.length, ["элемент", "элемента", "элементов"])} в очереди</Badge>
+            </header>
+            <ul className="space-y-3">
+              {g.items.map((item) => (
+                <li key={`${item.kind}-${item.id}`}>
+                  <Item item={item} grouped onAct={(action) => setPending({ item, action })} />
+                </li>
+              ))}
+            </ul>
+          </section>
+        ) : (
+          <Item key={g.key} item={g.items[0]} grouped={false} onAct={(action) => setPending({ item: g.items[0], action })} />
+        ),
       )}
+      <LoadMore pager={q} loaded={items.length} noun="Элементы очереди" />
       <ActionDialog pending={pending} onClose={() => setPending(null)} />
     </div>
   );
+}
+
+interface Group {
+  key: string;
+  company: CompanyRef | null;
+  items: TrustItem[];
+}
+
+/** One section per company: its complaints, flagged vacancies and invitations side by side. The queue is oldest first, so the
+ *  company whose signal waits longest comes first; a page loaded later can add to a section above. */
+function byCompany(items: TrustItem[]): Group[] {
+  const groups = new Map<string, Group>();
+  for (const item of items) {
+    const key = item.company?.id ?? `${item.kind}-${item.id}`;
+    const group = groups.get(key) ?? { key, company: item.company ?? null, items: [] };
+    group.items.push(item);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
 }
 
 export default function AntifakePage() {
@@ -189,7 +228,7 @@ export default function AntifakePage() {
     <div>
       <PageHeader
         title="Антифейк и жалобы"
-        description="Отметки антифейка — вилка выше рынка, слишком широкая вилка, копии вакансий — и жалобы кандидатов в одной очереди, сначала самые старые. Каждое действие — с комментарием: компания увидит его на странице «Доверие и квота»."
+        description="Отметки антифейка — вилка выше рынка, слишком широкая вилка, копии вакансий — и жалобы кандидатов в одной очереди, по компаниям: первой идёт та, чей сигнал ждёт дольше всех. Каждое действие — с комментарием: компания увидит его на странице «Доверие и квота»."
       />
       <Tabs
         idPrefix="antifake"

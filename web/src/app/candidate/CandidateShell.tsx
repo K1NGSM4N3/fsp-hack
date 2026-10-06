@@ -4,13 +4,13 @@ import { Briefcase, ClipboardList, GraduationCap, LayoutDashboard, ListChecks, M
 import type { ReactNode } from "react";
 import { CabinetShell, type NavItem } from "@/components/layout/CabinetShell";
 import { GuardianBanner } from "@/features/candidate/components/GuardianBanner";
-import { useReceivedInvitations } from "@/features/candidate/hooks";
+import { useInvitationSummary } from "@/features/candidate/hooks";
 import { useSkillNamePreload } from "@/features/catalog/hooks";
 
 export function CandidateShell({ children }: { children: ReactNode }) {
   useSkillNamePreload();
-  const invitations = useReceivedInvitations();
-  const fresh = invitations.data?.filter((i) => i.status === "sent").length ?? 0;
+  const invitations = useInvitationSummary();
+  const fresh = invitations.data?.by_status.find((c) => c.status === "sent")?.count ?? 0;
   const nav: NavItem[] = [
     { href: "/candidate", label: "Главная", icon: <LayoutDashboard className="size-4.5" />, exact: true, group: "Обзор" },
     { href: "/candidate/profile", label: "Профиль", icon: <UserRound className="size-4.5" />, group: "Категория" },

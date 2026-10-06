@@ -1,31 +1,20 @@
 "use client";
 
-import { ArrowRight, CalendarClock, Eye, ListChecks, Mail, TrendingUp, Trophy } from "lucide-react";
+import { ArrowRight, CalendarClock, ListChecks, Mail, TrendingUp, Trophy } from "lucide-react";
 import Link from "next/link";
 import { isApiError } from "@/api/client";
+import type { InvitationStatus } from "@/api/types";
 import { ButtonLink, Card, CardHeader, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Stat } from "@/components/ui";
 import { SalaryRange } from "@/components/domain/Category";
 import { ScoreRing } from "@/components/domain/Explanation";
 import { FspAchievementList, FspEmpty } from "@/components/domain/Fsp";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
 import { useMe } from "@/features/auth/hooks";
-import { useCategory, useFspStatus, useMarket, useMyTasks, usePrivacy, useReceivedInvitations } from "@/features/candidate/hooks";
+import { useCategory, useFspStatus, useInvitationSummary, useMarket, useMyTasks } from "@/features/candidate/hooks";
 import { LinkFspButton } from "@/features/candidate/components/FspCard";
-import { OnboardingCard } from "@/features/candidate/components/Onboarding";
+import { NextStepCard, useVisibility } from "@/features/candidate/components/Onboarding";
 import { formatDate, formatRelative, pluralize } from "@/lib/format";
 import { GRADE_LABEL, SPEC_LONG_LABEL, categoryLabel } from "@/lib/labels";
-
-/** Whether companies can find the profile right now, and what to do if not. */
-function useVisibility(): { visible: boolean; text: string } | null {
-  const me = useMe();
-  const privacy = usePrivacy();
-  const age = me.data?.candidate?.age;
-  if (!privacy.data) return null;
-  if (age?.bracket === "minor" && age.guardian !== "granted") return { visible: false, text: "Компании пока не видят профиль: ждём согласия законного представителя." };
-  if (!privacy.data.visible) return { visible: false, text: "Профиль скрыт от компаний — включить показ можно в настройках." };
-  if (privacy.data.search_status === "closed") return { visible: false, text: "Поиск закрыт: компании не находят вас в подборках. Открыть его можно в настройках." };
-  return { visible: true, text: "Видна компаниям — по ней вас находят." };
-}
 
 function CategoryCard() {
   const category = useCategory();
@@ -38,9 +27,6 @@ function CategoryCard() {
       <Card>
         <CardHeader title="Категория" />
         <p className="text-sm text-ink-muted">Категория появится после теста. До этого профиль не виден компаниям в поиске.</p>
-        <ButtonLink href="/candidate/assessment" className="mt-4" variant="soft">
-          К тестированию
-        </ButtonLink>
       </Card>
     );
   }
@@ -97,7 +83,8 @@ function CategoryCard() {
 }
 
 function InvitationsCard() {
-  const q = useReceivedInvitations();
+  const q = useInvitationSummary();
+  const count = (...statuses: InvitationStatus[]) => q.data?.by_status.filter((c) => statuses.includes(c.status)).reduce((n, c) => n + c.count, 0) ?? 0;
   return (
     <Card>
       <CardHeader
@@ -112,17 +99,17 @@ function InvitationsCard() {
         <SkeletonCard lines={2} className="border-0 p-0" />
       ) : q.isError ? (
         <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
-      ) : q.data.length === 0 ? (
+      ) : q.data.items.length === 0 ? (
         <EmptyState compact icon={<Mail className="size-5" aria-hidden />} title="Пока нет приглашений" description="Компании приглашают соискателей с подтверждённой категорией. Держите статус «Активно ищу»." />
       ) : (
         <>
           <div className="mb-4 grid grid-cols-3 gap-3">
-            <Stat label="Новые" value={q.data.filter((i) => i.status === "sent").length} tone="primary" />
-            <Stat label="Ждут ответа" value={q.data.filter((i) => i.status === "sent" || i.status === "viewed").length} />
-            <Stat label="Принято" value={q.data.filter((i) => i.status === "accepted").length} />
+            <Stat label="Новые" value={count("sent")} tone="primary" />
+            <Stat label="Ждут ответа" value={count("sent", "viewed")} />
+            <Stat label="Принято" value={count("accepted")} />
           </div>
           <ul className="divide-y divide-line">
-            {q.data.slice(0, 3).map((inv) => (
+            {q.data.items.map((inv) => (
               <li key={inv.id} className="py-3 first:pt-0 last:pb-0">
                 <Link href={`/candidate/invitations/${inv.id}`} className="group flex items-start justify-between gap-3 rounded">
                   <span className="min-w-0">
@@ -239,19 +226,8 @@ export default function CandidateDashboard() {
   const hasCategory = Boolean(me.data?.candidate?.category);
   return (
     <div>
-      <PageHeader
-        eyebrow={<span className="eyebrow text-primary">Обзор</span>}
-        title="Главная"
-        description="Ваша категория, приглашения и спрос — в одном месте."
-        actions={
-          hasCategory ? (
-            <ButtonLink href="/candidate/invitations" variant="secondary" icon={<Eye className="size-4" aria-hidden />}>
-              Приглашения
-            </ButtonLink>
-          ) : undefined
-        }
-      />
-      <OnboardingCard />
+      <PageHeader eyebrow={<span className="eyebrow text-primary">Обзор</span>} title="Главная" description="Ваша категория, приглашения и спрос — в одном месте." />
+      <NextStepCard />
       <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
         <div className="min-w-0 space-y-6">
           <CategoryCard />

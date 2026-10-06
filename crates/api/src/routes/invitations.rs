@@ -11,7 +11,7 @@ use chrono::{DateTime, Duration, Utc};
 use matching::trust::{MAX_QUOTA, TrustLevel, display_domain};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
@@ -21,12 +21,13 @@ use crate::{
     contacts::{AccessChannel, AccessContext, CandidateContacts, ContactGrant},
     dto::{DeclineReason, HiringStage, InvitationStatus, SalaryRange},
     error::{ApiError, ApiResult, Problem, Validator},
-    extract::{Created, Json, Path},
+    extract::{Created, Json, Path, Query},
     integrations::{
         events::{EventType, Outbox, expire_invitations},
         outcomes::{HiringOutcome, OutcomeIndex},
     },
     notify::{NotificationKind, Notifier},
+    page,
     state::AppState,
     trust,
 };
@@ -229,19 +230,7 @@ async fn send(
 ) -> ApiResult<Response> {
     validate(&req)?;
     let company = company_id(&state, user.id).await?;
-    let idempotency_key = match headers.get("idempotency-key") {
-        None => None,
-        Some(v) => Some(
-            v.to_str()
-                .ok()
-                .map(str::trim)
-                .filter(|k| !k.is_empty() && k.chars().count() <= 100)
-                .ok_or_else(|| {
-                    ApiError::field("idempotency_key", "Idempotency-Key — от 1 до 100 символов")
-                })?
-                .to_owned(),
-        ),
-    };
+    let idempotency_key = super::vacancies::idempotency_key(&headers)?;
 
     if let Some(key) = idempotency_key.as_deref()
         && let Some(sent) = replay(&state, company, key, req.candidate_id).await?
@@ -357,21 +346,97 @@ async fn send(
     .into_response())
 }
 
-/// Invitations sent by the company
+#[derive(Deserialize, IntoParams)]
+pub struct InvitationListQuery {
+    /// Comma-separated statuses to keep, e.g. `sent,viewed`; all by default.
+    pub status: Option<String>,
+    /// `next_cursor` of the previous page.
+    pub cursor: Option<String>,
+    /// 1–100, 30 by default.
+    pub limit: Option<i64>,
+}
+
+const PAGE_DEFAULT: i64 = 30;
+const PAGE_MAX: i64 = 100;
+
+fn status_filter(raw: Option<&str>) -> ApiResult<Vec<db::types::InvitationStatus>> {
+    use serde::de::{
+        IntoDeserializer,
+        value::{Error, StrDeserializer},
+    };
+    raw.unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| {
+            let de: StrDeserializer<'_, Error> = s.into_deserializer();
+            InvitationStatus::deserialize(de)
+                .map(Into::into)
+                .map_err(|_| {
+                    ApiError::bad_request("invalid_query", "Некорректные параметры запроса")
+                        .with_detail(format!("status: неизвестный статус «{s}»"))
+                })
+        })
+        .collect()
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct SentInvitationPage {
+    pub items: Vec<SentInvitation>,
+    /// Pass as `cursor` for the next page; `null` on the last one.
+    pub next_cursor: Option<String>,
+    /// How many invitations of each status the company has, whatever the filter.
+    pub by_status: Vec<StatusCount>,
+}
+
+/// Invitations sent by the company, newest first. Keyset pagination: pass `next_cursor` as `cursor`
 #[utoipa::path(get, path = "/invitations", tag = "invitations",
-    responses((status = 200, body = Vec<SentInvitation>), (status = 409, description = "`company_profile_required`", body = Problem)),
+    params(InvitationListQuery),
+    responses(
+        (status = 200, body = SentInvitationPage),
+        (status = 400, description = "`invalid_query` — неизвестный статус или `cursor` не из ответа", body = Problem),
+        (status = 409, description = "`company_profile_required`", body = Problem),
+    ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_sent(
     State(state): State<AppState>,
     user: EmployerUser,
-) -> ApiResult<Json<Vec<SentInvitation>>> {
+    Query(q): Query<InvitationListQuery>,
+) -> ApiResult<Json<SentInvitationPage>> {
+    let statuses = status_filter(q.status.as_deref())?;
+    let before = page::decode(q.cursor.as_deref())?;
+    let limit = page::limit(q.limit, PAGE_DEFAULT, PAGE_MAX);
     let company = company_id(&state, user.id).await?;
     expire_invitations(&state).await?;
-    Ok(Json(sent_views(&state.pool, company).await?))
+    let rows =
+        db::invitations::employer_invitations(&state.pool, company, &statuses, before, limit + 1)
+            .await?;
+    let (rows, next_cursor) = page::split(rows, limit, |r| (r.created_at, r.id));
+    let mut items = Vec::with_capacity(rows.len());
+    for row in rows {
+        items.push(sent_from_row!(row));
+    }
+    Ok(Json(SentInvitationPage {
+        items,
+        next_cursor,
+        by_status: status_counts(
+            db::invitations::company_invitation_status_counts(&state.pool, company).await?,
+        ),
+    }))
 }
 
+fn status_counts(rows: Vec<db::invitations::StatusCount>) -> Vec<StatusCount> {
+    rows.into_iter()
+        .map(|r| StatusCount {
+            status: r.status.into(),
+            count: r.count,
+        })
+        .collect()
+}
+
+/// Every invitation of the company, for the data export.
 pub(crate) async fn sent_views(pool: &PgPool, company: Uuid) -> ApiResult<Vec<SentInvitation>> {
-    let rows = db::invitations::employer_invitations(pool, company).await?;
+    let rows = db::invitations::employer_invitations(pool, company, &[], None, i64::MAX).await?;
     let mut out = Vec::with_capacity(rows.len());
     for row in rows {
         out.push(sent_from_row!(row));
@@ -513,14 +578,9 @@ async fn invitation_stats(
         trust_level: trust.level,
         quota_used: used,
         quota_resets_in_days: 7,
-        by_status: db::invitations::company_invitation_status_counts(&state.pool, company)
-            .await?
-            .into_iter()
-            .map(|r| StatusCount {
-                status: r.status.into(),
-                count: r.count,
-            })
-            .collect(),
+        by_status: status_counts(
+            db::invitations::company_invitation_status_counts(&state.pool, company).await?,
+        ),
         response_rate: if rate.total > 0 {
             rate.answered as f64 / rate.total as f64
         } else {
@@ -659,23 +719,59 @@ async fn received_view(
     Ok(inv)
 }
 
-/// Incoming invitations
+#[derive(Serialize, ToSchema)]
+pub struct ReceivedInvitationPage {
+    pub items: Vec<ReceivedInvitation>,
+    /// Pass as `cursor` for the next page; `null` on the last one.
+    pub next_cursor: Option<String>,
+    /// How many invitations of each status you have, whatever the filter.
+    pub by_status: Vec<StatusCount>,
+}
+
+/// Incoming invitations, newest first. Keyset pagination: pass `next_cursor` as `cursor`
 #[utoipa::path(get, path = "/invitations", tag = "invitations",
-    responses((status = 200, body = Vec<ReceivedInvitation>)),
+    params(InvitationListQuery),
+    responses(
+        (status = 200, body = ReceivedInvitationPage),
+        (status = 400, description = "`invalid_query` — неизвестный статус или `cursor` не из ответа", body = Problem),
+    ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_received(
     State(state): State<AppState>,
     user: CandidateUser,
-) -> ApiResult<Json<Vec<ReceivedInvitation>>> {
+    Query(q): Query<InvitationListQuery>,
+) -> ApiResult<Json<ReceivedInvitationPage>> {
+    let statuses = status_filter(q.status.as_deref())?;
+    let before = page::decode(q.cursor.as_deref())?;
+    let limit = page::limit(q.limit, PAGE_DEFAULT, PAGE_MAX);
     expire_invitations(&state).await?;
-    Ok(Json(received_views(&state.pool, user.id).await?))
+    let rows =
+        db::invitations::candidate_invitations(&state.pool, user.id, &statuses, before, limit + 1)
+            .await?;
+    let (rows, next_cursor) = page::split(rows, limit, |r| (r.created_at, r.id));
+    let outcomes = OutcomeIndex::for_candidate(&state.pool, user.id).await?;
+    Ok(Json(ReceivedInvitationPage {
+        items: rows
+            .into_iter()
+            .map(|r| {
+                let mut inv = received_from_row!(r);
+                inv.outcomes = outcomes.of(inv.id);
+                inv
+            })
+            .collect(),
+        next_cursor,
+        by_status: status_counts(
+            db::invitations::candidate_invitation_status_counts(&state.pool, user.id).await?,
+        ),
+    }))
 }
 
+/// Every invitation of the candidate, for the data export.
 pub(crate) async fn received_views(
     pool: &PgPool,
     candidate: Uuid,
 ) -> ApiResult<Vec<ReceivedInvitation>> {
-    let rows = db::invitations::candidate_invitations(pool, candidate).await?;
+    let rows = db::invitations::candidate_invitations(pool, candidate, &[], None, i64::MAX).await?;
     let outcomes = OutcomeIndex::for_candidate(pool, candidate).await?;
     Ok(rows
         .into_iter()

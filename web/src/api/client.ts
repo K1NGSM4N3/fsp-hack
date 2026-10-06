@@ -1,8 +1,10 @@
 /**
  * Auth is cookie-only (httpOnly `fsp_at`/`fsp_rt` set by the API), so every request
  * is same-origin with `credentials: "include"`. The access token lives 15 minutes:
- * a 401 triggers one refresh and a retry before giving up.
+ * when the `fsp_at_exp` hint says it has run out, the request refreshes first;
+ * a 401 anyway triggers one refresh and a retry before giving up.
  */
+import { accessExpired, checkClockAfterRefresh } from "./session-hint";
 
 export const API_BASE = "/api/v1";
 
@@ -144,6 +146,7 @@ function refreshSession(): Promise<boolean> {
   })
     .then((res) => {
       discard(res);
+      if (res.ok) checkClockAfterRefresh();
       return res.ok;
     })
     .catch(() => false)
@@ -196,10 +199,11 @@ export async function http<T>(method: string, path: string, options: HttpOptions
     }
   };
 
-  let res = await send();
   const canRefresh = !options.noRefresh && !path.startsWith("/auth/");
+  const refreshedFirst = canRefresh && accessExpired() ? await refreshSession() : null;
+  let res = await send();
   if (res.status === 401 && canRefresh) {
-    if (await refreshSession()) {
+    if (refreshedFirst !== false && (await refreshSession())) {
       discard(res);
       res = await send();
     }

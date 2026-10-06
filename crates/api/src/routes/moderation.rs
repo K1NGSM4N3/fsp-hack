@@ -30,6 +30,7 @@ use crate::{
         encode_cursor,
     },
     proctoring::{self as proctoring_svc, ProctoringMode, ProctoringSummary},
+    public_code,
     state::AppState,
     trust,
 };
@@ -1084,8 +1085,8 @@ pub struct LogQuery {
     /// Only this moderator's actions.
     pub moderator_id: Option<Uuid>,
     /// A session, vacancy, invitation, company or complaint, or a candidate or company the
-    /// actions concern.
-    pub subject: Option<Uuid>,
+    /// actions concern: its id, or a candidate's anonymous code «K-XXXXXX».
+    pub subject: Option<String>,
     pub cursor: Option<String>,
     /// 1–100, 30 by default.
     pub limit: Option<i64>,
@@ -1149,7 +1150,7 @@ fn audit_details(action: ModerationAction, d: &serde_json::Value) -> Vec<String>
     params(LogQuery),
     responses(
         (status = 200, body = AuditPage),
-        (status = 400, description = "`invalid_query`", body = Problem),
+        (status = 400, description = "`invalid_query` — `cursor` не из ответа или `subject` не id и не код кандидата", body = Problem),
         (status = 403, description = "`wrong_role`: moderators only", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
@@ -1160,13 +1161,42 @@ async fn audit_log(
 ) -> ApiResult<Json<AuditPage>> {
     let before = moderation::decode_cursor(q.cursor.as_deref())?;
     let limit = moderation::page_limit(q.limit);
+    let subject = match q
+        .subject
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        None => None,
+        Some(raw) => match (raw.parse::<Uuid>(), public_code::normalize(raw)) {
+            (Ok(id), _) => Some(id),
+            (Err(_), Some(code)) => {
+                match db::moderation::candidate_by_code(&state.pool, &code).await? {
+                    Some(id) => Some(id),
+                    None => {
+                        return Ok(Json(AuditPage {
+                            items: Vec::new(),
+                            next_cursor: None,
+                        }));
+                    }
+                }
+            }
+            (Err(_), None) => {
+                return Err(ApiError::bad_request(
+                    "invalid_query",
+                    "Некорректные параметры запроса",
+                )
+                .with_detail("subject: нужен id объекта или код кандидата вида K-7Q3M2X"));
+            }
+        },
+    };
     let mut rows = db::moderation::actions(
         &state.pool,
         db::moderation::ActionFilter {
             action: q.action.map(Into::into),
             target_kind: q.target_kind.map(Into::into),
             moderator_id: q.moderator_id,
-            subject: q.subject,
+            subject,
         },
         before,
         limit + 1,

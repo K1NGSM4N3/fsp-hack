@@ -96,9 +96,12 @@ export async function sendTestEvent(): Promise<T.TestDelivery> {
   return { event_id, delivered: false, status_code: null, latency_ms: 0, error: "Демо-режим: запросы наружу не отправляются" };
 }
 
-export async function listDeliveries(limit: number): Promise<T.DeliveryView[]> {
+export async function listDeliveries(status: T.DeliveryStatus | null, cursor: string | null | undefined, limit: number): Promise<T.DeliveryPage> {
   await wait();
-  return deliveries.slice(0, limit);
+  const wanted = deliveries.filter((d) => !status || d.status === status);
+  const start = Math.max(0, Number(cursor ?? 0) || 0);
+  const end = start + limit;
+  return { items: wanted.slice(start, end), next_cursor: end < wanted.length ? String(end) : null };
 }
 
 export async function retryDelivery(eventId: T.Uuid): Promise<void> {

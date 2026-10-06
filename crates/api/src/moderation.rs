@@ -4,7 +4,7 @@
 //! that was not logged did not happen.
 
 use catalog::Category;
-use chrono::{DateTime, Duration, TimeZone, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::PgConnection;
@@ -156,28 +156,10 @@ pub enum TrustAction {
     Restore,
 }
 
-/// Keyset position as an opaque string: `<unix microseconds>_<uuid>`.
-pub fn encode_cursor(at: DateTime<Utc>, id: Uuid) -> String {
-    format!("{}_{}", at.timestamp_micros(), id.simple())
-}
-
-pub fn decode_cursor(raw: Option<&str>) -> ApiResult<Option<db::moderation::Cursor>> {
-    let Some(raw) = raw.filter(|r| !r.is_empty()) else {
-        return Ok(None);
-    };
-    let invalid = || {
-        ApiError::bad_request("invalid_query", "Некорректные параметры запроса")
-            .with_detail("cursor: возьмите значение `next_cursor` из предыдущего ответа")
-    };
-    let (micros, id) = raw.split_once('_').ok_or_else(invalid)?;
-    let micros: i64 = micros.parse().map_err(|_| invalid())?;
-    let at = Utc.timestamp_micros(micros).single().ok_or_else(invalid)?;
-    let id: Uuid = id.parse().map_err(|_| invalid())?;
-    Ok(Some(db::moderation::Cursor { at, id }))
-}
+pub use crate::page::{decode as decode_cursor, encode as encode_cursor};
 
 pub fn page_limit(limit: Option<i64>) -> i64 {
-    limit.unwrap_or(PAGE_DEFAULT).clamp(1, PAGE_MAX)
+    crate::page::limit(limit, PAGE_DEFAULT, PAGE_MAX)
 }
 
 /// A comment is mandatory: the candidate or the company reads it, and the log keeps it.
@@ -942,23 +924,6 @@ pub fn category_name(key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn cursor_round_trip() {
-        let at = Utc
-            .timestamp_micros(1_790_000_000_123_456)
-            .single()
-            .unwrap();
-        let id = Uuid::now_v7();
-        let raw = encode_cursor(at, id);
-        let c = decode_cursor(Some(&raw)).unwrap().unwrap();
-        assert_eq!((c.at, c.id), (at, id));
-        assert!(decode_cursor(None).unwrap().is_none());
-        assert!(decode_cursor(Some("")).unwrap().is_none());
-        for bad in ["x", "12_nope", "abc_0191f0000000700080000000000000a1"] {
-            assert!(decode_cursor(Some(bad)).is_err(), "{bad}");
-        }
-    }
 
     #[test]
     fn comment_is_required_and_bounded() {

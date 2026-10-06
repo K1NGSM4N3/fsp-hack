@@ -58,12 +58,21 @@ pub struct ReportInput {
 #[derive(Serialize, ToSchema)]
 pub struct ReportCreated {
     pub id: Uuid,
+    /// You already have an open complaint about this target: it is returned, nothing new was
+    /// written.
+    pub already_open: bool,
 }
 
-/// Report a fake vacancy, a misleading invitation or an abusive company
+/// Report a fake vacancy, a misleading invitation or an abusive company. One open complaint per
+/// person and target: a repeat returns the open one
 #[utoipa::path(post, path = "/reports", tag = "account",
     request_body = ReportInput,
-    responses((status = 201, body = ReportCreated), (status = 429, body = Problem), (status = 422, description = "`validation_failed`: `comment`", body = Problem)),
+    responses(
+        (status = 201, body = ReportCreated),
+        (status = 200, description = "Жалоба на этот объект уже ждёт модератора — она и возвращается", body = ReportCreated),
+        (status = 429, body = Problem),
+        (status = 422, description = "`validation_failed`: `comment`", body = Problem),
+    ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn create_report(
     State(state): State<AppState>,
@@ -78,6 +87,29 @@ async fn create_report(
     if comment.is_some_and(|c| c.chars().count() > 2000) {
         return Err(ApiError::field("comment", "Не длиннее 2000 символов"));
     }
+    let kind = match r.target_kind {
+        ReportTarget::Vacancy => "vacancy",
+        ReportTarget::Invitation => "invitation",
+        ReportTarget::Company => "company",
+    };
+    let open = async || -> ApiResult<Option<(StatusCode, Json<ReportCreated>)>> {
+        Ok(
+            db::reports::open_report_by(&state.pool, user.id, kind, r.target_id)
+                .await?
+                .map(|id| {
+                    (
+                        StatusCode::OK,
+                        Json(ReportCreated {
+                            id,
+                            already_open: true,
+                        }),
+                    )
+                }),
+        )
+    };
+    if let Some(existing) = open().await? {
+        return Ok(existing);
+    }
     let recent = db::reports::recent_reports_by(&state.pool, user.id).await?;
     if recent.count >= DAILY_LIMIT {
         let wait = recent
@@ -88,11 +120,6 @@ async fn create_report(
             Duration::from_secs(wait.max(1).unsigned_abs()),
         ));
     }
-    let kind = match r.target_kind {
-        ReportTarget::Vacancy => "vacancy",
-        ReportTarget::Invitation => "invitation",
-        ReportTarget::Company => "company",
-    };
     let reason = match r.reason {
         ReportReason::FakeVacancy => "fake_vacancy",
         ReportReason::SalaryMismatch => "salary_mismatch",
@@ -101,7 +128,17 @@ async fn create_report(
         ReportReason::Other => "other",
     };
     let id = Uuid::now_v7();
-    db::reports::insert_report(&state.pool, id, user.id, kind, r.target_id, reason, comment)
-        .await?;
-    Ok((StatusCode::CREATED, Json(ReportCreated { id })))
+    if !db::reports::insert_report(&state.pool, id, user.id, kind, r.target_id, reason, comment)
+        .await?
+    {
+        // The same complaint sent twice at once: the other request wrote it.
+        return open().await?.ok_or_else(|| sqlx::Error::RowNotFound.into());
+    }
+    Ok((
+        StatusCode::CREATED,
+        Json(ReportCreated {
+            id,
+            already_open: false,
+        }),
+    ))
 }

@@ -103,11 +103,22 @@ export type DeclineRequest = S["DeclineRequest"];
 export type SendInvitation = S["SendInvitation"];
 export type SentInvitation = S["SentInvitation"];
 export type InvitationStats = S["InvitationStats"];
+export type InvitationStatusCount = S["StatusCount"];
+export type ReceivedInvitationPage = S["ReceivedInvitationPage"];
+export type SentInvitationPage = S["SentInvitationPage"];
+
+/** `status` goes out comma-separated (see `toQueryString`). */
+export interface InvitationListQuery {
+  status?: InvitationStatus[];
+  cursor?: string | null;
+  limit?: number;
+}
 
 export type ApplicationStatus = S["ApplicationStatus"];
 export type MyApplication = S["MyApplication"];
 export type ApplyInput = S["ApplyInput"];
 export type IncomingApplication = S["IncomingApplication"];
+export type ApplicationPage = S["CursorPage_IncomingApplication"];
 export type EmployerApplicationStatus = Exclude<ApplicationStatus, "sent" | "withdrawn">;
 
 export type TaskKind = S["TaskKind"];
@@ -117,6 +128,7 @@ export type SubmitInput = S["SubmitInput"];
 export type TaskInput = S["TaskInput"];
 export type EmployerTask = S["EmployerTask"];
 export type TaskSubmission = S["Submission"];
+export type SubmissionPage = S["CursorPage_Submission"];
 export type ReviewInput = S["ReviewInput"];
 
 export type FspDiscipline = S["Discipline"];
@@ -176,6 +188,7 @@ export type SimilarInput = S["SimilarInput"];
 export type SimilarVacancy = S["SimilarVacancy"];
 
 export type ReportInput = S["ReportInput"];
+export type ReportCreated = S["ReportCreated"];
 export type ReportReason = S["ReportReason"];
 
 export type CandidateSearchParams = NonNullable<operations["search"]["parameters"]["query"]>;
@@ -191,6 +204,7 @@ export type WebhookInput = S["WebhookInput"];
 export type WebhookSaved = S["WebhookSaved"];
 export type TestDelivery = S["TestDelivery"];
 export type DeliveryView = S["DeliveryView"];
+export type DeliveryPage = S["CursorPage_DeliveryView"];
 export type DeliveryStatus = S["DeliveryStatus"];
 export type DeliveryAttempt = S["AttemptView"];
 export type IntegrationEventType = S["EventType"];

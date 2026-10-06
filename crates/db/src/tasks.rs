@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::types::TaskAssignmentStatus;
+use crate::types::{Cursor, TaskAssignmentStatus};
 
 pub struct NewTask<'a> {
     pub id: Uuid,
@@ -118,10 +118,14 @@ pub async fn set_task_active(
     .map(|r| r.rows_affected())
 }
 
+/// Newest answers first, keyset-paginated on `(submitted_at, id)`; a submitted or reviewed
+/// answer always has `submitted_at`.
 pub async fn task_submissions(
     db: impl PgExecutor<'_>,
     task_id: Uuid,
     company_id: Uuid,
+    before: Option<Cursor>,
+    limit: i64,
 ) -> Result<Vec<TaskSubmission>, sqlx::Error> {
     sqlx::query_as!(
         TaskSubmission,
@@ -132,9 +136,15 @@ pub async fn task_submissions(
            JOIN tasks t ON t.id = a.task_id
            JOIN candidates c ON c.user_id = a.candidate_id
            WHERE t.id = $1 AND t.company_id = $2 AND a.status IN ('submitted', 'reviewed')
-           ORDER BY a.submitted_at DESC"#,
+             AND a.submitted_at IS NOT NULL
+             AND ($3::timestamptz IS NULL OR (a.submitted_at, a.id) < ($3, $4::uuid))
+           ORDER BY a.submitted_at DESC, a.id DESC
+           LIMIT $5"#,
         task_id,
         company_id,
+        before.map(|c| c.at),
+        before.map(|c| c.id),
+        limit,
     )
     .fetch_all(db)
     .await

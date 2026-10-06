@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
+/// `false`: the person already has an open complaint about this target, nothing was written.
 pub async fn insert_report(
     db: impl PgExecutor<'_>,
     id: Uuid,
@@ -10,10 +11,12 @@ pub async fn insert_report(
     target_id: Uuid,
     reason: &str,
     comment: Option<&str>,
-) -> Result<u64, sqlx::Error> {
+) -> Result<bool, sqlx::Error> {
     sqlx::query!(
         "INSERT INTO reports (id, reporter_user_id, target_kind, target_id, reason, comment)
-         VALUES ($1, $2, $3, $4, $5, $6)",
+         VALUES ($1, $2, $3, $4, $5, $6)
+         ON CONFLICT (reporter_user_id, target_kind, target_id) WHERE resolved_at IS NULL
+         DO NOTHING",
         id,
         reporter_user_id,
         target_kind,
@@ -23,7 +26,26 @@ pub async fn insert_report(
     )
     .execute(db)
     .await
-    .map(|r| r.rows_affected())
+    .map(|r| r.rows_affected() > 0)
+}
+
+/// The person's complaint about this target that a moderator has not resolved yet.
+pub async fn open_report_by(
+    db: impl PgExecutor<'_>,
+    reporter_user_id: Uuid,
+    target_kind: &str,
+    target_id: Uuid,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT id FROM reports
+         WHERE reporter_user_id = $1 AND target_kind = $2 AND target_id = $3
+           AND resolved_at IS NULL",
+        reporter_user_id,
+        target_kind,
+        target_id,
+    )
+    .fetch_optional(db)
+    .await
 }
 
 #[derive(Debug, Clone, Copy)]

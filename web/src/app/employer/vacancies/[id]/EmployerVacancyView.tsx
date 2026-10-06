@@ -6,7 +6,7 @@ import { useState } from "react";
 import type { EmployerApplicationStatus, IncomingApplication } from "@/api/types";
 import { CategoryBadge } from "@/components/domain/Category";
 import { ApplicationStatusBadge, VacancyStatusBadge } from "@/components/domain/StatusBadges";
-import { Alert, Button, Dialog, EmptyState, ErrorAlert, PageHeader, PageSkeleton, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
+import { Alert, Button, Dialog, EmptyState, ErrorAlert, LoadMore, PageHeader, PageSkeleton, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
 import { useOwnVacancy, useSetApplicationStatus, useVacancyApplications } from "@/features/employer/hooks";
 import { VacancyForm } from "@/features/employer/components/VacancyForm";
 import { formatDate, formatRelative } from "@/lib/format";
@@ -84,13 +84,17 @@ function Applications({ vacancyId }: { vacancyId: string }) {
   const q = useVacancyApplications(vacancyId);
   if (q.isPending) return <SkeletonCard lines={3} />;
   if (q.isError) return <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />;
-  if (q.data.length === 0) return <EmptyState icon={<Inbox className="size-5" aria-hidden />} title="Откликов пока нет" description="Когда кандидат откликнется, его контакты сразу станут доступны — он сделал это сам." />;
+  const list = q.data.pages.flatMap((p) => p.items);
+  if (list.length === 0) return <EmptyState icon={<Inbox className="size-5" aria-hidden />} title="Откликов пока нет" description="Когда кандидат откликнется, его контакты сразу станут доступны — он сделал это сам." />;
   return (
-    <ul className="space-y-3">
-      {q.data.map((a) => (
-        <ApplicationRow key={a.id} a={a} vacancyId={vacancyId} />
-      ))}
-    </ul>
+    <>
+      <ul className="space-y-3">
+        {list.map((a) => (
+          <ApplicationRow key={a.id} a={a} vacancyId={vacancyId} />
+        ))}
+      </ul>
+      <LoadMore pager={q} loaded={list.length} noun="Отклики" />
+    </>
   );
 }
 

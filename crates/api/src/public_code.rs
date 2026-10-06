@@ -48,6 +48,16 @@ pub async fn insert_candidate(tx: &mut PgConnection, user_id: Uuid) -> ApiResult
     Err(InternalError::PublicCodeExhausted(ATTEMPTS).into())
 }
 
+/// A code as a person types it — «k-7q3m2x», «K7Q3M2X», with spaces around — in its stored form,
+/// or `None` if it is not a code at all.
+pub fn normalize(raw: &str) -> Option<String> {
+    let upper = raw.trim().to_ascii_uppercase();
+    let body = upper
+        .strip_prefix("K-")
+        .or_else(|| upper.strip_prefix('K'))?;
+    (body.len() == 6 && body.bytes().all(|b| ALPHABET.contains(&b))).then(|| format!("K-{body}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -60,6 +70,24 @@ mod tests {
             assert!(code.starts_with("K-"));
             assert!(code[2..].bytes().all(|b| ALPHABET.contains(&b)), "{code}");
             assert!(!code[2..].contains(['I', 'L', 'O', 'U']));
+        }
+    }
+
+    #[test]
+    fn typed_codes_normalize() {
+        assert_eq!(normalize(" k-7q3m2x ").as_deref(), Some("K-7Q3M2X"));
+        assert_eq!(normalize("K7Q3M2X").as_deref(), Some("K-7Q3M2X"));
+        assert_eq!(normalize("K-00A1F3").as_deref(), Some("K-00A1F3"));
+        for bad in [
+            "",
+            "K-",
+            "K-7Q3M2",
+            "K-7Q3M2XX",
+            "7Q3M2X",
+            "K-7Q3M2!",
+            "0191f000-0000-7000-8000-000000000001",
+        ] {
+            assert_eq!(normalize(bad), None, "{bad}");
         }
     }
 

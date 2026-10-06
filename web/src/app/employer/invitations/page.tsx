@@ -7,8 +7,8 @@ import { isApiError } from "@/api/client";
 import type { InvitationStatus, SentInvitation } from "@/api/types";
 import { CategoryBadge, SalaryRange } from "@/components/domain/Category";
 import { InvitationStatusBadge } from "@/components/domain/StatusBadges";
-import { Button, ButtonLink, Dialog, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
-import { useSentInvitation, useSentInvitations, useWithdrawInvitation } from "@/features/employer/hooks";
+import { Button, ButtonLink, Dialog, EmptyState, ErrorAlert, LoadMore, PageHeader, SkeletonCard, Tabs, tabPanelProps, useToast } from "@/components/ui";
+import { useSentInvitation, useSentInvitationPages, useWithdrawInvitation } from "@/features/employer/hooks";
 import { cn } from "@/lib/cn";
 import { formatDateTime, formatRelative } from "@/lib/format";
 import { DECLINE_REASON_LABEL, INVITATION_STATUS_LABEL, WORK_FORMAT_LABEL } from "@/lib/labels";
@@ -131,13 +131,15 @@ function Row({ inv }: { inv: SentInvitation }) {
   );
 }
 
+const STATUSES: InvitationStatus[] = ["sent", "viewed", "accepted", "declined", "expired", "withdrawn"];
+
 export default function EmployerInvitationsPage() {
-  const q = useSentInvitations();
   const [filter, setFilter] = useState<Filter>("all");
-  const data = q.data ?? [];
-  const count = (s: InvitationStatus) => data.filter((i) => i.status === s).length;
-  const list = filter === "all" ? data : data.filter((i) => i.status === filter);
-  const statuses: InvitationStatus[] = ["sent", "viewed", "accepted", "declined", "expired", "withdrawn"];
+  const q = useSentInvitationPages(filter === "all" ? [] : [filter]);
+  const byStatus = q.data?.pages[0]?.by_status ?? [];
+  const count = (s: InvitationStatus) => byStatus.find((c) => c.status === s)?.count ?? 0;
+  const total = byStatus.reduce((n, c) => n + c.count, 0);
+  const list = q.isPlaceholderData ? [] : (q.data?.pages.flatMap((p) => p.items) ?? []);
   return (
     <div>
       <PageHeader title="Приглашения" description="Статусы обновляются, когда кандидат открывает приглашение и отвечает. Приглашение действует 14 дней." />
@@ -147,10 +149,10 @@ export default function EmployerInvitationsPage() {
         value={filter}
         onChange={setFilter}
         className="mb-6"
-        items={[{ value: "all" as Filter, label: "Все", count: data.length }, ...statuses.map((s) => ({ value: s as Filter, label: INVITATION_STATUS_LABEL[s], count: count(s) }))]}
+        items={[{ value: "all" as Filter, label: "Все", count: total }, ...STATUSES.map((s) => ({ value: s as Filter, label: INVITATION_STATUS_LABEL[s], count: count(s) }))]}
       />
       <div {...tabPanelProps("sent", filter)}>
-        {q.isPending ? (
+        {q.isPending || q.isPlaceholderData ? (
           <div className="space-y-3">
             <SkeletonCard lines={2} />
             <SkeletonCard lines={2} />
@@ -160,16 +162,19 @@ export default function EmployerInvitationsPage() {
         ) : list.length === 0 ? (
           <EmptyState
             icon={<Send className="size-5" aria-hidden />}
-            title={data.length === 0 ? "Вы ещё никого не пригласили" : "Нет приглашений с таким статусом"}
-            description={data.length === 0 ? "Откройте подборку по потребности или найдите кандидата в базе — и отправьте приглашение с вилкой." : undefined}
-            action={data.length === 0 ? <ButtonLink href="/employer/needs">К подборкам</ButtonLink> : undefined}
+            title={total === 0 ? "Вы ещё никого не пригласили" : "Нет приглашений с таким статусом"}
+            description={total === 0 ? "Откройте подборку по потребности или найдите кандидата в базе — и отправьте приглашение с вилкой." : undefined}
+            action={total === 0 ? <ButtonLink href="/employer/needs">К подборкам</ButtonLink> : undefined}
           />
         ) : (
-          <ul className="space-y-3">
-            {list.map((inv) => (
-              <Row key={inv.id} inv={inv} />
-            ))}
-          </ul>
+          <>
+            <ul className="space-y-3">
+              {list.map((inv) => (
+                <Row key={inv.id} inv={inv} />
+              ))}
+            </ul>
+            <LoadMore key={filter} pager={q} loaded={list.length} noun="Приглашения" />
+          </>
         )}
       </div>
     </div>

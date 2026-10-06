@@ -325,14 +325,13 @@
           {
             "name": "subject",
             "in": "query",
-            "description": "A session, vacancy, invitation, company or complaint, or a candidate or company the\nactions concern.",
+            "description": "A session, vacancy, invitation, company or complaint, or a candidate or company the\nactions concern: its id, or a candidate's anonymous code «K-XXXXXX».",
             "required": false,
             "schema": {
               "type": [
                 "string",
                 "null"
-              ],
-              "format": "uuid"
+              ]
             }
           },
           {
@@ -371,7 +370,7 @@
             }
           },
           "400": {
-            "description": "`invalid_query`",
+            "description": "`invalid_query` — `cursor` не из ответа или `subject` не id и не код кандидата",
             "content": {
               "application/json": {
                 "schema": {
@@ -2559,17 +2558,63 @@
         "tags": [
           "invitations"
         ],
-        "summary": "Incoming invitations",
+        "summary": "Incoming invitations, newest first. Keyset pagination: pass `next_cursor` as `cursor`",
         "operationId": "list_received",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Comma-separated statuses to keep, e.g. `sent,viewed`; all by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` of the previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100, 30 by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ReceivedInvitation"
-                  }
+                  "$ref": "#/components/schemas/ReceivedInvitationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query` — неизвестный статус или `cursor` не из ответа",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -4824,9 +4869,37 @@
         "tags": [
           "integrations"
         ],
-        "summary": "Recent integration events with the per-attempt delivery log",
+        "summary": "Integration events with the per-attempt delivery log, newest first. Keyset pagination: pass\n`next_cursor` as `cursor`",
         "operationId": "list_deliveries",
         "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Only events in this status.",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/DeliveryStatus"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` of the previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
           {
             "name": "limit",
             "in": "query",
@@ -4846,16 +4919,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/DeliveryView"
-                  }
+                  "$ref": "#/components/schemas/CursorPage_DeliveryView"
                 }
               }
             }
           },
           "400": {
-            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "description": "`invalid_query` — `cursor` не из ответа",
             "content": {
               "application/json": {
                 "schema": {
@@ -5558,17 +5628,63 @@
         "tags": [
           "invitations"
         ],
-        "summary": "Invitations sent by the company",
+        "summary": "Invitations sent by the company, newest first. Keyset pagination: pass `next_cursor` as `cursor`",
         "operationId": "list_sent",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Comma-separated statuses to keep, e.g. `sent,viewed`; all by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` of the previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100, 30 by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SentInvitation"
-                  }
+                  "$ref": "#/components/schemas/SentInvitationPage"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query` — неизвестный статус или `cursor` не из ответа",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -7473,7 +7589,7 @@
         "tags": [
           "tasks"
         ],
-        "summary": "Anonymous submissions to a task (a strong one is a reason to send an invitation)",
+        "summary": "Anonymous submissions to a task, newest first (a strong one is a reason to send an\ninvitation). Keyset pagination: pass `next_cursor` as `cursor`",
         "operationId": "submissions",
         "parameters": [
           {
@@ -7484,6 +7600,31 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` of the previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100, 30 by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
           }
         ],
         "responses": {
@@ -7491,16 +7632,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Submission"
-                  }
+                  "$ref": "#/components/schemas/CursorPage_Submission"
                 }
               }
             }
           },
           "400": {
-            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "description": "`invalid_query` — `cursor` не из ответа; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
             "content": {
               "application/json": {
                 "schema": {
@@ -7811,8 +7949,23 @@
         "tags": [
           "vacancies"
         ],
-        "summary": "Create a vacancy (salary range is mandatory)",
+        "summary": "Create a vacancy (salary range is mandatory). With `Idempotency-Key` a repeated click or\nretry returns the vacancy already created instead of a duplicate",
         "operationId": "create",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "До 100 символов, в пределах компании. Повтор с тем же ключом — и одновременная отправка — вернёт уже созданную вакансию",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "vac-2026-10-07-0001"
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -7824,6 +7977,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "Повтор по Idempotency-Key: вакансия уже создана",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Vacancy"
+                }
+              }
+            }
+          },
           "201": {
             "headers": {
               "Location": {
@@ -7902,7 +8065,7 @@
             }
           },
           "422": {
-            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "description": "`validation_failed`; `idempotency_key` — длиннее 100 символов; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -8252,7 +8415,7 @@
         "tags": [
           "vacancies"
         ],
-        "summary": "Applications to a vacancy. Contacts of applicants are available via `/employer/candidates/{id}/contacts`.",
+        "summary": "Applications to a vacancy, newest first. Contacts of applicants are available via\n`/employer/candidates/{id}/contacts`. Keyset pagination: pass `next_cursor` as `cursor`",
         "operationId": "list_applications",
         "parameters": [
           {
@@ -8263,6 +8426,31 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` of the previous page.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "1–100, 30 by default.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "format": "int64"
+            }
           }
         ],
         "responses": {
@@ -8270,16 +8458,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/IncomingApplication"
-                  }
+                  "$ref": "#/components/schemas/CursorPage_IncomingApplication"
                 }
               }
             }
           },
           "400": {
-            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "description": "`invalid_query` — `cursor` не из ответа; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
             "content": {
               "application/json": {
                 "schema": {
@@ -9324,7 +9509,7 @@
         "tags": [
           "Интеграции ATS"
         ],
-        "summary": "Polling alternative to webhooks: invitations whose status changed after `since`, oldest first",
+        "summary": "Polling alternative to webhooks: invitations whose status changed after `cursor`, oldest\nfirst. Changes of the last few seconds come on the next call, so a change still being saved is\nnever skipped",
         "operationId": "ats_invitations",
         "parameters": [
           {
@@ -9343,9 +9528,21 @@
             }
           },
           {
+            "name": "cursor",
+            "in": "query",
+            "description": "`next_cursor` of the previous call; without it the feed starts from the first invitation.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
             "name": "since",
             "in": "query",
-            "description": "RFC 3339; only invitations whose status changed after this moment. Pass `next_since` from\nthe previous page.",
+            "description": "Deprecated, use `cursor`. RFC 3339: invitations whose status changed after this moment.",
             "required": false,
             "schema": {
               "type": [
@@ -9380,7 +9577,7 @@
             }
           },
           "400": {
-            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "description": "`invalid_query` — `cursor` не из ответа",
             "content": {
               "application/json": {
                 "schema": {
@@ -9431,7 +9628,7 @@
         "tags": [
           "Интеграции ATS"
         ],
-        "summary": "Import a vacancy from the ATS: the text is parsed into a hiring need; the shortlist is built\nwhen the need is opened in the cabinet",
+        "summary": "Import a vacancy from the ATS: the text is parsed into a hiring need; the shortlist is built\nwhen the need is opened in the cabinet. With `external_id` the call is safe to retry",
         "operationId": "ats_import_need",
         "requestBody": {
           "content": {
@@ -9444,7 +9641,25 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "Потребность с этим `external_id` уже импортирована — она и возвращается",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportedNeed"
+                }
+              }
+            }
+          },
           "201": {
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                },
+                "description": "`/api/v1/employer/needs/{id}`"
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -9504,7 +9719,7 @@
             }
           },
           "422": {
-            "description": "Нет текста, не распознана специализация или вилка; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "description": "Нет текста, не распознана специализация или вилка; `external_id` длиннее 200 символов; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -10505,7 +10720,7 @@
         "tags": [
           "account"
         ],
-        "summary": "Report a fake vacancy, a misleading invitation or an abusive company",
+        "summary": "Report a fake vacancy, a misleading invitation or an abusive company. One open complaint per\nperson and target: a repeat returns the open one",
         "operationId": "create_report",
         "requestBody": {
           "content": {
@@ -10518,6 +10733,16 @@
           "required": true
         },
         "responses": {
+          "200": {
+            "description": "Жалоба на этот объект уже ждёт модератора — она и возвращается",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportCreated"
+                }
+              }
+            }
+          },
           "201": {
             "content": {
               "application/json": {
@@ -12066,13 +12291,20 @@
               "$ref": "#/components/schemas/AtsInvitationItem"
             }
           },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` on the next call. An empty page repeats the cursor it was asked with:\nkeep polling with it. A full page (`limit` items) means more are waiting — call again at once."
+          },
           "next_since": {
             "type": [
               "string",
               "null"
             ],
             "format": "date-time",
-            "description": "Cursor for the next call; `null` when the page is empty."
+            "description": "Deprecated: `updated_at` of the last item, for clients still on `since`; `null` when the\npage is empty."
           }
         }
       },
@@ -13414,6 +13646,227 @@
           "deadline": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CursorPage_DeliveryView": {
+        "type": "object",
+        "description": "A page of a list, newest first.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "event_id",
+                "event_type",
+                "status",
+                "created_at",
+                "attempts"
+              ],
+              "properties": {
+                "event_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "event_type": {
+                  "$ref": "#/components/schemas/EventType"
+                },
+                "status": {
+                  "$ref": "#/components/schemas/DeliveryStatus"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "next_attempt_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time",
+                  "description": "For `pending`: when the next attempt is due."
+                },
+                "delivered_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                },
+                "last_error": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "attempts": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AttemptView"
+                  },
+                  "description": "Every HTTP attempt, oldest first."
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` for the next page; `null` on the last one."
+          }
+        }
+      },
+      "CursorPage_IncomingApplication": {
+        "type": "object",
+        "description": "A page of a list, newest first.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "candidate_id",
+                "candidate_code",
+                "cover_letter",
+                "status",
+                "created_at",
+                "updated_at"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "candidate_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "candidate_code": {
+                  "type": "string"
+                },
+                "candidate_category": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Category"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "cover_letter": {
+                  "type": "string"
+                },
+                "status": {
+                  "$ref": "#/components/schemas/ApplicationStatus"
+                },
+                "created_at": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updated_at": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` for the next page; `null` on the last one."
+          }
+        }
+      },
+      "CursorPage_Submission": {
+        "type": "object",
+        "description": "A page of a list, newest first.",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "candidate_id",
+                "candidate_code",
+                "status"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "candidate_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "candidate_code": {
+                  "type": "string"
+                },
+                "candidate_category": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/Category"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "$ref": "#/components/schemas/TaskStatus"
+                },
+                "answer": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "rating": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "int32"
+                },
+                "review_comment": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "submitted_at": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` for the next page; `null` on the last one."
           }
         }
       },
@@ -14979,6 +15432,12 @@
             "type": "string",
             "format": "uuid"
           },
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "shortlist_url": {
             "type": "string",
             "description": "Page of the need with the shortlist in the employer cabinet."
@@ -15950,6 +16409,13 @@
           "text"
         ],
         "properties": {
+          "external_id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The vacancy id in your ATS, up to 200 characters. A repeat with the same `external_id`\ncreates nothing and returns the need imported first (200) — safe to retry."
+          },
           "title": {
             "type": [
               "string",
@@ -15974,6 +16440,7 @@
           }
         },
         "example": {
+          "external_id": "hh-98765432",
           "salary": {
             "max": 450000,
             "min": 350000
@@ -18402,6 +18869,35 @@
           }
         }
       },
+      "ReceivedInvitationPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "by_status"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ReceivedInvitation"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` for the next page; `null` on the last one."
+          },
+          "by_status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusCount"
+            },
+            "description": "How many invitations of each status you have, whatever the filter."
+          }
+        }
+      },
       "RecordingInfo": {
         "type": "object",
         "required": [
@@ -18620,12 +19116,17 @@
       "ReportCreated": {
         "type": "object",
         "required": [
-          "id"
+          "id",
+          "already_open"
         ],
         "properties": {
           "id": {
             "type": "string",
             "format": "uuid"
+          },
+          "already_open": {
+            "type": "boolean",
+            "description": "You already have an open complaint about this target: it is returned, nothing new was\nwritten."
           }
         }
       },
@@ -19255,6 +19756,35 @@
             "items": {
               "$ref": "#/components/schemas/StatusEvent"
             }
+          }
+        }
+      },
+      "SentInvitationPage": {
+        "type": "object",
+        "required": [
+          "items",
+          "by_status"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SentInvitation"
+            }
+          },
+          "next_cursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "Pass as `cursor` for the next page; `null` on the last one."
+          },
+          "by_status": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StatusCount"
+            },
+            "description": "How many invitations of each status the company has, whatever the filter."
           }
         }
       },

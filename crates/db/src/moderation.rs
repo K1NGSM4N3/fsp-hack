@@ -10,12 +10,7 @@ use crate::types::{
     AssessmentStatus, FlagReview, ModerationAction, ModerationTarget, ReviewDecision, VacancyStatus,
 };
 
-/// A keyset position: the sort time and the id that breaks ties.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Cursor {
-    pub at: DateTime<Utc>,
-    pub id: Uuid,
-}
+pub use crate::types::Cursor;
 
 #[derive(Debug, Clone)]
 pub struct QueueSession {
@@ -962,6 +957,19 @@ pub struct ActionFilter {
     pub moderator_id: Option<Uuid>,
     /// The target itself, or the candidate or company an action concerns.
     pub subject: Option<Uuid>,
+}
+
+/// The candidate behind an anonymous code, for the audit log filter.
+pub async fn candidate_by_code(
+    db: impl PgExecutor<'_>,
+    public_code: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT user_id FROM candidates WHERE public_code = $1",
+        public_code,
+    )
+    .fetch_optional(db)
+    .await
 }
 
 /// The audit log, newest first.

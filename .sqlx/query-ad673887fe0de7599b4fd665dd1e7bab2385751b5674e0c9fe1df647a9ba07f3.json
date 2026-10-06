@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT min(email_due_at) AS due,\n                  min(email_due_at) FILTER (WHERE kind = ANY($2)) AS urgent_due\n           FROM notifications\n           WHERE user_id = $1 AND email_due_at IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "due",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "urgent_due",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "ad673887fe0de7599b4fd665dd1e7bab2385751b5674e0c9fe1df647a9ba07f3"
+}

@@ -23,6 +23,7 @@ use crate::{
         seal_secret, signature,
     },
     notify::Notifier,
+    page::{self, CursorPage},
     state::AppState,
 };
 
@@ -343,23 +344,41 @@ pub struct DeliveryView {
 
 #[derive(Deserialize, IntoParams)]
 pub struct DeliveriesQuery {
+    /// Only events in this status.
+    pub status: Option<DeliveryStatus>,
+    /// `next_cursor` of the previous page.
+    pub cursor: Option<String>,
     /// Default 50, at most 200.
     pub limit: Option<i64>,
 }
 
-/// Recent integration events with the per-attempt delivery log
+/// Integration events with the per-attempt delivery log, newest first. Keyset pagination: pass
+/// `next_cursor` as `cursor`
 #[utoipa::path(get, path = "/integrations/deliveries", tag = "integrations",
     params(DeliveriesQuery),
-    responses((status = 200, body = Vec<DeliveryView>), (status = 409, description = "`company_profile_required`", body = Problem)),
+    responses(
+        (status = 200, body = CursorPage<DeliveryView>),
+        (status = 400, description = "`invalid_query` — `cursor` не из ответа", body = Problem),
+        (status = 409, description = "`company_profile_required`", body = Problem),
+    ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_deliveries(
     State(state): State<AppState>,
     user: EmployerUser,
     Query(q): Query<DeliveriesQuery>,
-) -> ApiResult<Json<Vec<DeliveryView>>> {
+) -> ApiResult<Json<CursorPage<DeliveryView>>> {
+    let before = page::decode(q.cursor.as_deref())?;
+    let limit = page::limit(q.limit, 50, 200);
     let company = company_id(&state, user.id).await?;
-    let limit = q.limit.unwrap_or(50).clamp(1, 200);
-    let events = db::integrations::company_events(&state.pool, company, limit).await?;
+    let events = db::integrations::company_events(
+        &state.pool,
+        company,
+        q.status.map(Into::into),
+        before,
+        limit + 1,
+    )
+    .await?;
+    let (events, next_cursor) = page::split(events, limit, |e| (e.created_at, e.id));
     let ids: Vec<Uuid> = events.iter().map(|e| e.id).collect();
     let attempts = db::integrations::event_attempts(&state.pool, &ids).await?;
     let mut out = Vec::with_capacity(events.len());
@@ -390,7 +409,10 @@ async fn list_deliveries(
             attempts: mine,
         });
     }
-    Ok(Json(out))
+    Ok(Json(CursorPage {
+        items: out,
+        next_cursor,
+    }))
 }
 
 /// «Отправить ещё раз»: queue the event again now, with a fresh 24-hour retry window

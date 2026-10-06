@@ -209,9 +209,9 @@ export function proctoringRecordingUrl(id: T.Uuid): string {
   return `${API_BASE}/candidate/assessments/${id}/proctoring/recording`;
 }
 
-export async function listReceivedInvitations(): Promise<T.ReceivedInvitation[]> {
-  if (USE_MOCKS) return (await mocks()).listReceivedInvitations();
-  return http("GET", "/candidate/invitations");
+export async function listReceivedInvitations(query: T.InvitationListQuery = {}): Promise<T.ReceivedInvitationPage> {
+  if (USE_MOCKS) return (await mocks()).listReceivedInvitations(query);
+  return http("GET", "/candidate/invitations", { query: { ...query } });
 }
 
 export async function getReceivedInvitation(id: T.Uuid): Promise<T.ReceivedInvitation> {
@@ -372,9 +372,9 @@ export async function getCandidateContacts(id: T.Uuid): Promise<T.CandidateConta
   return http("GET", `/employer/candidates/${id}/contacts`);
 }
 
-export async function listSentInvitations(): Promise<T.SentInvitation[]> {
-  if (USE_MOCKS) return (await mocks()).listSentInvitations();
-  return http("GET", "/employer/invitations");
+export async function listSentInvitations(query: T.InvitationListQuery = {}): Promise<T.SentInvitationPage> {
+  if (USE_MOCKS) return (await mocks()).listSentInvitations(query);
+  return http("GET", "/employer/invitations", { query: { ...query } });
 }
 
 export async function sendInvitation(body: T.SendInvitation, idempotencyKey: string): Promise<T.SentInvitation> {
@@ -419,9 +419,10 @@ export async function listOwnVacancies(): Promise<T.Vacancy[]> {
   return http("GET", "/employer/vacancies");
 }
 
-export async function createVacancy(body: T.VacancyInput): Promise<T.Vacancy> {
-  if (USE_MOCKS) return (await mocks()).createVacancy(body);
-  return http("POST", "/employer/vacancies", { body });
+/** The key is made once per form, so a double click or a retry returns the vacancy already created. */
+export async function createVacancy(body: T.VacancyInput, idempotencyKey: string): Promise<T.Vacancy> {
+  if (USE_MOCKS) return (await mocks()).createVacancy(body, idempotencyKey);
+  return http("POST", "/employer/vacancies", { body, headers: { "Idempotency-Key": idempotencyKey } });
 }
 
 export async function getOwnVacancy(id: T.Uuid): Promise<T.Vacancy> {
@@ -434,9 +435,9 @@ export async function updateVacancy(id: T.Uuid, body: T.VacancyInput): Promise<T
   return http("PUT", `/employer/vacancies/${id}`, { body });
 }
 
-export async function listVacancyApplications(id: T.Uuid): Promise<T.IncomingApplication[]> {
-  if (USE_MOCKS) return (await mocks()).listVacancyApplications(id);
-  return http("GET", `/employer/vacancies/${id}/applications`);
+export async function listVacancyApplications(id: T.Uuid, cursor?: string | null): Promise<T.ApplicationPage> {
+  if (USE_MOCKS) return (await mocks()).listVacancyApplications(id, cursor);
+  return http("GET", `/employer/vacancies/${id}/applications`, { query: { cursor } });
 }
 
 export async function setApplicationStatus(id: T.Uuid, status: T.EmployerApplicationStatus): Promise<void> {
@@ -459,9 +460,9 @@ export async function setTaskActive(id: T.Uuid, active: boolean): Promise<void> 
   return http("POST", `/employer/tasks/${id}/active`, { body: { active } });
 }
 
-export async function listTaskSubmissions(id: T.Uuid): Promise<T.TaskSubmission[]> {
-  if (USE_MOCKS) return (await mocks()).listTaskSubmissions(id);
-  return http("GET", `/employer/tasks/${id}/submissions`);
+export async function listTaskSubmissions(id: T.Uuid, cursor?: string | null): Promise<T.SubmissionPage> {
+  if (USE_MOCKS) return (await mocks()).listTaskSubmissions(id, cursor);
+  return http("GET", `/employer/tasks/${id}/submissions`, { query: { cursor } });
 }
 
 export async function reviewTaskSubmission(id: T.Uuid, submissionId: T.Uuid, body: T.ReviewInput): Promise<void> {
@@ -484,7 +485,8 @@ export async function applyToVacancy(id: T.Uuid, body: T.ApplyInput): Promise<T.
   return http("POST", `/vacancies/${id}/applications`, { body });
 }
 
-export async function createReport(body: T.ReportInput): Promise<void> {
+/** A repeat about the same target returns the complaint still open (`already_open`). */
+export async function createReport(body: T.ReportInput): Promise<T.ReportCreated> {
   if (USE_MOCKS) return (await mocks()).createReport(body);
   return http("POST", "/reports", { body });
 }
@@ -515,9 +517,9 @@ export async function sendTestEvent(): Promise<T.TestDelivery> {
   return http("POST", "/employer/integrations/webhook/test");
 }
 
-export async function listDeliveries(limit = 50): Promise<T.DeliveryView[]> {
-  if (USE_MOCKS) return (await mocks()).listDeliveries(limit);
-  return http("GET", "/employer/integrations/deliveries", { query: { limit } });
+export async function listDeliveries(status: T.DeliveryStatus | null, cursor?: string | null, limit = 20): Promise<T.DeliveryPage> {
+  if (USE_MOCKS) return (await mocks()).listDeliveries(status, cursor, limit);
+  return http("GET", "/employer/integrations/deliveries", { query: { status, cursor, limit } });
 }
 
 export async function retryDelivery(eventId: T.Uuid): Promise<void> {

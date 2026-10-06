@@ -10,6 +10,7 @@ import { formatDateTime } from "@/lib/format";
 const ACTIONS = Object.keys(ACTION_LABEL) as ModerationAction[];
 const TARGETS = Object.keys(TARGET_LABEL) as ModerationTarget[];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CODE = /^k-?[0-9a-z]{6}$/i;
 
 function Target({ e }: { e: AuditEntry }) {
   const label = e.target_label ?? e.company_name ?? null;
@@ -43,7 +44,7 @@ export default function AuditLogPage() {
   const [action, setAction] = useState<ModerationAction | "">("");
   const [target, setTarget] = useState<ModerationTarget | "">("");
   const [subject, setSubject] = useState("");
-  const subjectValid = !subject.trim() || UUID.test(subject.trim());
+  const subjectValid = !subject.trim() || UUID.test(subject.trim()) || CODE.test(subject.trim());
   const filter: AuditFilter = {
     action: action || null,
     target_kind: target || null,
@@ -76,8 +77,8 @@ export default function AuditLogPage() {
               ))}
             </Select>
           </Field>
-          <Field label="ID объекта, кандидата или компании" error={subjectValid ? undefined : "Нужен UUID"} optional>
-            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="0192…" spellCheck={false} />
+          <Field label="Код кандидата или ID" hint="K-7Q3M2X — всё о кандидате; ID — теста, вакансии, компании или жалобы" error={subjectValid ? undefined : "Нужен код вида K-7Q3M2X или ID"} optional>
+            <Input value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="K-7Q3M2X" spellCheck={false} autoCapitalize="characters" />
           </Field>
         </div>
       </Card>

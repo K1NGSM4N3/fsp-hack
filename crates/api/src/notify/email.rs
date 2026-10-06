@@ -2,7 +2,9 @@
 //!
 //! 1. **Assemble.** For each recipient with a due item, under a per-recipient advisory lock, all
 //!    queued items (including those still in their hold) become one letter — unless the rate
-//!    rule says wait, in which case they are postponed together and keep collecting.
+//!    rule says wait, in which case they are postponed together and keep collecting. A new
+//!    invitation is not postponed for the gap between letters: when its hold ends, the letter goes
+//!    with everything queued so far.
 //! 2. **Send.** Pending letters are leased with `FOR UPDATE SKIP LOCKED`, rendered and sent; the
 //!    letter id is the Message-ID, so a retry after a crash is the same letter. Kinds the user
 //!    turned off after the item was queued are dropped at this point.
@@ -24,8 +26,11 @@ const BATCH: i64 = 16;
 /// After the n-th failed send: 1 m, 5 m, 30 m, 2 h; the fifth failure is final.
 const RETRY_SECS: [i64; 4] = [60, 300, 1_800, 7_200];
 const MAX_ATTEMPTS: i16 = 5;
+/// Kinds that skip the gap between letters (`NotificationKind::skips_gap`).
+const URGENT: [&str; 1] = [NotificationKind::InvitationReceived.slug()];
 
-/// Per recipient: one letter per `min_gap`, at most `daily_cap` in any 24 hours.
+/// Per recipient: one letter per `min_gap`, at most `daily_cap` in any 24 hours. A letter that
+/// carries a new invitation skips the gap, not the cap.
 #[derive(Debug, Clone, Copy)]
 pub struct RateRule {
     pub min_gap: Duration,
@@ -153,15 +158,25 @@ impl EmailDispatcher {
         if !db::notifications::try_lock_recipient(&mut *tx, user).await? {
             return Ok(Assembled::Busy);
         }
-        let due = db::notifications::earliest_queued(&mut *tx, user).await?;
-        if due.is_none_or(|d| d > now) {
+        let queued = db::notifications::queued(&mut *tx, user, &URGENT).await?;
+        if queued.due.is_none_or(|d| d > now) {
             return Ok(Assembled::NotDue);
         }
         let history =
             db::notifications::email_history(&mut *tx, user, now - Duration::hours(24)).await?;
-        let out = match slot(self.rule, now, &history) {
+        let cap_only = RateRule {
+            min_gap: Duration::zero(),
+            ..self.rule
+        };
+        let urgent_due = queued.urgent_due.is_some_and(|d| d <= now);
+        let rule = if urgent_due { cap_only } else { self.rule };
+        let out = match slot(rule, now, &history) {
             Slot::Wait(at) => {
-                db::notifications::defer_queued(&mut *tx, user, at).await?;
+                let urgent_until = match slot(cap_only, now, &history) {
+                    Slot::Now => None,
+                    Slot::Wait(cap) => Some(cap),
+                };
+                db::notifications::defer_queued(&mut *tx, user, at, &URGENT, urgent_until).await?;
                 Assembled::Deferred(at)
             }
             Slot::Now => {
@@ -362,6 +377,16 @@ mod tests {
         let h = history(3, Some(100), Some(20));
         assert_eq!(slot(RULE, at(200), &h), Slot::Wait(at(20 + 24 * 60)));
         assert_eq!(slot(RULE, at(20 + 24 * 60), &h), Slot::Now);
+    }
+
+    #[test]
+    fn urgent_kinds_are_the_ones_that_skip_the_gap() {
+        let skipping: Vec<&str> = NotificationKind::ALL
+            .iter()
+            .filter(|k| k.skips_gap())
+            .map(|k| k.slug())
+            .collect();
+        assert_eq!(skipping, URGENT);
     }
 
     #[test]

@@ -19,6 +19,9 @@ pub const REFRESH_COOKIE: &str = "fsp_rt";
 /// Marker for the Next.js middleware: `fsp_rt` is path-scoped to /api and `fsp_at`
 /// expires every 15 minutes, so page requests need a cookie that lives as long as the session.
 pub const SESSION_COOKIE: &str = "fsp_session";
+/// When the access token expires, unix seconds — readable by the page script, unlike the token
+/// itself, so the client refreshes before a request instead of after its 401.
+pub const ACCESS_EXPIRY_COOKIE: &str = "fsp_at_exp";
 pub const REFRESH_TTL_DAYS: i64 = 30;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
@@ -196,7 +199,13 @@ fn origin_matches(origin: &str, public_url: &str) -> bool {
     origin == public_url || origin.starts_with(&format!("{public_url}/"))
 }
 
-pub fn session_cookies(jar: CookieJar, access: String, refresh: String, secure: bool) -> CookieJar {
+pub fn session_cookies(
+    jar: CookieJar,
+    access: String,
+    access_expires_at: i64,
+    refresh: String,
+    secure: bool,
+) -> CookieJar {
     let access = Cookie::build((ACCESS_COOKIE, access))
         .http_only(true)
         .secure(secure)
@@ -215,13 +224,20 @@ pub fn session_cookies(jar: CookieJar, access: String, refresh: String, secure: 
         .same_site(SameSite::Lax)
         .path("/")
         .max_age(time_dur(REFRESH_TTL_DAYS * 86_400));
-    jar.add(access).add(refresh).add(marker)
+    let expiry = Cookie::build((ACCESS_EXPIRY_COOKIE, access_expires_at.to_string()))
+        .http_only(false)
+        .secure(secure)
+        .same_site(SameSite::Lax)
+        .path("/")
+        .max_age(time_dur(REFRESH_TTL_DAYS * 86_400));
+    jar.add(access).add(refresh).add(marker).add(expiry)
 }
 
 pub fn clear_session_cookies(jar: CookieJar) -> CookieJar {
     jar.remove(Cookie::build(ACCESS_COOKIE).path("/"))
         .remove(Cookie::build(REFRESH_COOKIE).path("/api/v1/auth"))
         .remove(Cookie::build(SESSION_COOKIE).path("/"))
+        .remove(Cookie::build(ACCESS_EXPIRY_COOKIE).path("/"))
 }
 
 fn time_dur(secs: i64) -> time::Duration {

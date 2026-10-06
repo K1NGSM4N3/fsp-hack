@@ -339,13 +339,27 @@ pub async fn try_lock_recipient(
     .await
 }
 
-pub async fn earliest_queued(
+#[derive(Debug, Clone, Copy)]
+pub struct Queued {
+    /// When the first queued item's hold ends.
+    pub due: Option<DateTime<Utc>>,
+    /// The same, among the kinds that skip the gap between letters.
+    pub urgent_due: Option<DateTime<Utc>>,
+}
+
+pub async fn queued(
     db: impl PgExecutor<'_>,
     user_id: Uuid,
-) -> Result<Option<DateTime<Utc>>, sqlx::Error> {
-    sqlx::query_scalar!(
-        "SELECT min(email_due_at) FROM notifications WHERE user_id = $1 AND email_due_at IS NOT NULL",
+    urgent_kinds: &[&str],
+) -> Result<Queued, sqlx::Error> {
+    sqlx::query_as!(
+        Queued,
+        r#"SELECT min(email_due_at) AS due,
+                  min(email_due_at) FILTER (WHERE kind = ANY($2)) AS urgent_due
+           FROM notifications
+           WHERE user_id = $1 AND email_due_at IS NOT NULL"#,
         user_id,
+        urgent_kinds as &[&str],
     )
     .fetch_one(db)
     .await
@@ -369,16 +383,23 @@ pub async fn email_history(
     .await
 }
 
+/// Everything queued moves to `until` and keeps collecting there — except the urgent kinds, which
+/// keep their own time unless `urgent_until` (the daily cap) pushes them too.
 pub async fn defer_queued(
     db: impl PgExecutor<'_>,
     user_id: Uuid,
     until: DateTime<Utc>,
+    urgent_kinds: &[&str],
+    urgent_until: Option<DateTime<Utc>>,
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
-        "UPDATE notifications SET email_due_at = $2
+        "UPDATE notifications
+         SET email_due_at = CASE WHEN kind = ANY($3) THEN greatest(email_due_at, $4) ELSE $2 END
          WHERE user_id = $1 AND email_due_at IS NOT NULL",
         user_id,
         until,
+        urgent_kinds as &[&str],
+        urgent_until,
     )
     .execute(db)
     .await

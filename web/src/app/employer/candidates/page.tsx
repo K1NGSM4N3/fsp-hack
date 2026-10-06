@@ -1,9 +1,9 @@
 "use client";
 
-import { Search, SearchX, Send, Trophy } from "lucide-react";
+import { ChevronDown, Search, SearchX, Send, SlidersHorizontal, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useDeferredValue, useState } from "react";
+import { Suspense, useDeferredValue, useRef, useState } from "react";
 import type { CandidateSearchParams, Grade, Specialization, WorkFormat } from "@/api/types";
 import { CandidateCardView } from "@/components/domain/CandidateCard";
 import { ReasonList, ScoreRing } from "@/components/domain/Explanation";
@@ -98,6 +98,8 @@ function SearchView() {
   const needs = useNeeds();
   const [limit, setLimit] = useState(PAGE);
   const [invite, setInvite] = useState<InviteTarget | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersToggle = useRef<HTMLButtonElement>(null);
   const dq = useDeferredValue(q);
   const dcity = useDeferredValue(city);
 
@@ -116,6 +118,12 @@ function SearchView() {
     offset: 0,
   };
   const result = useCandidateSearch(search);
+
+  const active = [q.trim(), grade, skills.length, format, city.trim(), salaryMax, fspOnly, adultsOnly].filter(Boolean).length;
+  const closeFilters = () => {
+    setFiltersOpen(false);
+    filtersToggle.current?.focus();
+  };
 
   const reset = () => {
     setGrade("");
@@ -143,7 +151,26 @@ function SearchView() {
         }}
       />
       <div className="grid gap-6 lg:grid-cols-[17rem_1fr]">
-        <aside aria-label="Фильтры" className="scrollbar-thin h-fit space-y-4 rounded-card border border-line bg-white p-5 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto">
+        <div className="lg:hidden">
+          <Button ref={filtersToggle} variant="secondary" className="w-full justify-between" aria-expanded={filtersOpen} aria-controls="search-filters" onClick={() => setFiltersOpen((v) => !v)}>
+            <span className="inline-flex items-center gap-2">
+              <SlidersHorizontal className="size-4" aria-hidden />
+              {active ? pluralize(active, ["фильтр", "фильтра", "фильтров"]) : "Фильтры"}
+            </span>
+            <ChevronDown className={cn("size-4 transition-transform", filtersOpen && "rotate-180")} aria-hidden />
+          </Button>
+        </div>
+        <aside
+          id="search-filters"
+          aria-label="Фильтры"
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && filtersOpen) closeFilters();
+          }}
+          className={cn(
+            "scrollbar-thin h-fit space-y-4 rounded-card border border-line bg-white p-5 lg:sticky lg:top-20 lg:block lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto",
+            !filtersOpen && "hidden",
+          )}
+        >
           <Field label="Поиск по навыкам и описанию">
             <Input type="search" leading={<Search className="size-4" aria-hidden />} value={q} onChange={(e) => setQ(e.target.value)} placeholder="kafka, платежи…" />
           </Field>
@@ -190,6 +217,9 @@ function SearchView() {
           <Button variant="ghost" size="sm" className="w-full" onClick={reset}>
             Сбросить фильтры
           </Button>
+          <Button className="w-full lg:hidden" onClick={closeFilters}>
+            {result.data ? `Показать ${pluralize(result.data.total, ["кандидата", "кандидатов", "кандидатов"])}` : "Готово"}
+          </Button>
         </aside>
 
         <section aria-label="Результаты поиска" aria-busy={result.isFetching} className="min-w-0 space-y-4">
@@ -197,11 +227,11 @@ function SearchView() {
             <p className="text-sm text-ink" aria-live="polite">
               {result.data ? `Найдено ${pluralize(result.data.total, ["кандидат", "кандидата", "кандидатов"])}` : "Ищем…"}
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex w-full flex-col gap-1.5 sm:w-auto sm:flex-row sm:items-center sm:gap-2">
               <label htmlFor="rank-by" className="shrink-0 text-sm text-ink-subtle">
                 Ранжировать
               </label>
-              <Select id="rank-by" value={needId} onChange={(e) => setNeedId(e.target.value)} className="w-72">
+              <Select id="rank-by" value={needId} onChange={(e) => setNeedId(e.target.value)} className="w-full sm:w-72">
                 <option value="">По силе профиля (тест + ФСП + актуальность)</option>
                 {(needs.data ?? [])
                   .filter((n) => n.specialization === spec)

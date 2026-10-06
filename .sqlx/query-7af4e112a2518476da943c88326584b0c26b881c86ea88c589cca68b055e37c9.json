@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id, company_id, owner_user_id, candidate_id, public_code, specialization, grade,\n                  need_id, vacancy_id, title, message, salary_min, salary_max, work_format,\n                  status AS \"status: InvitationStatus\", decline_reason, decline_comment,\n                  created_at, viewed_at, responded_at, expires_at, updated_at AS \"updated_at!\",\n                  true AS \"webhook_on!\"\n           FROM (\n               SELECT i.*, co.owner_user_id, c.public_code, c.specialization, c.grade,\n                      greatest(i.created_at, i.viewed_at, i.responded_at,\n                               CASE WHEN i.status = 'expired' THEN i.expires_at END) AS updated_at\n               FROM invitations i\n               JOIN candidates c ON c.user_id = i.candidate_id\n               JOIN companies co ON co.id = i.company_id\n               WHERE i.company_id = $1\n           ) t\n           WHERE ($2::invitation_status IS NULL OR status = $2)\n             AND ($3::timestamptz IS NULL OR updated_at > $3)\n           ORDER BY updated_at, id\n           LIMIT $4",
+  "query": "SELECT id, company_id, owner_user_id, candidate_id, public_code, specialization, grade,\n                  need_id, vacancy_id, title, message, salary_min, salary_max, work_format,\n                  status AS \"status: InvitationStatus\", decline_reason, decline_comment,\n                  created_at, viewed_at, responded_at, expires_at, updated_at AS \"updated_at!\",\n                  true AS \"webhook_on!\"\n           FROM (\n               SELECT i.*, co.owner_user_id, c.public_code, c.specialization, c.grade,\n                      greatest(i.created_at, i.viewed_at, i.responded_at,\n                               CASE WHEN i.status = 'expired' THEN i.expires_at END) AS updated_at\n               FROM invitations i\n               JOIN candidates c ON c.user_id = i.candidate_id\n               JOIN companies co ON co.id = i.company_id\n               WHERE i.company_id = $1\n           ) t\n           WHERE ($2::invitation_status IS NULL OR status = $2)\n             AND ($3::timestamptz IS NULL OR (updated_at, id) > ($3, $4::uuid))\n             AND updated_at < least(\n                 now() - make_interval(secs => $5),\n                 (SELECT min(xact_start) FROM pg_stat_activity\n                  WHERE datname = current_database() AND backend_xid IS NOT NULL\n                    AND pid <> pg_backend_pid()))\n           ORDER BY updated_at, id\n           LIMIT $6",
   "describe": {
     "columns": [
       {
@@ -152,6 +152,8 @@
           }
         },
         "Timestamptz",
+        "Uuid",
+        "Float8",
         "Int8"
       ]
     },
@@ -181,5 +183,5 @@
       null
     ]
   },
-  "hash": "5d60bcfc0450e93190aa3d5e299ef8a345843b872ef025d546b22eb8ca368270"
+  "hash": "7af4e112a2518476da943c88326584b0c26b881c86ea88c589cca68b055e37c9"
 }

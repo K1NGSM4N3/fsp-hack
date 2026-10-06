@@ -1,7 +1,11 @@
 //! Classic flow kept alongside invitations (C-6, E-6): a candidate without invitations can still
 //! take the initiative. Applying grants the company access to the candidate's contacts.
 
-use axum::{extract::State, http::StatusCode};
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::{IntoResponse, Response},
+};
 use catalog::{Category, Grade, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
 use matching::trust::display_domain;
@@ -22,6 +26,7 @@ use crate::{
         outcomes::{HiringOutcome, OutcomeIndex},
     },
     notify::Notifier,
+    page::{self, CursorPage, PageQuery},
     skills,
     state::AppState,
     trust,
@@ -197,23 +202,55 @@ async fn check_trust(state: &AppState, company: Uuid, id: Uuid, v: &VacancyInput
     Ok(())
 }
 
-/// Create a vacancy (salary range is mandatory)
+/// Create a vacancy (salary range is mandatory). With `Idempotency-Key` a repeated click or
+/// retry returns the vacancy already created instead of a duplicate
 #[utoipa::path(post, path = "/vacancies", tag = "vacancies",
     request_body = VacancyInput,
-    responses((status = 201, body = Vacancy, headers(("Location" = String, description = "`/api/v1/employer/vacancies/{id}`"))), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
+    params(("Idempotency-Key" = Option<String>, Header, description = "До 100 символов, в пределах компании. Повтор с тем же ключом — и одновременная отправка — вернёт уже созданную вакансию", example = "vac-2026-10-07-0001")),
+    responses(
+        (status = 201, body = Vacancy, headers(("Location" = String, description = "`/api/v1/employer/vacancies/{id}`"))),
+        (status = 200, description = "Повтор по Idempotency-Key: вакансия уже создана", body = Vacancy),
+        (status = 422, description = "`validation_failed`; `idempotency_key` — длиннее 100 символов", body = Problem),
+        (status = 409, description = "`company_profile_required`", body = Problem),
+    ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn create(
     State(state): State<AppState>,
     user: EmployerUser,
+    headers: HeaderMap,
     Json(v): Json<VacancyInput>,
-) -> ApiResult<Created<Vacancy>> {
+) -> ApiResult<Response> {
     validate(&v)?;
+    let key = idempotency_key(&headers)?;
     let company = company_id(&state, user.id).await?;
+    if let Some(key) = key.as_deref()
+        && let Some(existing) = replay(&state, company, key).await?
+    {
+        return Ok((StatusCode::OK, Json(existing)).into_response());
+    }
     let id = Uuid::now_v7();
     let status: db::types::VacancyStatus = v.status.into();
     let published_at = (v.status == VacancyStatus::Published).then(Utc::now);
-    db::vacancies::insert_vacancy(&state.pool, id, company, status, published_at, &fields(&v))
-        .await?;
+    let inserted = db::vacancies::insert_vacancy(
+        &state.pool,
+        id,
+        company,
+        status,
+        published_at,
+        &fields(&v),
+        key.as_deref(),
+    )
+    .await;
+    if let Err(e) = inserted {
+        // The same key sent twice at once: the second insert lost to the first.
+        if db::is_unique_violation(&e)
+            && let Some(key) = key.as_deref()
+            && let Some(existing) = replay(&state, company, key).await?
+        {
+            return Ok((StatusCode::OK, Json(existing)).into_response());
+        }
+        return Err(e.into());
+    }
     check_trust(&state, company, id, &v).await?;
     let row = db::vacancies::company_vacancy(&state.pool, company, id)
         .await?
@@ -221,7 +258,33 @@ async fn create(
     Ok(Created(
         format!("/api/v1/employer/vacancies/{id}"),
         vacancy_from_row!(row),
-    ))
+    )
+    .into_response())
+}
+
+/// `Idempotency-Key`: 1–100 characters after trimming.
+pub(crate) fn idempotency_key(headers: &HeaderMap) -> ApiResult<Option<String>> {
+    let Some(v) = headers.get("idempotency-key") else {
+        return Ok(None);
+    };
+    v.to_str()
+        .ok()
+        .map(str::trim)
+        .filter(|k| !k.is_empty() && k.chars().count() <= 100)
+        .map(|k| Some(k.to_owned()))
+        .ok_or_else(|| ApiError::field("idempotency_key", "Idempotency-Key — от 1 до 100 символов"))
+}
+
+/// The vacancy an `Idempotency-Key` already created.
+async fn replay(state: &AppState, company: Uuid, key: &str) -> ApiResult<Option<Vacancy>> {
+    let Some(id) = db::vacancies::vacancy_by_idempotency_key(&state.pool, company, key).await?
+    else {
+        return Ok(None);
+    };
+    let row = db::vacancies::company_vacancy(&state.pool, company, id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    Ok(Some(vacancy_from_row!(row)))
 }
 
 /// One own vacancy
@@ -291,21 +354,32 @@ pub struct IncomingApplication {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Applications to a vacancy. Contacts of applicants are available via `/employer/candidates/{id}/contacts`.
+/// Applications to a vacancy, newest first. Contacts of applicants are available via
+/// `/employer/candidates/{id}/contacts`. Keyset pagination: pass `next_cursor` as `cursor`
 #[utoipa::path(get, path = "/vacancies/{id}/applications", tag = "vacancies",
-    params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vec<IncomingApplication>), (status = 404, description = "No such vacancy of this company", body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
+    params(("id" = Uuid, Path), PageQuery),
+    responses(
+        (status = 200, body = CursorPage<IncomingApplication>),
+        (status = 400, description = "`invalid_query` — `cursor` не из ответа", body = Problem),
+        (status = 404, description = "No such vacancy of this company", body = Problem),
+        (status = 409, description = "`company_profile_required`", body = Problem),
+    ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_applications(
     State(state): State<AppState>,
     user: EmployerUser,
     Path(id): Path<Uuid>,
-) -> ApiResult<Json<Vec<IncomingApplication>>> {
+    Query(q): Query<PageQuery>,
+) -> ApiResult<Json<CursorPage<IncomingApplication>>> {
+    let before = page::decode(q.cursor.as_deref())?;
+    let limit = page::limit(q.limit, page::DEFAULT, page::MAX);
     let company = company_id(&state, user.id).await?;
     db::vacancies::company_vacancy(&state.pool, company, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    let rows = db::vacancies::vacancy_applications(&state.pool, id, company).await?;
+    let rows =
+        db::vacancies::vacancy_applications(&state.pool, id, company, before, limit + 1).await?;
+    let (rows, next_cursor) = page::split(rows, limit, |r| (r.created_at, r.id));
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
         out.push(IncomingApplication {
@@ -322,7 +396,10 @@ async fn list_applications(
             updated_at: r.updated_at,
         });
     }
-    Ok(Json(out))
+    Ok(Json(CursorPage {
+        items: out,
+        next_cursor,
+    }))
 }
 
 #[derive(Deserialize, ToSchema)]

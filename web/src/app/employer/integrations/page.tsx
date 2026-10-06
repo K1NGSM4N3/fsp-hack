@@ -3,8 +3,8 @@
 import { ArrowLeftRight, Check, ChevronDown, Copy, KeyRound, Lock, RefreshCw, RotateCcw, Send, ShieldCheck, Trash2, Webhook } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { isApiError } from "@/api/client";
-import type { ApiKeyView, ApiScope, DeliveryView, IntegrationEventType, IntegrationsOverview, TestDelivery } from "@/api/types";
-import { Alert, Badge, Button, Card, CardHeader, Checkbox, CodeBlock, Dialog, EmptyState, ErrorAlert, Field, Input, PageHeader, PageSkeleton, SkeletonCard, ToggleChip, useToast } from "@/components/ui";
+import type { ApiKeyView, ApiScope, DeliveryStatus, DeliveryView, IntegrationEventType, IntegrationsOverview, TestDelivery } from "@/api/types";
+import { Alert, Badge, Button, Card, CardHeader, Checkbox, CodeBlock, Dialog, EmptyState, ErrorAlert, Field, Input, LoadMore, PageHeader, PageSkeleton, SkeletonCard, ToggleChip, useToast } from "@/components/ui";
 import {
   useApiKeys,
   useCreateApiKey,
@@ -396,60 +396,45 @@ function DeliveryRow({ d }: { d: DeliveryView }) {
   );
 }
 
-type DeliveryFilter = "all" | DeliveryView["status"];
+type DeliveryFilter = "all" | DeliveryStatus;
 
 const FILTER_LABEL: Record<DeliveryFilter, string> = { all: "Все", delivered: "Доставлено", pending: "В очереди", failed: "Не доставлено" };
-const FIRST_PAGE = 8;
 
-function DeliveriesCard() {
-  const q = useDeliveries();
+function DeliveriesCard({ counts }: { counts: IntegrationsOverview["deliveries"] }) {
   const [filter, setFilter] = useState<DeliveryFilter>("all");
-  const [all, setAll] = useState(false);
-  const list = (q.data ?? []).filter((d) => filter === "all" || d.status === filter);
-  const shown = all ? list : list.slice(0, FIRST_PAGE);
-  const count = (f: DeliveryFilter) => (f === "all" ? (q.data?.length ?? 0) : (q.data ?? []).filter((d) => d.status === f).length);
+  const q = useDeliveries(filter === "all" ? null : filter);
+  const total = counts.pending + counts.delivered + counts.failed;
+  const count = (f: DeliveryFilter) => (f === "all" ? total : counts[f]);
+  const list = q.data?.pages.flatMap((p) => p.items) ?? [];
   return (
     <Card id="deliveries" className="scroll-mt-24">
-      <CardHeader title="Журнал доставок" description="Последние 50 событий. Неудачные повторяем через 1 мин, 5 мин, 30 мин, 2 ч и 12 ч; через сутки сдаёмся" />
-      {q.isPending ? (
-        <SkeletonCard lines={3} className="border-0 p-0" />
-      ) : q.isError ? (
-        <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
-      ) : q.data.length === 0 ? (
+      <CardHeader title="Журнал доставок" description="Новые сверху, хранятся 30 дней. Неудачные повторяем через 1 мин, 5 мин, 30 мин, 2 ч и 12 ч; через сутки сдаёмся" />
+      {total === 0 && !q.isPending && list.length === 0 ? (
         <EmptyState compact icon={<Webhook className="size-5" aria-hidden />} title="Событий пока нет" description="Подключите вебхук и нажмите «Тестовое событие» — оно появится здесь вместе с ответом вашей ATS." />
       ) : (
         <>
           <div role="group" aria-label="Фильтр по статусу доставки" className="mb-4 flex flex-wrap gap-2">
             {(["all", "delivered", "pending", "failed"] as DeliveryFilter[]).map((f) => (
-              <ToggleChip
-                key={f}
-                selected={filter === f}
-                onToggle={() => {
-                  setFilter(f);
-                  setAll(false);
-                }}
-              >
+              <ToggleChip key={f} selected={filter === f} onToggle={() => setFilter(f)}>
                 {FILTER_LABEL[f]}
                 <span className="tabular font-mono text-xs opacity-80">{count(f)}</span>
               </ToggleChip>
             ))}
           </div>
-          {list.length === 0 ? (
+          {q.isPending ? (
+            <SkeletonCard lines={3} className="border-0 p-0" />
+          ) : q.isError ? (
+            <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />
+          ) : list.length === 0 ? (
             <p className="rounded-control bg-canvas px-4 py-3 text-sm text-ink-muted">Событий с таким статусом нет.</p>
           ) : (
             <ul className="divide-y divide-line">
-              {shown.map((d) => (
+              {list.map((d) => (
                 <DeliveryRow key={d.event_id} d={d} />
               ))}
             </ul>
           )}
-          {list.length > FIRST_PAGE && (
-            <div className="mt-4 flex justify-center border-t border-line pt-4">
-              <Button variant="secondary" size="sm" onClick={() => setAll((v) => !v)} aria-expanded={all}>
-                {all ? "Свернуть" : `Показать все: ${list.length}`}
-              </Button>
-            </div>
-          )}
+          <LoadMore key={filter} pager={q} loaded={list.length} noun="События" className="border-t border-line pt-4" />
         </>
       )}
     </Card>
@@ -651,7 +636,7 @@ export default function IntegrationsPage() {
               <ApiKeysCard data={q.data} />
             </div>
           </div>
-          <DeliveriesCard />
+          <DeliveriesCard counts={q.data.deliveries} />
         </div>
       )}
     </div>

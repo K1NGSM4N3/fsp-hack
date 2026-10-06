@@ -503,40 +503,47 @@ pub struct Letter {
     pub html: String,
 }
 
-fn subject(items: &[Event]) -> String {
+/// A letter leads with its newest invitation: the subject names it, the body starts with it. The
+/// rest keep the order they came in.
+fn ordered(items: &[Event]) -> Vec<&Event> {
+    let invitation = |e: &&Event| e.kind() == NotificationKind::InvitationReceived;
+    let mut out: Vec<&Event> = items.iter().rev().filter(invitation).collect();
+    out.extend(items.iter().filter(|e| !invitation(e)));
+    out
+}
+
+fn subject(items: &[&Event]) -> String {
+    let n = items.len();
     match items {
+        [] => String::new(),
         [one] => text(one, Channel::Email).title,
-        many if many
-            .iter()
-            .all(|e| e.kind() == NotificationKind::InvitationReceived) =>
-        {
-            let n = many.len();
+        [lead, rest @ ..] if lead.kind() == NotificationKind::InvitationReceived => {
+            let more = rest.len();
+            let forms = if rest
+                .iter()
+                .all(|e| e.kind() == NotificationKind::InvitationReceived)
+            {
+                ["приглашение", "приглашения", "приглашений"]
+            } else {
+                ["уведомление", "уведомления", "уведомлений"]
+            };
             format!(
-                "{n} {}",
-                plural(
-                    n,
-                    [
-                        "новое приглашение",
-                        "новых приглашения",
-                        "новых приглашений"
-                    ]
-                )
+                "{} (и ещё {more} {})",
+                text(lead, Channel::Email).title,
+                plural(more, forms)
             )
         }
-        many => {
-            let n = many.len();
-            format!(
-                "{n} {}",
-                plural(
-                    n,
-                    [
-                        "новое уведомление",
-                        "новых уведомления",
-                        "новых уведомлений"
-                    ]
-                )
+        _ => format!(
+            "{n} {}",
+            plural(
+                n,
+                [
+                    "новое уведомление",
+                    "новых уведомления",
+                    "новых уведомлений"
+                ]
             )
-        }
+        ),
     }
 }
 
@@ -561,6 +568,7 @@ pub fn letter(items: &[Event], ctx: &LetterContext<'_>) -> Letter {
     let base = ctx.public_url;
     let feed = format!("{base}{}", feed_path(ctx.audience));
     let settings = format!("{base}{}", settings_path(ctx.audience));
+    let items = ordered(items);
     let texts: Vec<Text> = items.iter().map(|e| text(e, Channel::Email)).collect();
 
     let mut plain = String::from("Здравствуйте!\n\n");
@@ -579,7 +587,7 @@ pub fn letter(items: &[Event], ctx: &LetterContext<'_>) -> Letter {
         ctx.unsubscribe_label, ctx.unsubscribe_url
     ));
 
-    let subject = subject(items);
+    let subject = subject(&items);
     let mut html = format!(
         "<!doctype html><html lang=\"ru\"><head><meta charset=\"utf-8\">\
          <meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{}</title></head>\
@@ -692,7 +700,14 @@ mod tests {
     fn several_invitations_become_one_letter() {
         let items = [invitation("Альфа"), invitation("Бета"), invitation("Гамма")];
         let letter = letter(&items, &ctx());
-        assert_eq!(letter.subject, "3 новых приглашения");
+        assert_eq!(
+            letter.subject,
+            "Гамма приглашает: Backend-разработчик (и ещё 2 приглашения)"
+        );
+        assert!(
+            letter.text.find("Гамма").unwrap() < letter.text.find("Альфа").unwrap(),
+            "the newest invitation leads the body too"
+        );
         for name in ["Альфа", "Бета", "Гамма"] {
             assert!(letter.text.contains(name) && letter.html.contains(name));
         }
@@ -758,7 +773,37 @@ mod tests {
                 .contains("anna@example.ru"),
             "the cabinet shows what the company already sees there"
         );
-        assert_eq!(subject(&[accepted, declined]), "2 новых уведомления");
+        assert_eq!(subject(&[&accepted, &declined]), "2 новых уведомления");
+    }
+
+    #[test]
+    fn a_mixed_letter_leads_with_the_newest_invitation() {
+        let result = Event::FspAchievements(FspNote {
+            added: 1,
+            removed: 0,
+            latest: Some("Призёр".into()),
+        });
+        let items = [invitation("Альфа"), result, invitation("Бета")];
+        let lead = ordered(&items);
+        assert_eq!(
+            subject(&lead),
+            "Бета приглашает: Backend-разработчик (и ещё 2 уведомления)"
+        );
+        assert_eq!(
+            subject(&lead[..2]),
+            "Бета приглашает: Backend-разработчик (и ещё 1 приглашение)"
+        );
+        let l = letter(&items, &ctx());
+        let (beta, alpha, fsp) = (
+            l.text.find("Бета").unwrap(),
+            l.text.find("Альфа").unwrap(),
+            l.text.find("Новые достижения ФСП").unwrap(),
+        );
+        assert!(beta < alpha && alpha < fsp, "{}", l.text);
+        assert_eq!(
+            subject(&ordered(&[items[1].clone(), invitation("Гамма")])),
+            "Гамма приглашает: Backend-разработчик (и ещё 1 уведомление)"
+        );
     }
 
     #[test]

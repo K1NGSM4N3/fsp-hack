@@ -507,7 +507,7 @@ async fn company_letter_carries_no_candidate_pii(pool: PgPool) {
 }
 
 #[sqlx::test(migrations = "../../db/migrations")]
-async fn invitations_within_the_hold_become_one_letter_and_the_cap_holds(pool: PgPool) {
+async fn invitations_skip_the_gap_but_not_the_hold_or_the_cap(pool: PgPool) {
     let api = Api::start(pool, rule(120, 600, 2)).await;
     let (cand, _) = api.candidate("anna@example.ru", "Анна").await;
     let d = api.dispatcher();
@@ -515,10 +515,11 @@ async fn invitations_within_the_hold_become_one_letter_and_the_cap_holds(pool: P
         let (et, _, _) = api
             .employer(&format!("hr{i}@example{i}.ru"), &format!("Компания {i}"))
             .await;
-        api.invite(&et, cand).await
+        (et.clone(), api.invite(&et, cand).await)
     };
+    let mut sent = Vec::new();
     for i in 0..3 {
-        invite_from(i).await;
+        sent.push(invite_from(i).await);
     }
     let now = Utc::now();
     assert_eq!(
@@ -541,7 +542,10 @@ async fn invitations_within_the_hold_become_one_letter_and_the_cap_holds(pool: P
     let Composed::Ready(out) = d.compose(first, cand).await.unwrap() else {
         panic!()
     };
-    assert_eq!(out.letter.subject, "3 новых приглашения");
+    assert_eq!(
+        out.letter.subject,
+        "Компания 2 приглашает: Backend-разработчик в платёжную команду (и ещё 2 приглашения)"
+    );
     for i in 0..3 {
         assert!(
             out.letter
@@ -550,42 +554,73 @@ async fn invitations_within_the_hold_become_one_letter_and_the_cap_holds(pool: P
         );
     }
 
-    invite_from(3).await;
+    let (et, inv) = &sent[0];
+    let r = api
+        .call(
+            Method::POST,
+            &format!("/employer/invitations/{inv}/withdraw"),
+            Some(et),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
     let later = Utc::now() + Duration::seconds(130);
     match d.assemble(cand, later).await.unwrap() {
         Assembled::Deferred(at) => {
-            assert!(at > later, "within ten minutes of the last letter");
+            assert!(at > later, "a withdrawal waits out the ten-minute gap");
             assert!(at <= Utc::now() + Duration::minutes(10) + Duration::seconds(5));
         }
         other => panic!("expected the gap to hold the letter, got {other:?}"),
     }
-    invite_from(4).await;
+
+    invite_from(3).await;
     assert_eq!(
         api.queued(cand).await,
         2,
-        "the next invitation waits with the deferred one"
+        "the new invitation joins the deferred withdrawal"
     );
     let Assembled::Letter(second) = d
-        .assemble(cand, Utc::now() + Duration::minutes(11))
+        .assemble(cand, Utc::now() + Duration::seconds(121))
         .await
         .unwrap()
     else {
-        panic!("the gap is over")
+        panic!("an invitation goes when its hold ends, gap or not")
     };
     assert_eq!(api.letter_items(second).await, 2, "they leave together");
+    let Composed::Ready(out) = d.compose(second, cand).await.unwrap() else {
+        panic!()
+    };
+    assert_eq!(
+        out.letter.subject,
+        "Компания 3 приглашает: Backend-разработчик в платёжную команду (и ещё 1 уведомление)"
+    );
+    assert!(
+        out.letter.text.find("Компания 3 приглашает").unwrap()
+            < out.letter.text.find("отозвала").unwrap(),
+        "{}",
+        out.letter.text
+    );
 
-    invite_from(5).await;
+    invite_from(4).await;
     match d
-        .assemble(cand, Utc::now() + Duration::minutes(30))
+        .assemble(cand, Utc::now() + Duration::seconds(121))
         .await
         .unwrap()
     {
         Assembled::Deferred(at) => assert!(
             at >= Utc::now() + Duration::hours(23),
-            "two letters a day: the third waits for the first to leave the window, {at}"
+            "two letters a day: even an invitation waits for the first to leave the window, {at}"
         ),
         other => panic!("expected the daily cap, got {other:?}"),
     }
+    let due: chrono::DateTime<Utc> = sqlx::query_scalar(
+        "SELECT email_due_at FROM notifications WHERE user_id = $1 AND email_due_at IS NOT NULL",
+    )
+    .bind(cand)
+    .fetch_one(api.pool())
+    .await
+    .unwrap();
+    assert!(due >= Utc::now() + Duration::hours(23), "{due}");
 }
 
 #[sqlx::test(migrations = "../../db/migrations")]

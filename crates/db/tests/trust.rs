@@ -111,6 +111,7 @@ async fn company_signals_count_behaviour_flags_and_complaints(pool: PgPool) {
             work_format: "remote",
             city: None,
         },
+        None,
     )
     .await
     .unwrap();

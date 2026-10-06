@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/endpoints";
-import type { AnswerInput, DeclineRequest, GuardianAction, GuardianContact, GuardianStatus, Privacy, ProfileInput, StartInput, SurveyInput } from "@/api/types";
+import type { AnswerInput, DeclineRequest, GuardianAction, GuardianContact, GuardianStatus, InvitationStatus, Privacy, ProfileInput, StartInput, SurveyInput } from "@/api/types";
 import { fresh, qk } from "../keys";
 
 export function useProfile() {
@@ -134,8 +134,23 @@ export function useAnswerItem(sessionId: string) {
   });
 }
 
-export function useReceivedInvitations() {
-  return useQuery({ queryKey: qk.received, queryFn: api.listReceivedInvitations, ...fresh.live });
+const INVITATION_PAGE = 20;
+
+/** The three newest and the counts by status: the menu badge and the home card share one request. */
+export function useInvitationSummary() {
+  return useQuery({ queryKey: qk.receivedSummary, queryFn: () => api.listReceivedInvitations({ limit: 3 }), ...fresh.live });
+}
+
+/** One tab of the inbox, a page at a time; the counts by status come with every page. */
+export function useReceivedInvitationPages(status: InvitationStatus[]) {
+  return useInfiniteQuery({
+    queryKey: qk.receivedPages(status.join(",")),
+    queryFn: ({ pageParam }) => api.listReceivedInvitations({ status, cursor: pageParam, limit: INVITATION_PAGE }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? null,
+    placeholderData: keepPreviousData,
+    ...fresh.live,
+  });
 }
 
 export function useReceivedInvitation(id: string) {
@@ -144,7 +159,7 @@ export function useReceivedInvitation(id: string) {
     queryKey: qk.receivedOne(id),
     queryFn: async () => {
       const inv = await api.getReceivedInvitation(id);
-      void qc.invalidateQueries({ queryKey: qk.received });
+      void qc.invalidateQueries({ queryKey: qk.receivedLists });
       return inv;
     },
     ...fresh.live,

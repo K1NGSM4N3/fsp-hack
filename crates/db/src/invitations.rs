@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::types::InvitationStatus;
+use crate::types::{Cursor, InvitationStatus};
 
 pub struct NewInvitation<'a> {
     pub id: Uuid,
@@ -195,9 +195,13 @@ pub async fn invitation_events(
     .await
 }
 
+/// Newest first, keyset-paginated on `(created_at, id)`; `statuses` empty — every status.
 pub async fn employer_invitations(
     db: impl PgExecutor<'_>,
     company_id: Uuid,
+    statuses: &[InvitationStatus],
+    before: Option<Cursor>,
+    limit: i64,
 ) -> Result<Vec<EmployerInvitation>, sqlx::Error> {
     sqlx::query_as!(
         EmployerInvitation,
@@ -208,8 +212,15 @@ pub async fn employer_invitations(
            FROM invitations i
            JOIN candidates c ON c.user_id = i.candidate_id
            WHERE i.company_id = $1
-           ORDER BY i.created_at DESC"#,
+             AND (cardinality($2::invitation_status[]) = 0 OR i.status = ANY($2))
+             AND ($3::timestamptz IS NULL OR (i.created_at, i.id) < ($3, $4::uuid))
+           ORDER BY i.created_at DESC, i.id DESC
+           LIMIT $5"#,
         company_id,
+        statuses as &[InvitationStatus],
+        before.map(|c| c.at),
+        before.map(|c| c.id),
+        limit,
     )
     .fetch_all(db)
     .await
@@ -236,9 +247,13 @@ pub async fn employer_invitation(
     .await
 }
 
+/// Newest first, keyset-paginated on `(created_at, id)`; `statuses` empty — every status.
 pub async fn candidate_invitations(
     db: impl PgExecutor<'_>,
     candidate_id: Uuid,
+    statuses: &[InvitationStatus],
+    before: Option<Cursor>,
+    limit: i64,
 ) -> Result<Vec<CandidateInvitation>, sqlx::Error> {
     sqlx::query_as!(
         CandidateInvitation,
@@ -252,7 +267,30 @@ pub async fn candidate_invitations(
            FROM invitations i
            JOIN companies co ON co.id = i.company_id
            WHERE i.candidate_id = $1
-           ORDER BY i.created_at DESC"#,
+             AND (cardinality($2::invitation_status[]) = 0 OR i.status = ANY($2))
+             AND ($3::timestamptz IS NULL OR (i.created_at, i.id) < ($3, $4::uuid))
+           ORDER BY i.created_at DESC, i.id DESC
+           LIMIT $5"#,
+        candidate_id,
+        statuses as &[InvitationStatus],
+        before.map(|c| c.at),
+        before.map(|c| c.id),
+        limit,
+    )
+    .fetch_all(db)
+    .await
+}
+
+pub async fn candidate_invitation_status_counts(
+    db: impl PgExecutor<'_>,
+    candidate_id: Uuid,
+) -> Result<Vec<StatusCount>, sqlx::Error> {
+    sqlx::query_as!(
+        StatusCount,
+        r#"SELECT status AS "status: InvitationStatus", count(*) AS "count!"
+           FROM invitations
+           WHERE candidate_id = $1
+           GROUP BY status"#,
         candidate_id,
     )
     .fetch_all(db)

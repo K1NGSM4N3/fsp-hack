@@ -18,6 +18,7 @@ export type ReviewDecision = S["ReviewDecision"];
 export type VideoState = S["VideoState"];
 export type TrustPage = S["TrustPage"];
 export type TrustItem = S["TrustItem"];
+export type CompanyRef = S["CompanyRef"];
 export type TrustItemKind = S["TrustItemKind"];
 export type TrustAction = S["TrustAction"];
 export type TrustView = NonNullable<operations["trust_queue"]["parameters"]["query"]>["view"] & string;

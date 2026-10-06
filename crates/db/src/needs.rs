@@ -92,6 +92,56 @@ pub async fn insert_need(
     .map(|r| r.rows_affected())
 }
 
+/// A need imported from the company's ATS. `false`: this `external_id` is already imported, nothing
+/// was written.
+pub async fn insert_imported_need(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+    company_id: Uuid,
+    n: &NeedFields<'_>,
+    external_id: Option<&str>,
+) -> Result<bool, sqlx::Error> {
+    sqlx::query!(
+        "INSERT INTO hiring_needs (id, company_id, title, description, specialization, grades,
+                                   allow_adjacent_grades, must_skills, nice_skills, salary_min,
+                                   salary_max, work_formats, city, industries, external_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         ON CONFLICT (company_id, external_id) WHERE external_id IS NOT NULL DO NOTHING",
+        id,
+        company_id,
+        n.title,
+        n.description,
+        n.specialization,
+        n.grades,
+        n.allow_adjacent_grades,
+        n.must_skills,
+        n.nice_skills,
+        n.salary_min,
+        n.salary_max,
+        n.work_formats,
+        n.city,
+        n.industries,
+        external_id,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected() > 0)
+}
+
+pub async fn need_by_external_id(
+    db: impl PgExecutor<'_>,
+    company_id: Uuid,
+    external_id: &str,
+) -> Result<Option<Uuid>, sqlx::Error> {
+    sqlx::query_scalar!(
+        "SELECT id FROM hiring_needs WHERE company_id = $1 AND external_id = $2",
+        company_id,
+        external_id,
+    )
+    .fetch_optional(db)
+    .await
+}
+
 pub async fn update_need(
     db: impl PgExecutor<'_>,
     id: Uuid,

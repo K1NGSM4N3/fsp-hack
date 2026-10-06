@@ -2,7 +2,11 @@
 //! (`Authorization: Bearer fsp_live_…`, see `integrations::keys`). Contacts and the full profile
 //! go through `ContactGrant` exactly like in the cabinet, with channel `api` in the access log.
 
-use axum::{extract::State, http::StatusCode, response::IntoResponse};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use catalog::{Category, Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -17,9 +21,9 @@ use crate::{
     contacts::{
         AccessChannel, AccessContext, CandidateContacts, ContactBasis, ContactGrant, Contacts,
     },
-    dto::{HiringStage, InvitationStatus, SalaryRange, slugs},
+    dto::{HiringStage, InvitationStatus, SalaryRange, parse_slugs, slugs},
     error::{ApiError, ApiResult, Problem, Validator},
-    extract::{Json, Path, Query},
+    extract::{Created, Json, Path, Query},
     integrations::{
         events::{
             AtsCandidate, AtsInvitation, category_of, expire_invitations, invitation_from_snapshot,
@@ -28,6 +32,7 @@ use crate::{
         outcomes::{HiringOutcome, OutcomeIndex},
     },
     notify::Notifier,
+    page,
     state::AppState,
 };
 
@@ -79,8 +84,9 @@ async fn ats_whoami(
 #[derive(Deserialize, IntoParams)]
 pub struct PollQuery {
     pub status: Option<InvitationStatus>,
-    /// RFC 3339; only invitations whose status changed after this moment. Pass `next_since` from
-    /// the previous page.
+    /// `next_cursor` of the previous call; without it the feed starts from the first invitation.
+    pub cursor: Option<String>,
+    /// Deprecated, use `cursor`. RFC 3339: invitations whose status changed after this moment.
     pub since: Option<DateTime<Utc>>,
     /// Default 50, at most 200.
     pub limit: Option<i64>,
@@ -99,15 +105,22 @@ pub struct AtsInvitationItem {
 #[derive(Serialize, ToSchema)]
 pub struct AtsInvitationPage {
     pub items: Vec<AtsInvitationItem>,
-    /// Cursor for the next call; `null` when the page is empty.
+    /// Pass as `cursor` on the next call. An empty page repeats the cursor it was asked with:
+    /// keep polling with it. A full page (`limit` items) means more are waiting — call again at once.
+    pub next_cursor: Option<String>,
+    /// Deprecated: `updated_at` of the last item, for clients still on `since`; `null` when the
+    /// page is empty.
     pub next_since: Option<DateTime<Utc>>,
 }
 
-/// Polling alternative to webhooks: invitations whose status changed after `since`, oldest first
+/// Polling alternative to webhooks: invitations whose status changed after `cursor`, oldest
+/// first. Changes of the last few seconds come on the next call, so a change still being saved is
+/// never skipped
 #[utoipa::path(get, path = "/invitations", tag = TAG,
     params(PollQuery),
     responses(
         (status = 200, body = AtsInvitationPage),
+        (status = 400, description = "`invalid_query` — `cursor` не из ответа", body = Problem),
         (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
         (status = 403, description = "`insufficient_scope` — нужно `invitations:read`", body = Problem),
         (status = 429, body = Problem),
@@ -119,13 +132,21 @@ async fn ats_invitations(
     Query(q): Query<PollQuery>,
 ) -> ApiResult<Json<AtsInvitationPage>> {
     client.require(Scope::InvitationsRead)?;
+    let after = match page::decode(q.cursor.as_deref())? {
+        Some(c) => Some(c),
+        None => q.since.map(|at| db::types::Cursor {
+            at,
+            id: Uuid::max(),
+        }),
+    };
     expire_invitations(&state).await?;
     let rows = db::integrations::polled_invitations(
         &state.pool,
         client.company_id,
         q.status.map(Into::into),
-        q.since,
-        q.limit.unwrap_or(POLL_DEFAULT).clamp(1, POLL_MAX),
+        after,
+        state.config.integrations.poll_lag.as_secs_f64(),
+        page::limit(q.limit, POLL_DEFAULT, POLL_MAX),
     )
     .await?;
     let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
@@ -133,6 +154,10 @@ async fn ats_invitations(
         db::integrations::subject_outcomes(&state.pool, client.company_id, &ids).await?,
     );
     let next_since = rows.last().map(|r| r.updated_at);
+    let next_cursor = match rows.last() {
+        Some(r) => Some(page::encode(r.updated_at, r.id)),
+        None => after.map(|c| page::encode(c.at, c.id)),
+    };
     let items = rows
         .into_iter()
         .map(|r| {
@@ -150,7 +175,11 @@ async fn ats_invitations(
             }
         })
         .collect();
-    Ok(Json(AtsInvitationPage { items, next_since }))
+    Ok(Json(AtsInvitationPage {
+        items,
+        next_cursor,
+        next_since,
+    }))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -428,11 +457,15 @@ async fn ats_outcome(
 
 #[derive(Deserialize, ToSchema)]
 #[schema(example = json!({
+    "external_id": "hh-98765432",
     "title": "Senior Python-разработчик (ML-платформа)",
     "text": "Senior Python-разработчик в команду ML-платформы\nМосква, гибрид, от 350 000 до 450 000 ₽\nСтек: Python, FastAPI, PostgreSQL, Kafka, Docker, Kubernetes.\nБудет плюсом: Airflow, ClickHouse. Опыт от 5 лет.",
     "salary": {"min": 350000, "max": 450000}
 }))]
 pub struct NeedImport {
+    /// The vacancy id in your ATS, up to 200 characters. A repeat with the same `external_id`
+    /// creates nothing and returns the need imported first (200) — safe to retry.
+    pub external_id: Option<String>,
     /// Vacancy title in the ATS; the first line of `text` if absent.
     pub title: Option<String>,
     /// Vacancy text as is: the parser finds specialization, grade, stack, salary and format.
@@ -444,6 +477,7 @@ pub struct NeedImport {
 #[derive(Serialize, ToSchema)]
 pub struct ImportedNeed {
     pub need_id: Uuid,
+    pub external_id: Option<String>,
     /// Page of the need with the shortlist in the employer cabinet.
     pub shortlist_url: String,
     pub title: String,
@@ -463,14 +497,15 @@ fn truncate(s: &str, max_chars: usize) -> &str {
 }
 
 /// Import a vacancy from the ATS: the text is parsed into a hiring need; the shortlist is built
-/// when the need is opened in the cabinet
+/// when the need is opened in the cabinet. With `external_id` the call is safe to retry
 #[utoipa::path(post, path = "/needs", tag = TAG,
     request_body = NeedImport,
     responses(
-        (status = 201, body = ImportedNeed),
+        (status = 201, body = ImportedNeed, headers(("Location" = String, description = "`/api/v1/employer/needs/{id}`"))),
+        (status = 200, description = "Потребность с этим `external_id` уже импортирована — она и возвращается", body = ImportedNeed),
         (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
         (status = 403, description = "`insufficient_scope` — нужно `needs:write`", body = Problem),
-        (status = 422, description = "Нет текста, не распознана специализация или вилка", body = Problem),
+        (status = 422, description = "Нет текста, не распознана специализация или вилка; `external_id` длиннее 200 символов", body = Problem),
         (status = 429, body = Problem),
     ),
     security(("api_key" = [])))]
@@ -478,8 +513,21 @@ async fn ats_import_need(
     State(state): State<AppState>,
     client: ApiClient,
     Json(input): Json<NeedImport>,
-) -> ApiResult<(StatusCode, Json<ImportedNeed>)> {
+) -> ApiResult<Response> {
     client.require(Scope::NeedsWrite)?;
+    let external_id = input
+        .external_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|e| !e.is_empty());
+    if external_id.is_some_and(|e| e.chars().count() > 200) {
+        return Err(ApiError::field("external_id", "Не длиннее 200 символов"));
+    }
+    if let Some(ext) = external_id
+        && let Some(existing) = imported(&state, client.company_id, ext).await?
+    {
+        return Ok((StatusCode::OK, Json(existing)).into_response());
+    }
     let text = input.text.trim();
     let title_in = input
         .title
@@ -545,7 +593,7 @@ async fn ats_import_need(
     let formats = slugs(&parsed.work_formats);
     let industries = slugs(&parsed.industries);
     let id = Uuid::now_v7();
-    db::needs::insert_need(
+    let inserted = db::needs::insert_imported_need(
         &state.pool,
         id,
         client.company_id,
@@ -563,13 +611,27 @@ async fn ats_import_need(
             city: parsed.city.as_deref(),
             industries: &industries,
         },
+        external_id,
     )
     .await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(ImportedNeed {
+    if !inserted {
+        // The same `external_id` arrived twice at once and the other request won.
+        let existing = match external_id {
+            Some(ext) => imported(&state, client.company_id, ext).await?,
+            None => None,
+        };
+        return Ok((
+            StatusCode::OK,
+            Json(existing.ok_or(sqlx::Error::RowNotFound)?),
+        )
+            .into_response());
+    }
+    Ok(Created(
+        format!("/api/v1/employer/needs/{id}"),
+        ImportedNeed {
             need_id: id,
-            shortlist_url: format!("{}/employer/needs/{id}", state.config.public_url),
+            external_id: external_id.map(str::to_owned),
+            shortlist_url: shortlist_url(&state, id),
             title,
             specialization,
             grades,
@@ -579,6 +641,42 @@ async fn ats_import_need(
             work_formats: parsed.work_formats,
             city: parsed.city,
             notes,
-        }),
-    ))
+        },
+    )
+    .into_response())
+}
+
+fn shortlist_url(state: &AppState, id: Uuid) -> String {
+    format!("{}/employer/needs/{id}", state.config.public_url)
+}
+
+/// The need this company already imported under `external_id`, as it is stored now.
+async fn imported(
+    state: &AppState,
+    company: Uuid,
+    external_id: &str,
+) -> ApiResult<Option<ImportedNeed>> {
+    let Some(id) = db::needs::need_by_external_id(&state.pool, company, external_id).await? else {
+        return Ok(None);
+    };
+    let n = db::needs::company_need(&state.pool, company, id)
+        .await?
+        .ok_or(sqlx::Error::RowNotFound)?;
+    Ok(Some(ImportedNeed {
+        need_id: n.id,
+        external_id: Some(external_id.to_owned()),
+        shortlist_url: shortlist_url(state, n.id),
+        title: n.title,
+        specialization: n.specialization.parse()?,
+        grades: parse_slugs(&n.grades),
+        must_skills: n.must_skills,
+        nice_skills: n.nice_skills,
+        salary: SalaryRange {
+            min: n.salary_min,
+            max: n.salary_max,
+        },
+        work_formats: parse_slugs(&n.work_formats),
+        city: n.city,
+        notes: Vec::new(),
+    }))
 }

@@ -1,3 +1,13 @@
+use chrono::{DateTime, Utc};
+use uuid::Uuid;
+
+/// A keyset position: the sort time and the id that breaks ties.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Cursor {
+    pub at: DateTime<Utc>,
+    pub id: Uuid,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
 #[sqlx(type_name = "user_role", rename_all = "snake_case")]
 pub enum UserRole {

@@ -11,6 +11,7 @@ import { Alert, Button, Card, CardHeader, Chip, Field, FormActions, FormStatus, 
 import { useMe } from "@/features/auth/hooks";
 import { SalaryHint } from "@/features/employer/components/SalaryHint";
 import { useSaveVacancy, useSimilarVacancies } from "@/features/employer/hooks";
+import { newIdempotencyKey } from "@/lib/idempotency";
 import { cn } from "@/lib/cn";
 import { formatSalaryRange, plural } from "@/lib/format";
 import { GRADE_LABEL, GRADES, SPEC_LONG_LABEL, SPECIALIZATIONS, VACANCY_STATUS_LABEL, WORK_FORMAT_LABEL, WORK_FORMATS } from "@/lib/labels";
@@ -122,7 +123,8 @@ function Readiness({ items }: { items: { label: string; done: boolean; optional?
 export function VacancyForm({ vacancy, onSaved, onCancel }: { vacancy?: Vacancy; onSaved: (v: Vacancy) => void; onCancel?: () => void }) {
   const toast = useToast();
   const me = useMe();
-  const save = useSaveVacancy(vacancy?.id);
+  const [key] = useState(newIdempotencyKey);
+  const save = useSaveVacancy(vacancy?.id, key);
   const similar = useSimilarVacancies();
   const form = useRef<HTMLFormElement>(null);
   const [initial] = useState<Draft>(() => toDraft(vacancy));

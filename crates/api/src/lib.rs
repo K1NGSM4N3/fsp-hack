@@ -18,6 +18,7 @@ pub mod mail;
 pub mod metrics;
 pub mod moderation;
 pub mod notify;
+pub mod page;
 pub mod pdf;
 pub mod pool;
 pub mod proctoring;

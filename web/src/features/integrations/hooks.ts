@@ -1,8 +1,8 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/endpoints";
-import type { ApiKeyInput, WebhookInput } from "@/api/types";
+import type { ApiKeyInput, DeliveryStatus, WebhookInput } from "@/api/types";
 import { fresh, qk } from "../keys";
 
 export function useIntegrations() {
@@ -10,11 +10,13 @@ export function useIntegrations() {
 }
 
 /** Pending deliveries are retried in the background, so the log refreshes while any are queued. */
-export function useDeliveries() {
-  return useQuery({
-    queryKey: qk.deliveries,
-    queryFn: () => api.listDeliveries(50),
-    refetchInterval: (q) => (q.state.data?.some((d) => d.status === "pending") ? 5_000 : 30_000),
+export function useDeliveries(status: DeliveryStatus | null) {
+  return useInfiniteQuery({
+    queryKey: qk.deliveryPages(status ?? "all"),
+    queryFn: ({ pageParam }) => api.listDeliveries(status, pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? null,
+    refetchInterval: (q) => (q.state.data?.pages.some((p) => p.items.some((d) => d.status === "pending")) ? 5_000 : 30_000),
   });
 }
 

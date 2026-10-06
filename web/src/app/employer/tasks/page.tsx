@@ -6,7 +6,7 @@ import { isApiError } from "@/api/client";
 import type { EmployerTask, Grade, Specialization, TaskKind, TaskSubmission } from "@/api/types";
 import { SkillInput } from "@/components/domain/Skills";
 import { TaskStatusBadge } from "@/components/domain/StatusBadges";
-import { Badge, Button, Card, CardHeader, ChipSelect, Dialog, ErrorAlert, Field, FieldSet, Input, Markdown, PageHeader, RadioCards, Select, SkeletonCard, Stat, Switch, Textarea, focusFirstError, useToast } from "@/components/ui";
+import { Badge, Button, Card, CardHeader, ChipSelect, Dialog, ErrorAlert, Field, FieldSet, Input, LoadMore, Markdown, PageHeader, RadioCards, Select, SkeletonCard, Stat, Switch, Textarea, focusFirstError, useToast } from "@/components/ui";
 import { CategoryBadge } from "@/components/domain/Category";
 import { useCreateTask, useEmployerTasks, useReviewSubmission, useSetTaskActive, useTaskSubmissions } from "@/features/employer/hooks";
 import { cn } from "@/lib/cn";
@@ -47,22 +47,26 @@ function Submissions({ task }: { task: EmployerTask }) {
   const q = useTaskSubmissions(task.id);
   if (q.isPending) return <SkeletonCard lines={2} className="border-0 p-0" />;
   if (q.isError) return <ErrorAlert error={q.error} />;
-  if (q.data.length === 0) return <p className="text-sm text-ink-subtle">Ответов пока нет. Задание выдаётся кандидатам категории раз в неделю.</p>;
+  const list = q.data.pages.flatMap((p) => p.items);
+  if (list.length === 0) return <p className="text-sm text-ink-subtle">Ответов пока нет. Задание выдаётся кандидатам категории раз в неделю.</p>;
   return (
-    <ul className="space-y-3">
-      {q.data.map((s) => (
-        <li key={s.id} className="rounded-control border border-line p-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-sm font-semibold text-ink">Кандидат {s.candidate_code}</span>
-            {s.candidate_category && <CategoryBadge category={s.candidate_category} size="sm" />}
-            <TaskStatusBadge status={s.status} />
-            {s.submitted_at && <span className="text-xs text-ink-subtle">{formatRelative(s.submitted_at)}</span>}
-          </div>
-          {s.answer && <p className="mt-2 font-mono text-[13px] whitespace-pre-line text-ink">{s.answer}</p>}
-          <ReviewForm taskId={task.id} sub={s} />
-        </li>
-      ))}
-    </ul>
+    <>
+      <ul className="space-y-3">
+        {list.map((s) => (
+          <li key={s.id} className="rounded-control border border-line p-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-mono text-sm font-semibold text-ink">Кандидат {s.candidate_code}</span>
+              {s.candidate_category && <CategoryBadge category={s.candidate_category} size="sm" />}
+              <TaskStatusBadge status={s.status} />
+              {s.submitted_at && <span className="text-xs text-ink-subtle">{formatRelative(s.submitted_at)}</span>}
+            </div>
+            {s.answer && <p className="mt-2 font-mono text-[13px] whitespace-pre-line text-ink">{s.answer}</p>}
+            <ReviewForm taskId={task.id} sub={s} />
+          </li>
+        ))}
+      </ul>
+      <LoadMore pager={q} loaded={list.length} noun="Ответы" />
+    </>
   );
 }
 
