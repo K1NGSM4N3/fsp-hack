@@ -29,11 +29,15 @@ use crate::{
     trust,
 };
 
+/// Anonymous reads of published vacancies: no personal data, cached publicly.
 pub fn public_router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(list_published))
         .routes(routes!(get_published))
-        .routes(routes!(apply))
+}
+
+pub fn apply_router() -> OpenApiRouter<AppState> {
+    OpenApiRouter::new().routes(routes!(apply))
 }
 
 pub fn employer_router() -> OpenApiRouter<AppState> {

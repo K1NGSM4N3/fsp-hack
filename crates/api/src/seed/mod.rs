@@ -20,12 +20,13 @@ use uuid::Uuid;
 use crate::{
     contacts::Contacts,
     crypto::{Crypto, normalize_email},
-    error::ApiResult,
+    error::{ApiResult, InternalError},
+    public_code,
     routes::candidate_profile::ExperienceEntry,
 };
 
 pub const DEMO_PASSWORD: &str = "demo12345";
-const CANDIDATES_PER_SPEC: usize = 40;
+pub const CANDIDATES_PER_SPEC: usize = 40;
 const CONSENT_PROCESSING: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000001);
 const CONSENT_PUBLICATION: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000002);
 const CONSENT_TERMS: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000003);
@@ -526,6 +527,16 @@ pub async fn seed(
     crypto: &Crypto,
     retention_days: i64,
 ) -> ApiResult<Option<SeedReport>> {
+    seed_sized(pool, crypto, retention_days, CANDIDATES_PER_SPEC).await
+}
+
+/// A larger bank for load tests (`SEED_CANDIDATES_PER_SPEC`); the demo uses [`CANDIDATES_PER_SPEC`].
+pub async fn seed_sized(
+    pool: &PgPool,
+    crypto: &Crypto,
+    retention_days: i64,
+    per_spec: usize,
+) -> ApiResult<Option<SeedReport>> {
     if db::seed::demo_seeded(pool).await? > 0 {
         return Ok(None);
     }
@@ -638,7 +649,7 @@ pub async fn seed(
     let mut fsp_linked = 0usize;
     let (mut with_video, mut without_video, mut with_remarks) = (0usize, 0usize, 0usize);
     for spec in Specialization::ALL.iter().copied() {
-        for k in 0..CANDIDATES_PER_SPEC {
+        for k in 0..per_spec {
             let target = match rng.random_range(0..10) {
                 0..=3 => Grade::Junior,
                 4..=7 => Grade::Middle,
@@ -773,33 +784,43 @@ pub async fn seed(
                 (base / 10_000.0).round() as i64 * 10_000
             });
             let last_activity = now - Duration::hours(rng.random_range(1..24 * 90));
-            db::seed::seed_candidate(
-                &mut *tx,
-                &db::seed::SeedCandidate {
-                    user_id: acc.id,
-                    public_code: &crate::auth::routes::public_code(acc.id),
-                    full_name_enc: &crypto.encrypt_str(&full_name),
-                    contacts_enc: &crypto.encrypt_json(&contacts)?,
-                    city: corpus::CITIES.choose(&mut rng).copied(),
-                    relocation: rng.random_bool(0.2),
-                    work_formats: &formats,
-                    salary_expectation_min: salary,
-                    about: &about,
-                    experience_years: Some(years),
-                    roles: &[role_name(spec).to_owned()],
-                    soft_skills: &SOFT
-                        .choose_multiple(&mut rng, 2)
-                        .map(|s| (*s).to_owned())
-                        .collect::<Vec<_>>(),
-                    industries: &industries,
-                    experience: &serde_json::to_value(&experience)?,
-                    search_status: status,
-                    show_name: rng.random_bool(0.3),
-                    last_activity_at: last_activity,
-                    created_at: created,
-                },
-            )
-            .await?;
+            let candidate = db::seed::SeedCandidate {
+                user_id: acc.id,
+                public_code: "",
+                full_name_enc: &crypto.encrypt_str(&full_name),
+                contacts_enc: &crypto.encrypt_json(&contacts)?,
+                city: corpus::CITIES.choose(&mut rng).copied(),
+                relocation: rng.random_bool(0.2),
+                work_formats: &formats,
+                salary_expectation_min: salary,
+                about: &about,
+                experience_years: Some(years),
+                roles: &[role_name(spec).to_owned()],
+                soft_skills: &SOFT
+                    .choose_multiple(&mut rng, 2)
+                    .map(|s| (*s).to_owned())
+                    .collect::<Vec<_>>(),
+                industries: &industries,
+                experience: &serde_json::to_value(&experience)?,
+                search_status: status,
+                show_name: rng.random_bool(0.3),
+                last_activity_at: last_activity,
+                created_at: created,
+            };
+            let mut seeded = false;
+            for code in public_code::candidates(acc.id).take(public_code::ATTEMPTS) {
+                let row = db::seed::SeedCandidate {
+                    public_code: &code,
+                    ..candidate
+                };
+                if db::seed::seed_candidate(&mut *tx, &row).await? == 1 {
+                    seeded = true;
+                    break;
+                }
+            }
+            if !seeded {
+                return Err(InternalError::PublicCodeExhausted(public_code::ATTEMPTS).into());
+            }
             for (skill, source) in &skills {
                 db::candidates::insert_candidate_skill(&mut *tx, acc.id, skill, source).await?;
             }

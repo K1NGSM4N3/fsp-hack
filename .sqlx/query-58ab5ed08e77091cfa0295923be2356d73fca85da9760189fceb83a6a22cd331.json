@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(DISTINCT pv.company_id) AS \"count!\" FROM profile_views pv\n           WHERE pv.candidate_id = $1 AND pv.viewed_on >= current_date - 30",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "58ab5ed08e77091cfa0295923be2356d73fca85da9760189fceb83a6a22cd331"
+}

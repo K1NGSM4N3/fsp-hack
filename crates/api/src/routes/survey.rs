@@ -117,6 +117,7 @@ async fn submit_survey(
     }
     db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
     tx.commit().await?;
+    state.candidates.invalidate().await;
 
     Ok((
         StatusCode::CREATED,

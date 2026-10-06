@@ -291,6 +291,7 @@ async fn put_profile(
         db::candidates::insert_candidate_skill(&mut *tx, user.id, &skill, "declared").await?;
     }
     tx.commit().await?;
+    state.candidates.invalidate().await;
     Ok(Json(load_profile(&state, &user).await?))
 }
 
@@ -374,6 +375,7 @@ async fn put_privacy(
         user.id,
     )
     .await?;
+    state.candidates.invalidate().await;
     Ok(Json(p))
 }
 
@@ -516,6 +518,7 @@ async fn upload_resume(
         db::candidates::insert_candidate_skill(&mut *tx, user.id, skill, "resume").await?;
     }
     tx.commit().await?;
+    state.candidates.invalidate().await;
     Ok(Json(ResumeDraft {
         parsed,
         recognized_fields: fields,

@@ -1,5 +1,6 @@
 pub mod age;
 pub mod auth;
+pub mod cache;
 pub mod cards;
 pub mod config;
 pub mod contacts;
@@ -9,6 +10,7 @@ pub mod dto;
 pub mod error;
 pub mod fsp_client;
 pub mod guardian;
+pub mod http_cache;
 pub mod integrations;
 pub mod kv;
 pub mod mail;
@@ -16,6 +18,7 @@ pub mod metrics;
 pub mod pdf;
 pub mod pool;
 pub mod proctoring;
+pub mod public_code;
 pub mod resume;
 pub mod routes;
 pub mod seed;
@@ -47,7 +50,7 @@ use utoipa::{
 use utoipa_axum::router::OpenApiRouter;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::state::AppState;
+use crate::{http_cache::Policy, state::AppState};
 
 #[derive(OpenApi)]
 #[openapi(
@@ -146,12 +149,40 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
             "/admin",
             routes::proctoring::admin_router().merge(routes::trust::admin_router()),
         )
-        .merge(routes::vacancies::public_router())
-        .merge(routes::guardian::public_router())
+        .merge(listing_routes().layer(middleware::from_fn_with_state(
+            Policy::Listing,
+            http_cache::public,
+        )))
+        .merge(routes::vacancies::apply_router())
+        .merge(
+            routes::guardian::public_router().layer(middleware::from_fn_with_state(
+                Policy::NoStore,
+                http_cache::public,
+            )),
+        )
         .merge(routes::reports::router())
-        .merge(routes::catalog::router())
-        .merge(routes::assessment::catalog_router())
-        .merge(routes::eval::router())
+        .merge(static_routes().layer(middleware::from_fn_with_state(
+            Policy::Static,
+            http_cache::public,
+        )))
+        .merge(
+            routes::eval::router()
+                .merge(routes::assessment::catalog_router())
+                .layer(middleware::from_fn_with_state(
+                    Policy::NoStore,
+                    http_cache::public,
+                )),
+        )
+}
+
+/// Reference data, cached publicly for 5 minutes. Only handlers without credentials belong here.
+fn static_routes() -> OpenApiRouter<AppState> {
+    routes::catalog::router()
+}
+
+/// Published vacancies, cached publicly for 30 seconds. Only handlers without credentials.
+fn listing_routes() -> OpenApiRouter<AppState> {
+    routes::vacancies::public_router()
 }
 
 pub fn openapi() -> utoipa::openapi::OpenApi {
@@ -178,6 +209,7 @@ pub fn app(state: AppState) -> Router {
             auth::csrf_guard,
         ))
         .layer(middleware::from_fn(metrics::track))
+        .layer(middleware::from_fn(http_cache::private_by_default))
         .layer(DefaultBodyLimit::max(256 * 1024))
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         .layer(TimeoutLayer::with_status_code(
@@ -193,4 +225,37 @@ pub fn app(state: AppState) -> Router {
         .layer(SetRequestIdLayer::new(x_request_id, MakeRequestUuid))
         .layer(CatchPanicLayer::new())
         .with_state(state)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn operations(router: OpenApiRouter<AppState>) -> Vec<(String, serde_json::Value)> {
+        let (_, api) = router.split_for_parts();
+        let json = serde_json::to_value(&api).unwrap_or_default();
+        let mut out = Vec::new();
+        if let Some(paths) = json["paths"].as_object() {
+            for (path, item) in paths {
+                for (method, op) in item.as_object().into_iter().flatten() {
+                    out.push((format!("{method} {path}"), op.clone()));
+                }
+            }
+        }
+        out
+    }
+
+    /// A handler that reads credentials must never sit behind a public `Cache-Control`.
+    #[test]
+    fn publicly_cached_routes_take_no_credentials() {
+        let ops: Vec<_> = operations(static_routes())
+            .into_iter()
+            .chain(operations(listing_routes()))
+            .collect();
+        assert!(ops.len() >= 5, "{ops:?}");
+        for (name, op) in ops {
+            assert!(name.starts_with("get "), "{name}: only reads are cached");
+            assert!(op.get("security").is_none(), "{name} requires credentials");
+        }
+    }
 }

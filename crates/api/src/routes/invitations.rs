@@ -743,6 +743,7 @@ async fn decline(
     if req.reason == DeclineReason::NotLooking {
         db::candidates::set_search_status(&state.pool, db::types::SearchStatus::Closed, user.id)
             .await?;
+        state.candidates.invalidate().await;
     }
     Ok(declined)
 }

@@ -265,6 +265,7 @@ async fn answer(
         }
     }
     tx.commit().await?;
+    state.candidates.invalidate().await;
     let t = target(&state, &req.token).await?;
     Ok(Json(build_view(&state, t, Utc::now()).await?))
 }

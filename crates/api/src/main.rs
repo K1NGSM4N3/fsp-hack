@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use api::{
     auth::jwt::JwtKeys,
+    cache::CandidateCache,
     config::{Config, ConfigError},
     crypto::{Crypto, CryptoError},
     db::DbSetupError,
@@ -55,7 +56,14 @@ async fn main() -> Result<(), StartupError> {
     }
     if command == "seed" || config.seed_demo {
         let crypto = Crypto::new(&config.field_key, &config.bidx_key);
-        match api::seed::seed(&pool, &crypto, config.proctoring.retention_days).await {
+        let seeded = api::seed::seed_sized(
+            &pool,
+            &crypto,
+            config.proctoring.retention_days,
+            config.seed_per_spec,
+        )
+        .await;
+        match seeded {
             Ok(Some(r)) => tracing::info!(
                 companies = r.companies,
                 candidates = r.candidates,
@@ -109,11 +117,13 @@ async fn main() -> Result<(), StartupError> {
     )
     .spawn();
 
+    let kv = Kv::connect(config.valkey_url.as_deref()).await?;
     let state = AppState {
         crypto,
         jwt: Arc::new(JwtKeys::new(config.jwt_seed)?),
         mailer: Arc::new(Mailer::new(&config.mail)?),
-        kv: Kv::connect(config.valkey_url.as_deref()).await?,
+        candidates: Arc::new(CandidateCache::new(kv.clone())),
+        kv,
         http: reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
             .build()?,

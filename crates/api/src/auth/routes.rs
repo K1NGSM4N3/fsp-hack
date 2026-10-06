@@ -216,7 +216,7 @@ async fn register(
     }
     match req.role {
         Role::Candidate => {
-            db::candidates::insert_candidate(&mut *tx, user_id, &public_code(user_id)).await?;
+            crate::public_code::insert_candidate(&mut tx, user_id).await?;
             if let Some((birth_date, contact)) = &minor {
                 db::guardians::set_birth_date(&mut *tx, user_id, *birth_date).await?;
                 db::guardians::insert_request(
@@ -252,12 +252,6 @@ async fn register(
             verification_required: true,
         }),
     ))
-}
-
-/// Anonymous handle for employers; taken from the random tail of the UUIDv7.
-pub(crate) fn public_code(id: Uuid) -> String {
-    let hex = id.simple().to_string();
-    format!("K-{}", hex[hex.len() - 6..].to_uppercase())
 }
 
 async fn send_verification(state: &AppState, email: &str, token: &str) {
@@ -530,11 +524,5 @@ mod tests {
         assert!(!valid_email("ivan@example"));
         assert!(!valid_email("ivan example@x.ru"));
         assert!(!valid_email("@x.ru"));
-    }
-
-    #[test]
-    fn public_code_shape() {
-        let code = public_code(Uuid::now_v7());
-        assert!(code.starts_with("K-") && code.len() == 8);
     }
 }

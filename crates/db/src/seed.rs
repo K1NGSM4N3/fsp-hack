@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::types::{AgeBracket, AssessmentStatus, SearchStatus, UserRole};
 
+#[derive(Clone, Copy)]
 pub struct SeedCandidate<'a> {
     pub user_id: Uuid,
     pub public_code: &'a str,
@@ -97,7 +98,8 @@ pub async fn seed_candidate(
                                  work_formats, salary_expectation_min, about, experience_years, roles,
                                  soft_skills, industries, experience, search_status, show_name,
                                  last_activity_at, created_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)",
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+         ON CONFLICT (public_code) DO NOTHING",
         c.user_id,
         c.public_code,
         c.full_name_enc,

@@ -28,6 +28,8 @@ pub struct Config {
     pub proctoring: ProctoringConfig,
     pub integrations: IntegrationsConfig,
     pub seed_demo: bool,
+    /// Candidates per specialization in the demo seed; raised only for load tests.
+    pub seed_per_spec: usize,
     pub log_json: bool,
 }
 
@@ -233,6 +235,7 @@ impl Config {
             proctoring,
             integrations,
             seed_demo: flag("SEED_DEMO", false),
+            seed_per_spec: parsed("SEED_CANDIDATES_PER_SPEC", crate::seed::CANDIDATES_PER_SPEC)?,
             log_json: var("LOG_FORMAT").as_deref() == Some("json"),
             public_url,
         })

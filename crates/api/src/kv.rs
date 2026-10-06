@@ -72,6 +72,35 @@ impl Kv {
         }
     }
 
+    /// Shared counter (`INCR`) for state that has to agree across API replicas. `None` without
+    /// Valkey: a single process keeps that counter in memory itself.
+    pub async fn incr(&self, key: &str) -> Result<Option<u64>, KvError> {
+        match self {
+            Kv::Valkey(conn) => {
+                let mut conn = conn.clone();
+                Ok(Some(conn.incr(key, 1u64).await?))
+            }
+            Kv::Memory(_) => Ok(None),
+        }
+    }
+
+    /// Current value of an [`incr`](Self::incr) counter: `Some(0)` before the first increment,
+    /// `None` without Valkey.
+    pub async fn counter(&self, key: &str) -> Result<Option<u64>, KvError> {
+        match self {
+            Kv::Valkey(conn) => {
+                let mut conn = conn.clone();
+                let value: Option<u64> = conn.get(key).await?;
+                Ok(Some(value.unwrap_or(0)))
+            }
+            Kv::Memory(_) => Ok(None),
+        }
+    }
+
+    pub fn is_shared(&self) -> bool {
+        matches!(self, Kv::Valkey(_))
+    }
+
     pub async fn ping(&self) -> Result<(), KvError> {
         if let Kv::Valkey(conn) = self {
             let mut conn = conn.clone();

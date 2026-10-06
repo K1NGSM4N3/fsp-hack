@@ -8,8 +8,6 @@ use crate::types::{InvitationStatus, SearchStatus};
 #[derive(Debug, Clone)]
 pub struct PoolCandidate {
     pub user_id: Uuid,
-    pub public_code: String,
-    pub specialization: String,
     pub grade: String,
     pub theta: Option<f64>,
     pub salary_expectation_min: Option<i64>,
@@ -22,7 +20,14 @@ pub struct PoolCandidate {
     pub achievements: Option<Value>,
     pub skills: Vec<String>,
     pub skill_sources: Vec<String>,
-    pub text_rank: f32,
+    /// Under 18 today; such a candidate is here only with the representative's consent.
+    pub minor: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct TextRank {
+    pub user_id: Uuid,
+    pub rank: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -66,54 +71,73 @@ pub struct CompanyRelation {
     pub applied: bool,
 }
 
-/// Searchable candidates of one specialization with everything the matching engine needs.
-/// `skills`/`skill_sources` are parallel arrays; `text_rank` scores the "about" text against an
-/// OR-query built from the need description.
+/// Searchable candidates of one specialization with everything the matching engine needs,
+/// ordered by id. `skills`/`skill_sources` are parallel arrays. The API caches the result per
+/// specialization (`api::pool`), so it carries no per-request filters: grade, «Только 18+» and
+/// the rest are applied to the cached snapshot.
 ///
 /// Searchable means visible, not closed, holding an unrevoked `pd_publication` grant and, while
 /// under 18, an unrevoked `guardian_consent` given by the legal representative. The grant checks
 /// repeat what `PUT /candidate/privacy` enforces, so a stale `visible` flag can never publish a
-/// profile; each is a semi-join over the partial `user_consents_active_idx`. `adults_only` is the
-/// employer's «Только 18+» filter: it drops minors, it does not rank them lower.
-pub async fn candidate_pool(
+/// profile; both semi-joins read `user_consents_document_idx`. Skills are aggregated per
+/// candidate in a lateral subquery: grouping the whole joined set was the slowest step of the
+/// query at 10 000 candidates.
+pub async fn searchable_pool(
     db: impl PgExecutor<'_>,
-    text_query: Option<&str>,
     specialization: &str,
-    grade: Option<&str>,
-    adults_only: bool,
 ) -> Result<Vec<PoolCandidate>, sqlx::Error> {
     sqlx::query_as!(
         PoolCandidate,
-        r#"SELECT c.user_id, c.public_code, c.specialization AS "specialization!", c.grade AS "grade!",
-                  c.theta, c.salary_expectation_min, c.work_formats, c.city, c.relocation,
-                  c.last_activity_at, c.industries, c.show_fsp, f.achievements AS "achievements?",
-                  coalesce(array_agg(s.skill ORDER BY s.skill, s.source)
-                           FILTER (WHERE s.skill IS NOT NULL), '{}') AS "skills!",
-                  coalesce(array_agg(s.source ORDER BY s.skill, s.source)
-                           FILTER (WHERE s.skill IS NOT NULL), '{}') AS "skill_sources!",
-                  CASE WHEN $1::text IS NULL THEN 0::real
-                       ELSE ts_rank_cd(c.about_tsv, to_tsquery('russian', $1))::real END AS "text_rank!"
+        r#"SELECT c.user_id, c.grade AS "grade!", c.theta, c.salary_expectation_min, c.work_formats,
+                  c.city, c.relocation, c.last_activity_at, c.industries, c.show_fsp,
+                  f.achievements AS "achievements?", sk.skills AS "skills!",
+                  sk.sources AS "skill_sources!",
+                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS "minor!"
            FROM candidates c
            JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
            LEFT JOIN fsp_links f ON f.candidate_id = c.user_id
-           LEFT JOIN candidate_skills s ON s.candidate_id = c.user_id
+           CROSS JOIN LATERAL (
+               SELECT coalesce(array_agg(s.skill ORDER BY s.skill, s.source), '{}') AS skills,
+                      coalesce(array_agg(s.source ORDER BY s.skill, s.source), '{}') AS sources
+               FROM candidate_skills s
+               WHERE s.candidate_id = c.user_id
+           ) sk
            WHERE c.visible
              AND c.search_status <> 'closed'
              AND EXISTS (SELECT 1 FROM user_consents uc
                           JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
                           WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
              AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
-                  OR (NOT $4 AND EXISTS (SELECT 1 FROM user_consents gc
-                                          JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
-                                          WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL)))
-             AND c.specialization = $2
+                  OR EXISTS (SELECT 1 FROM user_consents gc
+                              JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
+                              WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL))
+             AND c.specialization = $1
              AND c.grade IS NOT NULL
-             AND ($3::text IS NULL OR c.grade = $3)
-           GROUP BY c.user_id, f.achievements"#,
-        text_query,
+           ORDER BY c.user_id"#,
         specialization,
-        grade,
-        adults_only,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// `ts_rank_cd` of each candidate's "about" against an OR-query, for the specialization's
+/// candidates that match it at all (the rest rank 0), ordered by id. Visibility is not checked
+/// here: ranks are only attached to candidates already in [`searchable_pool`].
+pub async fn text_ranks(
+    db: impl PgExecutor<'_>,
+    specialization: &str,
+    text_query: &str,
+) -> Result<Vec<TextRank>, sqlx::Error> {
+    sqlx::query_as!(
+        TextRank,
+        r#"SELECT c.user_id, ts_rank_cd(c.about_tsv, q)::real AS "rank!"
+           FROM candidates c, to_tsquery('russian', $2) q
+           WHERE c.specialization = $1 AND c.grade IS NOT NULL
+             AND c.visible AND c.search_status <> 'closed'
+             AND c.about_tsv @@ q
+           ORDER BY c.user_id"#,
+        specialization,
+        text_query,
     )
     .fetch_all(db)
     .await
@@ -150,8 +174,9 @@ pub async fn candidate_cards(
     .await
 }
 
-/// Of `ids`, those an employer may currently find: the same rule as [`candidate_pool`].
-/// Stored shortlists are re-checked with it, so hiding a profile takes effect before the next rebuild.
+/// Of `ids`, those an employer may currently find: the same rule as [`searchable_pool`].
+/// Shown shortlists and search pages are re-checked with it against the live tables, so hiding a
+/// profile takes effect on the next request whatever the age of the cached pool.
 pub async fn searchable_among(
     db: impl PgExecutor<'_>,
     ids: &[Uuid],

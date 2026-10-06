@@ -41,13 +41,16 @@ async fn start() -> String {
         },
         integrations: IntegrationsConfig::default(),
         seed_demo: false,
+        seed_per_spec: 40,
         log_json: false,
     };
+    let kv = Kv::connect(None).await.unwrap();
     let state = AppState {
         crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
         jwt: Arc::new(JwtKeys::new(config.jwt_seed).unwrap()),
         mailer: Arc::new(Mailer::new(&config.mail).unwrap()),
-        kv: Kv::connect(None).await.unwrap(),
+        kv: kv.clone(),
+        candidates: Arc::new(api::cache::CandidateCache::new(kv)),
         http: reqwest::Client::new(),
         metrics: None,
         recordings: Arc::new(RecordingStore::new(config.proctoring.dir.clone())),

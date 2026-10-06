@@ -21,6 +21,7 @@
   `code` — стабильный машинный код, на него завязывается фронт. `errors` — только для 422. У 409 `consent_required` есть расширения `document_id` и `document_kind` — документ, который нужно принять (`POST /me/consents`). У 409 `guardian_consent_required` те же поля указывают на `guardian_consent`, но принять его может только законный представитель по ссылке из письма.
 - **Коды:** 200/201/204; 400 — неверный запрос; 401 — нет или истекла сессия; 403 — нет прав; 404 — не найдено **или чужое** (не раскрываем существование); 409 — конфликт состояния (кулдаун, квота, повтор); 422 — ошибки валидации полей; 429 — лимит запросов (`Retry-After`).
 - **Идемпотентность:** `POST /employer/invitations` принимает заголовок `Idempotency-Key`.
+- **Кеширование:** по умолчанию `Cache-Control: private, no-store` — всё, что за cookie, токеном или API-ключом, и всё с ПДн. Публично: `GET /catalog`, `/catalog/skills`, `/consents/current` — `public, max-age=300, stale-while-revalidate=86400`; `GET /vacancies`, `/vacancies/{id}` — `public, max-age=30, stale-while-revalidate=120`. У публичных ответов есть `ETag`, `If-None-Match` → 304. `/guardian/consent`, `POST /eval/pairs`, `GET /catalog/test-plan` — `no-store`. Ошибки не кешируются; 401 — `private, no-cache` (данных в нём нет, architecture.md §12.1). Тело ответа, которое клиенту не нужно, всё равно прочитать или отменить (`res.body?.cancel()`): Chrome не завершает непрочитанный ответ с `no-store` и держит соединение.
 
 ## Служебные
 

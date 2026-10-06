@@ -171,6 +171,7 @@ async fn delete_me(
     db::users::anonymize_user(&mut *tx, &tombstone, user.id).await?;
     db::users::revoke_user_refresh_tokens(&mut *tx, user.id).await?;
     tx.commit().await?;
+    state.candidates.invalidate().await;
     if user.role == Role::Candidate
         && let Err(e) = state.recordings.remove_candidate(user.id).await
     {
@@ -268,6 +269,7 @@ async fn grant_consent(
         user_agent(&headers).as_deref(),
     )
     .await?;
+    state.candidates.invalidate().await;
     let status = if grant.created {
         StatusCode::CREATED
     } else {
@@ -305,6 +307,7 @@ async fn revoke_consent(
     if user.role == Role::Candidate && matches!(kind.as_str(), "pd_publication" | "pd_processing") {
         db::me::hide_candidate(&state.pool, user.id).await?;
     }
+    state.candidates.invalidate().await;
     if user.role == Role::Candidate && kind == proctoring::CONSENT_KIND {
         let recordings = db::proctoring::candidate_recordings(&state.pool, user.id).await?;
         proctoring::purge(&state.pool, &state.recordings, &recordings).await?;

@@ -4,7 +4,6 @@
 use axum::{Json, extract::State};
 use catalog::{Category, Grade, Specialization};
 use serde::Serialize;
-use sqlx::PgPool;
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
 
@@ -32,10 +31,10 @@ pub struct CategoryCard {
     pub median_expectation: Option<i64>,
 }
 
-pub async fn category_cards(pool: &PgPool) -> ApiResult<Vec<CategoryCard>> {
-    let rows = db::market::category_overview(pool).await?;
-    let mut cards = Vec::with_capacity(rows.len());
-    for r in rows {
+pub async fn category_cards(state: &AppState) -> ApiResult<Vec<CategoryCard>> {
+    let overview = state.candidates.overview(&state.pool).await?;
+    let mut cards = Vec::with_capacity(overview.value.len());
+    for r in &overview.value {
         let category = Category::new(
             r.specialization.parse::<Specialization>()?,
             r.grade.parse::<Grade>()?,
@@ -61,7 +60,7 @@ async fn categories(
     State(state): State<AppState>,
     _user: EmployerUser,
 ) -> ApiResult<Json<Vec<CategoryCard>>> {
-    Ok(Json(category_cards(&state.pool).await?))
+    Ok(Json(category_cards(&state).await?))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -92,14 +91,19 @@ async fn market(
             "Категория появится после теста",
         ));
     };
-    let m = db::market::candidate_market(&state.pool, user.id, &spec, &grade).await?;
+    let category = Category::new(spec.parse()?, grade.parse()?);
+    let demand = state
+        .candidates
+        .demand(&state.pool, category.specialization, category.grade)
+        .await?;
+    let d = &demand.value;
     Ok(Json(MarketStats {
-        category: Category::new(spec.parse()?, grade.parse()?),
-        companies_viewed_you_30d: m.companies_viewed_you,
-        invitations_in_category_30d: m.invitations_in_category,
-        open_needs: m.open_needs,
-        peers_in_category: m.peers,
-        median_offer_min: m.median_salary_min,
-        median_offer_max: m.median_salary_max,
+        category,
+        companies_viewed_you_30d: db::market::companies_viewed(&state.pool, user.id).await?,
+        invitations_in_category_30d: d.invitations_in_category,
+        open_needs: d.open_needs,
+        peers_in_category: d.peers,
+        median_offer_min: d.median_salary_min,
+        median_offer_max: d.median_salary_max,
     }))
 }

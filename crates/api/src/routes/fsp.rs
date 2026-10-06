@@ -167,6 +167,7 @@ async fn link(state: &AppState, candidate: uuid::Uuid, fsp_id: &str, via: &str) 
     if let Err(e) = sync_achievements(state, candidate, fsp_id).await {
         tracing::warn!(error = %e, "fsp registry sync failed, link kept");
     }
+    state.candidates.invalidate().await;
     Ok(())
 }
 
@@ -281,6 +282,7 @@ async fn sync(State(state): State<AppState>, user: CandidateUser) -> ApiResult<J
         .await?
         .ok_or_else(ApiError::not_found)?;
     sync_achievements(&state, user.id, &link.fsp_id).await?;
+    state.candidates.invalidate().await;
     load_status(&state.pool, user.id).await.map(Json)
 }
 
@@ -290,5 +292,6 @@ async fn sync(State(state): State<AppState>, user: CandidateUser) -> ApiResult<J
     security(("cookie" = []), ("bearer" = [])))]
 async fn unlink(State(state): State<AppState>, user: CandidateUser) -> ApiResult<StatusCode> {
     db::fsp::delete_fsp_link(&state.pool, user.id).await?;
+    state.candidates.invalidate().await;
     Ok(StatusCode::NO_CONTENT)
 }

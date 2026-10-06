@@ -40,6 +40,10 @@ struct Reply {
 
 impl Api {
     async fn start(pool: PgPool) -> Self {
+        Self::start_with(pool, None).await
+    }
+
+    async fn start_with(pool: PgPool, valkey: Option<&str>) -> Self {
         let config = Config {
             bind: ([127, 0, 0, 1], 0).into(),
             database_url: String::new(),
@@ -64,13 +68,16 @@ impl Api {
             },
             integrations: IntegrationsConfig::default(),
             seed_demo: false,
+            seed_per_spec: 40,
             log_json: false,
         };
+        let kv = Kv::connect(valkey).await.unwrap();
         let state = AppState {
             crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
             jwt: Arc::new(JwtKeys::new(config.jwt_seed).unwrap()),
             mailer: Arc::new(Mailer::new(&config.mail).unwrap()),
-            kv: Kv::connect(None).await.unwrap(),
+            kv: kv.clone(),
+            candidates: Arc::new(api::cache::CandidateCache::new(kv)),
             http: reqwest::Client::new(),
             metrics: None,
             recordings: Arc::new(RecordingStore::new(config.proctoring.dir.clone())),
@@ -168,6 +175,8 @@ impl Api {
             .await
             .unwrap();
         }
+        // Written past the API, so nothing bumped the search cache the way a handler would.
+        self.state.candidates.invalidate().await;
         id
     }
 
@@ -198,6 +207,7 @@ impl Api {
         )
         .await
         .unwrap();
+        self.state.candidates.invalidate().await;
         (id, request)
     }
 
@@ -237,7 +247,7 @@ impl Api {
     }
 
     async fn in_pool(&self, id: Uuid) -> bool {
-        db::pool::candidate_pool(self.pool(), None, "backend", None, false)
+        db::pool::searchable_pool(self.pool(), "backend")
             .await
             .unwrap()
             .iter()
@@ -1306,4 +1316,375 @@ async fn export_and_deletion_cover_the_representative(pool: PgPool) {
     assert!(grant.ip.is_none() && grant.user_agent.is_none());
     let r = api.guardian(&confirm, "grant").await;
     assert_eq!(r.body["code"], "invalid_token");
+}
+
+fn listed(shortlist: &Reply, id: Uuid) -> bool {
+    shortlist.body["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|i| i["candidate"]["id"] == id.to_string())
+}
+
+async fn backend_need(api: &Api, et: &str) -> String {
+    let r = api
+        .call(
+            Method::POST,
+            "/employer/needs",
+            Some(et),
+            Some(json!({
+                "title": "Бэкенд-разработчик",
+                "description": "Платёжный сервис на Kafka и PostgreSQL",
+                "specialization": "backend",
+                "grades": ["middle"],
+                "salary": { "min": 200000, "max": 300000 },
+            })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", r.body);
+    format!(
+        "/employer/needs/{}/shortlist",
+        r.body["id"].as_str().unwrap()
+    )
+}
+
+/// The search pool is cached per specialization; a revoked consent, a hidden profile or an edited
+/// profile must still show on the very next request.
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn warm_pool_cache_follows_consents_and_profile_edits(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let anna = api.candidate("anna@example.ru").await;
+    let boris = api.candidate("boris@example.ru").await;
+    let (hr, _) = api.employer("hr@example.ru").await;
+    let ct = api.token(anna, Role::Candidate);
+    let et = api.token(hr, Role::Employer);
+    let shortlist = backend_need(&api, &et).await;
+    let search = "/employer/candidates?specialization=backend";
+
+    let r = api
+        .call(Method::POST, &shortlist, Some(&et), Some(json!({})))
+        .await;
+    assert!(listed(&r, anna) && listed(&r, boris), "{}", r.body);
+    assert!(found(
+        &api.call(Method::GET, search, Some(&et), None).await,
+        anna
+    ));
+
+    let r = api
+        .call(
+            Method::POST,
+            &format!("/me/consents/{PUBLICATION}/revoke"),
+            Some(&ct),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    let r = api.call(Method::GET, &shortlist, Some(&et), None).await;
+    assert!(!listed(&r, anna), "the stored shortlist hides her at once");
+    let r = api
+        .call(Method::POST, &shortlist, Some(&et), Some(json!({})))
+        .await;
+    assert!(
+        !listed(&r, anna) && listed(&r, boris),
+        "a rebuild skips her"
+    );
+    let r = api.call(Method::GET, search, Some(&et), None).await;
+    assert!(!found(&r, anna));
+    assert_eq!(r.body["total"], 1, "she is not counted either");
+
+    let r = api
+        .call(
+            Method::POST,
+            "/me/consents",
+            Some(&ct),
+            Some(json!({ "document_id": PUBLICATION })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::CREATED);
+    let r = api
+        .call(
+            Method::PUT,
+            "/candidate/privacy",
+            Some(&ct),
+            Some(privacy(true)),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert!(found(
+        &api.call(Method::GET, search, Some(&et), None).await,
+        anna
+    ));
+
+    let r = api
+        .call(
+            Method::PUT,
+            "/candidate/privacy",
+            Some(&ct),
+            Some(privacy(false)),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert!(!found(
+        &api.call(Method::GET, search, Some(&et), None).await,
+        anna
+    ));
+    api.call(
+        Method::PUT,
+        "/candidate/privacy",
+        Some(&ct),
+        Some(privacy(true)),
+    )
+    .await;
+
+    let kafka = "/employer/candidates?specialization=backend&skills=kafka";
+    assert!(!found(
+        &api.call(Method::GET, kafka, Some(&et), None).await,
+        anna
+    ));
+    let r = api
+        .call(
+            Method::PUT,
+            "/candidate/profile",
+            Some(&ct),
+            Some(json!({
+                "full_name": "Анна Петрова",
+                "contacts": { "telegram": "@anna" },
+                "salary_expectation_min": 280000,
+                "skills": ["kafka", "postgresql"],
+            })),
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.body);
+    let r = api.call(Method::GET, kafka, Some(&et), None).await;
+    assert!(
+        found(&r, anna) && !found(&r, boris),
+        "new skills count at once"
+    );
+    let cheap = "/employer/candidates?specialization=backend&max_expectation=250000";
+    let r = api.call(Method::GET, cheap, Some(&et), None).await;
+    assert!(
+        !found(&r, anna) && found(&r, boris),
+        "so does the new salary"
+    );
+}
+
+/// Another replica keeps its pool until the generation reaches it, but never shows a profile that
+/// stopped being searchable: the page is checked against the live tables.
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn other_replica_never_shows_a_hidden_profile(pool: PgPool) {
+    let a = Api::start(pool.clone()).await;
+    let b = Api::start(pool).await;
+    let anna = a.candidate("anna@example.ru").await;
+    let (hr, _) = a.employer("hr@example.ru").await;
+    let ct = a.token(anna, Role::Candidate);
+    let et = b.token(hr, Role::Employer);
+    let search = "/employer/candidates?specialization=backend";
+    assert!(found(
+        &b.call(Method::GET, search, Some(&et), None).await,
+        anna
+    ));
+
+    let r = a
+        .call(
+            Method::POST,
+            &format!("/me/consents/{PUBLICATION}/revoke"),
+            Some(&ct),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    let r = b.call(Method::GET, search, Some(&et), None).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert!(!found(&r, anna), "replica b has no Valkey generation yet");
+}
+
+fn cache_control(r: &Reply) -> &str {
+    r.headers[header::CACHE_CONTROL].to_str().unwrap()
+}
+
+/// 152-ФЗ: whatever is personal or behind credentials is `private, no-store`; only anonymous
+/// reference data and published vacancies are cached publicly.
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn cache_control_by_route(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let cand = api.candidate("anna@example.ru").await;
+    let (hr, company) = api.employer("hr@example.ru").await;
+    let ct = api.token(cand, Role::Candidate);
+    let et = api.token(hr, Role::Employer);
+    let vacancy = Uuid::now_v7();
+    db::vacancies::insert_vacancy(
+        api.pool(),
+        vacancy,
+        company,
+        db::types::VacancyStatus::Published,
+        Some(Utc::now()),
+        &db::vacancies::VacancyFields {
+            title: "Go-разработчик",
+            description: "Платежи",
+            specialization: "backend",
+            grade: "middle",
+            skills: &[],
+            salary_min: 200_000,
+            salary_max: 300_000,
+            work_format: "remote",
+            city: None,
+        },
+    )
+    .await
+    .unwrap();
+
+    for path in [
+        "/me",
+        "/me/consents",
+        "/candidate/profile",
+        "/candidate/privacy",
+        "/candidate/contact-access",
+    ] {
+        let r = api.call(Method::GET, path, Some(&ct), None).await;
+        assert_eq!(r.status, StatusCode::OK, "{path}");
+        assert_eq!(cache_control(&r), "private, no-store", "{path}");
+    }
+    for path in [
+        "/employer/company",
+        "/employer/candidates?specialization=backend",
+        "/employer/categories",
+        "/employer/invitations",
+    ] {
+        let r = api.call(Method::GET, path, Some(&et), None).await;
+        assert_eq!(r.status, StatusCode::OK, "{path}");
+        assert_eq!(cache_control(&r), "private, no-store", "{path}");
+    }
+    let r = api.call(Method::GET, "/me", None, None).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        cache_control(&r),
+        "private, no-cache",
+        "a 401 holds nothing to protect"
+    );
+    let key = api
+        .call(
+            Method::POST,
+            "/employer/integrations/keys",
+            Some(&et),
+            Some(json!({ "name": "ATS", "scopes": ["invitations:read"] })),
+        )
+        .await;
+    assert_eq!(key.status, StatusCode::CREATED, "{}", key.body);
+    assert_eq!(cache_control(&key), "private, no-store", "a secret");
+    let r = api
+        .call(
+            Method::GET,
+            "/integrations/whoami",
+            key.body["secret"].as_str(),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(cache_control(&r), "private, no-store");
+
+    let r = api
+        .call(Method::GET, "/guardian/consent?token=nope", None, None)
+        .await;
+    assert_eq!(cache_control(&r), "no-store");
+    let r = api
+        .call(
+            Method::POST,
+            "/eval/pairs",
+            None,
+            Some(json!({ "vacancies": [], "candidates": [] })),
+        )
+        .await;
+    assert_eq!(cache_control(&r), "no-store");
+    let r = api
+        .call(
+            Method::GET,
+            "/catalog/test-plan?specialization=backend&grade=middle",
+            None,
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(
+        cache_control(&r),
+        "no-store",
+        "fresh random examples each time"
+    );
+
+    let listing = "public, max-age=30, stale-while-revalidate=120";
+    for path in ["/vacancies".to_owned(), format!("/vacancies/{vacancy}")] {
+        let r = api.call(Method::GET, &path, Some(&ct), None).await;
+        assert_eq!(r.status, StatusCode::OK, "{path}");
+        assert_eq!(cache_control(&r), listing, "{path}");
+        assert!(!r.body.to_string().contains("anna"), "no personal data");
+    }
+    let r = api
+        .call(
+            Method::GET,
+            &format!("/vacancies/{}", Uuid::now_v7()),
+            None,
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    assert_eq!(cache_control(&r), "no-store", "errors are not cached");
+
+    let static_policy = "public, max-age=300, stale-while-revalidate=86400";
+    for path in ["/catalog", "/catalog/skills?q=post", "/consents/current"] {
+        let url = format!("{}/api/v1{path}", api.base);
+        let first = api.http.get(&url).send().await.unwrap();
+        assert_eq!(first.status(), StatusCode::OK, "{path}");
+        assert_eq!(
+            first.headers()[header::CACHE_CONTROL],
+            static_policy,
+            "{path}"
+        );
+        let etag = first.headers()[header::ETAG].clone();
+        let again = api
+            .http
+            .get(&url)
+            .header(header::IF_NONE_MATCH, etag.clone())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(again.status(), StatusCode::NOT_MODIFIED, "{path}");
+        assert_eq!(again.headers()[header::ETAG], etag);
+        assert_eq!(again.headers()[header::CACHE_CONTROL], static_policy);
+        assert!(again.bytes().await.unwrap().is_empty());
+    }
+}
+
+/// Run with a Valkey: `TEST_VALKEY_URL=redis://127.0.0.1:6379 cargo test -p api --test privacy
+/// -- --ignored`. Replicas share the generation, so b reloads within `REMOTE_TTL` of a's write.
+#[sqlx::test(migrations = "../../db/migrations")]
+#[ignore = "needs TEST_VALKEY_URL"]
+async fn valkey_generation_reaches_other_replicas(pool: PgPool) {
+    let url = std::env::var("TEST_VALKEY_URL").expect("TEST_VALKEY_URL");
+    let a = Api::start_with(pool.clone(), Some(&url)).await;
+    let b = Api::start_with(pool, Some(&url)).await;
+    let anna = a.candidate("anna@example.ru").await;
+    let (hr, _) = a.employer("hr@example.ru").await;
+    let ct = a.token(anna, Role::Candidate);
+    let et = b.token(hr, Role::Employer);
+    let search = "/employer/candidates?specialization=backend";
+    tokio::time::sleep(api::cache::REMOTE_TTL).await;
+    let r = b.call(Method::GET, search, Some(&et), None).await;
+    assert!(found(&r, anna));
+    assert_eq!(r.body["total"], 1);
+
+    let r = a
+        .call(
+            Method::POST,
+            &format!("/me/consents/{PUBLICATION}/revoke"),
+            Some(&ct),
+            None,
+        )
+        .await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    tokio::time::sleep(api::cache::REMOTE_TTL + std::time::Duration::from_millis(50)).await;
+    let r = b.call(Method::GET, search, Some(&et), None).await;
+    assert!(!found(&r, anna));
+    assert_eq!(
+        r.body["total"], 0,
+        "b rebuilt its pool from the shared generation"
+    );
 }

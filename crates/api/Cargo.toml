@@ -23,6 +23,7 @@ uuid.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 axum.workspace = true
+arc-swap = "1"
 futures-util = { version = "0.3", default-features = false, features = ["std"] }
 axum-extra = { version = "0.12", features = ["cookie"] }
 utoipa = { workspace = true, features = ["chrono"] }
@@ -51,3 +52,4 @@ pdf-extract = "0.12"
 
 [dev-dependencies]
 ats-mock = { path = "../ats-mock" }
+tower = { version = "0.5", features = ["util"] }

@@ -102,7 +102,7 @@ async fn search(
     };
     let text_for_rank = need.as_ref().map(|n| n.description.as_str()).or(text);
     let loaded = pool::load(
-        &state.pool,
+        &state,
         q.specialization,
         &PoolFilter {
             grade: q.grade,
@@ -112,7 +112,6 @@ async fn search(
             required_skills: &required,
             adults_only: q.adults_only,
         },
-        now,
     )
     .await?;
 
@@ -155,6 +154,10 @@ async fn search(
     let page: Vec<_> = ordered.into_iter().skip(offset).take(limit).collect();
     let ids: Vec<Uuid> = page.iter().map(|(i, ..)| loaded.ids[*i]).collect();
     let mut cards = cards::load(&state.pool, &state.crypto, company, &ids, now).await?;
+    // The pool may be up to a generation old on another replica; the page is checked live.
+    let mut searchable = db::pool::searchable_among(&state.pool, &ids).await?;
+    searchable.sort_unstable();
+    cards.retain(|c| searchable.binary_search(&c.id).is_ok());
     let mut items = Vec::with_capacity(page.len());
     for (i, strength, score, breakdown) in page {
         let Some(pos) = cards.iter().position(|c| c.id == loaded.ids[i]) else {
@@ -215,13 +218,12 @@ async fn profile(
         (Some(need_id), Some(category)) => {
             let need = super::needs::effective_need(&state.pool, company, need_id).await?;
             let loaded = pool::load(
-                &state.pool,
+                &state,
                 category.specialization,
                 &PoolFilter {
                     text: Some(&need.description),
                     ..PoolFilter::default()
                 },
-                now,
             )
             .await?;
             loaded

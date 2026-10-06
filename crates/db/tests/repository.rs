@@ -329,13 +329,51 @@ async fn pool_rows_without_fsp_link(pool: PgPool) {
         .await
         .unwrap();
 
-    let rows = db::pool::candidate_pool(&pool, Some("rust | tokio"), "backend", None, false)
-        .await
-        .unwrap();
+    let rows = db::pool::searchable_pool(&pool, "backend").await.unwrap();
     assert_eq!(rows.len(), 1);
-    assert!(rows[0].achievements.is_none());
+    assert!(rows[0].achievements.is_none() && !rows[0].minor);
     assert_eq!(rows[0].skills, ["rust", "rust"]);
     assert_eq!(rows[0].skill_sources, ["declared", "test"]);
+
+    assert!(
+        db::pool::text_ranks(&pool, "backend", "rust | tokio")
+            .await
+            .unwrap()
+            .is_empty(),
+        "an empty «about» matches nothing"
+    );
+    db::candidates::update_candidate_profile(
+        &pool,
+        id,
+        &db::candidates::ProfileUpdate {
+            full_name_enc: None,
+            contacts_enc: None,
+            city: None,
+            relocation: false,
+            work_formats: &[],
+            salary_expectation_min: None,
+            about: "Пишу сервисы на Rust и Tokio",
+            experience_years: None,
+            roles: &[],
+            soft_skills: &[],
+            industries: &[],
+            experience: &json!([]),
+        },
+    )
+    .await
+    .unwrap();
+    let ranks = db::pool::text_ranks(&pool, "backend", "rust | tokio")
+        .await
+        .unwrap();
+    assert_eq!(ranks.len(), 1);
+    assert_eq!(ranks[0].user_id, id);
+    assert!(ranks[0].rank > 0.0);
+    assert!(
+        db::pool::text_ranks(&pool, "frontend", "rust | tokio")
+            .await
+            .unwrap()
+            .is_empty()
+    );
 
     let cards = db::pool::candidate_cards(&pool, &[id]).await.unwrap();
     assert_eq!(cards.len(), 1);

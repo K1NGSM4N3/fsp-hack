@@ -11,9 +11,9 @@ pub struct CategoryOverview {
     pub median_expectation: Option<i64>,
 }
 
+/// Anonymous demand in one category, the same for every candidate in it.
 #[derive(Debug, Clone, Copy)]
-pub struct CandidateMarket {
-    pub companies_viewed_you: i64,
+pub struct CategoryDemand {
     pub invitations_in_category: i64,
     pub open_needs: i64,
     pub peers: i64,
@@ -49,24 +49,35 @@ pub async fn category_overview(
     .await
 }
 
-pub async fn candidate_market(
+/// Companies that opened the candidate's profile in the last 30 days.
+pub async fn companies_viewed(
     db: impl PgExecutor<'_>,
     candidate_id: Uuid,
+) -> Result<i64, sqlx::Error> {
+    sqlx::query_scalar!(
+        r#"SELECT count(DISTINCT pv.company_id) AS "count!" FROM profile_views pv
+           WHERE pv.candidate_id = $1 AND pv.viewed_on >= current_date - 30"#,
+        candidate_id,
+    )
+    .fetch_one(db)
+    .await
+}
+
+pub async fn category_demand(
+    db: impl PgExecutor<'_>,
     specialization: &str,
     grade: &str,
-) -> Result<CandidateMarket, sqlx::Error> {
+) -> Result<CategoryDemand, sqlx::Error> {
     sqlx::query_as!(
-        CandidateMarket,
+        CategoryDemand,
         r#"SELECT
-               (SELECT count(DISTINCT pv.company_id) FROM profile_views pv
-                 WHERE pv.candidate_id = $1 AND pv.viewed_on >= current_date - 30) AS "companies_viewed_you!",
                (SELECT count(*) FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id
-                 WHERE ic.specialization = $2 AND ic.grade = $3
+                 WHERE ic.specialization = $1 AND ic.grade = $2
                    AND i.created_at >= now() - interval '30 days') AS "invitations_in_category!",
                (SELECT count(*) FROM hiring_needs n
-                 WHERE n.status = 'active' AND n.specialization = $2 AND $3 = ANY (n.grades)) AS "open_needs!",
+                 WHERE n.status = 'active' AND n.specialization = $1 AND $2 = ANY (n.grades)) AS "open_needs!",
                (SELECT count(*) FROM candidates oc
-                 WHERE oc.specialization = $2 AND oc.grade = $3 AND oc.visible
+                 WHERE oc.specialization = $1 AND oc.grade = $2 AND oc.visible
                    AND oc.search_status <> 'closed'
                    AND EXISTS (SELECT 1 FROM user_consents uc
                                 JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
@@ -77,13 +88,12 @@ pub async fn candidate_market(
                                     WHERE gc.user_id = oc.user_id AND gc.revoked_at IS NULL))) AS "peers!",
                (SELECT (percentile_cont(0.5) WITHIN GROUP (ORDER BY i.salary_min))::bigint
                   FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id
-                 WHERE ic.specialization = $2 AND ic.grade = $3
+                 WHERE ic.specialization = $1 AND ic.grade = $2
                    AND i.created_at >= now() - interval '90 days') AS median_salary_min,
                (SELECT (percentile_cont(0.5) WITHIN GROUP (ORDER BY i.salary_max))::bigint
                   FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id
-                 WHERE ic.specialization = $2 AND ic.grade = $3
+                 WHERE ic.specialization = $1 AND ic.grade = $2
                    AND i.created_at >= now() - interval '90 days') AS median_salary_max"#,
-        candidate_id,
         specialization,
         grade,
     )

@@ -73,13 +73,15 @@ pub struct CandidateInvitable {
     pub grade: Option<String>,
 }
 
+/// 0 when the code is taken: the caller tries the next one inside the same transaction.
 pub async fn insert_candidate(
     db: impl PgExecutor<'_>,
     user_id: Uuid,
     public_code: &str,
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
-        "INSERT INTO candidates (user_id, public_code) VALUES ($1, $2)",
+        "INSERT INTO candidates (user_id, public_code) VALUES ($1, $2)
+         ON CONFLICT (public_code) DO NOTHING",
         user_id,
         public_code,
     )

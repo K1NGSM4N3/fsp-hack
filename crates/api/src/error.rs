@@ -91,6 +91,10 @@ pub enum InternalError {
     Io(#[from] std::io::Error),
     #[error("corrupt stored value: {0}")]
     Corrupt(String),
+    #[error("response body: {0}")]
+    Body(#[from] axum::Error),
+    #[error("no free public code after {0} attempts")]
+    PublicCodeExhausted(usize),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -140,6 +144,7 @@ internal_from!(
     reqwest::Error,
     PdfError,
     std::io::Error,
+    axum::Error,
 );
 
 /// Input of `POST /eval/pairs` over a limit or inconsistent: 422 naming the top-level field.

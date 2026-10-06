@@ -2,6 +2,8 @@
 //! [`CandidatePool`] stores many candidates as compact hot records (interned skill ids,
 //! bitsets, `f32`) plus a separate cold part (ids, texts) read only when explaining top-N.
 
+use std::sync::Arc;
+
 use catalog::{Category, Grade, Industry, WorkFormat};
 use serde::{Deserialize, Serialize};
 
@@ -179,6 +181,8 @@ pub struct CandidateProfile {
     pub(crate) salary_min: u32,
     pub(crate) city: u32,
     pub(crate) skills_start: u32,
+    /// Index of the candidate's cold record; survives [`CandidatePool::subset`].
+    pub(crate) origin: u32,
     pub(crate) skills_len: u16,
     pub(crate) industries: Bits,
     pub(crate) formats: Bits,
@@ -212,6 +216,10 @@ impl CandidateProfile {
     pub fn text_relevance(&self) -> f32 {
         self.text_relevance
     }
+
+    pub fn salary_expectation(&self) -> Option<u32> {
+        (self.salary_min > 0).then_some(self.salary_min)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -220,13 +228,14 @@ struct CandidateCold {
     fsp_summary: String,
 }
 
-/// Structure-of-arrays candidate store: build once per request (or cache per category)
+/// Structure-of-arrays candidate store: build once (the API caches one per specialization)
 /// and rank any number of needs against it without further allocation per candidate.
+/// Skills and cold records are shared, so a [`subset`](Self::subset) copies hot records only.
 #[derive(Debug, Clone, Default)]
 pub struct CandidatePool {
     profiles: Vec<CandidateProfile>,
-    skills: Vec<SkillHit>,
-    cold: Vec<CandidateCold>,
+    skills: Arc<Vec<SkillHit>>,
+    cold: Arc<Vec<CandidateCold>>,
 }
 
 impl CandidatePool {
@@ -237,8 +246,8 @@ impl CandidatePool {
     pub fn with_capacity(candidates: usize) -> Self {
         CandidatePool {
             profiles: Vec::with_capacity(candidates),
-            skills: Vec::with_capacity(candidates * 12),
-            cold: Vec::with_capacity(candidates),
+            skills: Arc::new(Vec::with_capacity(candidates * 12)),
+            cold: Arc::new(Vec::with_capacity(candidates)),
         }
     }
 
@@ -253,21 +262,24 @@ impl CandidatePool {
     /// Interns the snapshot; duplicate skills keep their most trusted source.
     /// Returns the candidate's index in the pool.
     pub fn push(&mut self, s: &CandidateSnapshot) -> usize {
-        let start = self.skills.len();
+        let skills = Arc::make_mut(&mut self.skills);
+        let start = skills.len();
         for cs in &s.skills {
-            if self.skills.len() - start >= usize::from(u16::MAX) {
+            if skills.len() - start >= usize::from(u16::MAX) {
                 break;
             }
             let id = SkillId::intern(&cs.slug);
-            match self.skills[start..].iter_mut().find(|h| h.id == id) {
+            match skills[start..].iter_mut().find(|h| h.id == id) {
                 Some(h) if cs.source.confidence() > h.source.confidence() => h.source = cs.source,
                 Some(_) => {}
-                None => self.skills.push(SkillHit {
+                None => skills.push(SkillHit {
                     id,
                     source: cs.source,
                 }),
             }
         }
+        let skills_len = (skills.len() - start) as u16;
+        let cold = Arc::make_mut(&mut self.cold);
         let salary_min = s
             .salary_expectation_min
             .filter(|v| *v > 0)
@@ -280,18 +292,45 @@ impl CandidatePool {
             salary_min,
             city: s.city.as_deref().map_or(0, lexicon::city_key),
             skills_start: start as u32,
-            skills_len: (self.skills.len() - start) as u16,
+            origin: cold.len() as u32,
+            skills_len,
             industries: Bits::of(s.industries.iter().copied()),
             formats: Bits::of(s.work_formats.iter().copied()),
             category: s.category,
             relocation: s.relocation,
             has_fsp: s.fsp.has_history,
         });
-        self.cold.push(CandidateCold {
+        cold.push(CandidateCold {
             id: s.id.clone(),
             fsp_summary: s.fsp.summary_ru.clone(),
         });
         self.profiles.len() - 1
+    }
+
+    /// A pool of the picked candidates, `(index in self, text relevance)` each, in pick order.
+    /// Hot records are copied with the given text relevance; skills and cold records are
+    /// shared, so a filtered per-request view of a cached pool costs one allocation.
+    pub fn subset(&self, picks: impl IntoIterator<Item = (usize, f32)>) -> CandidatePool {
+        let profiles = picks
+            .into_iter()
+            .filter_map(|(i, text)| {
+                self.profiles.get(i).map(|p| CandidateProfile {
+                    text_relevance: text.clamp(0.0, 1.0),
+                    ..*p
+                })
+            })
+            .collect();
+        CandidatePool {
+            profiles,
+            skills: Arc::clone(&self.skills),
+            cold: Arc::clone(&self.cold),
+        }
+    }
+
+    pub fn has_skill(&self, index: usize, skill: SkillId) -> bool {
+        self.profiles
+            .get(index)
+            .is_some_and(|p| self.skills_of(p).iter().any(|h| h.id == skill))
     }
 
     pub fn len(&self) -> usize {
@@ -303,7 +342,13 @@ impl CandidatePool {
     }
 
     pub fn id(&self, index: usize) -> Option<&str> {
-        self.cold.get(index).map(|c| c.id.as_str())
+        self.cold_of(index).map(|c| c.id.as_str())
+    }
+
+    fn cold_of(&self, index: usize) -> Option<&CandidateCold> {
+        self.profiles
+            .get(index)
+            .and_then(|p| self.cold.get(p.origin as usize))
     }
 
     pub fn profile(&self, index: usize) -> Option<&CandidateProfile> {
@@ -329,8 +374,7 @@ impl CandidatePool {
     }
 
     pub(crate) fn fsp_summary(&self, index: usize) -> &str {
-        self.cold
-            .get(index)
+        self.cold_of(index)
             .map_or(NO_FSP_DATA_RU, |c| c.fsp_summary.as_str())
     }
 }
@@ -385,5 +429,55 @@ mod tests {
         assert!(p.formats.has(WorkFormat::Remote) && !p.formats.has(WorkFormat::Office));
         assert_eq!(p.city, lexicon::city_key("Санкт-Петербург"));
         assert_eq!(pool.id(0), Some("c1"));
+    }
+
+    fn snapshot(id: &str, skill: &str, fsp: &str) -> CandidateSnapshot {
+        CandidateSnapshot {
+            id: id.into(),
+            category: Category::new(Specialization::Backend, Grade::Middle),
+            theta: 0.4,
+            skills: vec![CandidateSkill {
+                slug: skill.into(),
+                source: SkillSource::Test,
+            }],
+            fsp: FspSummary {
+                score: 0.5,
+                has_history: true,
+                summary_ru: fsp.into(),
+            },
+            salary_expectation_min: Some(250_000),
+            work_formats: Vec::new(),
+            city: None,
+            relocation: false,
+            last_activity_unix: 0,
+            industries: Vec::new(),
+            text_relevance: 0.0,
+        }
+    }
+
+    #[test]
+    fn subset_shares_skills_and_cold_records() {
+        let pool = CandidatePool::from_snapshots(&[
+            snapshot("a", "rust", "ФСП a"),
+            snapshot("b", "go", "ФСП b"),
+            snapshot("c", "kafka", "ФСП c"),
+        ]);
+        let view = pool.subset([(2, 0.25), (0, 7.0)]);
+        assert_eq!(view.len(), 2);
+        assert_eq!(view.id(0), Some("c"));
+        assert_eq!(view.id(1), Some("a"));
+        assert_eq!(view.fsp_summary(0), "ФСП c");
+        assert!(view.has_skill(0, SkillId::intern("kafka")));
+        assert!(!view.has_skill(0, SkillId::intern("rust")));
+        assert!(view.has_skill(1, SkillId::intern("rust")));
+        assert_eq!(view.profile(0).unwrap().text_relevance(), 0.25);
+        assert_eq!(view.profile(1).unwrap().text_relevance(), 1.0);
+        assert_eq!(view.profile(1).unwrap().salary_expectation(), Some(250_000));
+        assert!(Arc::ptr_eq(&view.skills, &pool.skills));
+
+        let nested = view.subset([(1, 0.0)]);
+        assert_eq!(nested.id(0), Some("a"));
+        assert_eq!(nested.id(1), None);
+        assert_eq!(pool.profile(0).unwrap().text_relevance(), 0.0);
     }
 }

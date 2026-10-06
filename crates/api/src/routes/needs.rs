@@ -402,14 +402,7 @@ async fn need_categories(
 ) -> ApiResult<Json<Vec<CategoryStats>>> {
     let company = company_id(&state.pool, user.id).await?;
     let need = load_need(&state.pool, company, id).await?;
-    let now = Utc::now().timestamp();
-    let loaded = pool::load(
-        &state.pool,
-        need.specialization,
-        &PoolFilter::default(),
-        now,
-    )
-    .await?;
+    let loaded = pool::load(&state, need.specialization, &PoolFilter::default()).await?;
     Ok(Json(matching::category_stats(
         &need.to_need(&need.filters),
         &loaded.pool,
@@ -530,7 +523,7 @@ async fn build_shortlist(
     let now = Utc::now().timestamp();
     let effective = need.to_need(&filters);
     let loaded = pool::load(
-        &state.pool,
+        &state,
         need.specialization,
         &PoolFilter {
             text: Some(&effective.description),
@@ -539,7 +532,6 @@ async fn build_shortlist(
             adults_only: filters.adults_only,
             ..PoolFilter::default()
         },
-        now,
     )
     .await?;
     let ranked = matching::rank(&effective, &loaded.pool, &Weights::default(), now, limit);

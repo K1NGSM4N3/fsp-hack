@@ -1,6 +1,14 @@
+use std::sync::LazyLock;
+
 use axum::{
     Json,
+    body::Bytes,
     extract::{Query, State},
+    http::{
+        HeaderValue,
+        header::{CONTENT_TYPE, ETAG},
+    },
+    response::{IntoResponse, Response},
 };
 use catalog::{Direction, Grade, Industry, Specialization, WorkFormat};
 use matching::{Discipline, SkillView};
@@ -9,7 +17,7 @@ use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
-use crate::{auth::Role, error::ApiResult, state::AppState};
+use crate::{auth::Role, error::ApiResult, http_cache, state::AppState};
 
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
@@ -40,10 +48,30 @@ pub struct CatalogResponse {
     pub fsp_disciplines: Vec<Named<Discipline>>,
 }
 
+/// Serialized once per process with its validator: the catalog is compiled in.
+static CATALOG: LazyLock<(HeaderValue, Bytes)> = LazyLock::new(|| {
+    let body = serde_json::to_vec(&catalog())
+        .map(Bytes::from)
+        .unwrap_or_default();
+    (http_cache::etag_of(&body), body)
+});
+
 /// Directions, specializations, grades, formats and industries
 #[utoipa::path(get, path = "/catalog", tag = "catalog", responses((status = 200, body = CatalogResponse)))]
-async fn get_catalog() -> Json<CatalogResponse> {
-    Json(CatalogResponse {
+async fn get_catalog() -> Response {
+    let (etag, body) = &*CATALOG;
+    (
+        [
+            (CONTENT_TYPE, HeaderValue::from_static("application/json")),
+            (ETAG, etag.clone()),
+        ],
+        body.clone(),
+    )
+        .into_response()
+}
+
+fn catalog() -> CatalogResponse {
+    CatalogResponse {
         directions: Direction::ALL
             .iter()
             .map(|&d| DirectionInfo {
@@ -86,7 +114,7 @@ async fn get_catalog() -> Json<CatalogResponse> {
                 name: d.name_ru(),
             })
             .collect(),
-    })
+    }
 }
 
 #[derive(Deserialize, IntoParams)]

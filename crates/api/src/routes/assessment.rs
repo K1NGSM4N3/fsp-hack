@@ -476,7 +476,7 @@ async fn start_session(
 }
 
 /// Records one outcome and either schedules the next item or finishes the session
-/// (assigning the grade and test-confirmed skills on a pass).
+/// (assigning the grade and test-confirmed skills on a pass). `true` when a grade was assigned.
 async fn advance(
     tx: &mut PgConnection,
     candidate: Uuid,
@@ -485,7 +485,7 @@ async fn advance(
     item: ItemRef,
     answer: Option<&Answer>,
     now: DateTime<Utc>,
-) -> ApiResult<()> {
+) -> ApiResult<bool> {
     let deadline = row.current_item_deadline.unwrap_or(now);
     let timed_out = now > deadline + Duration::seconds(DEADLINE_GRACE_SECS);
     let correct = !timed_out && answer.is_some_and(|a| assessment::check(&item, a));
@@ -579,7 +579,7 @@ async fn advance(
                 }
             }
         }
-        return Ok(());
+        return Ok(d.passed);
     }
     let next =
         assessment::next_item(session).ok_or_else(|| corrupt("no next item before decision"))?;
@@ -594,7 +594,7 @@ async fn advance(
         row.id,
     )
     .await?;
-    Ok(())
+    Ok(false)
 }
 
 async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<AssessmentSession> {
@@ -722,15 +722,19 @@ async fn current_item(
         .await?
         .ok_or_else(ApiError::not_found)?;
     let now = Utc::now();
+    let mut graded = false;
     if row.status == db::types::AssessmentStatus::InProgress
         && let (Some(item), Some(deadline)) = (&row.current_item, row.current_item_deadline)
         && now > deadline + Duration::seconds(DEADLINE_GRACE_SECS)
     {
         let mut session = load_state(row.state.clone())?;
         let item: ItemRef = serde_json::from_value(item.clone()).map_err(corrupt)?;
-        advance(&mut tx, user.id, &row, &mut session, item, None, now).await?;
+        graded = advance(&mut tx, user.id, &row, &mut session, item, None, now).await?;
     }
     tx.commit().await?;
+    if graded {
+        state.candidates.invalidate().await;
+    }
     Ok(Json(view(&state, user.id, id).await?))
 }
 
@@ -781,7 +785,7 @@ async fn answer(
         .transpose()
         .map_err(corrupt)?
         .ok_or_else(|| corrupt("no current item"))?;
-    advance(
+    let graded = advance(
         &mut tx,
         user.id,
         &row,
@@ -793,6 +797,9 @@ async fn answer(
     .await?;
     db::candidates::touch_candidate_activity(&mut *tx, user.id).await?;
     tx.commit().await?;
+    if graded {
+        state.candidates.invalidate().await;
+    }
     Ok(Json(view(&state, user.id, id).await?))
 }
 
