@@ -37,11 +37,14 @@ services:
     build:
       context: ..
       dockerfile: deploy/web.Dockerfile
+      args:
+        SITE_URL: ${SITE_URL:-http://localhost:8080}
     image: fsp-hack/web:local
     restart: unless-stopped
     init: true
     environment:
       API_PROXY_URL: ${API_PROXY_URL:-http://api:8000}
+      SITE_URL: ${SITE_URL:-http://localhost:8080}
       HOSTNAME: 0.0.0.0
       PORT: "3000"
     depends_on:

@@ -1933,3 +1933,22 @@ async fn valkey_generation_reaches_other_replicas(pool: PgPool) {
         "b rebuilt its pool from the shared generation"
     );
 }
+
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn concurrent_sign_ups_with_one_email_give_one_account_and_a_conflict(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let body = register("twice@example.ru", Some("adult"), None);
+    let (a, b) = tokio::join!(
+        api.call(Method::POST, "/auth/register", None, Some(body.clone())),
+        api.call(Method::POST, "/auth/register", None, Some(body)),
+    );
+    let mut statuses = [a.status, b.status];
+    statuses.sort();
+    assert_eq!(statuses, [StatusCode::CREATED, StatusCode::CONFLICT]);
+    let conflict = if a.status == StatusCode::CONFLICT {
+        a
+    } else {
+        b
+    };
+    assert_eq!(conflict.body["code"], "email_taken");
+}

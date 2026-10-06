@@ -201,6 +201,7 @@ async fn register(
     let (token, token_hash) = new_token();
     let ua = user_agent(&headers);
     let mut tx = state.pool.begin().await?;
+    // The pre-check above races with a concurrent sign-up (double submit); the unique index is the real guard.
     db::users::insert_user(
         &mut *tx,
         user_id,
@@ -209,7 +210,14 @@ async fn register(
         &bidx,
         &password_hash,
     )
-    .await?;
+    .await
+    .map_err(|e| {
+        if db::is_unique_violation(&e) {
+            ApiError::conflict("email_taken", "Этот email уже зарегистрирован")
+        } else {
+            e.into()
+        }
+    })?;
     for doc in docs.iter().filter(|d| req.consents.contains(&d.id)) {
         db::consents::insert_registration_consent(
             &mut *tx,

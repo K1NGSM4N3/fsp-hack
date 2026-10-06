@@ -708,7 +708,7 @@ make docs                # этот документ в PDF и DOCX
 - В `.env` — публичные адреса (`PUBLIC_URL`, `FSP_OIDC_ISSUER`, `FSP_OIDC_REDIRECT_URL`) и `COOKIE_SECURE=true`. Камера в браузере доступна только по HTTPS или на localhost; видеозапись отключается `PROCTORING=off`, файлы лежат в томе `proctoring-data`.
 - Новые ключи `JWT_ED25519_SEED_B64`, `FIELD_ENC_KEY`, `BIDX_KEY` — по 32 случайных байта в base64 (`openssl rand -base64 32`), новые пароли PostgreSQL и Keycloak (`KC_BOOTSTRAP_ADMIN_*`), секрет клиента ФСП ID.
 - Без демо: `SEED_DEMO=false`, пустые `WEBHOOK_DEV_HOSTS` и `ATS_DEMO_*` — тогда вебхуки уходят только по HTTPS на публичные адреса.
-- `KC_HOSTNAME` (публичный адрес Keycloak) и `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` подставляются в `deploy/compose.yml` из окружения shell или из `deploy/.env`, а не из корневого `.env`.
+- `KC_HOSTNAME` (публичный адрес Keycloak), `SITE_URL` (адрес сайта для canonical-ссылок, sitemap, OG-картинок и llms.txt) и `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` подставляются в `deploy/compose.yml` из окружения shell или из `deploy/.env`, а не из корневого `.env`. `SITE_URL` попадает в образ web при сборке: после смены — пересобрать web.
 - В `deploy/Caddyfile` — домен вместо `:8080` и без `auto_https off`, в `deploy/compose.yml` у `caddy` — порты 80 и 443: Caddy сам получит TLS-сертификат.
 
 ### 12.4. Производительность и кеширование
