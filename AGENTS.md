@@ -8,7 +8,9 @@
 | `specs.md` | Требования организаторов с ID (`T-3`, `V-2`, …) и статусами |
 | `architecture.md` | Зафиксированные решения: стек, механики тестирования и подбора, ФСП, безопасность, схема данных |
 | `api.md` | Соглашения API и список эндпоинтов |
-| `README.md` | Что это и как запустить |
+| `README.md` | Что это и как запустить: сервисы, порты, профили compose, демо-аккаунты |
+| `docs/solution.md` | Описание решения для жюри; из него `make docs` собирает PDF и DOCX |
+| `web/README.md` | Фронтенд: страницы, устройство, анимации, переменные окружения |
 
 `specs.md`, `architecture.md`, `api.md` и этот файл — рабочие, живут до финальной сдачи.
 
@@ -34,13 +36,18 @@ deploy/            compose, Dockerfile'ы, Caddy, Keycloak, Grafana
 ```sh
 make db          # создать локальную БД fsp_hack (нужен запущенный Postgres)
 make db-prepare  # применить миграции к DATABASE_URL и обновить .sqlx/
-make api         # запустить API на :8000 (миграции применяются при старте)
+make api         # запустить API на :8000 (миграции при старте; демо-данные — SEED_DEMO=true make api)
+make fsp-mock    # заглушка реестра ФСП на :8090
+make ats-mock    # демо-ATS на :8082
 make gen-api     # выгрузить OpenAPI в web/openapi.json и сгенерировать TS-типы
 make web         # Next.js dev-сервер на :3000
-make test        # cargo test (тесты crates/db — на Postgres из TEST_DATABASE_URL) + проверка типов web
+make test        # cargo test (тесты на живой БД — на Postgres из TEST_DATABASE_URL) + проверка типов web
 make lint        # cargo fmt --check, clippy -D warnings, eslint
 make validate    # прогнать валидацию → docs/validation/
+make docs        # docs/solution.md → docs/solution.pdf и docs/solution.docx (pandoc + typst)
 make up          # docker compose --profile full up -d --build
+make down        # остановить стек
+make logs        # логи api
 ```
 
 ## Правила
@@ -70,7 +77,7 @@ make up          # docker compose --profile full up -d --build
 ### Frontend
 - Next.js App Router, TypeScript strict. Кабинеты — клиентские компоненты с TanStack Query; серверный рендеринг — только для публичных страниц.
 - API — только через сгенерированный клиент (`web/src/api`), руками типы ответов не описываем.
-- Права проверяет бэкенд. Middleware Next — только редирект на логин.
+- Права проверяет бэкенд. Proxy Next (`web/src/proxy.ts`, бывший middleware) — только редирект на логин.
 - Цвета и шрифты ФСП — токены в `web/src/app/globals.css`; новых цветов мимо токенов не вводим.
 - Вёрстка адаптивная, проверяем на ширине 375 px.
 

@@ -12,52 +12,90 @@
 
 ```sh
 cp .env.example .env
-docker compose -f deploy/compose.yml --profile full up -d --build
+docker compose -f deploy/compose.yml --profile full up -d --build   # то же самое: make up
 ```
+
+На macOS без Docker Desktop движок даёт Colima из `nix develop`: сначала `colima start`.
 
 | Что | Где |
 |---|---|
 | Приложение | http://localhost:8080 |
 | Swagger UI | http://localhost:8080/api/docs |
-| Письма (подтверждение email) | http://localhost:8025 |
-| Keycloak (заглушка ФСП ID) | http://localhost:8081 |
+| Письма (подтверждение email, письма законному представителю) | http://localhost:8025 |
+| Keycloak (заглушка ФСП ID), админка — `/admin` | http://localhost:8081 |
 | Демо-ATS работодателя (вебхуки и этапы найма) | http://localhost:8082 |
-| Grafana | http://localhost:3001 |
+| Grafana (дашборд API, просмотр без входа) | http://localhost:3001 |
 
-Без профиля `full` поднимается только ядро: приложение, API, Postgres, Valkey, Mailpit.
-Демо-компания `employer@demo.fsp` сразу подключена к демо-ATS (профиль `ats`): события о приглашениях
-приходят туда с подписью, а кнопки «Собеседование», «Оффер», «Нанят», «Отказ» возвращают этап кандидату.
+### Сервисы и профили
 
-При первом запуске API заполняет демо-данные. Пароль у всех демо-аккаунтов — `demo12345`:
+| Сервис | Порт наружу | Профиль | Назначение |
+|---|---|---|---|
+| `caddy` | 8080 | ядро | Единый вход: `/api/*`, `/healthz`, `/readyz` → api, остальное → web; `/metrics` наружу закрыт |
+| `web` | — (3000 в сети compose) | ядро | Next.js: публичный сайт и кабинеты |
+| `api` | — (8000) | ядро | Rust API; миграции и демо-данные при старте |
+| `postgres` | — (5432) | ядро | PostgreSQL 17 (образ `pgvector/pgvector`) |
+| `valkey` | — (6379) | ядро | Лимиты запросов, отозванные токены, поколение кеша кандидатов |
+| `mailpit` | 8025, SMTP — `127.0.0.1:1025` | ядро | Почта для демо |
+| `keycloak` | 8081 | `fsp` | ФСП ID: realm `fsp`, клиент `fsp-talent` |
+| `fsp-mock` | — (8090) | `fsp` | Заглушка реестра достижений ФСП |
+| `ats-mock` | 8082 | `ats` | Демо-ATS работодателя |
+| `prometheus`, `loki`, `alloy` | — | `obs` | Метрики API и логи контейнеров |
+| `grafana` | 3001 | `obs` | Дашборды |
+
+`full` включает все профили. Без профилей поднимается только ядро; профили складываются:
+`--profile fsp --profile ats`. Без `ats` события для демо-компании не доставляются и видны в журнале
+доставок как ошибки. Демо-компания `employer@demo.fsp` сразу подключена к демо-ATS: события
+о приглашениях приходят туда с подписью, а кнопки «Собеседование», «Оффер», «Нанят», «Отказ»
+возвращают этап кандидату.
+
+### Демо-аккаунты
+
+При первом запуске на пустой базе API заполняет демо-данные (`SEED_DEMO=true` в `.env`).
+Пароль у всех демо-аккаунтов — `demo12345`:
 
 | Роль | Вход |
 |---|---|
-| Работодатель | `employer@demo.fsp` |
+| Работодатель (6 потребностей, подключён к демо-ATS) | `employer@demo.fsp` |
 | Работодатели с подтверждённым доменом | `hr@pixel-manufactura.example`, `hr@oblakostroy.example`, `hr@medsignal.example`, `it-hr@logplus.example`, `career@shield-key.example` |
-| Кандидат | `candidate@demo.fsp`, `cand1@demo.fsp` … `cand239@demo.fsp` |
-| Участник ФСП (вход в ФСП ID) | `fsp-000001` … `fsp-000010` |
+| Кандидат | `candidate@demo.fsp`, `cand1@demo.fsp` … `cand239@demo.fsp` (один из номеров вместо этого входит как `minor@demo.fsp`) |
+| Кандидат 14–17 лет, ждёт согласия законного представителя | `minor@demo.fsp` |
+| Участник ФСП (вход в ФСП ID на Keycloak) | `fsp-000001` … `fsp-000010` |
+
+Администратор Keycloak — `admin` / `admin` (`KC_BOOTSTRAP_ADMIN_*` в `.env`), Grafana — `admin` / `admin`.
+Роль `admin` платформы (очередь модерации, разбор видеозаписей) регистрацией не выдаётся и демо-аккаунта не имеет.
 
 ## Локальная разработка без Docker
 
-Нужны Rust ≥ 1.85, Node.js ≥ 22, PostgreSQL ≥ 14 — или `nix develop`, где есть всё, включая Colima и Docker.
+Нужны Rust ≥ 1.85, Node.js ≥ 20.9, PostgreSQL ≥ 14 — или `nix develop`, где есть всё, включая
+Valkey, sqlx-cli, pandoc, typst, Colima и Docker.
 
 ```sh
-make db      # создать базу fsp_hack
-make api     # API на :8000 (миграции применяются при старте)
-make web     # фронтенд на :3000 (без бэкенда: NEXT_PUBLIC_USE_MOCKS=1 в web/.env.local)
-make test    # тесты; тесты БД создают временные базы на сервере из TEST_DATABASE_URL
+make db                  # создать базу fsp_hack
+SEED_DEMO=true make api  # API на :8000: миграции при старте, демо-данные на пустой базе
+make web                 # фронтенд на :3000, /api/* проксируется на :8000
+make test                # тесты; тесты БД создают временные базы на сервере из TEST_DATABASE_URL
 ```
+
+`make api` не читает `.env`: без `VALKEY_URL` лимиты и отозванные токены живут в памяти процесса,
+без `MAIL_MODE=smtp` ссылки из писем печатаются в лог API, а `FSP_DEV_LINK=true` разрешает привязать
+ФСП ID вводом номера, без Keycloak. Реестр ФСП локально — `make fsp-mock` (:8090) и
+`FSP_REGISTRY_URL=http://localhost:8090`; демо-ATS — `make ats-mock` (:8082). Фронтенд без бэкенда —
+`NEXT_PUBLIC_USE_MOCKS=1` в `web/.env.local` (`web/README.md`).
 
 Доступ к базе — sqlx: запросы проверяются по схеме при компиляции, а сборка идёт по метаданным из
 `.sqlx/` и базы не требует. Изменили SQL или миграцию — `make db-prepare` (нужна база из `DATABASE_URL`)
-и закоммитьте `.sqlx/` вместе с кодом.
+и закоммитьте `.sqlx/` вместе с кодом. Изменили DTO — `make gen-api`.
 
-Подробнее о командах и правилах — в `AGENTS.md`.
+Остальные команды и правила разработки — в `AGENTS.md`.
 
 ## Документация
 
-- `docs/solution.md` — описание решения для жюри: архитектура, механики, валидация, API, запуск
-- `architecture.md` — архитектура, механики тестирования и подбора, интеграция с ФСП
-- `api.md` — API; актуальная спецификация — `/api/v1/openapi.json`
-- `docs/validation/` — процедура валидации и результаты
+- `docs/solution.md` — описание решения для жюри: архитектура, механики, валидация, 152-ФЗ, API, запуск; `make docs` собирает из него `docs/solution.pdf` и `docs/solution.docx`
+- `docs/presentation.pdf`, `docs/presentation.pptx` — презентация
+- `architecture.md` — зафиксированные решения: стек, механики тестирования и подбора, ФСП, безопасность, модель данных, развёртывание
+- `api.md` — соглашения API и список эндпоинтов; актуальная спецификация — `/api/v1/openapi.json`
+- `specs.md` — требования организаторов и статус их выполнения
+- `web/README.md` — фронтенд: страницы, устройство, анимации, переменные окружения
+- `docs/validation/` — отчёты валидации тестирования (`assessment.md`) и подбора (`matching.md`), `make validate`
 - `docs/validation/pairs-example/` — проверка подбора на своих данных: пример входа и отчёта; запуск — `cargo run -p validate --release -- pairs --input data.json --out report.md` или `POST /api/v1/eval/pairs` в Swagger (`docs/solution.md` §6.4)
+- `AGENTS.md` — структура репозитория, команды, правила кода

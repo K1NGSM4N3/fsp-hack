@@ -1,8 +1,33 @@
 # web — фронтенд «ФСП Таланты»
 
-Next.js 16 (App Router) + TypeScript strict, Tailwind CSS 4, TanStack Query, react-hook-form + zod, GSAP + Lenis.
-Публичный сайт (`/`, `/candidates`, `/employers`, `/fsp`, `/vacancies`),
-кабинет кандидата (`/candidate/*`) и кабинет работодателя (`/employer/*`).
+Next.js 16 (App Router) + TypeScript strict, Tailwind CSS 4, TanStack Query, react-hook-form + zod, lucide-react,
+GSAP + Lenis для анимаций публичного сайта. Node.js ≥ 20.9.
+
+## Страницы
+
+**Публичный сайт** (`src/app/(public)`, серверный рендеринг; шапка, подвал и Lenis — в общем layout):
+
+| Путь | Что там |
+|---|---|
+| `/` | Главная: первый экран с карточкой приглашения и графом-канвасом, бегущая строка из 18 категорий, история «вакансия → приглашение» на ноутбуке и телефоне, диалог соискателя и компании, выбор «я ищу работу / я нанимаю» |
+| `/seekers` | Соискателям: уведомление о приглашении на экране блокировки, первая неделя по дням, мини-демо адаптивного теста, свайп приглашений, приватность, что подготовить |
+| `/business` | Компаниям: разбор текста вакансии, сравнение «до и после», тур по кабинету, правила для всех компаний, первая потребность |
+| `/fsp` | Участникам ФСП: привязка ФСП ID, разряды, дисциплины, сезон соревнований |
+| `/vacancies`, `/vacancies/[id]` | Опубликованные вакансии с фильтрами и карточка вакансии |
+| `/privacy` | Политика обработки ПДн; действующие тексты согласий запрашиваются у API на сервере при каждом запросе |
+| `/guardian/confirm?token=…` | Страница законного представителя соискателя 14–17 лет: подтвердить, отказаться, отозвать (noindex) |
+
+**Вход** (`src/app/(auth)`): `/login` (с кнопками демо-входа), `/register` (роль, возраст, представитель для 14–17,
+согласия), `/verify-email`.
+
+**Кабинет кандидата** (`/candidate/*`, клиентские страницы): главная (категория, приглашения, спрос, ФСП), профиль
+и резюме, опрос, тестирование (шаг видеозаписи `/assessment/start`, сессия `/assessment/[id]`), приглашения,
+вакансии и отклики, регулярные задания, настройки (статус поиска, видимость, ФСП ID, согласия, «Кто открывал ваши
+контакты», выгрузка данных, удаление аккаунта). Для 14–17 лет без согласия представителя — баннер в шапке кабинета.
+
+**Кабинет работодателя** (`/employer/*`): главная (квота, воронка, причины отказов), потребности и подборки
+(создание из текста, подборка с объяснениями, категории, план теста), поиск по базе, профиль кандидата, приглашения,
+вакансии и отклики, регулярные задания, интеграции (вебхук, ключи API, журнал доставок), компания, доверие и квота.
 
 ## Скрипты
 
@@ -20,66 +45,116 @@ npm run gen:api    # openapi.json → src/api/schema.d.ts (см. make gen-api)
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
-| `NEXT_PUBLIC_USE_MOCKS` | `1` в `.env.development`, иначе выключено | `1` — данные из встроенного мок-API в браузере, без бэкенда. Подставляется при сборке |
-| `API_PROXY_URL` | `http://localhost:8000` | Куда `next dev` / `next start` проксирует `/api/*` (rewrite в `next.config.ts`). В Docker `/api` отдаёт Caddy |
+| `API_PROXY_URL` | `http://localhost:8000` (`.env.development`); в Docker — `http://api:8000` | Куда `next dev` / `next start` проксируют `/api/*` (rewrite в `next.config.ts`, при сборке фиксируется), и откуда `/privacy` на сервере берёт тексты согласий. В Docker `/api/*` отдаёт Caddy, мимо Next |
+| `NEXT_PUBLIC_USE_MOCKS` | `0` (`.env.development`, `.env.example`) | `1` — данные из встроенного мок-API в браузере, без бэкенда. Подставляется при сборке |
 | `NEXT_PUBLIC_DEMO_LOGIN` | включено | `0` — скрыть кнопки демо-входа на `/login` (в мок-режиме они видны всегда) |
 
 Шаблон — `.env.example`. Локальные переопределения — в `.env.local` (не коммитится).
 
+По умолчанию `npm run dev` работает с настоящим API: запустите его рядом (`make api` из корня, для демо-аккаунтов —
+`SEED_DEMO=true make api`).
+
 ## Мок-режим
 
-Включён по умолчанию в `npm run dev`. Все вызовы `src/api/endpoints.ts` уходят в `src/mocks/handlers.ts`:
-состояние живёт в `localStorage` браузера, поэтому сквозные сценарии работают целиком —
+`NEXT_PUBLIC_USE_MOCKS=1` в `.env.local`. Каждая функция `src/api/endpoints.ts` тогда уходит в `src/mocks/handlers.ts`
+(модуль загружается лениво): состояние живёт в `localStorage` браузера, поэтому сквозные сценарии работают целиком —
 регистрация → подтверждение email («демо-почта» на экране) → профиль → опрос → адаптивный тест (IRT/EAP,
 задания генерируются шаблонами) → категория; работодатель видит нового кандидата, приглашает,
 кандидат принимает — у работодателя открываются контакты.
 
 - Демо-аккаунты: `candidate@demo.fsp` и `employer@demo.fsp`, пароль `demo12345` (кнопки на странице входа) —
-  совпадают с сидом бэкенда. Кнопки скрываются в боевом режиме через `NEXT_PUBLIC_DEMO_LOGIN=0`.
-- ФСП ID в демо: `FSP-000001`, `FSP-000003`, `FSP-000006`, `FSP-000010` (без достижений) — те же, что в `crates/fsp-mock`.
-- «Сбросить демо-данные» — в боковой панели кабинета.
-- Тест в моках короче боевого: 6–12 заданий вместо 8–20.
-
-Чтобы работать с настоящим API: `NEXT_PUBLIC_USE_MOCKS=0` в `.env.local`, запустить `make api` и `npm run dev`.
+  совпадают с сидом бэкенда.
+- ФСП ID в демо: `FSP-000001`, `FSP-000003`, `FSP-000006`, `FSP-000010` (без достижений) — те же, что в `crates/fsp-mock`;
+  `FSP-000002` уже привязан к демо-кандидату. Ввод номера вручную — только в мок-режиме, с настоящим API кнопка
+  ведёт в ФСП ID (`/api/v1/fsp/link/start`).
+- «Сбросить демо-данные» — в боковой панели кабинета (только в мок-режиме).
+- Тест в моках короче боевого: 6–12 заданий вместо 8–20. Вместо PDF-профиля открывается страница для печати
+  `/candidate/profile/print`.
 
 ## Устройство
 
 ```
 src/api/schema.d.ts     СГЕНЕРИРОВАНО из OpenAPI бэкенда (make gen-api), руками не править
 src/api/types.ts        короткие имена-алиасы над schema.d.ts
-src/api/client.ts       fetch-обёртка: cookie-сессия, refresh при 401, problem+json → ApiError
+src/api/client.ts       fetch-обёртка: cookie-сессия, один общий refresh при 401, problem+json → ApiError,
+                        отмена непрочитанных тел ответов (no-store иначе держит соединение в Chrome)
 src/api/endpoints.ts    одна функция на эндпоинт (+ переключатель на моки)
-src/features/*/hooks.ts TanStack Query-хуки; страницы вызывают только их
-src/components/ui       примитивы: Button, Field/Input/Select/MoneyInput, Chip, Card, Badge, Tabs, Dialog,
-                        Stepper, ProgressBar, EmptyState, Skeleton, Alert, Toast, CodeBlock, Markdown
-src/components/domain   категории, зарплата, навыки, ФСП, объяснение подбора, карточки кандидатов и вакансий
+src/features/*          хуки TanStack Query (hooks.ts) и компоненты разделов: auth, candidate, catalog, employer,
+                        integrations, reports, vacancies; features/keys.ts — ключи запросов и их свежесть
+src/features/auth/session.ts  лёгкая проверка сессии для шапки публичного сайта, без клиента API
+src/components/ui       примитивы: Button, Field, Input (+ Select, MoneyInput, Textarea), Choice, Chip, Card, Badge,
+                        Tabs, Dialog, Stepper, Feedback (ProgressBar, EmptyState, Skeleton, Alert, Stat), QueryState,
+                        Toast, Spinner, PageHeader, AnimatedNumber, CodeBlock, Markdown
+src/components/domain   категории, зарплата, навыки, ФСП, объяснение подбора, карточки кандидатов и вакансий,
+                        отметка домена, этапы найма, статусы, жалоба
+src/components/layout   CabinetShell — оболочка обоих кабинетов
+src/components/site     шапка, подвал, навигация (nav.ts) и блоки страниц: home/, seekers/, business/, fsp/
+src/components/motion   система анимаций (ниже)
+src/lib                 форматирование денег и дат, подписи справочников, навыки, cn
 src/mocks               мок-API: сид-данные, оценивание и объяснения, адаптивный тест
-src/proxy.ts            только редирект на /login без cookie `fsp_session`; права проверяет API
+src/app/providers.tsx   QueryClient и тосты — подключаются только там, где есть запросы к API (кабинеты, вход,
+                        вакансии, страница представителя); маркетинговые страницы их не загружают
+src/proxy.ts            только редирект на /login без cookie `fsp_session` для /candidate/* и /employer/*;
+                        права проверяет API
 ```
 
+Страницы кабинетов зовут API через хуки из `src/features`; исключения — видеозапись теста (загрузка фрагментов,
+параметры шага, ссылка на свою запись) и скачивание PDF-профиля: они вызывают `src/api/endpoints.ts` напрямую.
+
 Цвета и шрифты ФСП — токены в `src/app/globals.css` (стандартная палитра Tailwind отключена).
-Шрифты: Onest (текст и заголовки) и фирменный JetBrains Mono (подписи, цифры, код). Логотипы — `public/brand/`.
+Шрифты: Onest (текст и заголовки) и фирменный JetBrains Mono (подписи, цифры, код), оба через `next/font/google`.
+Логотипы — `public/brand/`. Иконки — lucide-react.
 
 ## Анимации
 
+Анимации — только на публичном сайте. Разметка без JS полностью читаема, первый экран от анимаций не зависит.
+
 ```
-src/components/motion/gsap.ts          регистрация плагинов GSAP (ScrollTrigger, SplitText, DrawSVG, ScrambleText)
-src/components/motion/MotionRoot.tsx   декларативные анимации по data-атрибутам для серверных страниц
-src/components/motion/SmoothScroll.tsx Lenis, синхронизированный с ScrollTrigger через gsap.ticker
-src/components/site/*                  шапка, подвал и интерактивные блоки публичного сайта
+src/components/motion/config.ts          профили: MOTION_OK, MOTION_DESKTOP, MOTION_MOBILE, FINE_POINTER
+src/components/motion/lazy.ts            ленивая загрузка GSAP и хук useMotion
+src/components/motion/gsap.ts            «набор»: GSAP + ScrollTrigger, SplitText, DrawSVG, ScrambleText
+src/components/motion/extras/*           плагины отдельных блоков: Draggable + Inertia, Flip, MorphSVG, MotionPath
+src/components/motion/MotionRoot.tsx     декларативные анимации серверных страниц по data-атрибутам
+src/components/motion/MotionRoot.motion.ts  сами сцены MotionRoot, отдельный чанк
+src/components/motion/MotionFlag.tsx     инлайн-скрипт в <head>: класс motion на <html> до первой отрисовки
+src/components/motion/SmoothScroll.tsx   Lenis, синхронизированный с ScrollTrigger через gsap.ticker
+src/components/motion/core.ts            обычный (не ленивый) GSAP — только для объяснения балла в кабинетах
+src/components/site/HeroGraphLazy.tsx    граф-канвас первого экрана, загружается после гидратации
 ```
 
-Серверная страница размечает элементы атрибутами (`data-split`, `data-reveal`, `data-stagger`, `data-counter`,
-`data-scramble`, `data-draw`, `data-grow`, `data-parallax`, `data-skew`, `data-magnetic`, `data-tilt`) и оборачивается
-в `<MotionRoot variant=…>`. Вариант задаёт странице свой язык появления: `rise` (главная, строки снизу), `wipe`
-(кандидатам, слова и шторка), `center` (работодателям, буквы и раскрытие от центра), `blur` (ФСП, проявление из
-размытия и наклон от скорости прокрутки). Разметка без JS полностью читаема: анимации стартуют только на клиенте
-внутри `gsap.matchMedia("(prefers-reduced-motion: no-preference)")`.
+**Ленивый GSAP.** `useMotion` (обёртка над идеей `useGSAP`) загружает `gsap.ts` отдельным чанком после гидратации,
+а плагины конкретного блока (`extra`) — рядом, только на тех страницах, где они нужны. Компоненты активируются по
+одному за задачу (`setTimeout(0)`), первыми — герой и шапка (`urgent`), поэтому на телефоне после гидратации нет
+одной длинной задачи. Всё созданное живёт в `gsap.context` компонента и откатывается при размонтировании.
 
-При `prefers-reduced-motion: reduce` не запускаются ни GSAP-анимации, ни Lenis, канвас-граф рисует один статичный
-кадр, горизонтальный «пин» превращается в обычную прокрутку карточек, а CSS-анимации кабинета обнуляются глобальным
-правилом в `globals.css`. Первый экран не мигает: инлайн-скрипт до отрисовки ставит класс `motion` на `<html>`,
-и только тогда героические блоки скрыты до появления (с CSS-страховкой на случай сбоя скрипта).
+**Два профиля.** Выбираются медиазапросами из `config.ts`:
+
+| | Десктоп: мышь и ширина ≥ 1024 px | Телефоны и планшеты |
+|---|---|---|
+| Заголовки | SplitText: строки, слова или буквы в зависимости от варианта | Появляются целиком |
+| Появления | Вариант страницы: `rise`, `wipe`, `center`, `blur` (сдвиг, clip-path, размытие) | Одно для всех страниц: подъём на 24 px и проявление, только transform и opacity |
+| Пины и scrub | Есть: история на главной, тур по кабинету, дисциплины и сезон ФСП | Нет: вертикальные списки, нативные snap-ленты, одноразовые проигрывания |
+| Параллакс, наклон от скорости прокрутки | Есть | Нет |
+| Плавный скролл | Lenis | Нативный, Lenis не загружается |
+| Граф-канвас | До 96 узлов, импульсы по рёбрам, реакция на курсор, работает только в зоне видимости | Редкий граф, один статичный кадр |
+
+Счётчики, рисование SVG и полосы работают в обоих профилях; «магнит» и наклон карточек — при точном указателе
+любой ширины (`FINE_POINTER`).
+
+**MotionRoot.** Серверная страница размечает элементы атрибутами и оборачивается в `<MotionRoot variant=…>`:
+`data-hero` (появление при загрузке; `data-hero="lead"` никогда не скрывается), `data-split` (`="hero"` — при
+загрузке, `data-delay`), `data-reveal` (или с видом: `up`, `left`, `right`, `scale`, `fade`, `wipe`, `center`, `blur`),
+`data-stagger`, `data-counter` (+ `data-decimals`), `data-scramble`, `data-draw`, `data-grow`, `data-parallax`,
+`data-skew`, `data-magnetic`, `data-tilt`. Сейчас `rise` у главной, `/seekers`, `/business` и подвала, `wipe` —
+у `/vacancies`; `center` и `blur` определены, но не используются. Блоки `/fsp` управляют анимацией сами через `useMotion`.
+
+**Первый экран не мигает.** `MotionFlag` ставит класс `motion` на `<html>` во время разбора HTML. Только при этом
+классе и только на десктопе CSS скрывает блоки `[data-hero]` до появления; через 3,5 с их показывает CSS-страховка
+на случай сбоя скрипта. На телефонах первый экран рисуется сразу.
+
+**`prefers-reduced-motion: reduce`.** Не запускаются ни GSAP-анимации, ни Lenis, граф рисует один статичный кадр,
+горизонтальные пины превращаются в обычную прокрутку, CSS-анимации и переходы обнуляются глобальным правилом
+в `globals.css`.
 
 Лицензии: `lenis` — MIT; `gsap` и `@gsap/react` — GSAP Standard «No Charge» License (бесплатно, включая все
 плагины, но это не OSI-лицензия — исключение из правила MIT/Apache/BSD согласовано отдельно).
@@ -94,5 +169,5 @@ npm run typecheck     # компилятор покажет, какие стра
 ```
 
 Мок-API (`src/mocks`) типизирован теми же схемами, поэтому расхождение с бэкендом ловится на `tsc`.
-Запросы идут через `http()` в `src/api/client.ts` (refresh при 401, problem+json → `ApiError`);
-`openapi-fetch` установлен и может заменить её без изменения сигнатур в `endpoints.ts`.
+Запросы идут через `http()` в `src/api/client.ts`; `openapi-fetch` установлен, но пока не используется — он может
+заменить `http()` без изменения сигнатур в `endpoints.ts`.
