@@ -23,7 +23,7 @@ async fn candidate(pool: &PgPool, code: &str) -> Uuid {
 }
 
 async fn session(pool: &PgPool, candidate_id: Uuid, started: DateTime<Utc>) -> Uuid {
-    db::assessment::expire_abandoned_sessions(pool, candidate_id)
+    db::assessment::expire_abandoned_sessions(pool, candidate_id, 1800.0)
         .await
         .unwrap();
     let id = Uuid::now_v7();

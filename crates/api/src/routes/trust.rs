@@ -1,10 +1,7 @@
 //! Trust and anti-fake (X-1): the employer's own trust level and quota with reasons, soft checks
 //! while filling a vacancy or an invitation, and the moderation list for administrators.
 
-use axum::{
-    Json,
-    extract::{Query, State},
-};
+use axum::extract::State;
 use catalog::{Category, Grade, Specialization};
 use chrono::{DateTime, Duration, Utc};
 use matching::trust::{
@@ -21,6 +18,7 @@ use crate::{
     auth::{AdminUser, EmployerUser},
     dto::{SalaryRange, VacancyStatus},
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Query},
     state::AppState,
     trust,
 };

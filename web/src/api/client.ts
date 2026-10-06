@@ -2,8 +2,6 @@
  * Auth is cookie-only (httpOnly `fsp_at`/`fsp_rt` set by the API), so every request
  * is same-origin with `credentials: "include"`. The access token lives 15 minutes:
  * a 401 triggers one refresh and a retry before giving up.
- * When the generated client lands, `openapi-fetch` can replace `http()`; keep the
- * refresh step and the problem+json → ApiError mapping.
  */
 
 export const API_BASE = "/api/v1";

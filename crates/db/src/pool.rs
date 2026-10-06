@@ -106,45 +106,41 @@ impl CandidateCard {
 }
 
 /// Searchable candidates of one specialization with everything the matching engine needs,
-/// ordered by id. `skills`/`skill_sources` are parallel arrays. The API caches the result per
-/// specialization (`api::pool`), so it carries no per-request filters: grade, «Только 18+» and
-/// the rest are applied to the cached snapshot.
+/// ordered by id. `skills`/`skill_sources` are parallel arrays; skills confirmed by FSP are left
+/// out while the candidate hides FSP data, like the achievements themselves. The API caches the
+/// result per specialization (`api::pool`), so it carries no per-request filters: grade,
+/// «Только 18+» and the rest are applied to the cached snapshot.
 ///
-/// Searchable means visible, not closed, holding an unrevoked `pd_publication` grant and, while
-/// under 18, an unrevoked `guardian_consent` given by the legal representative. The grant checks
-/// repeat what `PUT /candidate/privacy` enforces, so a stale `visible` flag can never publish a
-/// profile; both semi-joins read `user_consents_document_idx`. Skills are aggregated per
-/// candidate in a lateral subquery: grouping the whole joined set was the slowest step of the
-/// query at 10 000 candidates.
+/// Searchable means published (the `published_candidates` view: visible, holding an unrevoked
+/// `pd_publication` grant and, while under 18, an unrevoked `guardian_consent` given by the
+/// legal representative) and not closed. The grant checks repeat what `PUT /candidate/privacy`
+/// enforces, so a stale `visible` flag can never publish a profile; both semi-joins read
+/// `user_consents_document_idx`. Skills are aggregated per candidate in a lateral subquery:
+/// grouping the whole joined set was the slowest step of the query at 10 000 candidates. sqlx
+/// sees the view's columns as nullable, hence the `!` overrides.
 pub async fn searchable_pool(
     db: impl PgExecutor<'_>,
     specialization: &str,
 ) -> Result<Vec<PoolCandidate>, sqlx::Error> {
     sqlx::query_as!(
         PoolCandidate,
-        r#"SELECT c.user_id, c.grade AS "grade!", c.theta, c.salary_expectation_min, c.work_formats,
-                  c.city, c.relocation, c.last_activity_at, c.industries, c.show_fsp,
+        r#"SELECT c.user_id AS "user_id!", c.grade AS "grade!", c.theta, c.salary_expectation_min,
+                  c.work_formats AS "work_formats!", c.city, c.relocation AS "relocation!",
+                  c.last_activity_at AS "last_activity_at!", c.industries AS "industries!",
+                  c.show_fsp AS "show_fsp!",
                   f.achievements AS "achievements?", sk.skills AS "skills!",
                   sk.sources AS "skill_sources!",
                   (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS "minor!"
-           FROM candidates c
+           FROM published_candidates c
            JOIN users u ON u.id = c.user_id AND u.deleted_at IS NULL
            LEFT JOIN fsp_links f ON f.candidate_id = c.user_id
            CROSS JOIN LATERAL (
                SELECT coalesce(array_agg(s.skill ORDER BY s.skill, s.source), '{}') AS skills,
                       coalesce(array_agg(s.source ORDER BY s.skill, s.source), '{}') AS sources
                FROM candidate_skills s
-               WHERE s.candidate_id = c.user_id
+               WHERE s.candidate_id = c.user_id AND (s.source <> 'fsp' OR c.show_fsp)
            ) sk
-           WHERE c.visible
-             AND c.search_status <> 'closed'
-             AND EXISTS (SELECT 1 FROM user_consents uc
-                          JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                          WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
-             AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
-                  OR EXISTS (SELECT 1 FROM user_consents gc
-                              JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
-                              WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL))
+           WHERE c.search_status <> 'closed'
              AND c.specialization = $1
              AND c.grade IS NOT NULL
            ORDER BY c.user_id"#,
@@ -222,7 +218,7 @@ pub async fn candidate_cards(
                SELECT coalesce(array_agg(s.skill ORDER BY s.skill, s.source), '{}') AS skills,
                       coalesce(array_agg(s.source ORDER BY s.skill, s.source), '{}') AS sources
                FROM candidate_skills s
-               WHERE s.candidate_id = c.user_id
+               WHERE s.candidate_id = c.user_id AND (s.source <> 'fsp' OR c.show_fsp)
            ) sk
            CROSS JOIN LATERAL (
                SELECT (avg(a.rating) FILTER (WHERE a.status = 'reviewed'))::real AS task_rating,
@@ -231,14 +227,7 @@ pub async fn candidate_cards(
                WHERE a.candidate_id = c.user_id
            ) ta
            CROSS JOIN LATERAL (
-               SELECT c.visible
-                      AND EXISTS (SELECT 1 FROM user_consents uc
-                                   JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                                   WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
-                      AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
-                           OR EXISTS (SELECT 1 FROM user_consents gc
-                                       JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
-                                       WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL)) AS published
+               SELECT EXISTS (SELECT 1 FROM published_candidates p WHERE p.user_id = c.user_id) AS published
            ) vis
            LEFT JOIN LATERAL (
                SELECT p.camera,

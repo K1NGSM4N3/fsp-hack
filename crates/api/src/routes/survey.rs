@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{extract::State, http::StatusCode};
 use catalog::{Direction, Grade, Industry, Specialization};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -12,6 +12,7 @@ use crate::{
     auth::CandidateUser,
     dto::{parse_slugs, slugs},
     error::{ApiResult, Problem, Validator},
+    extract::Json,
     skills,
     state::AppState,
 };

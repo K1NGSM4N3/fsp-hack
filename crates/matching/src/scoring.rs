@@ -694,6 +694,8 @@ struct SkillReport {
     partial: usize,
     missing: Vec<String>,
     verified: usize,
+    /// Fully matched by a skill the FSP registry confirms.
+    by_fsp: Vec<String>,
 }
 
 fn skill_report(
@@ -710,6 +712,7 @@ fn skill_report(
         partial: 0,
         missing: Vec::new(),
         verified: 0,
+        by_fsp: Vec::new(),
     };
     for &(id, src) in req {
         let label = cn.label(list, id, src);
@@ -726,6 +729,9 @@ fn skill_report(
             if hit.is_some_and(|h| h.source.is_verified()) {
                 r.verified += 1;
             }
+            if hit.is_some_and(|h| h.source == SkillSource::Fsp) {
+                r.by_fsp.push(label.clone());
+            }
         } else {
             r.partial += 1;
         }
@@ -741,6 +747,8 @@ fn skill_report(
     }
     r
 }
+
+const FSP_CONFIRMED: &str = "подтверждено ФСП";
 
 /// Builds the employer-facing explanation. Reasons are ranked by the points their feature
 /// contributed; gaps list what is missing. Absence of FSP data is never a gap (F-3).
@@ -781,6 +789,9 @@ fn explain(
         }
         if !must.missing.is_empty() {
             s.push_str(&format!(" (нет {})", must.missing.join(", ")));
+        }
+        if !must.by_fsp.is_empty() {
+            s.push_str(&format!("; {} — {FSP_CONFIRMED}", must.by_fsp.join(", ")));
         }
         let verified = if must.verified > 0 {
             format!(
@@ -888,13 +899,39 @@ fn explain(
             points(FeatureKey::Nice),
             format!("Желательные навыки: {}", nice.full.join(", ")),
         ));
-        format!(
+        let mut s = format!(
             "Желательные навыки: {} из {} — {}",
             nice.full.len(),
             cn.nice.len(),
             nice.full.join(", ")
-        )
+        );
+        if !nice.by_fsp.is_empty() {
+            s.push_str(&format!("; {} — {FSP_CONFIRMED}", nice.by_fsp.join(", ")));
+        }
+        s
     };
+    // The share of the skill features these skills earned: each fully matched skill is worth
+    // weight / number of skills of its list.
+    let share = |k: FeatureKey, list: usize, n: usize| {
+        if n == 0 {
+            0.0
+        } else {
+            100.0 * card.weight(&w, k as usize) * list as f32 / n as f32
+        }
+    };
+    let by_fsp: Vec<&str> = must
+        .by_fsp
+        .iter()
+        .chain(&nice.by_fsp)
+        .map(String::as_str)
+        .collect();
+    if !by_fsp.is_empty() {
+        reasons.push((
+            share(FeatureKey::Must, must.by_fsp.len(), cn.must.len())
+                + share(FeatureKey::Nice, nice.by_fsp.len(), cn.nice.len()),
+            format!("{} — {FSP_CONFIRMED}", by_fsp.join(", ")),
+        ));
+    }
 
     texts[FeatureKey::Salary as usize] = match (cn.salary_max, p.salary_min) {
         (0, _) => "Вилка в запросе не указана".to_owned(),
@@ -1125,6 +1162,53 @@ mod tests {
             test.explanation_ru,
             "Результат теста выше 82 % диапазона грейда Middle"
         );
+    }
+
+    #[test]
+    fn fsp_confirmed_skills_are_named_in_the_explanation() {
+        let mut n = need();
+        n.must_skills = vec!["go".into(), "algorithms".into()];
+        n.nice_skills = vec!["data_structures".into()];
+        let c = candidate(
+            "olympiad",
+            Grade::Middle,
+            0.5,
+            vec![
+                skill("go", SkillSource::Declared),
+                skill("algorithms", SkillSource::Fsp),
+                skill("data_structures", SkillSource::Fsp),
+            ],
+        );
+        let b = score(&n, &c, &Weights::default(), NOW);
+        assert!(
+            b.reasons
+                .contains(&"Алгоритмы, Структуры данных — подтверждено ФСП".to_owned()),
+            "{:?}",
+            b.reasons
+        );
+        assert_eq!(
+            b.features[0].explanation_ru,
+            "Обязательные навыки: 2 из 2; Алгоритмы — подтверждено ФСП"
+        );
+        let algorithms = b.skills.iter().find(|m| m.skill == "Алгоритмы").unwrap();
+        assert_eq!(algorithms.source, Some(SkillSource::Fsp));
+        assert!((algorithms.credit - 1.0).abs() < 1e-6);
+
+        // Confirmed by our own test as well: the test is named, the FSP line goes away.
+        let both = candidate(
+            "both",
+            Grade::Middle,
+            0.5,
+            vec![
+                skill("algorithms", SkillSource::Fsp),
+                skill("algorithms", SkillSource::Test),
+                skill("go", SkillSource::Declared),
+            ],
+        );
+        let b = score(&n, &both, &Weights::default(), NOW);
+        let algorithms = b.skills.iter().find(|m| m.skill == "Алгоритмы").unwrap();
+        assert_eq!(algorithms.source, Some(SkillSource::Test));
+        assert!(!b.reasons.iter().any(|r| r.contains("подтверждено ФСП")));
     }
 
     #[test]

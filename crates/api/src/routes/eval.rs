@@ -5,8 +5,7 @@
 use std::time::Duration;
 
 use axum::{
-    Json,
-    extract::{DefaultBodyLimit, State, rejection::JsonRejection},
+    extract::{DefaultBodyLimit, State},
     http::{HeaderMap, StatusCode},
 };
 use chrono::Utc;
@@ -16,6 +15,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::{
     auth::client_ip,
     error::{ApiError, ApiResult, Problem},
+    extract::Json,
     state::AppState,
 };
 
@@ -29,20 +29,21 @@ pub fn router() -> OpenApiRouter<AppState> {
         .layer(DefaultBodyLimit::max(BODY_LIMIT))
 }
 
-fn rejected(r: JsonRejection) -> ApiError {
-    let status = r.status();
-    match status {
-        StatusCode::PAYLOAD_TOO_LARGE => {
-            ApiError::new(status, "payload_too_large", "Тело запроса больше 8 МиБ").with_detail(
-                "Большие наборы проверяйте через CLI: cargo run -p validate --release -- pairs",
-            )
-        }
-        StatusCode::UNSUPPORTED_MEDIA_TYPE => ApiError::new(
-            status,
-            "unsupported_media_type",
-            "Нужен Content-Type: application/json",
+/// The body is read only after the rate limit; an oversized one points to the CLI.
+fn rejected(e: ApiError) -> ApiError {
+    match e {
+        ApiError::Status {
+            code: "payload_too_large",
+            ..
+        } => ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payload_too_large",
+            "Тело запроса больше 8 МиБ",
+        )
+        .with_detail(
+            "Большие наборы проверяйте через CLI: cargo run -p validate --release -- pairs",
         ),
-        _ => ApiError::new(status, "invalid_json", "Некорректный JSON").with_detail(r.body_text()),
+        other => other,
     }
 }
 
@@ -119,11 +120,12 @@ fn example() -> serde_json::Value {
 async fn eval_pairs(
     State(state): State<AppState>,
     headers: HeaderMap,
-    body: Result<Json<PairsInput>, JsonRejection>,
+    body: Result<Json<PairsInput>, ApiError>,
 ) -> ApiResult<Json<PairsReport>> {
     let ip = client_ip(&headers).unwrap_or_default();
-    if state.kv.hit(&format!("rl:eval:{ip}"), RATE_WINDOW).await? > RATE_LIMIT {
-        return Err(ApiError::too_many_requests());
+    let hit = state.kv.hit(&format!("rl:eval:{ip}"), RATE_WINDOW).await?;
+    if hit.over(RATE_LIMIT) {
+        return Err(ApiError::rate_limited(hit.retry_after));
     }
     let Json(input) = body.map_err(rejected)?;
     input.check()?;

@@ -182,12 +182,12 @@ impl FromRequestParts<AppState> for ApiClient {
         let row = db::integrations::api_key_by_hash(&state.pool, &sha256(token.as_bytes()))
             .await?
             .ok_or_else(|| unauthorized("api_key_invalid", "Ключ не найден или отозван"))?;
-        let hits = state
+        let hit = state
             .kv
             .hit(&format!("rl:apikey:{}", row.id), Duration::from_secs(60))
             .await?;
-        if hits > RATE_PER_MINUTE {
-            return Err(ApiError::too_many_requests());
+        if hit.over(RATE_PER_MINUTE) {
+            return Err(ApiError::rate_limited(hit.retry_after));
         }
         db::integrations::touch_api_key(&state.pool, row.id).await?;
         let client = ApiClient {

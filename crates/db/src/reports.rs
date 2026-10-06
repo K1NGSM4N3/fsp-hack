@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
@@ -25,12 +26,21 @@ pub async fn insert_report(
     .map(|r| r.rows_affected())
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct RecentReports {
+    pub count: i64,
+    /// When the oldest of them leaves the 24-hour window.
+    pub first_slot_frees_at: Option<DateTime<Utc>>,
+}
+
 pub async fn recent_reports_by(
     db: impl PgExecutor<'_>,
     reporter_user_id: Uuid,
-) -> Result<i64, sqlx::Error> {
-    sqlx::query_scalar!(
-        r#"SELECT count(*) AS "count!" FROM reports
+) -> Result<RecentReports, sqlx::Error> {
+    sqlx::query_as!(
+        RecentReports,
+        r#"SELECT count(*) AS "count!", min(created_at) + interval '1 day' AS first_slot_frees_at
+           FROM reports
            WHERE reporter_user_id = $1 AND created_at > now() - interval '1 day'"#,
         reporter_user_id,
     )

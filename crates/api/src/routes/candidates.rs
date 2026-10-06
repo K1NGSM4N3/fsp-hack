@@ -1,9 +1,6 @@
 //! Search over the whole candidate bank (E-4) and the anonymous profile with an explanation.
 
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-};
+use axum::extract::State;
 use catalog::{Grade, Specialization, WorkFormat};
 use chrono::Utc;
 use matching::{ScoreBreakdown, Weights};
@@ -18,6 +15,7 @@ use crate::{
     cards::{self, CandidateCard},
     dto::Page,
     error::{ApiError, ApiResult, Problem},
+    extract::{Json, Path, Query},
     pool::{self, PoolFilter},
     skills,
     state::AppState,
@@ -66,7 +64,7 @@ pub struct BankItem {
 /// expectations, adults only
 #[utoipa::path(get, path = "/candidates", tag = "matching",
     params(SearchQuery),
-    responses((status = 200, body = Page<BankItem>), (status = 422, body = Problem)),
+    responses((status = 200, body = Page<BankItem>), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn search(
     State(state): State<AppState>,
@@ -189,7 +187,7 @@ pub struct CandidateProfileView {
 /// Anonymous candidate profile; with `need_id` — why the candidate fits the need
 #[utoipa::path(get, path = "/candidates/{id}", tag = "matching",
     params(("id" = Uuid, Path), ProfileQuery),
-    responses((status = 200, body = CandidateProfileView), (status = 404, body = Problem)),
+    responses((status = 200, body = CandidateProfileView), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn profile(
     State(state): State<AppState>,

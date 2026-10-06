@@ -1,12 +1,7 @@
 //! FSP ID linking (architecture.md §7.1): OIDC Authorization Code + PKCE against the FSP
 //! Keycloak realm, then a snapshot of achievements from the registry.
 
-use axum::{
-    Json,
-    extract::{Query, State},
-    http::StatusCode,
-    response::Redirect,
-};
+use axum::{extract::State, http::StatusCode, response::Redirect};
 use chrono::{DateTime, Duration, Utc};
 use matching::{Achievement, FspScore};
 use serde::{Deserialize, Serialize};
@@ -17,7 +12,9 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::{
     auth::CandidateUser,
     error::{ApiError, ApiResult, Problem},
+    extract::{Json, Query},
     fsp_client::{self, FspError},
+    skills,
     state::AppState,
 };
 
@@ -163,7 +160,10 @@ async fn link(state: &AppState, candidate: uuid::Uuid, fsp_id: &str, via: &str) 
             "Этот ФСП ID уже привязан к другому профилю",
         ));
     }
-    db::fsp::upsert_fsp_link(&state.pool, candidate, fsp_id, via).await?;
+    let mut tx = state.pool.begin().await?;
+    db::fsp::upsert_fsp_link(&mut *tx, candidate, fsp_id, via).await?;
+    skills::replace_fsp_skills(&mut tx, candidate, None).await?;
+    tx.commit().await?;
     if let Err(e) = sync_achievements(state, candidate, fsp_id).await {
         tracing::warn!(error = %e, "fsp registry sync failed, link kept");
     }
@@ -178,13 +178,12 @@ async fn sync_achievements(state: &AppState, candidate: uuid::Uuid, fsp_id: &str
             Err(FspError::NotFound) => Vec::new(),
             Err(e) => return Err(fsp_error(e)),
         };
-    db::fsp::store_fsp_achievements(
-        &state.pool,
-        &serde_json::Value::Array(achievements),
-        candidate,
-    )
-    .await?;
-    db::candidates::touch_candidate_activity(&state.pool, candidate).await?;
+    let snapshot = serde_json::Value::Array(achievements);
+    let mut tx = state.pool.begin().await?;
+    db::fsp::store_fsp_achievements(&mut *tx, &snapshot, candidate).await?;
+    skills::replace_fsp_skills(&mut tx, candidate, Some(&snapshot)).await?;
+    db::candidates::touch_candidate_activity(&mut *tx, candidate).await?;
+    tx.commit().await?;
     Ok(())
 }
 
@@ -217,7 +216,7 @@ pub struct DevLinkInput {
 /// Development only (`FSP_DEV_LINK=true`): link an FSP ID without Keycloak
 #[utoipa::path(post, path = "/link/dev", tag = "fsp",
     request_body = DevLinkInput,
-    responses((status = 200, body = FspStatus), (status = 404, description = "Disabled"), (status = 409, body = Problem)),
+    responses((status = 200, body = FspStatus), (status = 404, description = "Disabled"), (status = 409, description = "`fsp_already_linked`", body = Problem), (status = 422, description = "`validation_failed`: `fsp_id`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn link_dev(
     State(state): State<AppState>,
@@ -275,7 +274,7 @@ async fn achievements(
 
 /// Re-sync achievements from the registry
 #[utoipa::path(post, path = "/sync", tag = "fsp",
-    responses((status = 200, body = FspStatus), (status = 404, body = Problem), (status = 502, body = Problem)),
+    responses((status = 200, body = FspStatus), (status = 404, body = Problem), (status = 502, description = "`fsp_unavailable`", body = Problem), (status = 503, description = "`fsp_registry_disabled`: the FSP registry is not configured", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn sync(State(state): State<AppState>, user: CandidateUser) -> ApiResult<Json<FspStatus>> {
     let link = db::fsp::fsp_link(&state.pool, user.id)
@@ -286,12 +285,15 @@ async fn sync(State(state): State<AppState>, user: CandidateUser) -> ApiResult<J
     load_status(&state.pool, user.id).await.map(Json)
 }
 
-/// Unlink FSP ID and drop the achievements snapshot
+/// Unlink FSP ID and drop the achievements snapshot and the skills it confirmed
 #[utoipa::path(delete, path = "/link", tag = "fsp",
     responses((status = 204)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn unlink(State(state): State<AppState>, user: CandidateUser) -> ApiResult<StatusCode> {
-    db::fsp::delete_fsp_link(&state.pool, user.id).await?;
+    let mut tx = state.pool.begin().await?;
+    db::fsp::delete_fsp_link(&mut *tx, user.id).await?;
+    skills::replace_fsp_skills(&mut tx, user.id, None).await?;
+    tx.commit().await?;
     state.candidates.invalidate().await;
     Ok(StatusCode::NO_CONTENT)
 }

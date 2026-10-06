@@ -100,15 +100,22 @@ pub struct NewResponse<'a> {
     pub answered_at: DateTime<Utc>,
 }
 
+/// Closes the candidate's session left without an answer `abandon_after_secs` past the current
+/// item's deadline. `finished_at` is the moment the rule closed it rather than the moment this
+/// ran: the retry window after an abandoned test must not depend on when the candidate returns.
 pub async fn expire_abandoned_sessions(
     db: impl PgExecutor<'_>,
     candidate_id: Uuid,
+    abandon_after_secs: f64,
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
-        "UPDATE assessment_sessions SET status = 'expired', finished_at = now()
+        "UPDATE assessment_sessions
+         SET status = 'expired',
+             finished_at = coalesce(current_item_deadline, started_at) + make_interval(secs => $2)
          WHERE candidate_id = $1 AND status = 'in_progress'
-           AND coalesce(current_item_deadline, started_at) < now() - interval '30 minutes'",
+           AND coalesce(current_item_deadline, started_at) + make_interval(secs => $2) < now()",
         candidate_id,
+        abandon_after_secs,
     )
     .execute(db)
     .await

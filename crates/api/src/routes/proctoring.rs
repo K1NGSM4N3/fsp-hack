@@ -5,9 +5,7 @@
 use assessment::IntegrityEvent;
 use assessment::proctoring::{self as rules, ChunkAdmission, ChunkError};
 use axum::{
-    Json,
-    body::Bytes,
-    extract::{DefaultBodyLimit, Path, State},
+    extract::{DefaultBodyLimit, State},
     http::{HeaderMap, HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -21,6 +19,7 @@ use super::catalog::ConsentDocument;
 use crate::{
     auth::{AdminUser, CandidateUser},
     error::{ApiError, ApiResult, Problem},
+    extract::{Json, Path, RawBody},
     proctoring::{
         self, CONSENT_KIND, LIMITS, MAX_BATCH, MAX_EVENTS, ProctoringMode, ProctoringSummary,
         TAIL_SECS,
@@ -40,6 +39,14 @@ pub fn candidate_router() -> OpenApiRouter<AppState> {
                     LIMITS.max_chunk_bytes as usize + 1024,
                 )),
         )
+}
+
+fn chunk_too_large() -> ApiError {
+    ApiError::new(
+        StatusCode::PAYLOAD_TOO_LARGE,
+        "chunk_too_large",
+        "Фрагмент записи больше 1 МиБ",
+    )
 }
 
 pub fn admin_router() -> OpenApiRouter<AppState> {
@@ -131,7 +138,7 @@ async fn put_chunk(
     user: CandidateUser,
     Path((id, seq)): Path<(Uuid, u32)>,
     headers: HeaderMap,
-    body: Bytes,
+    body: Result<RawBody, ApiError>,
 ) -> ApiResult<StatusCode> {
     if state.config.proctoring.mode == ProctoringMode::Off {
         return Err(ApiError::conflict(
@@ -139,6 +146,13 @@ async fn put_chunk(
             "Видеозапись отключена",
         ));
     }
+    let RawBody(body) = body.map_err(|e| match e {
+        ApiError::Status {
+            code: "payload_too_large",
+            ..
+        } => chunk_too_large(),
+        other => other,
+    })?;
     let size = u32::try_from(body.len()).unwrap_or(u32::MAX);
     let now = Utc::now();
     let mut tx = state.pool.begin().await?;
@@ -167,13 +181,7 @@ async fn put_chunk(
                 "Пустой фрагмент записи",
             ));
         }
-        Err(ChunkError::TooLarge) => {
-            return Err(ApiError::new(
-                StatusCode::PAYLOAD_TOO_LARGE,
-                "chunk_too_large",
-                "Фрагмент записи больше 1 МиБ",
-            ));
-        }
+        Err(ChunkError::TooLarge) => return Err(chunk_too_large()),
         Err(ChunkError::SessionFull) => {
             return Err(ApiError::new(
                 StatusCode::PAYLOAD_TOO_LARGE,

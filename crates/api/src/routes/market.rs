@@ -1,7 +1,7 @@
 //! Two-sided market transparency (architecture.md §6.2): employers see supply per category,
 //! candidates see anonymous demand for theirs.
 
-use axum::{Json, extract::State};
+use axum::extract::State;
 use catalog::{Category, Grade, Specialization};
 use serde::Serialize;
 use utoipa::ToSchema;
@@ -10,6 +10,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 use crate::{
     auth::{CandidateUser, EmployerUser},
     error::{ApiError, ApiResult, Problem},
+    extract::Json,
     state::AppState,
 };
 

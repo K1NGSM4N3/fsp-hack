@@ -189,7 +189,12 @@ async fn rate_limited_per_ip() {
     let (status, headers, r) = post(&url, "10.0.0.4", "{}".into()).await;
     assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
     assert_eq!(r["code"], "rate_limited");
-    assert!(headers.contains_key(header::RETRY_AFTER));
+    let wait: u64 = headers[header::RETRY_AFTER]
+        .to_str()
+        .unwrap()
+        .parse()
+        .unwrap();
+    assert!((1..=600).contains(&wait), "{wait}");
     let (status, _, _) = post(&url, "10.0.0.5", small().to_string()).await;
     assert_eq!(status, StatusCode::OK);
 }

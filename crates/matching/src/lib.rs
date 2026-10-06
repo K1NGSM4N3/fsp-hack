@@ -19,7 +19,7 @@ pub mod trust;
 pub use extract::SpecializationGuess;
 pub use fsp::{
     Achievement, AchievementKind, Contribution, Discipline, EventLevel, FspScore, Place, Rank,
-    fsp_score,
+    confirmed_skills, fsp_score,
 };
 pub use lexicon::canonical_city;
 pub use need_parse::{ParsedNeed, parse_need};

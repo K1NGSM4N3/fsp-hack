@@ -256,7 +256,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Current item without the answer key; an expired item is recorded as wrong and the next one is returned */
+        /**
+         * Current item without the answer key
+         * @description An item past its deadline is recorded as wrong and the next one is returned; a session left
+         *     30 minutes past the deadline is closed as `expired` instead (an unsuccessful attempt).
+         */
         get: operations["current_item"];
         put?: never;
         post?: never;
@@ -1395,7 +1399,7 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Unlink FSP ID and drop the achievements snapshot */
+        /** Unlink FSP ID and drop the achievements snapshot and the skills it confirmed */
         delete: operations["unlink"];
         options?: never;
         head?: never;
@@ -1958,6 +1962,11 @@ export interface components {
             topics: components["schemas"]["TopicResult"][];
             /** @description What the candidate may do next right away (step down after a fail, upgrade after a confident pass). */
             offers: components["schemas"]["Offer"][];
+            /**
+             * @description What opens later and when: e.g. the up-test to a grade failed or abandoned less than
+             *     30 days ago.
+             */
+            locked: components["schemas"]["LockedOffer"][];
         };
         AssessmentSession: {
             /** Format: uuid */
@@ -2274,9 +2283,11 @@ export interface components {
             specialization?: components["schemas"]["Specialization"] | null;
             claimed_grade_in_survey?: components["schemas"]["Grade"] | null;
             available: components["schemas"]["Offer"][];
+            /** @description Tests that open later, one per grade, with the date. */
+            locked: components["schemas"]["LockedOffer"][];
             /**
              * Format: date-time
-             * @description When a grade change becomes possible, if it is blocked by the cooldown now.
+             * @description When a grade change becomes possible, if no change is possible now.
              */
             next_change_at?: string | null;
             history: components["schemas"]["GradeHistoryEntry"][];
@@ -2914,6 +2925,20 @@ export interface components {
             input_hint?: string | null;
             /** Format: int32 */
             time_limit_secs: number;
+        };
+        /**
+         * @description Why a test is not available yet; the same codes `POST /candidate/assessments` answers with.
+         * @enum {string}
+         */
+        LockReason: "retry_blocked" | "grade_change_cooldown";
+        /** @description A test that opens later, with the date it opens. */
+        LockedOffer: {
+            grade: components["schemas"]["Grade"];
+            kind: components["schemas"]["AttemptKind"];
+            reason: components["schemas"]["LockReason"];
+            /** Format: date-time */
+            available_at: string;
+            label: string;
         };
         LoginRequest: {
             email: string;
@@ -4188,6 +4213,24 @@ export interface operations {
                     "application/json": components["schemas"]["AdminProctoringView"];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `wrong_role` */
             403: {
                 headers: {
@@ -4224,6 +4267,24 @@ export interface operations {
                 };
                 content: {
                     "video/webm": number[];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `wrong_role` */
@@ -4263,6 +4324,15 @@ export interface operations {
                     "application/json": components["schemas"]["ModerationQueue"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `wrong_role` */
             403: {
                 headers: {
@@ -4295,6 +4365,15 @@ export interface operations {
                     "application/json": components["schemas"]["LoginResponse"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `invalid_credentials` */
             401: {
                 headers: {
@@ -4306,6 +4385,33 @@ export interface operations {
             };
             /** @description `email_not_verified` */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4388,6 +4494,15 @@ export interface operations {
                     "application/json": components["schemas"]["RegisterResponse"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `email_taken` */
             409: {
                 headers: {
@@ -4397,7 +4512,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `validation_failed`: also `age` for a candidate without it, `minor.birth_date` outside 14–17, `minor.guardian.*` */
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: also `age` for a candidate without it, `minor.birth_date` outside 14–17, `minor.guardian.*`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4435,6 +4568,42 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             429: {
                 headers: {
                     [name: string]: unknown;
@@ -4464,8 +4633,35 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `invalid_token` */
+            /** @description `invalid_token`; `invalid_json`: the body is not valid JSON */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4492,6 +4688,15 @@ export interface operations {
                     "application/json": components["schemas"]["MyApplication"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     withdraw_application: {
@@ -4510,6 +4715,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
             /** @description `application_closed` */
             409: {
@@ -4539,6 +4762,15 @@ export interface operations {
                     "application/json": components["schemas"]["AssessmentSession"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     start_session: {
@@ -4562,7 +4794,25 @@ export interface operations {
                     "application/json": components["schemas"]["AssessmentSession"];
                 };
             };
-            /** @description `assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked`, `attempt_not_allowed`, `already_assigned` */
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade), `attempt_not_allowed`, `already_assigned` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4571,7 +4821,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `validation_failed`: `proctoring.consent_document_id` missing or not the current version */
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `proctoring.consent_document_id` missing or not the current version; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4599,6 +4867,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssessmentSession"];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             404: {
@@ -4634,6 +4920,24 @@ export interface operations {
                     "application/json": components["schemas"]["AssessmentSession"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4642,8 +4946,35 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `assessment_finished`, `stale_item` */
+            /** @description `assessment_finished` (also when the session was left 30 minutes past the item's deadline and has just been closed as abandoned), `stale_item` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4670,6 +5001,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssessmentSession"];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             404: {
@@ -4708,8 +5057,17 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `empty_chunk` */
+            /** @description `empty_chunk`; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4768,6 +5126,24 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -4785,7 +5161,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `validation_failed`: more than 50 events */
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: more than 50 events; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4814,6 +5208,24 @@ export interface operations {
                 };
                 content: {
                     "video/webm": number[];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `wrong_role`: employers never get the video */
@@ -4853,6 +5265,15 @@ export interface operations {
                     "application/json": components["schemas"]["CategoryStatus"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     contact_access: {
@@ -4872,6 +5293,7 @@ export interface operations {
                     "application/json": components["schemas"]["ContactAccessEntry"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4907,6 +5329,7 @@ export interface operations {
                     "application/json": components["schemas"]["GuardianStatus"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -4946,7 +5369,25 @@ export interface operations {
                     "application/json": components["schemas"]["GuardianStatus"];
                 };
             };
-            /** @description `guardian_not_needed`, `guardian_already_confirmed` */
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `guardian_not_needed`, `guardian_already_confirmed`; `guardian_already_answered` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4955,7 +5396,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `validation_failed`: `full_name`, `email` (also when it is your own address) */
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `full_name`, `email` (also when it is your own address); `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -4991,7 +5450,16 @@ export interface operations {
                     "application/json": components["schemas"]["GuardianStatus"];
                 };
             };
-            /** @description `guardian_not_needed`: you are 18 or older; `guardian_already_confirmed` */
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `guardian_not_needed`: you are 18 or older; `guardian_already_confirmed`; `guardian_missing`, `guardian_already_answered` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5028,6 +5496,15 @@ export interface operations {
                     "application/json": components["schemas"]["ReceivedInvitation"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_received: {
@@ -5047,6 +5524,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceivedInvitation"];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             404: {
@@ -5076,6 +5571,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReceivedInvitation"];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not the caller's invitation */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `invitation_closed`; `guardian_consent_required` */
@@ -5112,8 +5634,62 @@ export interface operations {
                     "application/json": components["schemas"]["ReceivedInvitation"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Not the caller's invitation */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `invitation_closed` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5138,6 +5714,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MarketStats"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `no_category` */
@@ -5168,6 +5753,15 @@ export interface operations {
                     "application/json": components["schemas"]["Privacy"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     put_privacy: {
@@ -5191,8 +5785,53 @@ export interface operations {
                     "application/json": components["schemas"]["Privacy"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`. `guardian_consent_required`: under 18 without an active `guardian_consent` from the legal representative */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5219,6 +5858,7 @@ export interface operations {
                     "application/json": components["schemas"]["ProctoringOptions"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5254,6 +5894,15 @@ export interface operations {
                     "application/json": components["schemas"]["ProfileResponse"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             403: {
                 headers: {
                     [name: string]: unknown;
@@ -5285,6 +5934,43 @@ export interface operations {
                     "application/json": components["schemas"]["ProfileResponse"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5312,6 +5998,15 @@ export interface operations {
                     "application/pdf": number[];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     upload_resume: {
@@ -5335,7 +6030,34 @@ export interface operations {
                     "application/json": components["schemas"]["ResumeDraft"];
                 };
             };
-            /** @description `not_pdf`, `pdf_unreadable`, `pdf_no_text`, `pdf_too_large` */
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: not `multipart/form-data` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `not_pdf`, `pdf_unreadable`, `pdf_no_text`, `pdf_too_large`; `validation_failed`: `file` */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5367,6 +6089,43 @@ export interface operations {
                     "application/json": components["schemas"]["SurveyResponse"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5394,6 +6153,15 @@ export interface operations {
                     "application/json": components["schemas"]["SurveyResponse"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     my_tasks: {
@@ -5411,6 +6179,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MyTask"][];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -5432,6 +6209,25 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `task_closed` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -5465,8 +6261,53 @@ export interface operations {
                     "application/json": components["schemas"]["MyTask"][];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `task_closed` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `answer`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5517,6 +6358,15 @@ export interface operations {
                     "application/json": components["schemas"]["SkillView"][];
                 };
             };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     test_plan: {
@@ -5539,6 +6389,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestPlanDemo"];
+                };
+            };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             422: {
@@ -5591,6 +6450,24 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -5599,6 +6476,34 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5643,6 +6548,33 @@ export interface operations {
                     "application/json": components["schemas"]["Page_BankItem"];
                 };
             };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5675,7 +6607,34 @@ export interface operations {
                     "application/json": components["schemas"]["CandidateProfileView"];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID); `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5704,8 +6663,35 @@ export interface operations {
                     "application/json": components["schemas"]["CandidateContacts"];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `contacts_not_granted` */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -5732,6 +6718,15 @@ export interface operations {
                     "application/json": components["schemas"]["CategoryCard"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_company: {
@@ -5749,6 +6744,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CompanyResponse"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             403: {
@@ -5782,6 +6786,43 @@ export interface operations {
                     "application/json": components["schemas"]["CompanyResponse"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5809,6 +6850,7 @@ export interface operations {
                     "application/json": components["schemas"]["IntegrationsOverview"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -5856,6 +6898,24 @@ export interface operations {
                     "application/json": components["schemas"]["DeliveryView"][];
                 };
             };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -5884,6 +6944,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
             404: {
                 headers: {
@@ -5921,6 +6999,15 @@ export interface operations {
                     "application/json": components["schemas"]["ApiKeyView"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `company_profile_required` */
             409: {
                 headers: {
@@ -5953,6 +7040,24 @@ export interface operations {
                     "application/json": components["schemas"]["ApiKeyCreated"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `api_key_limit` — не больше 10 действующих ключей, `company_profile_required` */
             409: {
                 headers: {
@@ -5962,6 +7067,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -5988,6 +7112,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
             404: {
                 headers: {
@@ -6039,7 +7181,25 @@ export interface operations {
                     "application/json": components["schemas"]["WebhookSaved"];
                 };
             };
-            /** @description `company_profile_required` */
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required`; `webhook_changed` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6048,7 +7208,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Адрес не https, ведёт во внутреннюю сеть или не находится в DNS */
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Адрес не https, ведёт во внутреннюю сеть или не находится в DNS; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6073,6 +7251,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
             404: {
                 headers: {
@@ -6110,6 +7297,15 @@ export interface operations {
                     "application/json": components["schemas"]["WebhookSaved"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6144,6 +7340,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TestDelivery"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description Вебхук не настроен */
@@ -6191,6 +7396,24 @@ export interface operations {
                     "application/json": components["schemas"]["SentInvitation"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     send: {
@@ -6226,6 +7449,24 @@ export interface operations {
                     "application/json": components["schemas"]["SentInvitation"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Кандидат не найден или скрыт */
             404: {
                 headers: {
@@ -6235,7 +7476,7 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available` */
+            /** @description `invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available`; `company_profile_required` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6244,6 +7485,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6271,6 +7531,24 @@ export interface operations {
                     "application/json": components["schemas"]["InvitationStats"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_sent: {
@@ -6292,7 +7570,34 @@ export interface operations {
                     "application/json": components["schemas"]["SentInvitation"];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6319,7 +7624,25 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description `invitation_closed` */
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invitation_closed`; `company_profile_required` */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -6347,6 +7670,24 @@ export interface operations {
                     "application/json": components["schemas"]["HiringNeed"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     create_need: {
@@ -6370,6 +7711,52 @@ export interface operations {
                     "application/json": components["schemas"]["HiringNeed"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6401,6 +7788,51 @@ export interface operations {
                     "application/json": components["schemas"]["ParsedNeed"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `text`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_need: {
@@ -6422,7 +7854,34 @@ export interface operations {
                     "application/json": components["schemas"]["HiringNeed"];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6455,6 +7914,24 @@ export interface operations {
                     "application/json": components["schemas"]["HiringNeed"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6463,6 +7940,34 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6490,7 +7995,34 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6519,6 +8051,33 @@ export interface operations {
                     "application/json": components["schemas"]["CategoryStats"][];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_shortlist: {
@@ -6540,7 +8099,34 @@ export interface operations {
                     "application/json": components["schemas"]["Shortlist"];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6573,6 +8159,24 @@ export interface operations {
                     "application/json": components["schemas"]["Shortlist"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6581,6 +8185,34 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6613,7 +8245,61 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6642,7 +8328,34 @@ export interface operations {
                     "application/json": components["schemas"]["TestPlanDemo"];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6672,6 +8385,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SalaryCheck"];
+                };
+            };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `wrong_role` */
@@ -6710,6 +8441,24 @@ export interface operations {
                     "application/json": components["schemas"]["EmployerTask"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     create_task: {
@@ -6733,6 +8482,52 @@ export interface operations {
                     "application/json": components["schemas"]["EmployerTask"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6764,7 +8559,61 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -6793,6 +8642,33 @@ export interface operations {
                     "application/json": components["schemas"]["Submission"][];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     review: {
@@ -6817,6 +8693,24 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6825,6 +8719,34 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6850,6 +8772,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TrustStatus"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `wrong_role` */
@@ -6889,6 +8820,24 @@ export interface operations {
                     "application/json": components["schemas"]["Vacancy"][];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     create: {
@@ -6912,6 +8861,52 @@ export interface operations {
                     "application/json": components["schemas"]["Vacancy"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6943,6 +8938,24 @@ export interface operations {
                     "application/json": components["schemas"]["SimilarVacancy"][];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `wrong_role` */
             403: {
                 headers: {
@@ -6961,6 +8974,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -6990,7 +9022,34 @@ export interface operations {
                     "application/json": components["schemas"]["Vacancy"];
                 };
             };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7023,6 +9082,24 @@ export interface operations {
                     "application/json": components["schemas"]["Vacancy"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7031,6 +9108,34 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7058,6 +9163,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IncomingApplication"][];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `company_profile_required` */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7227,6 +9359,15 @@ export interface operations {
                     "application/json": components["schemas"]["FspStatus"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     unlink: {
@@ -7243,6 +9384,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
         };
     };
@@ -7265,6 +9415,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
         };
     };
@@ -7289,6 +9448,24 @@ export interface operations {
                     "application/json": components["schemas"]["FspStatus"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description Disabled */
             404: {
                 headers: {
@@ -7296,7 +9473,35 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `fsp_already_linked` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `fsp_id`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7321,6 +9526,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
             /** @description `fsp_oidc_disabled` */
             503: {
@@ -7350,6 +9564,15 @@ export interface operations {
                     "application/json": components["schemas"]["FspStatus"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7358,7 +9581,17 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `fsp_unavailable` */
             502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `fsp_registry_disabled`: the FSP registry is not configured */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7388,7 +9621,7 @@ export interface operations {
                     "application/json": components["schemas"]["GuardianConsentView"];
                 };
             };
-            /** @description `invalid_token`: unknown token or a link of a superseded letter */
+            /** @description `invalid_token`: unknown token or a link of a superseded letter; `invalid_query`: a query parameter is missing or does not parse */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7420,7 +9653,7 @@ export interface operations {
                     "application/json": components["schemas"]["GuardianConsentView"];
                 };
             };
-            /** @description `invalid_token`; `token_expired`: the answer link is older than 7 days */
+            /** @description `invalid_token`; `token_expired`: the answer link is older than 7 days; `invalid_json`: the body is not valid JSON */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -7431,6 +9664,33 @@ export interface operations {
             };
             /** @description `token_used`: already answered or revoked; `action_unavailable`: granting needs the answer link; `guardian_not_needed`: the participant is 18 */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7458,6 +9718,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AtsCandidateProfile"];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             /** @description `api_key_required`, `api_key_invalid` */
@@ -7514,6 +9783,15 @@ export interface operations {
                 };
                 content: {
                     "application/pdf": number[];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             401: {
@@ -7578,6 +9856,15 @@ export interface operations {
                     "application/json": components["schemas"]["AtsInvitationPage"];
                 };
             };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             /** @description `api_key_required`, `api_key_invalid` */
             401: {
                 headers: {
@@ -7627,6 +9914,15 @@ export interface operations {
                     "application/json": components["schemas"]["ImportedNeed"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7644,7 +9940,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description Нет текста, не распознана специализация или вилка */
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Нет текста, не распознана специализация или вилка; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7694,6 +10008,15 @@ export interface operations {
                     "application/json": components["schemas"]["OutcomeRecorded"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7729,6 +10052,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7800,6 +10142,7 @@ export interface operations {
                     "application/json": components["schemas"]["MeResponse"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7825,6 +10168,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description `unauthorized`: no session or it has expired */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7850,6 +10194,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserConsent"][];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
         };
@@ -7885,6 +10238,16 @@ export interface operations {
                     "application/json": components["schemas"]["UserConsent"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7893,7 +10256,25 @@ export interface operations {
                     "application/json": components["schemas"]["Problem"];
                 };
             };
-            /** @description `validation_failed`: unknown document, not its current version, not for this role, or `guardian_consent` (only the legal representative gives it) */
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: unknown document, not its current version, not for this role, or `guardian_consent` (only the legal representative gives it); `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -7921,6 +10302,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
             };
             404: {
                 headers: {
@@ -7952,6 +10351,7 @@ export interface operations {
                     "application/json": components["schemas"]["DataExport"];
                 };
             };
+            /** @description `unauthorized`: no session or it has expired */
             401: {
                 headers: {
                     [name: string]: unknown;
@@ -7981,6 +10381,51 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ReportCreated"];
+                };
+            };
+            /** @description `invalid_json`: the body is not valid JSON */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `comment`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             429: {
@@ -8020,6 +10465,15 @@ export interface operations {
                     "application/json": components["schemas"]["Page_PublicVacancy"];
                 };
             };
+            /** @description `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     get_published: {
@@ -8039,6 +10493,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicVacancy"];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
                 };
             };
             404: {
@@ -8074,6 +10537,24 @@ export interface operations {
                     "application/json": components["schemas"]["MyApplication"];
                 };
             };
+            /** @description `invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unauthorized`: no session or it has expired */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -8084,6 +10565,33 @@ export interface operations {
             };
             /** @description `already_applied`; `guardian_consent_required` */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `payload_too_large`: the body is over the route's limit */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `unsupported_media_type`: `Content-Type` is not `application/json` */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description `validation_failed`: `cover_letter`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

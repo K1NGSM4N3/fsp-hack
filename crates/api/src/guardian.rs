@@ -163,10 +163,15 @@ pub async fn letter_quota(state: &AppState, candidate: Uuid, email_bidx: &[u8]) 
             Duration::from_secs(86_400),
         )
         .await?;
-    if per_candidate > 3 || per_recipient > 5 {
-        return Err(ApiError::too_many_requests());
+    let wait = [(per_candidate, 3), (per_recipient, 5)]
+        .into_iter()
+        .filter(|(hit, limit)| hit.over(*limit))
+        .map(|(hit, _)| hit.retry_after)
+        .max();
+    match wait {
+        Some(retry_after) => Err(ApiError::rate_limited(retry_after)),
+        None => Ok(()),
     }
-    Ok(())
 }
 
 /// Issues a new link pair for the request (earlier letters stop working) and sends the letter.

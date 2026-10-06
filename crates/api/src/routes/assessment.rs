@@ -3,13 +3,12 @@
 //! grade policy (T-5, T-6) decides which attempts are allowed. Only `ItemRef`s are stored.
 
 use assessment::{
-    Answer, AttemptKind, Decision, GradePolicy, ItemRef, ItemView, PolicyError, SessionState,
-    TestPlan, Topic,
-    policy::{Attempt, PolicyConfig},
+    ABANDON_AFTER_SECS, Answer, AttemptKind, Decision, GradePolicy, ItemRef, ItemView, Outcome,
+    PolicyError, SessionState, TestPlan, Topic,
+    policy::{AllowedAttempt, Attempt, PolicyConfig},
 };
 use axum::{
-    Json,
-    extract::{Path, Query, State},
+    extract::State,
     http::{HeaderMap, StatusCode},
 };
 use catalog::{Category, Grade, Specialization};
@@ -25,6 +24,7 @@ use crate::{
     auth::{CandidateUser, EmployerUser, client_ip, user_agent},
     dto::AssessmentStatus,
     error::{ApiError, ApiResult, InternalError, Problem},
+    extract::{Json, Path, Query},
     proctoring::{self, ProctoringMode, ProctoringSummary},
     skills,
     state::AppState,
@@ -93,6 +93,12 @@ fn at(ts: i64) -> DateTime<Utc> {
     Utc.timestamp_opt(ts, 0).single().unwrap_or_else(Utc::now)
 }
 
+/// Lazily closes an abandoned session before anything reads or extends it.
+async fn expire_abandoned(db: impl sqlx::PgExecutor<'_>, candidate: Uuid) -> ApiResult<()> {
+    db::assessment::expire_abandoned_sessions(db, candidate, ABANDON_AFTER_SECS as f64).await?;
+    Ok(())
+}
+
 fn corrupt(e: impl std::fmt::Display) -> ApiError {
     ApiError::Internal(InternalError::Corrupt(e.to_string()))
 }
@@ -120,15 +126,20 @@ async fn history(pool: &PgPool, candidate: Uuid) -> ApiResult<History> {
         });
     let mut out = Vec::with_capacity(rows.len());
     for r in rows.into_iter().rev() {
-        let passed = r.status == db::types::AssessmentStatus::Passed;
-        if !passed && r.status != db::types::AssessmentStatus::Failed {
-            continue;
-        }
+        // There is no platform-fault ending: the test never waits on the camera or the upload
+        // («запись прервалась» only marks the result), so `expired` always means the candidate
+        // stopped answering.
+        let outcome = match r.status {
+            db::types::AssessmentStatus::Passed => Outcome::Passed,
+            db::types::AssessmentStatus::Failed => Outcome::Failed,
+            db::types::AssessmentStatus::Expired => Outcome::Abandoned,
+            db::types::AssessmentStatus::InProgress => continue,
+        };
         out.push(Attempt {
             specialization: r.specialization.parse()?,
             grade: r.claimed_grade.parse()?,
             kind: parse_kind(&r.attempt_kind),
-            passed,
+            outcome,
             assigned: r.assigned,
             at: r.finished_at.unwrap_or(r.started_at).timestamp(),
         });
@@ -146,21 +157,89 @@ pub struct Offer {
     pub label: String,
 }
 
-fn offers(state: &AppState, spec: Specialization, history: &History, now: i64) -> Vec<Offer> {
+/// Why a test is not available yet; the same codes `POST /candidate/assessments` answers with.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum LockReason {
+    /// 30 days after an unsuccessful (failed or abandoned) attempt at this grade, or after a
+    /// failed upgrade.
+    RetryBlocked,
+    /// 90 days from the last grade assignment.
+    GradeChangeCooldown,
+}
+
+/// A test that opens later, with the date it opens.
+#[derive(Serialize, ToSchema)]
+pub struct LockedOffer {
+    pub grade: Grade,
+    pub kind: AttemptKind,
+    pub reason: LockReason,
+    pub available_at: DateTime<Utc>,
+    pub label: String,
+}
+
+#[derive(Default)]
+struct Offers {
+    available: Vec<Offer>,
+    locked: Vec<LockedOffer>,
+}
+
+/// The attempt kinds that could lead to `grade`, tried in order: the first allowed one wins,
+/// otherwise the block that lifts earliest, otherwise the structural refusal.
+fn pick(
+    p: &GradePolicy,
+    spec: Specialization,
+    history: &History,
+    grade: Grade,
+    now: i64,
+) -> Result<AllowedAttempt, (AttemptKind, PolicyError)> {
+    let current = p.current_grade(spec, &history.attempts);
+    let mut refusal = (AttemptKind::Placement, PolicyError::NotAllowed);
+    for kind in candidate_kinds(current, grade, history.upgrade_earned) {
+        match p.check(spec, &history.attempts, kind, grade, now) {
+            Ok(a) => return Ok(a),
+            Err(e) => {
+                let earlier = match (e.available_at(), refusal.1.available_at()) {
+                    (Some(new), Some(old)) => new < old,
+                    (Some(_), None) => true,
+                    (None, Some(_)) => false,
+                    (None, None) => refusal.1 == PolicyError::NotAllowed,
+                };
+                if earlier {
+                    refusal = (kind, e);
+                }
+            }
+        }
+    }
+    Err(refusal)
+}
+
+fn offers(state: &AppState, spec: Specialization, history: &History, now: i64) -> Offers {
     let p = policy(state);
     let current = p.current_grade(spec, &history.attempts);
-    let mut out: Vec<Offer> = Vec::new();
+    let mut out = Offers::default();
     for grade in Grade::ALL.iter().copied().filter(|g| Some(*g) != current) {
-        for kind in candidate_kinds(current, grade, history.upgrade_earned) {
-            if let Ok(a) = p.check(spec, &history.attempts, kind, grade, now) {
-                if !out.iter().any(|o| o.grade == a.grade) {
-                    out.push(Offer {
-                        grade: a.grade,
-                        kind: a.kind,
-                        label: format!("{}: {}", kind_ru(a.kind), a.grade.name_ru()),
+        match pick(&p, spec, history, grade, now) {
+            Ok(a) => out.available.push(Offer {
+                grade: a.grade,
+                kind: a.kind,
+                label: format!("{}: {}", kind_ru(a.kind), a.grade.name_ru()),
+            }),
+            Err((kind, e)) => {
+                let reason = match e {
+                    PolicyError::ChangeCooldown { .. } => LockReason::GradeChangeCooldown,
+                    PolicyError::RetryBlocked { .. } => LockReason::RetryBlocked,
+                    PolicyError::NotAllowed | PolicyError::NoAdjacentGrade => continue,
+                };
+                if let Some(available_at) = e.available_at() {
+                    out.locked.push(LockedOffer {
+                        grade,
+                        kind,
+                        reason,
+                        available_at: at(available_at),
+                        label: format!("{}: {}", kind_ru(kind), grade.name_ru()),
                     });
                 }
-                break;
             }
         }
     }
@@ -241,6 +320,9 @@ pub struct AssessmentResult {
     pub topics: Vec<TopicResult>,
     /// What the candidate may do next right away (step down after a fail, upgrade after a confident pass).
     pub offers: Vec<Offer>,
+    /// What opens later and when: e.g. the up-test to a grade failed or abandoned less than
+    /// 30 days ago.
+    pub locked: Vec<LockedOffer>,
 }
 
 #[derive(Serialize, ToSchema)]
@@ -320,7 +402,7 @@ pub struct ProctoringChoice {
     request_body = StartInput,
     responses(
         (status = 201, body = AssessmentSession),
-        (status = 409, description = "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked`, `attempt_not_allowed`, `already_assigned`", body = Problem),
+        (status = 409, description = "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade), `attempt_not_allowed`, `already_assigned`", body = Problem),
         (status = 422, description = "`validation_failed`: `proctoring.consent_document_id` missing or not the current version", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
@@ -330,7 +412,7 @@ async fn start_session(
     headers: HeaderMap,
     Json(input): Json<StartInput>,
 ) -> ApiResult<(StatusCode, Json<AssessmentSession>)> {
-    db::assessment::expire_abandoned_sessions(&state.pool, user.id).await?;
+    expire_abandoned(&state.pool, user.id).await?;
     if let Some(active) = db::assessment::active_session(&state.pool, user.id).await? {
         return Err(
             ApiError::conflict("assessment_in_progress", "Сначала завершите начатый тест")
@@ -368,28 +450,14 @@ async fn start_session(
             "Этот грейд уже подтверждён",
         ));
     }
-    let mut last_error = PolicyError::NotAllowed;
-    let mut allowed = None;
-    for kind in candidate_kinds(current, input.grade, history.upgrade_earned) {
-        match p.check(
-            input.specialization,
-            &history.attempts,
-            kind,
-            input.grade,
-            now.timestamp(),
-        ) {
-            Ok(a) => {
-                allowed = Some(a);
-                break;
-            }
-            Err(e @ (PolicyError::ChangeCooldown { .. } | PolicyError::RetryBlocked { .. })) => {
-                last_error = e
-            }
-            Err(e) if matches!(last_error, PolicyError::NotAllowed) => last_error = e,
-            Err(_) => {}
-        }
-    }
-    let allowed = allowed.ok_or_else(|| policy_problem(last_error))?;
+    let allowed = pick(
+        &p,
+        input.specialization,
+        &history,
+        input.grade,
+        now.timestamp(),
+    )
+    .map_err(|(_, e)| policy_problem(e))?;
 
     let camera = input.proctoring.as_ref().is_some_and(|p| p.camera);
     let consent_doc = match state.config.proctoring.mode {
@@ -640,6 +708,7 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
                 items_administered: s.administered.len() as u16,
             };
             let history = history(&state.pool, candidate).await?;
+            let next = offers(state, spec, &history, Utc::now().timestamp());
             Some(AssessmentResult {
                 test_strength: Some(matching::test_strength(claimed, theta as f32)),
                 assigned_grade: r.assigned.then_some(claimed),
@@ -650,7 +719,8 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
                     None => decision.aberrant,
                 },
                 topics: topic_results(&s),
-                offers: offers(state, spec, &history, Utc::now().timestamp()),
+                offers: next.available,
+                locked: next.locked,
                 decision,
             })
         }
@@ -681,7 +751,7 @@ async fn list_sessions(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<Vec<AssessmentSession>>> {
-    db::assessment::expire_abandoned_sessions(&state.pool, user.id).await?;
+    expire_abandoned(&state.pool, user.id).await?;
     let ids: Vec<Uuid> = db::assessment::candidate_sessions(&state.pool, user.id)
         .await?
         .into_iter()
@@ -707,7 +777,10 @@ async fn get_session(
     Ok(Json(view(&state, user.id, id).await?))
 }
 
-/// Current item without the answer key; an expired item is recorded as wrong and the next one is returned
+/// Current item without the answer key
+///
+/// An item past its deadline is recorded as wrong and the next one is returned; a session left
+/// 30 minutes past the deadline is closed as `expired` instead (an unsuccessful attempt).
 #[utoipa::path(get, path = "/assessments/{id}/current-item", tag = "assessment",
     params(("id" = Uuid, Path)),
     responses((status = 200, body = AssessmentSession), (status = 404, body = Problem)),
@@ -718,6 +791,7 @@ async fn current_item(
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<AssessmentSession>> {
     let mut tx = state.pool.begin().await?;
+    expire_abandoned(&mut *tx, user.id).await?;
     let row = db::assessment::session_for_update(&mut *tx, id, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
@@ -752,7 +826,7 @@ pub struct AnswerInput {
     responses(
         (status = 200, body = AssessmentSession),
         (status = 404, body = Problem),
-        (status = 409, description = "`assessment_finished`, `stale_item`", body = Problem),
+        (status = 409, description = "`assessment_finished` (also when the session was left 30 minutes past the item's deadline and has just been closed as abandoned), `stale_item`", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn answer(
@@ -762,10 +836,12 @@ async fn answer(
     Json(input): Json<AnswerInput>,
 ) -> ApiResult<Json<AssessmentSession>> {
     let mut tx = state.pool.begin().await?;
+    expire_abandoned(&mut *tx, user.id).await?;
     let row = db::assessment::session_for_update(&mut *tx, id, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
     if row.status != db::types::AssessmentStatus::InProgress {
+        tx.commit().await?;
         return Err(ApiError::conflict(
             "assessment_finished",
             "Тест уже завершён",
@@ -843,7 +919,9 @@ pub struct CategoryStatus {
     pub specialization: Option<Specialization>,
     pub claimed_grade_in_survey: Option<Grade>,
     pub available: Vec<Offer>,
-    /// When a grade change becomes possible, if it is blocked by the cooldown now.
+    /// Tests that open later, one per grade, with the date.
+    pub locked: Vec<LockedOffer>,
+    /// When a grade change becomes possible, if no change is possible now.
     pub next_change_at: Option<DateTime<Utc>>,
     pub history: Vec<GradeHistoryEntry>,
 }
@@ -856,6 +934,7 @@ async fn category(
     State(state): State<AppState>,
     user: CandidateUser,
 ) -> ApiResult<Json<CategoryStatus>> {
+    expire_abandoned(&state.pool, user.id).await?;
     let c = db::candidates::candidate_profile(&state.pool, user.id)
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
@@ -869,32 +948,32 @@ async fn category(
         .or_else(|| survey.as_ref().and_then(|s| s.specialization.parse().ok()));
     let now = Utc::now().timestamp();
     let history = history(&state.pool, user.id).await?;
-    let (available, next_change_at) = match spec {
+    let (offers, next_change_at) = match spec {
         Some(spec) => {
-            let available = offers(&state, spec, &history, now);
+            let offers = offers(&state, spec, &history, now);
             let next = category.and_then(|c| {
                 let p = policy(&state);
-                [c.grade.next(), c.grade.prev()]
-                    .into_iter()
-                    .flatten()
-                    .find_map(|g| {
-                        let kind = if g > c.grade {
-                            AttemptKind::Upgrade
-                        } else {
-                            AttemptKind::Downgrade
-                        };
-                        match p.check(spec, &history.attempts, kind, g, now) {
-                            Err(
-                                PolicyError::ChangeCooldown { available_at }
-                                | PolicyError::RetryBlocked { available_at },
-                            ) => Some(at(available_at)),
-                            _ => None,
+                let mut earliest: Option<i64> = None;
+                for g in [c.grade.next(), c.grade.prev()].into_iter().flatten() {
+                    let kind = if g > c.grade {
+                        AttemptKind::Upgrade
+                    } else {
+                        AttemptKind::Downgrade
+                    };
+                    match p.check(spec, &history.attempts, kind, g, now) {
+                        Ok(_) => return None,
+                        Err(e) => {
+                            if let Some(t) = e.available_at() {
+                                earliest = Some(earliest.map_or(t, |x| x.min(t)));
+                            }
                         }
-                    })
+                    }
+                }
+                earliest.map(at)
             });
-            (available, next)
+            (offers, next)
         }
-        None => (Vec::new(), None),
+        None => (Offers::default(), None),
     };
     let history_out = grade_history_views(&state.pool, user.id).await?;
     Ok(Json(CategoryStatus {
@@ -908,7 +987,8 @@ async fn category(
         assigned_at: c.category_assigned_at,
         specialization: spec,
         claimed_grade_in_survey: survey.and_then(|s| s.claimed_grade.parse().ok()),
-        available,
+        available: offers.available,
+        locked: offers.locked,
         next_change_at,
         history: history_out,
     }))
@@ -978,7 +1058,7 @@ async fn test_plan(Query(q): Query<PlanQuery>) -> ApiResult<Json<TestPlanDemo>> 
 /// Test plan derived from a need: the stack of the vacancy steers which templates the test favours
 #[utoipa::path(get, path = "/needs/{id}/test-plan", tag = "assessment",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = TestPlanDemo), (status = 404, body = Problem)),
+    responses((status = 200, body = TestPlanDemo), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn need_test_plan(
     State(state): State<AppState>,

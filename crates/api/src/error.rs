@@ -1,7 +1,7 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, time::Duration};
 
 use axum::{
-    Json,
+    extract::rejection::{JsonRejection, PathRejection, QueryRejection},
     http::{HeaderValue, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -119,6 +119,9 @@ pub enum ApiError {
     /// the candidate cannot grant this document, it only names it.
     #[error("guardian consent required")]
     GuardianConsentRequired { document_id: Uuid },
+    /// 429 `rate_limited` with `Retry-After` set to what is left of the refusing limiter's window.
+    #[error("rate limited for {retry_after:?}")]
+    RateLimited { retry_after: Duration },
     #[error(transparent)]
     Internal(#[from] InternalError),
 }
@@ -151,6 +154,50 @@ internal_from!(
 impl From<matching::pairs::PairsError> for ApiError {
     fn from(e: matching::pairs::PairsError) -> Self {
         ApiError::field(e.field(), e.to_string())
+    }
+}
+
+/// Request bodies that do not parse: problem+json like every other error, never axum's plain text.
+impl From<JsonRejection> for ApiError {
+    fn from(r: JsonRejection) -> Self {
+        let status = r.status();
+        match r {
+            JsonRejection::JsonDataError(_) => ApiError::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "invalid_json",
+                "Поля запроса не соответствуют схеме",
+            )
+            .with_detail(r.body_text()),
+            JsonRejection::JsonSyntaxError(_) => {
+                ApiError::bad_request("invalid_json", "Некорректный JSON")
+                    .with_detail(r.body_text())
+            }
+            JsonRejection::MissingJsonContentType(_) => ApiError::new(
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "unsupported_media_type",
+                "Нужен Content-Type: application/json",
+            ),
+            _ if status == StatusCode::PAYLOAD_TOO_LARGE => ApiError::payload_too_large(),
+            _ => ApiError::bad_request("invalid_body", "Не удалось прочитать тело запроса")
+                .with_detail(r.body_text()),
+        }
+    }
+}
+
+impl From<PathRejection> for ApiError {
+    fn from(r: PathRejection) -> Self {
+        if r.status().is_server_error() {
+            return ApiError::Internal(InternalError::Corrupt(r.body_text()));
+        }
+        ApiError::bad_request("invalid_path", "Некорректный параметр в адресе")
+            .with_detail(r.body_text())
+    }
+}
+
+impl From<QueryRejection> for ApiError {
+    fn from(r: QueryRejection) -> Self {
+        ApiError::bad_request("invalid_query", "Некорректные параметры запроса")
+            .with_detail(r.body_text())
     }
 }
 
@@ -210,11 +257,15 @@ impl ApiError {
         Self::new(StatusCode::CONFLICT, code, title)
     }
 
-    pub fn too_many_requests() -> Self {
+    pub fn rate_limited(retry_after: Duration) -> Self {
+        Self::RateLimited { retry_after }
+    }
+
+    pub fn payload_too_large() -> Self {
         Self::new(
-            StatusCode::TOO_MANY_REQUESTS,
-            "rate_limited",
-            "Слишком много запросов, попробуйте позже",
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payload_too_large",
+            "Тело запроса слишком большое",
         )
     }
 
@@ -260,6 +311,7 @@ impl Validator {
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
+        let mut retry_after = None;
         let problem = match self {
             ApiError::Status {
                 status,
@@ -314,6 +366,20 @@ impl IntoResponse for ApiError {
                 document_id: Some(document_id),
                 document_kind: Some(db::guardians::KIND.into()),
             },
+            ApiError::RateLimited { retry_after: wait } => {
+                let secs = wait.as_secs().max(1);
+                retry_after = Some(secs);
+                Problem {
+                    kind: "about:blank",
+                    title: "Слишком много запросов, попробуйте позже".into(),
+                    status: 429,
+                    code: "rate_limited",
+                    detail: Some(format!("Повторите {}", in_ru(secs))),
+                    errors: None,
+                    document_id: None,
+                    document_kind: None,
+                }
+            }
             ApiError::Internal(err) => {
                 tracing::error!(error = %err, "internal error");
                 Problem {
@@ -330,16 +396,40 @@ impl IntoResponse for ApiError {
         };
         let status =
             StatusCode::from_u16(problem.status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
-        let mut response = (status, Json(problem)).into_response();
+        let mut response = (status, crate::extract::Json(problem)).into_response();
         let headers = response.headers_mut();
         headers.insert(
             header::CONTENT_TYPE,
             HeaderValue::from_static("application/problem+json"),
         );
-        if status == StatusCode::TOO_MANY_REQUESTS {
-            headers.insert(header::RETRY_AFTER, HeaderValue::from_static("60"));
+        if let Some(secs) = retry_after {
+            headers.insert(header::RETRY_AFTER, HeaderValue::from(secs));
         }
         response
+    }
+}
+
+/// «через 40 с», «через 5 мин», «через 3 ч» — rounded up, so the client never comes back early.
+fn in_ru(secs: u64) -> String {
+    match secs {
+        0..60 => format!("через {secs} с"),
+        60..3600 => format!("через {} мин", secs.div_ceil(60)),
+        _ => format!("через {} ч", secs.div_ceil(3600)),
+    }
+}
+
+/// tower-http answers an over-limit `Content-Length` itself, before any extractor: give that
+/// 413 the same problem+json as the rest.
+pub fn problem_for_bare_413(res: Response) -> Response {
+    let bare = res.status() == StatusCode::PAYLOAD_TOO_LARGE
+        && res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .is_none_or(|v| v != "application/problem+json");
+    if bare {
+        ApiError::payload_too_large().into_response()
+    } else {
+        res
     }
 }
 
@@ -386,6 +476,23 @@ mod tests {
         assert_eq!(body["document_id"], id.to_string());
         assert_eq!(body["document_kind"], "pd_publication");
         assert!(body.get("errors").is_none());
+    }
+
+    #[tokio::test]
+    async fn rate_limited_tells_how_long_to_wait() {
+        let response = ApiError::rate_limited(Duration::from_secs(250)).into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(response.headers()[header::RETRY_AFTER], "250");
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["code"], "rate_limited");
+        assert_eq!(body["detail"], "Повторите через 5 мин");
+        let response = ApiError::rate_limited(Duration::ZERO).into_response();
+        assert_eq!(response.headers()[header::RETRY_AFTER], "1");
+        assert_eq!(in_ru(59), "через 59 с");
+        assert_eq!(in_ru(3601), "через 2 ч");
     }
 
     #[tokio::test]

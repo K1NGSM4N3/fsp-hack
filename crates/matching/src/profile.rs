@@ -43,6 +43,17 @@ impl SkillSource {
     pub const fn is_verified(self) -> bool {
         matches!(self, SkillSource::Test | SkillSource::Fsp)
     }
+
+    /// Which source a skill listed under several keeps: our own test before the FSP registry
+    /// (same confidence), then the resume, then the declaration.
+    const fn precedence(self) -> u8 {
+        match self {
+            SkillSource::Test => 3,
+            SkillSource::Fsp => 2,
+            SkillSource::Resume => 1,
+            SkillSource::Declared => 0,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -270,7 +281,7 @@ impl CandidatePool {
             }
             let id = SkillId::intern(&cs.slug);
             match skills[start..].iter_mut().find(|h| h.id == id) {
-                Some(h) if cs.source.confidence() > h.source.confidence() => h.source = cs.source,
+                Some(h) if cs.source.precedence() > h.source.precedence() => h.source = cs.source,
                 Some(_) => {}
                 None => skills.push(SkillHit {
                     id,

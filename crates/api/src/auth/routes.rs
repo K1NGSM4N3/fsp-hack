@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use axum::{
-    Json,
     extract::State,
     http::{HeaderMap, StatusCode},
 };
@@ -20,6 +19,7 @@ use crate::{
     age::{self, AgeBracket},
     crypto::{new_token, normalize_email, sha256},
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::Json,
     guardian::{self, GuardianContact, clean_contact},
     state::AppState,
 };
@@ -78,8 +78,9 @@ pub(crate) fn valid_email(email: &str) -> bool {
 }
 
 async fn rate_limit(state: &AppState, key: String, limit: u64, window: Duration) -> ApiResult<()> {
-    if state.kv.hit(&key, window).await? > limit {
-        return Err(ApiError::too_many_requests());
+    let hit = state.kv.hit(&key, window).await?;
+    if hit.over(limit) {
+        return Err(ApiError::rate_limited(hit.retry_after));
     }
     Ok(())
 }

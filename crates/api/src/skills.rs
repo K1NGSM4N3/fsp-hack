@@ -1,5 +1,10 @@
 use std::borrow::Cow;
 
+use sqlx::{PgConnection, PgPool};
+use uuid::Uuid;
+
+use crate::{error::ApiResult, pool};
+
 pub fn is_known(slug: &str) -> bool {
     matching::lookup(slug).is_some()
 }
@@ -29,6 +34,43 @@ pub fn canonicalize(input: &[String]) -> Result<Vec<String>, Vec<String>> {
 
 pub fn unknown_message(unknown: &[String]) -> Cow<'static, str> {
     Cow::Owned(format!("Неизвестные навыки: {}", unknown.join(", ")))
+}
+
+/// Rewrites the candidate's `fsp` skills to what the stored FSP snapshot confirms
+/// (`matching::confirmed_skills`, architecture.md §7.4). Runs in the transaction that writes the
+/// snapshot, so the two never disagree; `None` — no link, no such skills. Rows of other sources
+/// are separate and untouched: a skill the test confirmed stays confirmed by the test.
+pub async fn replace_fsp_skills(
+    tx: &mut PgConnection,
+    candidate: Uuid,
+    snapshot: Option<&serde_json::Value>,
+) -> Result<(), sqlx::Error> {
+    db::candidates::delete_candidate_skills_by_source(&mut *tx, candidate, "fsp").await?;
+    for slug in matching::confirmed_skills(&pool::achievements(snapshot)) {
+        db::candidates::insert_candidate_skill(&mut *tx, candidate, slug, "fsp").await?;
+    }
+    Ok(())
+}
+
+/// Brings every candidate's `fsp` skills in line with their snapshot: links written before
+/// the skills were derived, or after the discipline mapping changed. Returns how many changed.
+pub async fn backfill_fsp_skills(pg: &PgPool) -> ApiResult<usize> {
+    let mut changed = 0;
+    for row in db::fsp::fsp_skill_states(pg).await? {
+        let want = matching::confirmed_skills(&pool::achievements(row.achievements.as_ref()));
+        if want
+            .iter()
+            .copied()
+            .eq(row.fsp_skills.iter().map(String::as_str))
+        {
+            continue;
+        }
+        let mut tx = pg.begin().await?;
+        replace_fsp_skills(&mut tx, row.candidate_id, row.achievements.as_ref()).await?;
+        tx.commit().await?;
+        changed += 1;
+    }
+    Ok(changed)
 }
 
 #[cfg(test)]

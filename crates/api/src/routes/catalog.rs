@@ -1,9 +1,8 @@
 use std::sync::LazyLock;
 
 use axum::{
-    Json,
     body::Bytes,
-    extract::{Query, State},
+    extract::State,
     http::{
         HeaderValue,
         header::{CONTENT_TYPE, ETAG},
@@ -17,7 +16,13 @@ use utoipa::{IntoParams, ToSchema};
 use utoipa_axum::{router::OpenApiRouter, routes};
 use uuid::Uuid;
 
-use crate::{auth::Role, error::ApiResult, http_cache, state::AppState};
+use crate::{
+    auth::Role,
+    error::ApiResult,
+    extract::{Json, Query},
+    http_cache,
+    state::AppState,
+};
 
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()

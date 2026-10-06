@@ -22,7 +22,7 @@ pub use report::{
     OriginCounts, PairsReport, RankedPair, VacancyReport, VacancySummary,
 };
 
-use crate::fsp::fsp_score;
+use crate::fsp::{confirmed_skills, fsp_score};
 use crate::metrics::{self, RELEVANT};
 use crate::need_parse::parse_need;
 use crate::profile::{CandidatePool, CandidateSkill, CandidateSnapshot, FspSummary, SkillSource};
@@ -191,6 +191,16 @@ fn read_candidates(input: &[CandidateInput], now: i64) -> (Hot, Vec<Facts>) {
         }
         hot.keyword_spans
             .push((start as u32, (hot.keywords.len() - start) as u16));
+        // As in the API: skills a result confirms, for our ranking only — the keyword baseline
+        // reads the resume and the declared skills.
+        skills.extend(
+            confirmed_skills(&c.fsp_achievements)
+                .into_iter()
+                .map(|slug| CandidateSkill {
+                    slug: slug.to_owned(),
+                    source: SkillSource::Fsp,
+                }),
+        );
         let term_start = hot.terms.len();
         let added = terms::document(&c.resume_text, &mut hot.terms);
         hot.term_spans.push((term_start as u32, added as u32));

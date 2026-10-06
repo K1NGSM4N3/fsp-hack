@@ -1,6 +1,5 @@
 use axum::{
-    Json,
-    extract::{DefaultBodyLimit, Multipart, State},
+    extract::{DefaultBodyLimit, State},
     http::header,
     response::IntoResponse,
 };
@@ -17,6 +16,7 @@ use crate::{
     contacts::{AccessChannel, ContactAccessEntry, ContactBasis, Contacts},
     dto::{SearchStatus, parse_slugs, slugs},
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Multipart},
     pdf, pool,
     resume::{self, ResumeError},
     skills,
@@ -457,13 +457,13 @@ fn recognized(p: &ParsedResume) -> Vec<&'static str> {
     request_body(content = ResumeUpload, content_type = "multipart/form-data"),
     responses(
         (status = 200, body = ResumeDraft),
-        (status = 422, description = "`not_pdf`, `pdf_unreadable`, `pdf_no_text`, `pdf_too_large`", body = Problem),
+        (status = 422, description = "`not_pdf`, `pdf_unreadable`, `pdf_no_text`, `pdf_too_large`; `validation_failed`: `file`", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
 async fn upload_resume(
     State(state): State<AppState>,
     user: CandidateUser,
-    mut form: Multipart,
+    Multipart(mut form): Multipart,
 ) -> ApiResult<Json<ResumeDraft>> {
     let mut file: Option<(String, Vec<u8>)> = None;
     while let Some(field) = form

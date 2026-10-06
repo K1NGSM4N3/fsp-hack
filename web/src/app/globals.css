@@ -201,7 +201,7 @@ html.lenis body {
   }
 }
 
-/* Same condition as MOTION_DESKTOP in components/motion/core.ts, for layouts that only exist with the desktop choreography. */
+/* Same condition as MOTION_DESKTOP in components/motion/config.ts, for layouts that only exist with the desktop choreography. */
 @custom-variant motion-desk {
   @media (prefers-reduced-motion: no-preference) and (pointer: fine) and (min-width: 1024px) {
     html.motion & {

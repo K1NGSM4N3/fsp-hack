@@ -7,7 +7,10 @@ use std::{
     hash::{DefaultHasher, Hash, Hasher},
 };
 
-use assessment::{ItemParams, ItemRef, Posterior, SessionState};
+use assessment::{
+    AttemptKind, GradePolicy, ItemParams, ItemRef, Outcome, Posterior, SessionState,
+    policy::Attempt,
+};
 use catalog::{Grade, Specialization};
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -82,7 +85,8 @@ fn run_session(
     }
 }
 
-/// Placement as the API runs it: claimed grade, then one step down after a fail.
+/// Placement as the API runs it: the claimed grade, then every step down the production
+/// `GradePolicy` allows right after a fail (Senior → Middle → Junior), one session an hour.
 fn place(
     rng: &mut ChaCha8Rng,
     spec: Specialization,
@@ -90,20 +94,39 @@ fn place(
     theta: f64,
     misspecified: bool,
 ) -> (Option<Grade>, Vec<Session>) {
+    const HOUR: i64 = 3_600;
+    let policy = GradePolicy::default();
     let mut sessions = Vec::new();
+    let mut attempts: Vec<Attempt> = Vec::new();
     let mut hits = (0, 0);
-    let mut grade = claimed;
+    let (mut grade, mut kind) = (claimed, AttemptKind::Placement);
     loop {
         let Some(s) = run_session(rng, spec, grade, theta, misspecified, None, &mut hits) else {
             return (None, sessions);
         };
         let passed = s.decision.passed;
         sessions.push(s);
+        attempts.push(Attempt {
+            specialization: spec,
+            grade,
+            kind,
+            outcome: if passed {
+                Outcome::Passed
+            } else {
+                Outcome::Failed
+            },
+            assigned: passed,
+            at: attempts.len() as i64 * HOUR,
+        });
         if passed {
             return (Some(grade), sessions);
         }
-        match grade.prev() {
-            Some(lower) if sessions.len() == 1 => grade = lower,
+        let now = attempts.len() as i64 * HOUR;
+        let next = grade
+            .prev()
+            .map(|lower| policy.check(spec, &attempts, AttemptKind::PlacementStepDown, lower, now));
+        match next {
+            Some(Ok(a)) => (grade, kind) = (a.grade, a.kind),
             _ => return (None, sessions),
         }
     }
@@ -485,7 +508,7 @@ pub fn markdown(r: &AssessmentReport) -> String {
         s,
         "Каждая сессия — настоящий движок `assessment` (адаптивный выбор из {} шаблонов, EAP-оценка θ, правило остановки). \
          Синтетическими остаются только ответы: вероятность верного ответа по модели 3PL при истинной способности θ ~ N(0, 1). \
-         По {} человек на специализацию; процедура как в API: тест на заявленный грейд, при провале — на грейд ниже. \
+         По {} человек на специализацию; процедура как в API и по той же политике грейда (`GradePolicy`): тест на заявленный грейд, при провале — сразу на грейд ниже, вплоть до Junior. \
          Пересдача — вторая независимая процедура с другими заданиями.\n",
         r.templates_total, PER_SPEC
     );

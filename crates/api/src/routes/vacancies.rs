@@ -1,11 +1,7 @@
 //! Classic flow kept alongside invitations (C-6, E-6): a candidate without invitations can still
 //! take the initiative. Applying grants the company access to the candidate's contacts.
 
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-    http::StatusCode,
-};
+use axum::{extract::State, http::StatusCode};
 use catalog::{Category, Grade, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
 use matching::trust::display_domain;
@@ -20,6 +16,7 @@ use crate::{
     auth::{CandidateUser, EmployerUser},
     dto::{ApplicationStatus, Page, SalaryRange, VacancyStatus},
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Path, Query},
     integrations::{
         events::{EventType, Outbox},
         outcomes::{HiringOutcome, OutcomeIndex},
@@ -140,7 +137,7 @@ fn validate(v: &VacancyInput) -> ApiResult<()> {
 
 /// Company vacancies
 #[utoipa::path(get, path = "/vacancies", tag = "vacancies",
-    responses((status = 200, body = Vec<Vacancy>)),
+    responses((status = 200, body = Vec<Vacancy>), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_own(
     State(state): State<AppState>,
@@ -194,7 +191,7 @@ async fn check_trust(state: &AppState, company: Uuid, id: Uuid, v: &VacancyInput
 /// Create a vacancy (salary range is mandatory)
 #[utoipa::path(post, path = "/vacancies", tag = "vacancies",
     request_body = VacancyInput,
-    responses((status = 201, body = Vacancy), (status = 422, body = Problem)),
+    responses((status = 201, body = Vacancy), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn create(
     State(state): State<AppState>,
@@ -218,7 +215,7 @@ async fn create(
 /// One own vacancy
 #[utoipa::path(get, path = "/vacancies/{id}", tag = "vacancies",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vacancy), (status = 404, body = Problem)),
+    responses((status = 200, body = Vacancy), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn get_own(
     State(state): State<AppState>,
@@ -236,7 +233,7 @@ async fn get_own(
 #[utoipa::path(put, path = "/vacancies/{id}", tag = "vacancies",
     params(("id" = Uuid, Path)),
     request_body = VacancyInput,
-    responses((status = 200, body = Vacancy), (status = 404, body = Problem), (status = 422, body = Problem)),
+    responses((status = 200, body = Vacancy), (status = 404, body = Problem), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn update(
     State(state): State<AppState>,
@@ -274,7 +271,7 @@ pub struct IncomingApplication {
 /// Applications to a vacancy. Contacts of applicants are available via `/employer/candidates/{id}/contacts`.
 #[utoipa::path(get, path = "/vacancies/{id}/applications", tag = "vacancies",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vec<IncomingApplication>)),
+    responses((status = 200, body = Vec<IncomingApplication>), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_applications(
     State(state): State<AppState>,
@@ -311,7 +308,7 @@ pub struct ApplicationStatusInput {
 #[utoipa::path(post, path = "/applications/{id}/status", tag = "vacancies",
     params(("id" = Uuid, Path)),
     request_body = ApplicationStatusInput,
-    responses((status = 204), (status = 404, body = Problem), (status = 422, body = Problem)),
+    responses((status = 204), (status = 404, body = Problem), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn set_application_status(
     State(state): State<AppState>,
@@ -488,7 +485,7 @@ pub struct MyApplication {
 #[utoipa::path(post, path = "/vacancies/{id}/applications", tag = "vacancies",
     params(("id" = Uuid, Path)),
     request_body = ApplyInput,
-    responses((status = 201, body = MyApplication), (status = 404, body = Problem), (status = 409, description = "`already_applied`; `guardian_consent_required`", body = Problem)),
+    responses((status = 201, body = MyApplication), (status = 404, body = Problem), (status = 409, description = "`already_applied`; `guardian_consent_required`", body = Problem), (status = 422, description = "`validation_failed`: `cover_letter`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn apply(
     State(state): State<AppState>,

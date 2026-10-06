@@ -1,7 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, CheckCircle2, CircleSlash, Clock, LogOut, ShieldAlert, Timer, TrendingDown, TrendingUp } from "lucide-react";
+import { ArrowRight, CalendarClock, CheckCircle2, CircleSlash, Clock, LogOut, ShieldAlert, Timer, TrendingDown, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -13,7 +13,7 @@ import { useAnswerItem, useAssessment, useStartAssessment } from "@/features/can
 import { qk } from "@/features/keys";
 import { cn } from "@/lib/cn";
 import { formatDate, formatDuration } from "@/lib/format";
-import { ATTEMPT_KIND_HINT, ATTEMPT_KIND_LABEL, GRADE_LABEL, TOPIC_LABEL } from "@/lib/labels";
+import { ATTEMPT_KIND_HINT, ATTEMPT_KIND_LABEL, GRADE_LABEL, LOCK_REASON_HINT, TOPIC_LABEL } from "@/lib/labels";
 import { proctor } from "../_proctoring/proctor";
 import { ProctoringResultCard } from "../_proctoring/ResultCard";
 import { FullscreenButton, RecordingIndicator, useProctoringOptions } from "../_proctoring/ui";
@@ -265,8 +265,8 @@ function Runner({ session, refreshing }: { session: AssessmentSession; refreshin
       <p className="mt-6 flex items-start gap-2 text-xs text-ink-subtle">
         <Clock className="mt-px size-3.5 shrink-0" aria-hidden />
         {recorded
-          ? "Можно выйти и вернуться, но видеозапись при этом остановится и результат получит отметку «запись прервалась». Тест закрывается через час без активности."
-          : "Можно выйти и вернуться: незавершённый тест закрывается через час без активности."}
+          ? "Можно выйти и вернуться, но видеозапись при этом остановится и результат получит отметку «запись прервалась» — на сам тест это не влияет. Без ответа тест закроется через 30 минут после окончания времени на задание и засчитается как неудачная попытка."
+          : "Можно выйти и вернуться, но без ответа тест закроется через 30 минут после окончания времени на задание и засчитается как неудачная попытка."}
       </p>
     </div>
   );
@@ -318,8 +318,15 @@ function Result({ session }: { session: AssessmentSession }) {
   if (session.status === "expired" || !r) {
     return (
       <div className="mx-auto max-w-3xl">
-        <PageHeader back={{ href: "/candidate/assessment", label: "Тестирование" }} title="Тест прерван" description="Сессия закрылась после часа без активности. Результат не засчитан." />
-        <ButtonLink href="/candidate/assessment">Начать заново</ButtonLink>
+        <PageHeader
+          back={{ href: "/candidate/assessment", label: "Тестирование" }}
+          title="Тест прерван"
+          description={`Тест на ${GRADE_LABEL[session.claimed_grade]} закрылся: 30 минут после окончания времени на задание прошли без ответа.`}
+        />
+        <Alert tone="info" title="Засчитан как неудачная попытка" className="mb-6">
+          Повторить тест на {GRADE_LABEL[session.claimed_grade]} можно через 30 дней. Если это было первичное размещение, тест на грейд ниже доступен сразу. Уже присвоенный грейд не меняется.
+        </Alert>
+        <ButtonLink href="/candidate/assessment">Что доступно сейчас</ButtonLink>
       </div>
     );
   }
@@ -327,6 +334,7 @@ function Result({ session }: { session: AssessmentSession }) {
   const d = r.decision;
   const strength = d.passed && typeof r.test_strength === "number" ? Math.round(r.test_strength * 100) : null;
   const offers = r.offers.filter((o) => o.kind !== "placement");
+  const locked = r.locked.filter((o) => o.kind !== "placement" || o.grade === session.claimed_grade);
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -381,6 +389,20 @@ function Result({ session }: { session: AssessmentSession }) {
 
       {offers.map((o) => (
         <OfferCard key={`${o.kind}-${o.grade}`} offer={o} session={session} />
+      ))}
+
+      {locked.map((o) => (
+        <Card key={`locked-${o.kind}-${o.grade}`}>
+          <div className="flex items-start gap-3">
+            <CalendarClock className="mt-0.5 size-5 shrink-0 text-ink-subtle" aria-hidden />
+            <div>
+              <p className="font-medium text-ink">
+                {o.label} — с {formatDate(o.available_at)}
+              </p>
+              <p className="mt-0.5 text-sm text-ink-muted">{LOCK_REASON_HINT[o.reason]}.</p>
+            </div>
+          </div>
+        </Card>
       ))}
 
       {r.topics.length > 0 && (

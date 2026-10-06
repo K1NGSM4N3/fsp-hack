@@ -227,4 +227,57 @@ async fn expectation_band_uses_the_published_pool(pool: PgPool) {
     );
     assert_eq!(band.median, Some(350_000));
     assert_eq!(band.p90, Some(470_000));
+
+    // A 15-year-old asking a lot: published only once the legal representative consents, and
+    // the market band follows the same rule as the category cards.
+    let minor = candidate(&pool, "minor@example.ru").await;
+    db::grades::set_candidate_category(&pool, "backend", "middle", 0.3, Utc::now(), minor)
+        .await
+        .unwrap();
+    db::candidates::update_candidate_profile(
+        &pool,
+        minor,
+        &db::candidates::ProfileUpdate {
+            full_name_enc: None,
+            contacts_enc: None,
+            city: None,
+            relocation: false,
+            work_formats: &[],
+            salary_expectation_min: Some(900_000),
+            about: "",
+            experience_years: None,
+            roles: &[],
+            soft_skills: &[],
+            industries: &[],
+            experience: &json!([]),
+        },
+    )
+    .await
+    .unwrap();
+    let born = (Utc::now() - Duration::days(15 * 366)).date_naive();
+    db::guardians::set_birth_date(&pool, minor, born)
+        .await
+        .unwrap();
+    db::consents::insert_user_consent(&pool, Uuid::now_v7(), minor, publication, None, None)
+        .await
+        .unwrap();
+    let band = db::trust::expectation_band(&pool, "backend", "middle")
+        .await
+        .unwrap();
+    assert_eq!(band.samples, 4, "under 18 without the representative");
+    assert_eq!(band.p90, Some(470_000));
+    let cards = db::market::category_overview(&pool).await.unwrap();
+    assert_eq!(cards[0].candidates, 4, "the category cards agree");
+
+    let guardian = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000a01);
+    db::consents::insert_user_consent(&pool, Uuid::now_v7(), minor, guardian, None, None)
+        .await
+        .unwrap();
+    let band = db::trust::expectation_band(&pool, "backend", "middle")
+        .await
+        .unwrap();
+    assert_eq!(band.samples, 5);
+    assert_eq!(band.p90, Some(740_000));
+    let cards = db::market::category_overview(&pool).await.unwrap();
+    assert_eq!(cards[0].candidates, 5);
 }

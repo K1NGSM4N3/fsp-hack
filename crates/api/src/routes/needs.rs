@@ -1,11 +1,7 @@
 //! Employer needs → recommended categories → persisted shortlist with explanations (§6.1).
 //! Refining filters re-ranks but keeps pinned and dismissed candidates (M-4).
 
-use axum::{
-    Json,
-    extract::{Path, State},
-    http::StatusCode,
-};
+use axum::{extract::State, http::StatusCode};
 use catalog::{Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
 use matching::{CategoryStats, Need, ParsedNeed, ScoreBreakdown, Weights};
@@ -22,6 +18,7 @@ use crate::{
     cards::{self, CandidateCard},
     dto::{SalaryRange, parse_slugs, slugs},
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Path},
     pool::{self, PoolFilter},
     skills,
     state::AppState,
@@ -275,7 +272,7 @@ async fn load_need(pool: &PgPool, company: Uuid, id: Uuid) -> ApiResult<HiringNe
 
 /// Company needs
 #[utoipa::path(get, path = "/needs", tag = "matching",
-    responses((status = 200, body = Vec<HiringNeed>)),
+    responses((status = 200, body = Vec<HiringNeed>), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_needs(
     State(state): State<AppState>,
@@ -297,7 +294,7 @@ pub(crate) async fn company_need_views(pool: &PgPool, company: Uuid) -> ApiResul
 /// Describe a need: specialization, grades, stack, salary range
 #[utoipa::path(post, path = "/needs", tag = "matching",
     request_body = NeedInput,
-    responses((status = 201, body = HiringNeed), (status = 422, body = Problem)),
+    responses((status = 201, body = HiringNeed), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn create_need(
     State(state): State<AppState>,
@@ -322,7 +319,7 @@ pub struct ParseInput {
 /// Recognize specialization, grade, stack, salary and format in a free-text vacancy
 #[utoipa::path(post, path = "/needs/parse", tag = "matching",
     request_body = ParseInput,
-    responses((status = 200, body = ParsedNeed)),
+    responses((status = 200, body = ParsedNeed), (status = 422, description = "`validation_failed`: `text`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn parse_need(
     _user: EmployerUser,
@@ -337,7 +334,7 @@ async fn parse_need(
 /// One need
 #[utoipa::path(get, path = "/needs/{id}", tag = "matching",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = HiringNeed), (status = 404, body = Problem)),
+    responses((status = 200, body = HiringNeed), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn get_need(
     State(state): State<AppState>,
@@ -352,7 +349,7 @@ async fn get_need(
 #[utoipa::path(put, path = "/needs/{id}", tag = "matching",
     params(("id" = Uuid, Path)),
     request_body = NeedInput,
-    responses((status = 200, body = HiringNeed), (status = 404, body = Problem), (status = 422, body = Problem)),
+    responses((status = 200, body = HiringNeed), (status = 404, body = Problem), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn update_need(
     State(state): State<AppState>,
@@ -377,7 +374,7 @@ async fn update_need(
 /// Delete a need with its shortlist
 #[utoipa::path(delete, path = "/needs/{id}", tag = "matching",
     params(("id" = Uuid, Path)),
-    responses((status = 204), (status = 404, body = Problem)),
+    responses((status = 204), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn delete_need(
     State(state): State<AppState>,
@@ -394,7 +391,7 @@ async fn delete_need(
 /// Recommended categories for the need: every grade of its specialization with supply and stack fit
 #[utoipa::path(get, path = "/needs/{id}/categories", tag = "matching",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vec<CategoryStats>)),
+    responses((status = 200, body = Vec<CategoryStats>), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn need_categories(
     State(state): State<AppState>,
@@ -476,7 +473,7 @@ async fn shortlist_view(state: &AppState, company: Uuid, need: HiringNeed) -> Ap
 /// Current shortlist with explanations
 #[utoipa::path(get, path = "/needs/{id}/shortlist", tag = "matching",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = Shortlist), (status = 404, body = Problem)),
+    responses((status = 200, body = Shortlist), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn get_shortlist(
     State(state): State<AppState>,
@@ -492,7 +489,7 @@ async fn get_shortlist(
 #[utoipa::path(post, path = "/needs/{id}/shortlist", tag = "matching",
     params(("id" = Uuid, Path)),
     request_body = ShortlistFilters,
-    responses((status = 200, body = Shortlist), (status = 404, body = Problem), (status = 422, body = Problem)),
+    responses((status = 200, body = Shortlist), (status = 404, body = Problem), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn build_shortlist(
     State(state): State<AppState>,
@@ -562,7 +559,7 @@ pub struct ShortlistPatch {
 #[utoipa::path(patch, path = "/needs/{id}/shortlist/{candidate_id}", tag = "matching",
     params(("id" = Uuid, Path), ("candidate_id" = Uuid, Path)),
     request_body = ShortlistPatch,
-    responses((status = 204), (status = 404, body = Problem)),
+    responses((status = 204), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn patch_shortlist_item(
     State(state): State<AppState>,

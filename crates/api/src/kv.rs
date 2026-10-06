@@ -15,6 +15,21 @@ pub enum KvError {
     Redis(#[from] redis::RedisError),
 }
 
+/// One counted request of a fixed-window rate limiter.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Hit {
+    /// Requests in the current window, this one included.
+    pub count: u64,
+    /// Until the window resets: what a refused client is told in `Retry-After`.
+    pub retry_after: Duration,
+}
+
+impl Hit {
+    pub fn over(&self, limit: u64) -> bool {
+        self.count > limit
+    }
+}
+
 /// Rate-limit counters and the access-token deny-list: Valkey in deployments,
 /// a lock-free in-process table otherwise.
 #[derive(Clone)]
@@ -36,18 +51,38 @@ impl Kv {
         }
     }
 
-    /// Fixed-window counter; returns the number of hits in the current window.
-    pub async fn hit(&self, key: &str, window: Duration) -> Result<u64, KvError> {
+    /// Fixed-window counter: counts this request and says when the window resets.
+    pub async fn hit(&self, key: &str, window: Duration) -> Result<Hit, KvError> {
+        let secs = window.as_secs().max(1);
         match self {
             Kv::Valkey(conn) => {
                 let mut conn = conn.clone();
-                let count: u64 = conn.incr(key, 1).await?;
-                if count == 1 {
-                    let _: () = conn.expire(key, window.as_secs() as i64).await?;
-                }
-                Ok(count)
+                // One round trip, atomically. `EXPIRE … NX` sets the window only on the first
+                // hit, and on every later hit repairs a key left without one by a lost reply.
+                let (count, ttl): (u64, i64) = redis::pipe()
+                    .atomic()
+                    .incr(key, 1u64)
+                    .cmd("EXPIRE")
+                    .arg(key)
+                    .arg(secs)
+                    .arg("NX")
+                    .ignore()
+                    .ttl(key)
+                    .query_async(&mut conn)
+                    .await?;
+                let left = u64::try_from(ttl).ok().filter(|t| *t > 0).unwrap_or(secs);
+                Ok(Hit {
+                    count,
+                    retry_after: Duration::from_secs(left),
+                })
             }
-            Kv::Memory(mem) => Ok(mem.hit(key, window, unix_now())),
+            Kv::Memory(mem) => {
+                let now = unix_now();
+                Ok(Hit {
+                    count: mem.hit(key, window, now),
+                    retry_after: Duration::from_secs(secs - now % secs),
+                })
+            }
         }
     }
 
@@ -225,6 +260,48 @@ mod tests {
         assert_eq!(kv.hit("a", w, 1_010), 2);
         assert_eq!(kv.hit("b", w, 1_010), 1);
         assert_eq!(kv.hit("a", w, 1_100), 1);
+    }
+
+    #[tokio::test]
+    async fn memory_hit_reports_the_rest_of_the_window() {
+        let kv = Kv::Memory(Arc::new(MemoryKv::new(1024)));
+        // Windows are aligned to multiples of their length; this one cannot roll over mid-test.
+        let window = Duration::from_secs(1 << 30);
+        let first = kv.hit("w", window).await.unwrap();
+        let second = kv.hit("w", window).await.unwrap();
+        assert_eq!((first.count, second.count), (1, 2));
+        assert!(second.over(1) && !second.over(2));
+        let left = second.retry_after.as_secs();
+        assert!((1..=1 << 30).contains(&left), "{left}");
+        assert!(left <= first.retry_after.as_secs());
+    }
+
+    /// `TEST_VALKEY_URL=redis://127.0.0.1:6379 cargo test -p api --lib kv -- --ignored`
+    #[tokio::test]
+    #[ignore = "needs TEST_VALKEY_URL"]
+    async fn valkey_hit_reports_the_key_ttl() {
+        let url = std::env::var("TEST_VALKEY_URL").expect("TEST_VALKEY_URL");
+        let kv = Kv::connect(Some(&url)).await.unwrap();
+        let key = format!("rl:test:{}", unix_now() ^ u64::from(std::process::id()));
+        let window = Duration::from_secs(600);
+        let first = kv.hit(&key, window).await.unwrap();
+        let second = kv.hit(&key, window).await.unwrap();
+        assert_eq!((first.count, second.count), (1, 2));
+        assert!(
+            (590..=600).contains(&second.retry_after.as_secs()),
+            "{second:?}"
+        );
+        // A key that lost its expiry gets one back on the next hit instead of living forever.
+        if let Kv::Valkey(conn) = &kv {
+            let mut conn = conn.clone();
+            let _: () = conn.persist(&key).await.unwrap();
+        }
+        let third = kv.hit(&key, window).await.unwrap();
+        assert_eq!(third.count, 3);
+        assert!(
+            (590..=600).contains(&third.retry_after.as_secs()),
+            "{third:?}"
+        );
     }
 
     #[test]

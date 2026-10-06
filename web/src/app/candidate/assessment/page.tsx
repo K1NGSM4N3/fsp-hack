@@ -12,7 +12,7 @@ import { Alert, Badge, Button, ButtonLink, Card, CardHeader, EmptyState, ErrorAl
 import { useAssessments, useCategory, useStartAssessment } from "@/features/candidate/hooks";
 import { OnboardingStrip } from "@/features/candidate/components/Onboarding";
 import { formatDate, formatDateTime } from "@/lib/format";
-import { ATTEMPT_KIND_HINT, ATTEMPT_KIND_LABEL, GRADE_HINT, GRADE_LABEL, GRADES, SPEC_LONG_LABEL } from "@/lib/labels";
+import { ATTEMPT_KIND_HINT, ATTEMPT_KIND_LABEL, GRADE_HINT, GRADE_LABEL, GRADES, LOCK_REASON_HINT, SPEC_LONG_LABEL } from "@/lib/labels";
 import { ProctoringMark, useProctoringOptions } from "./_proctoring/ui";
 
 function Rules() {
@@ -41,9 +41,10 @@ function Rules() {
         <p className="font-medium text-ink">Правила смены грейда</p>
         <ul className="mt-2 list-disc space-y-1 pl-5 text-ink-muted">
           <li>Не прошли при первом размещении — сразу можно пройти тест на грейд ниже.</li>
-          <li>Прошли уверенно — предложим дотест на грейд выше, один раз.</li>
+          <li>Тот же грейд после неудачной попытки — через 30 дней. Брошенный тест считается неудачной попыткой.</li>
+          <li>Прошли уверенно — предложим дотест на грейд выше, один раз. Если этот грейд вы не прошли меньше 30 дней назад, дотест откроется, когда пройдут 30 дней.</li>
           <li>После присвоения грейд можно менять не чаще раза в 90 дней.</li>
-          <li>Неудачная попытка повышения не понижает текущий грейд.</li>
+          <li>Неудачная попытка повышения не понижает текущий грейд; следующая — через 30 дней, но не раньше конца 90-дневного окна.</li>
         </ul>
       </div>
     </Card>
@@ -68,6 +69,8 @@ function StartCard() {
   }
 
   const offerFor = (g: Grade) => c.available.find((o) => o.grade === g);
+  const lockFor = (g: Grade) => c.locked.find((o) => o.grade === g);
+  const nextLock = [...c.locked].sort((a, b) => a.available_at.localeCompare(b.available_at))[0];
   const allowed = GRADES.filter((g) => offerFor(g));
   const fallback = allowed.find((g) => g === preselect) ?? allowed.find((g) => g === c.claimed_grade_in_survey) ?? allowed[0];
   const grade = picked && offerFor(picked) ? picked : (fallback ?? null);
@@ -76,7 +79,8 @@ function StartCard() {
     const offer = offerFor(g);
     if (offer) return ATTEMPT_KIND_HINT[offer.kind];
     if (c.category?.grade === g) return "Ваш текущий грейд";
-    if (c.next_change_at) return `Смена грейда — не чаще раза в 90 дней. Доступно с ${formatDate(c.next_change_at)}`;
+    const lock = lockFor(g);
+    if (lock) return `${LOCK_REASON_HINT[lock.reason]}. Доступно с ${formatDate(lock.available_at)}`;
     return "Сейчас недоступно";
   };
 
@@ -95,7 +99,11 @@ function StartCard() {
       />
       {allowed.length === 0 ? (
         <Alert tone="info" title="Сейчас новый тест недоступен" icon={<CalendarClock className="size-5 text-primary" aria-hidden />}>
-          {c.next_change_at ? `Смена грейда — не чаще раза в 90 дней. Следующая попытка — с ${formatDate(c.next_change_at)}.` : "Попробуйте позже."}
+          {nextLock
+            ? `${nextLock.label} — с ${formatDate(nextLock.available_at)}. ${LOCK_REASON_HINT[nextLock.reason]}.`
+            : c.next_change_at
+              ? `Смена грейда — не чаще раза в 90 дней. Следующая попытка — с ${formatDate(c.next_change_at)}.`
+              : "Попробуйте позже."}
         </Alert>
       ) : (
         <FieldSet legend="Выберите грейд">
@@ -262,7 +270,7 @@ function ActiveSessionBanner() {
       icon={<RotateCcw className="size-5 text-warning" aria-hidden />}
       action={<ButtonLink href={`/candidate/assessment/${active.id}`} size="sm">Продолжить тест на {GRADE_LABEL[active.claimed_grade]}</ButtonLink>}
     >
-      Тест закрывается автоматически через час без активности.
+      Если не ответить в течение 30 минут после окончания времени на задание, тест закроется и засчитается как неудачная попытка.
     </Alert>
   );
 }

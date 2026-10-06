@@ -3,11 +3,7 @@
 
 use std::time::Duration as StdDuration;
 
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-    http::StatusCode,
-};
+use axum::{extract::State, http::StatusCode};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
@@ -19,6 +15,7 @@ use crate::{
     auth::EmployerUser,
     dto::DeliveryStatus,
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Path, Query},
     integrations::{
         dispatcher::{self, Dispatcher},
         events::{DELIVERY_WINDOW_HOURS, EventType, Outbox},
@@ -160,7 +157,7 @@ async fn load_webhook(state: &AppState, company: Uuid) -> ApiResult<WebhookView>
     responses(
         (status = 201, description = "Создан, `secret` показан один раз", body = WebhookSaved),
         (status = 200, description = "Адрес изменён, секрет прежний", body = WebhookSaved),
-        (status = 409, description = "`company_profile_required`", body = Problem),
+        (status = 409, description = "`company_profile_required`; `webhook_changed`", body = Problem),
         (status = 422, description = "Адрес не https, ведёт во внутреннюю сеть или не находится в DNS", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
@@ -280,8 +277,8 @@ async fn send_test_event(
             StdDuration::from_secs(60),
         )
         .await?;
-    if hits > TEST_EVENTS_PER_MINUTE {
-        return Err(ApiError::too_many_requests());
+    if hits.over(TEST_EVENTS_PER_MINUTE) {
+        return Err(ApiError::rate_limited(hits.retry_after));
     }
     if !db::integrations::webhook_enabled(&state.pool, company).await? {
         return Err(ApiError::not_found().with_detail("Вебхук не настроен"));

@@ -1,11 +1,7 @@
 //! Consent of a minor candidate's legal representative: the public page behind the letter's two
 //! links, and the minor's own view with «Отправить письмо ещё раз» and «Изменить адрес».
 
-use axum::{
-    Json,
-    extract::{Query, State},
-    http::HeaderMap,
-};
+use axum::{extract::State, http::HeaderMap};
 use chrono::{DateTime, NaiveDate, Utc};
 use db::types::GuardianDecision;
 use serde::{Deserialize, Serialize};
@@ -19,6 +15,7 @@ use crate::{
     auth::{CandidateUser, client_ip, user_agent},
     crypto::sha256,
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Query},
     guardian::{self, GuardianContact, GuardianState, clean_contact},
     state::AppState,
 };
@@ -373,7 +370,7 @@ async fn status(
 #[utoipa::path(post, path = "/guardian/resend", tag = "candidate",
     responses(
         (status = 200, body = GuardianStatus),
-        (status = 409, description = "`guardian_not_needed`: you are 18 or older; `guardian_already_confirmed`", body = Problem),
+        (status = 409, description = "`guardian_not_needed`: you are 18 or older; `guardian_already_confirmed`; `guardian_missing`, `guardian_already_answered`", body = Problem),
         (status = 429, description = "Three letters an hour, five a day to one address", body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
@@ -411,7 +408,7 @@ async fn resend(
     request_body = GuardianContact,
     responses(
         (status = 200, body = GuardianStatus),
-        (status = 409, description = "`guardian_not_needed`, `guardian_already_confirmed`", body = Problem),
+        (status = 409, description = "`guardian_not_needed`, `guardian_already_confirmed`; `guardian_already_answered`", body = Problem),
         (status = 422, description = "`validation_failed`: `full_name`, `email` (also when it is your own address)", body = Problem),
         (status = 429, body = Problem),
     ),

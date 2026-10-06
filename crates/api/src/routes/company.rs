@@ -1,4 +1,4 @@
-use axum::{Json, extract::State};
+use axum::extract::State;
 use chrono::{DateTime, Utc};
 use matching::trust::display_domain;
 use serde::{Deserialize, Serialize};
@@ -10,6 +10,7 @@ use uuid::Uuid;
 use crate::{
     auth::EmployerUser,
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::Json,
     state::AppState,
     trust,
 };

@@ -8,6 +8,7 @@ pub mod crypto;
 pub mod db;
 pub mod dto;
 pub mod error;
+pub mod extract;
 pub mod fsp_client;
 pub mod guardian;
 pub mod http_cache;
@@ -59,7 +60,7 @@ use crate::{http_cache::Policy, state::AppState};
 #[openapi(
     info(
         title = "ФСП Таланты API",
-        description = "Платформа подбора ИТ-специалистов: работодатель выходит на кандидата из подтверждённой тестом категории. Ошибки — RFC 9457 problem+json со стабильным полем `code`.",
+        description = "Платформа подбора ИТ-специалистов: работодатель выходит на кандидата из подтверждённой тестом категории. Ошибки — RFC 9457 problem+json со стабильным полем `code`, в том числе ошибки разбора запроса: `invalid_json` (400 — не JSON, 422 — не по схеме), `unsupported_media_type` (415), `invalid_path`, `invalid_query` (400), `payload_too_large` (413). Методы с сессией отвечают 401 `unauthorized`; метод кабинета чужой роли — 403 `wrong_role`; изменяющий запрос с cookie без верного `Origin` — 403 `csrf`. 429 `rate_limited` приходит с `Retry-After` — сколько секунд осталось до сброса окна лимита.",
         version = "1.0.0"
     ),
     modifiers(&SecuritySchemes),
@@ -189,10 +190,123 @@ fn listing_routes() -> OpenApiRouter<AppState> {
 }
 
 pub fn openapi() -> utoipa::openapi::OpenApi {
-    let (_, api) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())
+    let (_, mut api) = OpenApiRouter::<AppState>::with_openapi(ApiDoc::openapi())
         .nest("/api/v1", api_v1())
         .split_for_parts();
+    document_request_errors(&mut api);
     api
+}
+
+/// Problems raised before a handler runs, added to every operation they can reach: request
+/// extractors (`extract`) by the operation's body and parameters, the session check by its
+/// security. Codes a handler already lists are not repeated.
+fn document_request_errors(api: &mut utoipa::openapi::OpenApi) {
+    use utoipa::openapi::{
+        Content, Ref, RefOr, ResponseBuilder,
+        path::{Operation, ParameterIn},
+    };
+
+    fn add(op: &mut Operation, status: &str, code: &str, text: &str) {
+        let line = format!("`{code}`: {text}");
+        match op.responses.responses.get_mut(status) {
+            Some(RefOr::T(r)) if r.description.contains(&format!("`{code}`")) => {}
+            Some(RefOr::T(r)) if r.description.is_empty() => r.description = line,
+            Some(RefOr::T(r)) => r.description = format!("{}; {line}", r.description),
+            Some(RefOr::Ref(_)) => {}
+            None => {
+                let problem = Content::new(Some(Ref::from_schema_name("Problem")));
+                op.responses.responses.insert(
+                    status.to_owned(),
+                    RefOr::T(
+                        ResponseBuilder::new()
+                            .description(line)
+                            .content("application/json", problem)
+                            .build(),
+                    ),
+                );
+            }
+        }
+    }
+
+    for item in api.paths.paths.values_mut() {
+        let ops = [
+            &mut item.get,
+            &mut item.put,
+            &mut item.post,
+            &mut item.delete,
+            &mut item.patch,
+        ];
+        for op in ops.into_iter().flatten() {
+            let located = |at: ParameterIn| {
+                op.parameters.iter().flatten().any(|p| match p {
+                    RefOr::T(p) => p.parameter_in == at,
+                    RefOr::Ref(_) => false,
+                })
+            };
+            let (in_path, in_query) = (located(ParameterIn::Path), located(ParameterIn::Query));
+            let body: Vec<String> = match &op.request_body {
+                Some(RefOr::T(b)) => b.content.keys().cloned().collect(),
+                _ => Vec::new(),
+            };
+            let session = op.security.iter().flatten().any(|s| {
+                serde_json::to_value(s)
+                    .is_ok_and(|v| v.get("cookie").is_some() || v.get("bearer").is_some())
+            });
+            if body.iter().any(|c| c == "application/json") {
+                add(op, "400", "invalid_json", "the body is not valid JSON");
+                add(
+                    op,
+                    "413",
+                    "payload_too_large",
+                    "the body is over the route's limit",
+                );
+                add(
+                    op,
+                    "415",
+                    "unsupported_media_type",
+                    "`Content-Type` is not `application/json`",
+                );
+                add(
+                    op,
+                    "422",
+                    "invalid_json",
+                    "the body does not match the schema (unknown enum value, wrong type, missing field)",
+                );
+            } else if body.iter().any(|c| c == "multipart/form-data") {
+                add(
+                    op,
+                    "413",
+                    "payload_too_large",
+                    "the body is over the route's limit",
+                );
+                add(
+                    op,
+                    "415",
+                    "unsupported_media_type",
+                    "not `multipart/form-data`",
+                );
+            }
+            if in_path {
+                add(
+                    op,
+                    "400",
+                    "invalid_path",
+                    "a path parameter does not parse (e.g. not a UUID)",
+                );
+            }
+            if in_query {
+                add(
+                    op,
+                    "400",
+                    "invalid_query",
+                    "a query parameter is missing or does not parse",
+                );
+            }
+            if session {
+                add(op, "401", "unauthorized", "no session or it has expired");
+            }
+        }
+    }
 }
 
 /// UUIDv4 from the thread-local generator: `MakeRequestUuid` asks the OS for entropy on every
@@ -222,9 +336,10 @@ pub fn app(
     + Send
     + 'static,
 > {
-    let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
+    let (api_router, mut api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/api/v1", api_v1())
         .split_for_parts();
+    document_request_errors(&mut api);
 
     let router: Router = Router::new()
         .merge(api_router)
@@ -257,7 +372,7 @@ pub fn app(
             StatusCode::REQUEST_TIMEOUT,
             Duration::from_secs(30),
         ))
-        .map_response(boxed_response)
+        .map_response(|res| error::problem_for_bare_413(boxed_response(res)))
         .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
         .layer(DefaultBodyLimit::max(256 * 1024))
         .map_request(boxed_request)
@@ -302,6 +417,41 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn request_errors_are_documented_on_every_operation() {
+        let api = serde_json::to_value(openapi()).unwrap_or_default();
+        let described = |path: &str, method: &str, status: &str, code: &str| {
+            api["paths"][path][method]["responses"][status]["description"]
+                .as_str()
+                .is_some_and(|d| d.contains(&format!("`{code}`")))
+        };
+        let start = "/api/v1/candidate/assessments";
+        assert!(described(start, "post", "400", "invalid_json"));
+        assert!(described(start, "post", "415", "unsupported_media_type"));
+        assert!(described(start, "post", "422", "invalid_json"));
+        assert!(described(start, "post", "422", "validation_failed"));
+        assert!(described(start, "post", "401", "unauthorized"));
+        assert!(described(
+            "/api/v1/candidate/assessments/{id}",
+            "get",
+            "400",
+            "invalid_path"
+        ));
+        assert!(described(
+            "/api/v1/catalog/test-plan",
+            "get",
+            "400",
+            "invalid_query"
+        ));
+        assert!(!described("/api/v1/catalog", "get", "401", "unauthorized"));
+        assert!(described(
+            "/api/v1/fsp/sync",
+            "post",
+            "503",
+            "fsp_registry_disabled"
+        ));
     }
 
     /// A handler that reads credentials must never sit behind a public `Cache-Control`.

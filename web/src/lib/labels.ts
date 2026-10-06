@@ -16,6 +16,7 @@ import type {
   HiringStage,
   Industry,
   InvitationStatus,
+  LockReason,
   NeedStatus,
   SearchStatus,
   SkillSource,
@@ -358,6 +359,11 @@ export const ATTEMPT_KIND_LABEL: Record<AttemptKind, string> = {
   upgrade: "Повышение грейда",
   downgrade: "Смена грейда на ниже",
   retry: "Повторный тест",
+};
+
+export const LOCK_REASON_HINT: Record<LockReason, string> = {
+  retry_blocked: "После неудачной или брошенной попытки на этот грейд — пауза 30 дней",
+  grade_change_cooldown: "Смена грейда — не чаще раза в 90 дней",
 };
 
 export const ATTEMPT_KIND_HINT: Record<AttemptKind, string> = {

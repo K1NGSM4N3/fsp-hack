@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "ФСП Таланты API",
-    "description": "Платформа подбора ИТ-специалистов: работодатель выходит на кандидата из подтверждённой тестом категории. Ошибки — RFC 9457 problem+json со стабильным полем `code`.",
+    "description": "Платформа подбора ИТ-специалистов: работодатель выходит на кандидата из подтверждённой тестом категории. Ошибки — RFC 9457 problem+json со стабильным полем `code`, в том числе ошибки разбора запроса: `invalid_json` (400 — не JSON, 422 — не по схеме), `unsupported_media_type` (415), `invalid_path`, `invalid_query` (400), `payload_too_large` (413). Методы с сессией отвечают 401 `unauthorized`; метод кабинета чужой роли — 403 `wrong_role`; изменяющий запрос с cookie без верного `Origin` — 403 `csrf`. 429 `rate_limited` приходит с `Retry-After` — сколько секунд осталось до сброса окна лимита.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -34,6 +34,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AdminProctoringView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -101,6 +121,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "403": {
             "description": "`wrong_role`",
             "content": {
@@ -145,6 +185,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ModerationQueue"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -197,6 +247,16 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`invalid_credentials`",
             "content": {
@@ -209,6 +269,36 @@
           },
           "403": {
             "description": "`email_not_verified`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -297,6 +387,16 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`email_taken`",
             "content": {
@@ -307,8 +407,28 @@
               }
             }
           },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "`validation_failed`: also `age` for a candidate without it, `minor.birth_date` outside 14–17, `minor.guardian.*`",
+            "description": "`validation_failed`: also `age` for a candidate without it, `minor.birth_date` outside 14–17, `minor.guardian.*`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -348,6 +468,46 @@
         },
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "429": {
             "content": {
               "application/json": {
@@ -380,7 +540,37 @@
         "responses": {
           "204": {},
           "400": {
-            "description": "`invalid_token`",
+            "description": "`invalid_token`; `invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -408,6 +598,16 @@
                   "items": {
                     "$ref": "#/components/schemas/MyApplication"
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -443,6 +643,26 @@
         ],
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`application_closed`",
             "content": {
@@ -483,6 +703,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -520,8 +750,48 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked`, `attempt_not_allowed`, `already_assigned`",
+            "description": "`assessment_in_progress`, `survey_required`, `grade_change_cooldown`, `retry_blocked` (30 days after a failed or abandoned attempt at that grade), `attempt_not_allowed`, `already_assigned`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -531,7 +801,7 @@
             }
           },
           "422": {
-            "description": "`validation_failed`: `proctoring.consent_document_id` missing or not the current version",
+            "description": "`validation_failed`: `proctoring.consent_document_id` missing or not the current version; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -575,6 +845,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AssessmentSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -637,6 +927,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -647,7 +957,37 @@
             }
           },
           "409": {
-            "description": "`assessment_finished`, `stale_item`",
+            "description": "`assessment_finished` (also when the session was left 30 minutes past the item's deadline and has just been closed as abandoned), `stale_item`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -672,7 +1012,8 @@
         "tags": [
           "assessment"
         ],
-        "summary": "Current item without the answer key; an expired item is recorded as wrong and the next one is returned",
+        "summary": "Current item without the answer key",
+        "description": "An item past its deadline is recorded as wrong and the next one is returned; a session left\n30 minutes past the deadline is closed as `expired` instead (an unsuccessful attempt).",
         "operationId": "current_item",
         "parameters": [
           {
@@ -691,6 +1032,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AssessmentSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -766,7 +1127,17 @@
             "description": "Stored or already stored"
           },
           "400": {
-            "description": "`empty_chunk`",
+            "description": "`empty_chunk`; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -847,6 +1218,26 @@
         },
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -866,8 +1257,28 @@
               }
             }
           },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "`validation_failed`: more than 50 events",
+            "description": "`validation_failed`: more than 50 events; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -921,6 +1332,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "403": {
             "description": "`wrong_role`: employers never get the video",
             "content": {
@@ -968,6 +1399,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1001,6 +1442,7 @@
             }
           },
           "401": {
+            "description": "`unauthorized`: no session or it has expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -1047,6 +1489,7 @@
             }
           },
           "401": {
+            "description": "`unauthorized`: no session or it has expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -1100,8 +1543,48 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "`guardian_not_needed`, `guardian_already_confirmed`",
+            "description": "`guardian_not_needed`, `guardian_already_confirmed`; `guardian_already_answered`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1111,7 +1594,7 @@
             }
           },
           "422": {
-            "description": "`validation_failed`: `full_name`, `email` (also when it is your own address)",
+            "description": "`validation_failed`: `full_name`, `email` (also when it is your own address); `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1157,8 +1640,18 @@
               }
             }
           },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "`guardian_not_needed`: you are 18 or older; `guardian_already_confirmed`",
+            "description": "`guardian_not_needed`: you are 18 or older; `guardian_already_confirmed`; `guardian_missing`, `guardian_already_answered`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1207,6 +1700,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1243,6 +1746,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReceivedInvitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1291,6 +1814,36 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReceivedInvitation"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not the caller's invitation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1354,8 +1907,68 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not the caller's invitation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`invitation_closed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1388,6 +2001,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MarketStats"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1429,6 +2052,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1466,8 +2099,58 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`consent_required`: `visible: true` without an active `pd_processing` or `pd_publication` grant; `document_id` is the current version to grant via `POST /me/consents`. `guardian_consent_required`: under 18 without an active `guardian_consent` from the legal representative",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1505,6 +2188,7 @@
             }
           },
           "401": {
+            "description": "`unauthorized`: no session or it has expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -1546,6 +2230,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1595,7 +2289,48 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1633,6 +2368,16 @@
                     "format": "int32",
                     "minimum": 0
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1675,8 +2420,38 @@
               }
             }
           },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: not `multipart/form-data`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "`not_pdf`, `pdf_unreadable`, `pdf_no_text`, `pdf_too_large`",
+            "description": "`not_pdf`, `pdf_unreadable`, `pdf_no_text`, `pdf_too_large`; `validation_failed`: `file`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1723,7 +2498,48 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1762,6 +2578,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -1790,6 +2616,16 @@
                   "items": {
                     "$ref": "#/components/schemas/MyTask"
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -1825,7 +2661,28 @@
         ],
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
+            "description": "`task_closed`",
             "content": {
               "application/json": {
                 "schema": {
@@ -1886,8 +2743,58 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`task_closed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `answer`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -1976,6 +2883,16 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -2023,6 +2940,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TestPlanDemo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2092,6 +3019,26 @@
         },
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -2101,7 +3048,38 @@
               }
             }
           },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2279,6 +3257,36 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
             "content": {
               "application/json": {
@@ -2340,7 +3348,37 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID); `invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2388,8 +3426,38 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "403": {
             "description": "`contacts_not_granted`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2428,6 +3496,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -2453,6 +3531,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/CompanyResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -2502,7 +3590,48 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2540,6 +3669,7 @@
             }
           },
           "401": {
+            "description": "`unauthorized`: no session or it has expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -2613,6 +3743,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -2655,6 +3805,26 @@
         ],
         "responses": {
           "202": {},
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -2705,6 +3875,16 @@
               }
             }
           },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`company_profile_required`",
             "content": {
@@ -2751,6 +3931,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
             "description": "`api_key_limit` — не больше 10 действующих ключей, `company_profile_required`",
             "content": {
@@ -2761,7 +3961,28 @@
               }
             }
           },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2801,6 +4022,26 @@
         ],
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -2869,8 +4110,48 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "`company_profile_required`",
+            "description": "`company_profile_required`; `webhook_changed`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -2880,7 +4161,7 @@
             }
           },
           "422": {
-            "description": "Адрес не https, ведёт во внутреннюю сеть или не находится в DNS",
+            "description": "Адрес не https, ведёт во внутреннюю сеть или не находится в DNS; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -2907,6 +4188,16 @@
         "operationId": "delete_webhook",
         "responses": {
           "204": {},
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -2954,6 +4245,16 @@
               }
             }
           },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -2997,6 +4298,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TestDelivery"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3057,6 +4368,26 @@
                   "items": {
                     "$ref": "#/components/schemas/SentInvitation"
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3121,6 +4452,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Кандидат не найден или скрыт",
             "content": {
@@ -3132,7 +4483,27 @@
             }
           },
           "409": {
-            "description": "`invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available`",
+            "description": "`invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available`; `company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3142,6 +4513,7 @@
             }
           },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3174,6 +4546,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/InvitationStats"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3217,7 +4609,37 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3257,8 +4679,28 @@
         ],
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "409": {
-            "description": "`invitation_closed`",
+            "description": "`invitation_closed`; `company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3294,6 +4736,26 @@
                   "items": {
                     "$ref": "#/components/schemas/HiringNeed"
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -3334,7 +4796,58 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3380,6 +4893,56 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `text`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3420,7 +4983,37 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3476,6 +5069,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -3485,7 +5098,38 @@
               }
             }
           },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3523,7 +5167,37 @@
         ],
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3573,6 +5247,36 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3613,7 +5317,37 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3669,6 +5403,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -3678,7 +5432,38 @@
               }
             }
           },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3737,7 +5522,67 @@
         },
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3785,7 +5630,37 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -3858,6 +5733,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "403": {
             "description": "`wrong_role`",
             "content": {
@@ -3907,6 +5802,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -3944,7 +5859,58 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -3994,7 +5960,67 @@
         },
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4041,6 +6067,36 @@
                   "items": {
                     "$ref": "#/components/schemas/Submission"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -4095,6 +6151,26 @@
         },
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -4104,7 +6180,38 @@
               }
             }
           },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4137,6 +6244,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/TrustStatus"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -4191,6 +6308,26 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4228,7 +6365,58 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4278,6 +6466,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "403": {
             "description": "`wrong_role`",
             "content": {
@@ -4298,7 +6506,28 @@
               }
             }
           },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4346,7 +6575,37 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
             "content": {
               "application/json": {
                 "schema": {
@@ -4402,6 +6661,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -4411,7 +6690,38 @@
               }
             }
           },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4458,6 +6768,36 @@
                   "items": {
                     "$ref": "#/components/schemas/IncomingApplication"
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "`company_profile_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -4648,6 +6988,16 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -4665,10 +7015,20 @@
         "tags": [
           "fsp"
         ],
-        "summary": "Unlink FSP ID and drop the achievements snapshot",
+        "summary": "Unlink FSP ID and drop the achievements snapshot and the skills it confirmed",
         "operationId": "unlink",
         "responses": {
-          "204": {}
+          "204": {},
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          }
         },
         "security": [
           {
@@ -4725,6 +7085,16 @@
         "responses": {
           "303": {
             "description": "Redirect to /candidate/settings?fsp=linked|error"
+          },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -4756,10 +7126,61 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "description": "Disabled"
           },
           "409": {
+            "description": "`fsp_already_linked`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `fsp_id`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4789,6 +7210,16 @@
         "responses": {
           "303": {
             "description": "Redirect to FSP ID"
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           },
           "503": {
             "description": "`fsp_oidc_disabled`",
@@ -4828,6 +7259,16 @@
               }
             }
           },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -4838,6 +7279,17 @@
             }
           },
           "502": {
+            "description": "`fsp_unavailable`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "`fsp_registry_disabled`: the FSP registry is not configured",
             "content": {
               "application/json": {
                 "schema": {
@@ -4886,7 +7338,7 @@
             }
           },
           "400": {
-            "description": "`invalid_token`: unknown token or a link of a superseded letter",
+            "description": "`invalid_token`: unknown token or a link of a superseded letter; `invalid_query`: a query parameter is missing or does not parse",
             "content": {
               "application/json": {
                 "schema": {
@@ -4924,7 +7376,7 @@
             }
           },
           "400": {
-            "description": "`invalid_token`; `token_expired`: the answer link is older than 7 days",
+            "description": "`invalid_token`; `token_expired`: the answer link is older than 7 days; `invalid_json`: the body is not valid JSON",
             "content": {
               "application/json": {
                 "schema": {
@@ -4935,6 +7387,36 @@
           },
           "409": {
             "description": "`token_used`: already answered or revoked; `action_unavailable`: granting needs the answer link; `guardian_not_needed`: the participant is 18",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -4971,6 +7453,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/AtsCandidateProfile"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5051,6 +7543,16 @@
                     "format": "int32",
                     "minimum": 0
                   }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5161,6 +7663,16 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "401": {
             "description": "`api_key_required`, `api_key_invalid`",
             "content": {
@@ -5225,6 +7737,16 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "401": {
             "content": {
               "application/json": {
@@ -5244,8 +7766,28 @@
               }
             }
           },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
-            "description": "Нет текста, не распознана специализация или вилка",
+            "description": "Нет текста, не распознана специализация или вилка; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5309,6 +7851,16 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "401": {
             "content": {
               "application/json": {
@@ -5348,7 +7900,28 @@
               }
             }
           },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "422": {
+            "description": "`invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5436,6 +8009,7 @@
             }
           },
           "401": {
+            "description": "`unauthorized`: no session or it has expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -5463,6 +8037,7 @@
         "responses": {
           "204": {},
           "401": {
+            "description": "`unauthorized`: no session or it has expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -5498,6 +8073,16 @@
                   "items": {
                     "$ref": "#/components/schemas/UserConsent"
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5549,7 +8134,38 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
             "content": {
               "application/json": {
                 "schema": {
@@ -5559,7 +8175,7 @@
             }
           },
           "422": {
-            "description": "`validation_failed`: unknown document, not its current version, not for this role, or `guardian_consent` (only the legal representative gives it)",
+            "description": "`validation_failed`: unknown document, not its current version, not for this role, or `guardian_consent` (only the legal representative gives it); `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -5600,6 +8216,26 @@
         ],
         "responses": {
           "204": {},
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -5647,6 +8283,7 @@
             }
           },
           "401": {
+            "description": "`unauthorized`: no session or it has expired",
             "content": {
               "application/json": {
                 "schema": {
@@ -5689,6 +8326,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ReportCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `comment`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5825,6 +8512,16 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "`invalid_query`: a query parameter is missing or does not parse",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
           }
         }
       }
@@ -5853,6 +8550,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PublicVacancy"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "`invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             }
@@ -5907,6 +8614,26 @@
               }
             }
           },
+          "400": {
+            "description": "`invalid_json`: the body is not valid JSON; `invalid_path`: a path parameter does not parse (e.g. not a UUID)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "`unauthorized`: no session or it has expired",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
           "404": {
             "content": {
               "application/json": {
@@ -5918,6 +8645,36 @@
           },
           "409": {
             "description": "`already_applied`; `guardian_consent_required`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "`payload_too_large`: the body is over the route's limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "`unsupported_media_type`: `Content-Type` is not `application/json`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "`validation_failed`: `cover_letter`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field)",
             "content": {
               "application/json": {
                 "schema": {
@@ -6553,7 +9310,8 @@
           "decision",
           "needs_review",
           "topics",
-          "offers"
+          "offers",
+          "locked"
         ],
         "properties": {
           "decision": {
@@ -6593,6 +9351,13 @@
               "$ref": "#/components/schemas/Offer"
             },
             "description": "What the candidate may do next right away (step down after a fail, upgrade after a confident pass)."
+          },
+          "locked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LockedOffer"
+            },
+            "description": "What opens later and when: e.g. the up-test to a grade failed or abandoned less than\n30 days ago."
           }
         }
       },
@@ -7761,6 +10526,7 @@
         "type": "object",
         "required": [
           "available",
+          "locked",
           "history"
         ],
         "properties": {
@@ -7828,13 +10594,20 @@
               "$ref": "#/components/schemas/Offer"
             }
           },
+          "locked": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LockedOffer"
+            },
+            "description": "Tests that open later, one per grade, with the date."
+          },
           "next_change_at": {
             "type": [
               "string",
               "null"
             ],
             "format": "date-time",
-            "description": "When a grade change becomes possible, if it is blocked by the cooldown now."
+            "description": "When a grade change becomes possible, if no change is possible now."
           },
           "history": {
             "type": "array",
@@ -10019,6 +12792,43 @@
             "type": "integer",
             "format": "int32",
             "minimum": 0
+          }
+        }
+      },
+      "LockReason": {
+        "type": "string",
+        "description": "Why a test is not available yet; the same codes `POST /candidate/assessments` answers with.",
+        "enum": [
+          "retry_blocked",
+          "grade_change_cooldown"
+        ]
+      },
+      "LockedOffer": {
+        "type": "object",
+        "description": "A test that opens later, with the date it opens.",
+        "required": [
+          "grade",
+          "kind",
+          "reason",
+          "available_at",
+          "label"
+        ],
+        "properties": {
+          "grade": {
+            "$ref": "#/components/schemas/Grade"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/AttemptKind"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/LockReason"
+          },
+          "available_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "label": {
+            "type": "string"
           }
         }
       },

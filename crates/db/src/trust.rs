@@ -181,7 +181,9 @@ pub async fn set_verified_domain(
     .map(|r| r.rows_affected())
 }
 
-/// Stated expectations of the category's searchable candidates (same pool as the category cards).
+/// Stated expectations of the category's searchable candidates: the pool of the category cards,
+/// under the same publication rule (`published_candidates`, minors only with the representative's
+/// consent).
 pub async fn expectation_band(
     db: impl PgExecutor<'_>,
     specialization: &str,
@@ -192,12 +194,9 @@ pub async fn expectation_band(
         r#"SELECT count(*) AS "samples!",
                   (percentile_cont(0.5) WITHIN GROUP (ORDER BY c.salary_expectation_min))::bigint AS median,
                   (percentile_cont(0.9) WITHIN GROUP (ORDER BY c.salary_expectation_min))::bigint AS p90
-           FROM candidates c
+           FROM published_candidates c
            WHERE c.specialization = $1 AND c.grade = $2 AND c.salary_expectation_min IS NOT NULL
-             AND c.visible AND c.search_status <> 'closed'
-             AND EXISTS (SELECT 1 FROM user_consents uc
-                          JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                          WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)"#,
+             AND c.search_status <> 'closed'"#,
         specialization,
         grade,
     )

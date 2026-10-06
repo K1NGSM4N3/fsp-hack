@@ -946,6 +946,7 @@ pub async fn seed_sized(
             if let Some(i) = fsp_pick {
                 let (fsp_id, _, raw) = fsp_queue.remove(i);
                 db::seed::seed_fsp_link(&mut *tx, acc.id, &fsp_id, &raw).await?;
+                crate::skills::replace_fsp_skills(&mut tx, acc.id, Some(&raw)).await?;
                 fsp_linked += 1;
             }
             if matches!(assigned, Some((Grade::Junior, ..))) && n != 0 {

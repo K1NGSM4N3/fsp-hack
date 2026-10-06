@@ -643,6 +643,7 @@ export async function getCandidateCategory(): Promise<T.CategoryStatus> {
     specialization: current?.category.specialization ?? survey?.specialization ?? null,
     claimed_grade_in_survey: survey?.claimed_grade ?? null,
     available: offersFor(cand),
+    locked: [],
     next_change_at: nextChangeAt(cand),
     history: [...cand.assignments].reverse().map((a) => ({
       specialization: a.category.specialization,
@@ -863,6 +864,7 @@ function finishSession(m: MockAssessment, cand: MockCandidate) {
     needs_review: aberrant,
     topics: [...byTopic.entries()].map(([topic, r]) => ({ topic, topic_ru: TOPIC_LABEL[topic], ...r })),
     offers: offersFor(cand),
+    locked: [],
   };
   cand.last_active_at = t.toISOString();
 }

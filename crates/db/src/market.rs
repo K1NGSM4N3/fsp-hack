@@ -32,17 +32,10 @@ pub async fn category_overview(
                   count(*) FILTER (WHERE c.search_status = 'active') AS "actively_looking!",
                   (percentile_cont(0.5) WITHIN GROUP (ORDER BY c.salary_expectation_min))::bigint
                       AS median_expectation
-           FROM candidates c
+           FROM published_candidates c
            LEFT JOIN fsp_links f ON f.candidate_id = c.user_id
-           WHERE c.visible AND c.search_status <> 'closed'
+           WHERE c.search_status <> 'closed'
              AND c.specialization IS NOT NULL AND c.grade IS NOT NULL
-             AND EXISTS (SELECT 1 FROM user_consents uc
-                          JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                          WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
-             AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
-                  OR EXISTS (SELECT 1 FROM user_consents gc
-                              JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
-                              WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL))
            GROUP BY c.specialization, c.grade"#,
     )
     .fetch_all(db)
@@ -76,16 +69,9 @@ pub async fn category_demand(
                    AND i.created_at >= now() - interval '30 days') AS "invitations_in_category!",
                (SELECT count(*) FROM hiring_needs n
                  WHERE n.status = 'active' AND n.specialization = $1 AND $2 = ANY (n.grades)) AS "open_needs!",
-               (SELECT count(*) FROM candidates oc
-                 WHERE oc.specialization = $1 AND oc.grade = $2 AND oc.visible
-                   AND oc.search_status <> 'closed'
-                   AND EXISTS (SELECT 1 FROM user_consents uc
-                                JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                                WHERE uc.user_id = oc.user_id AND uc.revoked_at IS NULL)
-                   AND (oc.birth_date IS NULL OR oc.birth_date + interval '18 years' <= current_date
-                        OR EXISTS (SELECT 1 FROM user_consents gc
-                                    JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
-                                    WHERE gc.user_id = oc.user_id AND gc.revoked_at IS NULL))) AS "peers!",
+               (SELECT count(*) FROM published_candidates oc
+                 WHERE oc.specialization = $1 AND oc.grade = $2
+                   AND oc.search_status <> 'closed') AS "peers!",
                (SELECT (percentile_cont(0.5) WITHIN GROUP (ORDER BY i.salary_min))::bigint
                   FROM invitations i JOIN candidates ic ON ic.user_id = i.candidate_id
                  WHERE ic.specialization = $1 AND ic.grade = $2

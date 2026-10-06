@@ -2,11 +2,7 @@
 //! nothing open, and the last task was given more than a week ago, the next unseen task for
 //! their category is assigned. No scheduler is needed and inactive candidates get nothing.
 
-use axum::{
-    Json,
-    extract::{Path, State},
-    http::StatusCode,
-};
+use axum::{extract::State, http::StatusCode};
 use catalog::{Category, Grade, Specialization};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -20,6 +16,7 @@ use crate::{
     auth::{CandidateUser, EmployerUser},
     dto::{TaskStatus, parse_slugs},
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Path},
     skills,
     state::AppState,
 };
@@ -96,7 +93,7 @@ pub struct EmployerTask {
 
 /// Company tasks with submission counters
 #[utoipa::path(get, path = "/tasks", tag = "tasks",
-    responses((status = 200, body = Vec<EmployerTask>)),
+    responses((status = 200, body = Vec<EmployerTask>), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_tasks(
     State(state): State<AppState>,
@@ -133,7 +130,7 @@ pub(crate) async fn company_task_views(
 /// Publish a short task for a category; candidates receive it in turn
 #[utoipa::path(post, path = "/tasks", tag = "tasks",
     request_body = TaskInput,
-    responses((status = 201, body = EmployerTask), (status = 422, body = Problem)),
+    responses((status = 201, body = EmployerTask), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn create_task(
     State(state): State<AppState>,
@@ -210,7 +207,7 @@ pub struct ActiveInput {
 #[utoipa::path(post, path = "/tasks/{id}/active", tag = "tasks",
     params(("id" = Uuid, Path)),
     request_body = ActiveInput,
-    responses((status = 204), (status = 404, body = Problem)),
+    responses((status = 204), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn set_active(
     State(state): State<AppState>,
@@ -241,7 +238,7 @@ pub struct Submission {
 /// Anonymous submissions to a task (a strong one is a reason to send an invitation)
 #[utoipa::path(get, path = "/tasks/{id}/submissions", tag = "tasks",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = Vec<Submission>)),
+    responses((status = 200, body = Vec<Submission>), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn submissions(
     State(state): State<AppState>,
@@ -281,7 +278,7 @@ pub struct ReviewInput {
 #[utoipa::path(post, path = "/tasks/{id}/submissions/{sid}/review", tag = "tasks",
     params(("id" = Uuid, Path), ("sid" = Uuid, Path)),
     request_body = ReviewInput,
-    responses((status = 204), (status = 404, body = Problem), (status = 422, body = Problem)),
+    responses((status = 204), (status = 404, body = Problem), (status = 422, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn review(
     State(state): State<AppState>,
@@ -390,7 +387,7 @@ pub struct SubmitInput {
 #[utoipa::path(post, path = "/tasks/{id}/submit", tag = "tasks",
     params(("id" = Uuid, Path)),
     request_body = SubmitInput,
-    responses((status = 200, body = Vec<MyTask>), (status = 409, description = "`task_closed`", body = Problem)),
+    responses((status = 200, body = Vec<MyTask>), (status = 409, description = "`task_closed`", body = Problem), (status = 422, description = "`validation_failed`: `answer`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn submit(
     State(state): State<AppState>,
@@ -415,7 +412,7 @@ async fn submit(
 /// Skip the current task
 #[utoipa::path(post, path = "/tasks/{id}/skip", tag = "tasks",
     params(("id" = Uuid, Path)),
-    responses((status = 204), (status = 409, body = Problem)),
+    responses((status = 204), (status = 409, description = "`task_closed`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn skip(
     State(state): State<AppState>,

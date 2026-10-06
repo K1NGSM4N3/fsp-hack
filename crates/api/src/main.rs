@@ -134,6 +134,18 @@ async fn main() -> Result<(), StartupError> {
         config: Arc::new(config),
     });
 
+    match api::skills::backfill_fsp_skills(&state.pool).await {
+        Ok(0) => {}
+        Ok(n) => {
+            tracing::info!(
+                candidates = n,
+                "fsp-confirmed skills brought in line with snapshots"
+            );
+            state.candidates.invalidate().await;
+        }
+        Err(e) => tracing::warn!(error = %e, "fsp skill backfill failed"),
+    }
+
     let listener = tokio::net::TcpListener::bind(state.config.bind).await?;
     tracing::info!(addr = %state.config.bind, "listening");
     axum::serve(listener, api::app(state))

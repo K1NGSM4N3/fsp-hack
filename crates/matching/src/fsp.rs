@@ -107,6 +107,24 @@ impl Discipline {
     }
 }
 
+impl Discipline {
+    /// Dictionary skills a result in this discipline confirms (source `fsp`, architecture §7.4).
+    /// Deliberately narrow: the registry records the discipline and the result, not the team's
+    /// stack or the person's role, so only what every contest of the discipline exercises
+    /// counts. Algorithmic contests are solved with algorithms and data structures; a security
+    /// CTF is finding and exploiting vulnerabilities; an AI track is a model scored by a quality
+    /// metric on hidden data. A product, robotics or UAV result proves delivery in some stack
+    /// the registry does not name, and the dictionary has no embedded skills, so none.
+    pub const fn skills(self) -> &'static [&'static str] {
+        match self {
+            Discipline::Algorithmic => &["algorithms", "data_structures"],
+            Discipline::Security => &["pentest"],
+            Discipline::Ai => &["machine_learning", "ml_metrics"],
+            Discipline::Product | Discipline::Robotics | Discipline::Uav => &[],
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 #[serde(rename_all = "snake_case")]
@@ -280,6 +298,18 @@ impl Achievement {
         }
     }
 
+    /// A result rather than a start: any sports rank (ranks are awarded for results), or a
+    /// competition finished as a finalist or on the podium. Plain participation confirms nothing.
+    pub fn is_result(&self) -> bool {
+        match self.kind {
+            AchievementKind::Rank => self.rank.is_some(),
+            AchievementKind::Competition => matches!(
+                self.place,
+                Some(Place::First | Place::Second | Place::Third | Place::Finalist)
+            ),
+        }
+    }
+
     pub fn year(&self) -> Option<i32> {
         parse_date(&self.date).map(|d| d.year())
     }
@@ -315,6 +345,18 @@ impl Achievement {
         }
         s
     }
+}
+
+/// Skills the achievements confirm, sorted and deduplicated (slugs of the skill dictionary).
+pub fn confirmed_skills(achievements: &[Achievement]) -> Vec<&'static str> {
+    let mut out: Vec<&'static str> = achievements
+        .iter()
+        .filter(|a| a.is_result())
+        .flat_map(|a| a.discipline.skills().iter().copied())
+        .collect();
+    out.sort_unstable();
+    out.dedup();
+    out
 }
 
 fn parse_date(s: &str) -> Option<time::Date> {
@@ -576,6 +618,73 @@ mod tests {
                 .explanation_ru
                 .contains("учтён более высокий разряд")
         );
+    }
+
+    #[test]
+    fn disciplines_confirm_only_dictionary_skills() {
+        for d in Discipline::ALL {
+            for slug in d.skills() {
+                assert!(crate::lookup(slug).is_some(), "{d:?}: {slug}");
+            }
+        }
+        assert!(Discipline::Product.skills().is_empty());
+        assert!(Discipline::Robotics.skills().is_empty());
+        assert!(Discipline::Uav.skills().is_empty());
+    }
+
+    #[test]
+    fn results_confirm_skills_and_participation_does_not() {
+        let podium = competition(
+            Discipline::Algorithmic,
+            EventLevel::Regional,
+            Place::Third,
+            "2024-04-01",
+        );
+        let finalist = competition(
+            Discipline::Ai,
+            EventLevel::National,
+            Place::Finalist,
+            "2025-04-01",
+        );
+        let started = competition(
+            Discipline::Security,
+            EventLevel::International,
+            Place::Participant,
+            "2026-04-01",
+        );
+        let product = competition(
+            Discipline::Product,
+            EventLevel::National,
+            Place::First,
+            "2026-04-01",
+        );
+        let ctf_rank = rank(Discipline::Security, Rank::Third, "2023-01-01");
+        assert_eq!(
+            confirmed_skills(&[podium.clone(), started.clone(), product.clone()]),
+            ["algorithms", "data_structures"]
+        );
+        assert_eq!(
+            confirmed_skills(&[finalist, podium.clone(), ctf_rank, podium]),
+            [
+                "algorithms",
+                "data_structures",
+                "machine_learning",
+                "ml_metrics",
+                "pentest"
+            ]
+        );
+        assert!(confirmed_skills(&[started, product]).is_empty());
+        let no_place = Achievement {
+            place: None,
+            ..competition(
+                Discipline::Algorithmic,
+                EventLevel::National,
+                Place::First,
+                "2025-01-01",
+            )
+        };
+        assert!(confirmed_skills(&[no_place]).is_empty());
+        assert!(confirmed_skills(&[]).is_empty());
     }
 
     #[test]

@@ -1,7 +1,10 @@
 //! Complaints about vacancies, invitations and companies (X-1). Unresolved complaints from
 //! candidates lower the company's trust level and invitation quota (architecture.md §11.1).
 
-use axum::{Json, extract::State, http::StatusCode};
+use std::time::Duration;
+
+use axum::{extract::State, http::StatusCode};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use utoipa_axum::{router::OpenApiRouter, routes};
@@ -10,6 +13,7 @@ use uuid::Uuid;
 use crate::{
     auth::AuthUser,
     error::{ApiError, ApiResult, Problem},
+    extract::Json,
     state::AppState,
 };
 
@@ -53,7 +57,7 @@ pub struct ReportCreated {
 /// Report a fake vacancy, a misleading invitation or an abusive company
 #[utoipa::path(post, path = "/reports", tag = "account",
     request_body = ReportInput,
-    responses((status = 201, body = ReportCreated), (status = 429, body = Problem)),
+    responses((status = 201, body = ReportCreated), (status = 429, body = Problem), (status = 422, description = "`validation_failed`: `comment`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn create_report(
     State(state): State<AppState>,
@@ -68,8 +72,14 @@ async fn create_report(
     if comment.is_some_and(|c| c.len() > 2000) {
         return Err(ApiError::field("comment", "Не длиннее 2000 символов"));
     }
-    if db::reports::recent_reports_by(&state.pool, user.id).await? >= DAILY_LIMIT {
-        return Err(ApiError::too_many_requests());
+    let recent = db::reports::recent_reports_by(&state.pool, user.id).await?;
+    if recent.count >= DAILY_LIMIT {
+        let wait = recent
+            .first_slot_frees_at
+            .map_or(0, |at| (at - Utc::now()).num_seconds());
+        return Err(ApiError::rate_limited(Duration::from_secs(
+            wait.max(1).unsigned_abs(),
+        )));
     }
     let kind = match r.target_kind {
         ReportTarget::Vacancy => "vacancy",

@@ -22,6 +22,15 @@ pub struct FspLink {
     pub has_achievements: bool,
 }
 
+/// A candidate's FSP snapshot next to the `fsp` skills last derived from it.
+#[derive(Debug, Clone)]
+pub struct FspSkillState {
+    pub candidate_id: Uuid,
+    pub achievements: Option<Value>,
+    /// Sorted.
+    pub fsp_skills: Vec<String>,
+}
+
 pub async fn insert_oidc_state(
     db: impl PgExecutor<'_>,
     state: &str,
@@ -123,6 +132,23 @@ pub async fn store_fsp_achievements(
     .execute(db)
     .await
     .map(|r| r.rows_affected())
+}
+
+/// Every candidate with an FSP link or with `fsp` skills left over.
+pub async fn fsp_skill_states(db: impl PgExecutor<'_>) -> Result<Vec<FspSkillState>, sqlx::Error> {
+    sqlx::query_as!(
+        FspSkillState,
+        r#"SELECT c.user_id AS "candidate_id!", f.achievements AS "achievements?",
+                  coalesce((SELECT array_agg(s.skill ORDER BY s.skill) FROM candidate_skills s
+                             WHERE s.candidate_id = c.user_id AND s.source = 'fsp'), '{}') AS "fsp_skills!"
+           FROM candidates c
+           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id
+           WHERE f.candidate_id IS NOT NULL
+              OR EXISTS (SELECT 1 FROM candidate_skills s
+                          WHERE s.candidate_id = c.user_id AND s.source = 'fsp')"#,
+    )
+    .fetch_all(db)
+    .await
 }
 
 pub async fn delete_fsp_link(

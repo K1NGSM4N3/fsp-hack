@@ -18,9 +18,9 @@
     "code": "grade_change_cooldown", "detail": "Следующая попытка — после 03.01.2027",
     "errors": { "field": ["сообщение"] } }
   ```
-  `code` — стабильный машинный код, на него завязывается фронт; общие — `unauthorized`, `wrong_role`, `not_found`, `validation_failed`, `rate_limited`, `csrf`, `internal`. `errors` — только для 422. Исключение: запрос, который не разобрал extractor axum (битый JSON, неизвестное значение enum, не-UUID в пути, нет обязательного query-параметра), получает стандартный ответ axum `text/plain` без `code`; problem+json на такие ошибки отвечает только `POST /eval/pairs`. У 409 `consent_required` есть расширения `document_id` и `document_kind` — документ, который нужно принять (`POST /me/consents`). У 409 `guardian_consent_required` те же поля указывают на `guardian_consent`, но принять его может только законный представитель по ссылке из письма.
-- **Коды:** 200/201/204, 202 — поставлено в очередь, 303 — редиректы ФСП ID; 400 — неверный запрос; 401 — нет или истекла сессия; 403 — нет прав; 404 — не найдено **или чужое** (не раскрываем существование); 408 — запрос дольше 30 с; 409 — конфликт состояния (кулдаун, квота, повтор); 413 — тело больше лимита; 422 — ошибки валидации полей; 429 — лимит запросов (`Retry-After: 60`); 502/503 — реестр или ФСП ID недоступны или не настроены.
-- **Размер тела:** по умолчанию до 256 КиБ, резюме — до 10 МиБ, фрагмент видео — до 1 МиБ, `POST /eval/pairs` — до 8 МиБ; сверх 10 МиБ запрос отсекается до хендлера (413 без `code`).
+  `code` — стабильный машинный код, на него завязывается фронт; общие — `unauthorized`, `wrong_role`, `not_found`, `validation_failed`, `rate_limited`, `csrf`, `internal`. `errors` — только для 422. Запрос, который не удалось разобрать, — тоже problem+json со своим `code` (extractor'ы `crates/api/src/extract.rs`): `invalid_json` — 400, если тело не JSON, и 422, если JSON не по схеме (неизвестное значение enum, не тот тип, нет поля; что именно — в `detail`); `unsupported_media_type` — 415, не тот `Content-Type`; `invalid_path` — 400, параметр пути не разбирается (например, не UUID); `invalid_query` — 400, нет обязательного query-параметра или он не разбирается; `payload_too_large` — 413; `invalid_body` — 400, тело не удалось дочитать. В OpenAPI эти ответы добавлены каждому методу, где они возможны, вместе с 401 `unauthorized` у методов с сессией; 403 `wrong_role` (метод чужой роли) и `csrf` возможны у любого метода кабинета. У 409 `consent_required` есть расширения `document_id` и `document_kind` — документ, который нужно принять (`POST /me/consents`). У 409 `guardian_consent_required` те же поля указывают на `guardian_consent`, но принять его может только законный представитель по ссылке из письма.
+- **Коды:** 200/201/204, 202 — поставлено в очередь, 303 — редиректы ФСП ID; 400 — неверный запрос; 401 — нет или истекла сессия; 403 — нет прав; 404 — не найдено **или чужое** (не раскрываем существование); 408 — запрос дольше 30 с; 409 — конфликт состояния (кулдаун, квота, повтор); 413 — тело больше лимита; 422 — ошибки валидации полей; 429 — лимит запросов (`Retry-After` — сколько секунд осталось до сброса окна лимита, который отказал; то же словами в `detail`); 502/503 — реестр или ФСП ID недоступны или не настроены.
+- **Размер тела:** по умолчанию до 256 КиБ, резюме — до 10 МиБ, фрагмент видео — до 1 МиБ, `POST /eval/pairs` — до 8 МиБ; сверх 10 МиБ (по `Content-Length`) запрос отсекается до хендлера — тоже 413 `payload_too_large`.
 - **Идемпотентность:** `POST /employer/invitations` принимает заголовок `Idempotency-Key` (до 100 символов, в пределах компании): повтор возвращает 200 и уже созданное приглашение. Этапы найма от ATS идемпотентны по паре «приглашение или отклик + этап».
 - **Кеширование:** по умолчанию `Cache-Control: private, no-store` — всё, что за cookie, токеном или API-ключом, и всё с ПДн. Публично: `GET /catalog`, `/catalog/skills`, `/consents/current` — `public, max-age=300, stale-while-revalidate=86400`; `GET /vacancies`, `/vacancies/{id}` — `public, max-age=30, stale-while-revalidate=120`. У публичных ответов есть `ETag`, `If-None-Match` → 304. `/guardian/consent`, `POST /eval/pairs`, `GET /catalog/test-plan` — `no-store`. Ошибки и ответы с `Set-Cookie` в публичных группах — `no-store`; 401 — `private, no-cache` (данных в нём нет, architecture.md §12.1). Тело ответа, которое клиенту не нужно, всё равно прочитать или отменить (`res.body?.cancel()`): Chrome не завершает непрочитанный ответ с `no-store` и держит соединение.
 
@@ -75,12 +75,12 @@
 | GET | `/api/v1/me` → `candidate.onboarding_step` | 🅲 | Шаг пути: профиль → опрос → тест → категория (отдельного эндпоинта нет) | ✅ |
 | POST | `/api/v1/candidate/survey` | 🅲 | Опрос: направление, специализация, стек, отрасли, самооценка тем | ✅ |
 | GET | `/api/v1/candidate/survey/history` | 🅲 | История опросов | ✅ |
-| GET | `/api/v1/candidate/category` | 🅲 | Текущая категория, история присвоений, когда доступна смена грейда | ✅ |
-| POST | `/api/v1/candidate/assessments` | 🅲 | `{specialization, grade, proctoring?: {camera, consent_document_id}}` → новая сессия. Политика грейда: 409 `grade_change_cooldown`, `retry_blocked`, `attempt_not_allowed`, `already_assigned`; ещё 409 `assessment_in_progress`, `survey_required`; 422 `specialization` — не та, что в опросе или категории. С `camera: true` нужен id текущего документа `proctoring_video` (выдача согласия пишется тут же), иначе 422; без поля `proctoring` — тест без видеозаписи | ✅ |
+| GET | `/api/v1/candidate/category` | 🅲 | Текущая категория, история присвоений; `available` — тесты, доступные сейчас; `locked` — тесты с датой открытия `available_at` и причиной `reason`: `retry_blocked` (30 дней после неудачной или брошенной попытки на этот грейд или неудачного повышения) или `grade_change_cooldown` (90 дней от присвоения); например, дотест на грейд, проваленный меньше 30 дней назад; `next_change_at` — когда станет возможна смена грейда, если сейчас нельзя ни вверх, ни вниз | ✅ |
+| POST | `/api/v1/candidate/assessments` | 🅲 | `{specialization, grade, proctoring?: {camera, consent_document_id}}` → новая сессия. Политика грейда (architecture.md §5.4): 409 `grade_change_cooldown`, `retry_blocked` (30 дней после неудачной или брошенной попытки на этот грейд, в т. ч. для дотеста после уверенной сдачи грейдом ниже), `attempt_not_allowed`, `already_assigned`; в `detail` — дата; ещё 409 `assessment_in_progress`, `survey_required`; 422 `specialization` — не та, что в опросе или категории. С `camera: true` нужен id текущего документа `proctoring_video` (выдача согласия пишется тут же), иначе 422; без поля `proctoring` — тест без видеозаписи | ✅ |
 | GET | `/api/v1/candidate/assessments` | 🅲 | История сессий | ✅ |
-| GET | `/api/v1/candidate/assessments/{id}` | 🅲 | Состояние или результат сессии; `proctoring` — сводка видеозаписи, `result.needs_review` — «требует подтверждения» | ✅ |
-| GET | `/api/v1/candidate/assessments/{id}/current-item` | 🅲 | Текущее задание (без правильного ответа), дедлайн | ✅ |
-| POST | `/api/v1/candidate/assessments/{id}/answer` | 🅲 | `{seq, answer}` → следующее задание или результат; ответ после дедлайна засчитывается неверным. 409 `assessment_finished`, `stale_item` (ответ не на текущее задание) | ✅ |
+| GET | `/api/v1/candidate/assessments/{id}` | 🅲 | Состояние или результат сессии; `proctoring` — сводка видеозаписи, `result.needs_review` — «требует подтверждения», `result.offers` / `result.locked` — что доступно сейчас и что откроется позже (как в `/candidate/category`) | ✅ |
+| GET | `/api/v1/candidate/assessments/{id}/current-item` | 🅲 | Текущее задание (без правильного ответа), дедлайн. Просроченное задание засчитывается неверным и выдаётся следующее; если 30 минут после дедлайна прошли без ответа — сессия закрывается как `expired` | ✅ |
+| POST | `/api/v1/candidate/assessments/{id}/answer` | 🅲 | `{seq, answer}` → следующее задание или результат; ответ после дедлайна засчитывается неверным. 409 `assessment_finished` (в т. ч. когда 30 минут после дедлайна прошли без ответа: сессия только что закрыта как брошенная), `stale_item` (ответ не на текущее задание) | ✅ |
 | GET | `/api/v1/candidate/invitations` | 🅲 | Входящие приглашения; `outcomes` — этапы найма, которые отметила ATS компании («Компания отметила: собеседование») | ✅ |
 | GET | `/api/v1/candidate/invitations/{id}` | 🅲 | Приглашение; первое открытие → `viewed` | ✅ |
 | POST | `/api/v1/candidate/invitations/{id}/accept` | 🅲 | → `accepted`, контакты раскрываются компании. 409 `invitation_closed` — приглашение уже не ждёт ответа. До 18 лет без действующего согласия представителя (например, его отозвали после приглашения) → 409 `guardian_consent_required` | ✅ |
@@ -111,10 +111,10 @@
 |---|---|---|---|---|
 | GET | `/api/v1/fsp/link/start` | 🅲 | 303 на Keycloak: `state`, PKCE S256 и `nonce` хранятся в `oidc_states`. 503 `fsp_oidc_disabled` — ФСП ID не настроен, 502 `fsp_unavailable` | ✅ |
 | GET | `/api/v1/fsp/link/callback` | 🅰 | Пользователь — по одноразовой строке `state` (живёт 10 минут). Обмен code, проверка id_token, привязка `fsp_id`, синхронизация → 303 на `/candidate/settings?fsp=linked` или `?fsp=error&reason=…` (`cancelled`, `expired`, `no_fsp_id`, `verification_failed`, `already_linked`, …) | ✅ |
-| POST | `/api/v1/fsp/link/dev` | 🅲 | `{fsp_id}` — только при `FSP_DEV_LINK=true` (иначе 404); 409 `fsp_already_linked` | ✅ |
+| POST | `/api/v1/fsp/link/dev` | 🅲 | `{fsp_id}` — только при `FSP_DEV_LINK=true` (иначе 404); 409 `fsp_already_linked`, 422 — пустой `fsp_id`. Как и вход через ФСП ID, синхронизирует достижения и пишет навыки, которые они подтверждают (источник `fsp`, architecture.md §7.4) | ✅ |
 | GET | `/api/v1/fsp/achievements` | 🅲 | Свой снимок достижений и ФСП-скор | ✅ |
-| POST | `/api/v1/fsp/sync` | 🅲 | Пересинхронизация; 404 — ФСП ID не привязан, 502 `fsp_unavailable`, 503 `fsp_registry_disabled`. Участника нет в реестре — пустой список достижений | ✅ |
-| DELETE | `/api/v1/fsp/link` | 🅲 | Отвязка | ✅ |
+| POST | `/api/v1/fsp/sync` | 🅲 | Пересинхронизация: новый снимок и навыки из ФСП по нему; 404 — ФСП ID не привязан, 502 `fsp_unavailable`, 503 `fsp_registry_disabled` — реестр не настроен. Участника нет в реестре — пустой список достижений | ✅ |
+| DELETE | `/api/v1/fsp/link` | 🅲 | Отвязка: удаляются снимок достижений и навыки из ФСП | ✅ |
 
 ## Работодатель
 
@@ -153,7 +153,7 @@
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
 | GET | `/api/v1/employer/trust` | 🅴 | Уровень доверия (`low` / `new` / `standard` / `high`), квота за 7 дней = база + бонусы + штрафы, причины с вкладом, советы, статус домена с подсказкой, правило словами. Перепроверяет домен | ✅ |
-| GET | `/api/v1/employer/salary-check?specialization&grade&min&max` | 🅴 | Рынок категории (медиана и 90-й перцентиль ожиданий, при ≥ 5) и мягкие предупреждения `salary_above_market`, `salary_wide_range`; 422 при неверной вилке | ✅ |
+| GET | `/api/v1/employer/salary-check?specialization&grade&min&max` | 🅴 | Рынок категории (медиана и 90-й перцентиль ожиданий, при ≥ 5) — по тем же кандидатам, что карточки категорий: опубликованные (14–17 лет — с согласием представителя), поиск не закрыт; мягкие предупреждения `salary_above_market`, `salary_wide_range`; 422 при неверной вилке | ✅ |
 | POST | `/api/v1/employer/vacancies/similar` | 🅴 | `{title, description, exclude_id?}` → свои черновики и опубликованные вакансии со сходством ≥ 0,6 (чужие не показываются) | ✅ |
 | GET | `/api/v1/admin/trust` | admin | Очередь модерации: компании с отрицательными сигналами (от низкой квоты), отмеченные вакансии и приглашения (до 200 каждого) с причинами словами | ✅ |
 
@@ -222,7 +222,7 @@
 
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
-| POST | `/api/v1/eval/pairs` | 🅰 | `{vacancies: [{id, text, …}], candidates: [{id, resume_text, …}], labels?: [{vacancy_id, candidate_id, relevance 0–3}], k?, now?}` → как распознана каждая вакансия, топ-k нашего подбора с объяснениями и топ-k базовой линии «ключевые слова + стаж», Precision@5/@k, nDCG@k, MAP, MRR по вакансиям и в среднем, покрытие. Тело ≤ 8 МиБ (413 `payload_too_large`), ≤ 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты ≤ 20 000 символов (422 `validation_failed`, поле в `errors`); JSON не по схеме — 400/422 `invalid_json`, не JSON — 415 `unsupported_media_type`; `k` — 1–20, по умолчанию 10; 10 запросов за 10 минут с IP (429) | ✅ |
+| POST | `/api/v1/eval/pairs` | 🅰 | `{vacancies: [{id, text, …}], candidates: [{id, resume_text, …}], labels?: [{vacancy_id, candidate_id, relevance 0–3}], k?, now?}` → как распознана каждая вакансия, топ-k нашего подбора с объяснениями и топ-k базовой линии «ключевые слова + стаж», Precision@5/@k, nDCG@k, MAP, MRR по вакансиям и в среднем, покрытие. Тело ≤ 8 МиБ (413 `payload_too_large`), ≤ 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты ≤ 20 000 символов (422 `validation_failed`, поле в `errors`); JSON не по схеме — 400/422 `invalid_json`, не JSON — 415 `unsupported_media_type`; `k` — 1–20, по умолчанию 10; 10 запросов за 10 минут с IP (429). Достижения ФСП кандидата (`fsp_achievements`) подтверждают навыки по тому же правилу, что в API | ✅ |
 
 ## Статусы
 
@@ -230,7 +230,7 @@
 
 **Отклик:** `sent` → `viewed` → `accepted` | `rejected`; кандидат может `withdrawn` до решения.
 
-**Сессия теста:** `in_progress` → `passed` | `failed` | `expired` (через 30 минут после дедлайна текущего задания; проверяется лениво — при старте нового теста и чтении истории).
+**Сессия теста:** `in_progress` → `passed` | `failed` | `expired` (30 минут после дедлайна текущего задания без ответа; проверяется лениво — при старте теста, чтении истории, категории и текущего задания, при ответе; `finished_at` — дедлайн + 30 минут). `expired` — брошенный тест: в правилах смены грейда он считается неудачной попыткой на свой грейд.
 
 **Согласие представителя** (`state`): `not_sent` (подросток ещё не подтвердил почту) → `pending` → `granted` | `declined`; из `pending` → `expired` (ссылка ответа старше 7 дней, письмо можно повторить); `granted` → `revoked`.
 

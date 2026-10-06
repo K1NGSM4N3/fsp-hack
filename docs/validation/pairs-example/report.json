@@ -6399,6 +6399,170 @@
       "top": [
         {
           "rank": 1,
+          "candidate_id": "c51",
+          "score": 64.57057,
+          "relevance": 3,
+          "category": {
+            "specialization": "ml",
+            "grade": "middle"
+          },
+          "notes": [],
+          "breakdown": {
+            "total": 64.57057,
+            "features": [
+              {
+                "key": "must",
+                "label_ru": "Обязательные навыки",
+                "value": 0.68333334,
+                "weight": 0.41,
+                "contribution": 28.016666,
+                "explanation_ru": "Обязательные навыки: 5 из 6 (нет Python); Машинное обучение, Метрики качества ML — подтверждено ФСП"
+              },
+              {
+                "key": "test",
+                "label_ru": "Результат теста",
+                "value": 0.85,
+                "weight": 0.1,
+                "contribution": 8.5,
+                "explanation_ru": "Результат теста выше 85 % диапазона грейда Middle"
+              },
+              {
+                "key": "grade",
+                "label_ru": "Грейд",
+                "value": 1.0,
+                "weight": 0.15,
+                "contribution": 15.000001,
+                "explanation_ru": "Грейд Middle — как в запросе"
+              },
+              {
+                "key": "fsp",
+                "label_ru": "Достижения ФСП",
+                "value": 0.33739078,
+                "weight": 0.1,
+                "contribution": 3.3739078,
+                "explanation_ru": "Призёр (3 место) всероссийских соревнований по программированию систем ИИ, 2025"
+              },
+              {
+                "key": "nice",
+                "label_ru": "Желательные навыки",
+                "value": 0.21000001,
+                "weight": 0.08,
+                "contribution": 1.6800001,
+                "explanation_ru": "Желательные навыки: 0 из 2"
+              },
+              {
+                "key": "salary",
+                "label_ru": "Зарплатные ожидания",
+                "value": 1.0,
+                "weight": 0.07,
+                "contribution": 7.0,
+                "explanation_ru": "Ожидания 300 000 ₽ — в пределах вилки"
+              },
+              {
+                "key": "fresh",
+                "label_ru": "Актуальность профиля",
+                "value": 0.0,
+                "weight": 0.05,
+                "contribution": 0.0,
+                "explanation_ru": "Нет данных об активности"
+              },
+              {
+                "key": "text",
+                "label_ru": "Близость опыта",
+                "value": 0.25,
+                "weight": 0.04,
+                "contribution": 1.0,
+                "explanation_ru": "Близость описания опыта к задачам: 42 %; Нет опыта в отраслях запроса"
+              }
+            ],
+            "skills": [
+              {
+                "skill": "Машинное обучение",
+                "slug": "machine_learning",
+                "required": true,
+                "matched_by": "Машинное обучение",
+                "source": "fsp",
+                "similarity": 1.0,
+                "credit": 1.0
+              },
+              {
+                "skill": "NLP",
+                "slug": "nlp",
+                "required": true,
+                "matched_by": "NLP",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Python",
+                "slug": "python",
+                "required": true,
+                "matched_by": null,
+                "source": null,
+                "similarity": 0.0,
+                "credit": 0.0
+              },
+              {
+                "skill": "PyTorch",
+                "slug": "pytorch",
+                "required": true,
+                "matched_by": "PyTorch",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Метрики качества ML",
+                "slug": "ml_metrics",
+                "required": true,
+                "matched_by": "Метрики качества ML",
+                "source": "fsp",
+                "similarity": 1.0,
+                "credit": 1.0
+              },
+              {
+                "skill": "SQL",
+                "slug": "sql",
+                "required": true,
+                "matched_by": "SQL",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "LLM",
+                "slug": "llm",
+                "required": false,
+                "matched_by": "NLP",
+                "source": "resume",
+                "similarity": 0.6,
+                "credit": 0.42000002
+              },
+              {
+                "skill": "Docker",
+                "slug": "docker",
+                "required": false,
+                "matched_by": null,
+                "source": null,
+                "similarity": 0.0,
+                "credit": 0.0
+              }
+            ],
+            "reasons": [
+              "5 из 6 обязательных навыков; 2 подтверждены тестом или ФСП",
+              "Машинное обучение, Метрики качества ML — подтверждено ФСП",
+              "Результат теста выше 85 % диапазона грейда Middle",
+              "Ожидания 300 000 ₽ — в пределах вилки"
+            ],
+            "gaps": [
+              "Нет обязательного навыка: Python",
+              "Другой город, есть готовность к переезду"
+            ]
+          }
+        },
+        {
+          "rank": 2,
           "candidate_id": "c45",
           "score": 61.11,
           "relevance": 3,
@@ -6563,7 +6727,7 @@
           }
         },
         {
-          "rank": 2,
+          "rank": 3,
           "candidate_id": "c48",
           "score": 59.34964,
           "relevance": 3,
@@ -6724,172 +6888,6 @@
             ],
             "gaps": [
               "Нет обязательного навыка: SQL"
-            ]
-          }
-        },
-        {
-          "rank": 3,
-          "candidate_id": "c51",
-          "score": 50.90391,
-          "relevance": 3,
-          "category": {
-            "specialization": "ml",
-            "grade": "middle"
-          },
-          "notes": [],
-          "breakdown": {
-            "total": 50.90391,
-            "features": [
-              {
-                "key": "must",
-                "label_ru": "Обязательные навыки",
-                "value": 0.35,
-                "weight": 0.41,
-                "contribution": 14.349999,
-                "explanation_ru": "Обязательные навыки: 3 из 6 (нет Машинное обучение, Python, Метрики качества ML)"
-              },
-              {
-                "key": "test",
-                "label_ru": "Результат теста",
-                "value": 0.85,
-                "weight": 0.1,
-                "contribution": 8.5,
-                "explanation_ru": "Результат теста выше 85 % диапазона грейда Middle"
-              },
-              {
-                "key": "grade",
-                "label_ru": "Грейд",
-                "value": 1.0,
-                "weight": 0.15,
-                "contribution": 15.000001,
-                "explanation_ru": "Грейд Middle — как в запросе"
-              },
-              {
-                "key": "fsp",
-                "label_ru": "Достижения ФСП",
-                "value": 0.33739078,
-                "weight": 0.1,
-                "contribution": 3.3739078,
-                "explanation_ru": "Призёр (3 место) всероссийских соревнований по программированию систем ИИ, 2025"
-              },
-              {
-                "key": "nice",
-                "label_ru": "Желательные навыки",
-                "value": 0.21000001,
-                "weight": 0.08,
-                "contribution": 1.6800001,
-                "explanation_ru": "Желательные навыки: 0 из 2"
-              },
-              {
-                "key": "salary",
-                "label_ru": "Зарплатные ожидания",
-                "value": 1.0,
-                "weight": 0.07,
-                "contribution": 7.0,
-                "explanation_ru": "Ожидания 300 000 ₽ — в пределах вилки"
-              },
-              {
-                "key": "fresh",
-                "label_ru": "Актуальность профиля",
-                "value": 0.0,
-                "weight": 0.05,
-                "contribution": 0.0,
-                "explanation_ru": "Нет данных об активности"
-              },
-              {
-                "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.25,
-                "weight": 0.04,
-                "contribution": 1.0,
-                "explanation_ru": "Близость описания опыта к задачам: 42 %; Нет опыта в отраслях запроса"
-              }
-            ],
-            "skills": [
-              {
-                "skill": "Машинное обучение",
-                "slug": "machine_learning",
-                "required": true,
-                "matched_by": null,
-                "source": null,
-                "similarity": 0.0,
-                "credit": 0.0
-              },
-              {
-                "skill": "NLP",
-                "slug": "nlp",
-                "required": true,
-                "matched_by": "NLP",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Python",
-                "slug": "python",
-                "required": true,
-                "matched_by": null,
-                "source": null,
-                "similarity": 0.0,
-                "credit": 0.0
-              },
-              {
-                "skill": "PyTorch",
-                "slug": "pytorch",
-                "required": true,
-                "matched_by": "PyTorch",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Метрики качества ML",
-                "slug": "ml_metrics",
-                "required": true,
-                "matched_by": null,
-                "source": null,
-                "similarity": 0.0,
-                "credit": 0.0
-              },
-              {
-                "skill": "SQL",
-                "slug": "sql",
-                "required": true,
-                "matched_by": "SQL",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "LLM",
-                "slug": "llm",
-                "required": false,
-                "matched_by": "NLP",
-                "source": "resume",
-                "similarity": 0.6,
-                "credit": 0.42000002
-              },
-              {
-                "skill": "Docker",
-                "slug": "docker",
-                "required": false,
-                "matched_by": null,
-                "source": null,
-                "similarity": 0.0,
-                "credit": 0.0
-              }
-            ],
-            "reasons": [
-              "3 из 6 обязательных навыков",
-              "Результат теста выше 85 % диапазона грейда Middle",
-              "Ожидания 300 000 ₽ — в пределах вилки",
-              "Грейд Middle — как в запросе"
-            ],
-            "gaps": [
-              "Нет обязательного навыка: Машинное обучение",
-              "Нет обязательного навыка: Python",
-              "Нет обязательного навыка: Метрики качества ML",
-              "Другой город, есть готовность к переезду"
             ]
           }
         },

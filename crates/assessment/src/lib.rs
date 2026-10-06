@@ -19,5 +19,7 @@ pub use items::{
     Answer, BANK_VERSION, Bank, CodeBlock, ItemError, ItemKind, ItemRef, ItemView, Template, Topic,
     bank, check, generate, render,
 };
-pub use policy::{AttemptKind, GradePolicy, PlacementStage, PolicyError};
+pub use policy::{
+    ABANDON_AFTER_SECS, AttemptKind, GradePolicy, Outcome, PlacementStage, PolicyError,
+};
 pub use proctoring::{EventCounts, IntegrityEvent, ProctoringStatus};

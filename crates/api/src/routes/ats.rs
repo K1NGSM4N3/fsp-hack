@@ -2,12 +2,7 @@
 //! (`Authorization: Bearer fsp_live_…`, see `integrations::keys`). Contacts and the full profile
 //! go through `ContactGrant` exactly like in the cabinet, with channel `api` in the access log.
 
-use axum::{
-    Json,
-    extract::{Path, Query, State},
-    http::StatusCode,
-    response::IntoResponse,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse};
 use catalog::{Category, Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -24,6 +19,7 @@ use crate::{
     },
     dto::{HiringStage, InvitationStatus, SalaryRange, slugs},
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Path, Query},
     integrations::{
         events::{
             AtsCandidate, AtsInvitation, category_of, expire_invitations, invitation_from_snapshot,

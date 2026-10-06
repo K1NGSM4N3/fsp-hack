@@ -2,8 +2,7 @@
 //! salary range before any conversation, contacts open only after acceptance.
 
 use axum::{
-    Json,
-    extract::{Path, State},
+    extract::State,
     http::{HeaderMap, StatusCode},
 };
 use catalog::{Category, WorkFormat};
@@ -21,6 +20,7 @@ use crate::{
     contacts::{AccessChannel, AccessContext, CandidateContacts, ContactGrant},
     dto::{DeclineReason, HiringStage, InvitationStatus, SalaryRange},
     error::{ApiError, ApiResult, Problem, Validator},
+    extract::{Json, Path},
     integrations::{
         events::{EventType, Outbox, expire_invitations},
         outcomes::{HiringOutcome, OutcomeIndex},
@@ -176,7 +176,7 @@ fn validate(req: &SendInvitation) -> ApiResult<()> {
         (status = 201, body = SentInvitation),
         (status = 200, description = "Повтор по Idempotency-Key", body = SentInvitation),
         (status = 404, description = "Кандидат не найден или скрыт", body = Problem),
-        (status = 409, description = "`invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available`", body = Problem),
+        (status = 409, description = "`invitation_quota_exceeded`, `invitation_already_active`, `candidate_not_available`; `company_profile_required`", body = Problem),
         (status = 422, body = Problem),
     ),
     security(("cookie" = []), ("bearer" = [])))]
@@ -288,7 +288,7 @@ async fn send(
 
 /// Invitations sent by the company
 #[utoipa::path(get, path = "/invitations", tag = "invitations",
-    responses((status = 200, body = Vec<SentInvitation>)),
+    responses((status = 200, body = Vec<SentInvitation>), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn list_sent(
     State(state): State<AppState>,
@@ -311,7 +311,7 @@ pub(crate) async fn sent_views(pool: &PgPool, company: Uuid) -> ApiResult<Vec<Se
 /// One sent invitation with its status history
 #[utoipa::path(get, path = "/invitations/{id}", tag = "invitations",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = SentInvitation), (status = 404, body = Problem)),
+    responses((status = 200, body = SentInvitation), (status = 404, body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn get_sent(
     State(state): State<AppState>,
@@ -342,7 +342,7 @@ async fn events(pool: &PgPool, id: Uuid) -> ApiResult<Vec<StatusEvent>> {
 /// Withdraw an invitation that has not been answered yet
 #[utoipa::path(post, path = "/invitations/{id}/withdraw", tag = "invitations",
     params(("id" = Uuid, Path)),
-    responses((status = 204), (status = 409, description = "`invitation_closed`", body = Problem)),
+    responses((status = 204), (status = 409, description = "`invitation_closed`; `company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn withdraw(
     State(state): State<AppState>,
@@ -410,7 +410,7 @@ pub struct StageCount {
 
 /// Quota, funnel and aggregated decline reasons
 #[utoipa::path(get, path = "/invitations/stats", tag = "invitations",
-    responses((status = 200, body = InvitationStats)),
+    responses((status = 200, body = InvitationStats), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn invitation_stats(
     State(state): State<AppState>,
@@ -468,7 +468,7 @@ async fn invitation_stats(
 /// Every successful call is written to the access log.
 #[utoipa::path(get, path = "/candidates/{id}/contacts", tag = "invitations",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = CandidateContacts), (status = 403, description = "`contacts_not_granted`", body = Problem)),
+    responses((status = 200, body = CandidateContacts), (status = 403, description = "`contacts_not_granted`", body = Problem), (status = 409, description = "`company_profile_required`", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn candidate_contacts(
     State(state): State<AppState>,
@@ -686,7 +686,7 @@ async fn respond(
 /// representative's consent in force (it may have been revoked after the invitation came)
 #[utoipa::path(post, path = "/invitations/{id}/accept", tag = "invitations",
     params(("id" = Uuid, Path)),
-    responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`; `guardian_consent_required`", body = Problem)),
+    responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`; `guardian_consent_required`", body = Problem), (status = 404, description = "Not the caller's invitation", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn accept(
     State(state): State<AppState>,
@@ -719,7 +719,7 @@ pub struct DeclineRequest {
 #[utoipa::path(post, path = "/invitations/{id}/decline", tag = "invitations",
     params(("id" = Uuid, Path)),
     request_body = DeclineRequest,
-    responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`", body = Problem)),
+    responses((status = 200, body = ReceivedInvitation), (status = 409, description = "`invitation_closed`", body = Problem), (status = 404, description = "Not the caller's invitation", body = Problem)),
     security(("cookie" = []), ("bearer" = [])))]
 async fn decline(
     State(state): State<AppState>,

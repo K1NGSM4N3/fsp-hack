@@ -9,12 +9,16 @@ use serde::{Deserialize, Serialize};
 
 const DAY: i64 = 86_400;
 
+/// A session left without an answer this long after the current item's deadline is abandoned:
+/// it closes as `expired` and counts as an unsuccessful attempt at its grade.
+pub const ABANDON_AFTER_SECS: i64 = 30 * 60;
+
 /// Configurable intervals. Defaults follow architecture §5.4.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PolicyConfig {
     /// Minimum gap between grade changes after a category is assigned.
     pub change_cooldown_days: i64,
-    /// Wait after a failed junior placement before retrying.
+    /// Wait after an unsuccessful attempt before the same grade can be taken again.
     pub retry_after_fail_days: i64,
     /// Wait after a failed upgrade attempt before the next attempt.
     pub retry_after_failed_upgrade_days: i64,
@@ -44,6 +48,18 @@ impl PolicyConfig {
     }
 }
 
+/// How a session ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum Outcome {
+    Passed,
+    Failed,
+    /// Left unfinished until it expired. Counts exactly like a failure: otherwise walking away
+    /// from a test that goes badly would dodge every retry window.
+    Abandoned,
+}
+
 /// What a single session attempted and how it ended.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
@@ -51,10 +67,17 @@ pub struct Attempt {
     pub specialization: Specialization,
     pub grade: Grade,
     pub kind: AttemptKind,
-    pub passed: bool,
+    pub outcome: Outcome,
     /// Whether this attempt changed the candidate's active category.
     pub assigned: bool,
+    /// When it ended: the last answer, or the moment an abandoned session expired.
     pub at: i64,
+}
+
+impl Attempt {
+    fn unsuccessful(&self) -> bool {
+        self.outcome != Outcome::Passed
+    }
 }
 
 /// The intent behind an attempt, which drives the next allowed action.
@@ -66,7 +89,7 @@ pub enum AttemptKind {
     Placement,
     /// Immediate re-test one grade lower after failing placement (still placement, T-5).
     PlacementStepDown,
-    /// Immediate upgrade test offered after a confident pass (one per placement, T-5).
+    /// Upgrade test offered after a confident pass (one per placement, T-5).
     PlacementUpgrade,
     /// Post-assignment move up a grade (cooldown applies, T-6).
     Upgrade,
@@ -110,6 +133,53 @@ pub enum PolicyError {
     /// Already at the grade bound (no grade above senior / below junior).
     #[error("no adjacent grade in that direction")]
     NoAdjacentGrade,
+}
+
+impl PolicyError {
+    /// When the attempt opens, for the two time-based blocks.
+    pub const fn available_at(self) -> Option<i64> {
+        match self {
+            PolicyError::ChangeCooldown { available_at }
+            | PolicyError::RetryBlocked { available_at } => Some(available_at),
+            PolicyError::NotAllowed | PolicyError::NoAdjacentGrade => None,
+        }
+    }
+}
+
+/// The latest of the windows an attempt has to wait out. Every rule that applies contributes
+/// one, so the date shown is the one when the attempt really opens, not the first rule hit.
+#[derive(Debug, Clone, Copy, Default)]
+struct Wait(Option<PolicyError>);
+
+impl Wait {
+    fn retry(&mut self, until: i64) {
+        self.push(PolicyError::RetryBlocked {
+            available_at: until,
+        });
+    }
+
+    fn cooldown(&mut self, until: i64) {
+        self.push(PolicyError::ChangeCooldown {
+            available_at: until,
+        });
+    }
+
+    fn push(&mut self, e: PolicyError) {
+        let later = match (self.0.and_then(PolicyError::available_at), e.available_at()) {
+            (Some(current), Some(new)) => new > current,
+            _ => true,
+        };
+        if later {
+            self.0 = Some(e);
+        }
+    }
+
+    fn check(self, allowed: AllowedAttempt, now: i64) -> Result<AllowedAttempt, PolicyError> {
+        match self.0 {
+            Some(e) if e.available_at().is_some_and(|at| now < at) => Err(e),
+            _ => Ok(allowed),
+        }
+    }
 }
 
 /// Grade policy over one candidate's history for a single specialization.
@@ -217,25 +287,38 @@ impl GradePolicy {
     ) -> Result<AllowedAttempt, PolicyError> {
         let history = self.history(spec, attempts);
         let stage = self.stage(spec, attempts);
-        match kind {
-            AttemptKind::Placement => self.check_placement(&history, grade, now),
-            AttemptKind::PlacementStepDown => self.check_step_down(&history, grade, now),
-            AttemptKind::PlacementUpgrade => self.check_placement_upgrade(stage, &history, now),
+        let mut wait = Wait::default();
+        let allowed = match kind {
+            AttemptKind::Placement => self.check_placement(&history, grade, &mut wait)?,
+            AttemptKind::PlacementStepDown => self.check_step_down(&history, grade)?,
+            AttemptKind::PlacementUpgrade => {
+                self.check_placement_upgrade(stage, &history, grade)?
+            }
             AttemptKind::Upgrade => {
-                self.check_change(spec, attempts, stage, Grade::next, grade, now)
+                self.check_change(spec, attempts, stage, Grade::next, grade, &mut wait)?
             }
             AttemptKind::Downgrade => {
-                self.check_change(spec, attempts, stage, Grade::prev, grade, now)
+                self.check_change(spec, attempts, stage, Grade::prev, grade, &mut wait)?
             }
-            AttemptKind::Retry => self.check_retry(stage, &history, grade, now),
+            AttemptKind::Retry => self.check_retry(stage, &history, grade, &mut wait)?,
+        };
+        // Whatever the kind, a grade the candidate failed or abandoned waits out the retry
+        // window: an immediate up-test after a confident pass one grade lower would otherwise
+        // retake that very grade the same day.
+        for a in history
+            .iter()
+            .filter(|a| a.grade == allowed.grade && a.unsuccessful())
+        {
+            wait.retry(a.at + self.config.retry_fail());
         }
+        wait.check(allowed, now)
     }
 
     fn check_placement(
         &self,
         history: &[&Attempt],
         grade: Option<Grade>,
-        now: i64,
+        wait: &mut Wait,
     ) -> Result<AllowedAttempt, PolicyError> {
         if history.iter().any(|a| a.assigned) {
             return Err(PolicyError::NotAllowed);
@@ -243,11 +326,8 @@ impl GradePolicy {
         // After a failed attempt the only immediate option is one grade lower (step-down);
         // retaking the same or a higher grade waits out the retry window, otherwise the test
         // could be brute-forced by repeating it until the items happen to be easy.
-        if let Some(last_fail) = history.iter().rev().find(|a| !a.passed && !a.assigned) {
-            let available_at = last_fail.at + self.config.retry_fail();
-            if now < available_at {
-                return Err(PolicyError::RetryBlocked { available_at });
-            }
+        if let Some(last_fail) = history.iter().rev().find(|a| a.unsuccessful()) {
+            wait.retry(last_fail.at + self.config.retry_fail());
         }
         Ok(AllowedAttempt {
             grade: grade.unwrap_or(Grade::Junior),
@@ -259,7 +339,6 @@ impl GradePolicy {
         &self,
         history: &[&Attempt],
         grade: Option<Grade>,
-        now: i64,
     ) -> Result<AllowedAttempt, PolicyError> {
         // Allowed immediately after a failed placement/step-down that did not assign a category,
         // as long as there is a grade below the one just failed.
@@ -269,7 +348,7 @@ impl GradePolicy {
         let is_placement_fail = matches!(
             last.kind,
             AttemptKind::Placement | AttemptKind::PlacementStepDown
-        ) && !last.passed
+        ) && last.unsuccessful()
             && !last.assigned;
         if !is_placement_fail || history.iter().any(|a| a.assigned) {
             return Err(PolicyError::NotAllowed);
@@ -280,12 +359,9 @@ impl GradePolicy {
                 available_at: last.at + self.config.retry_fail(),
             });
         };
-        if let Some(g) = grade {
-            if g != lower {
-                return Err(PolicyError::NotAllowed);
-            }
+        if grade.is_some_and(|g| g != lower) {
+            return Err(PolicyError::NotAllowed);
         }
-        let _ = now;
         Ok(AllowedAttempt {
             grade: lower,
             kind: AttemptKind::PlacementStepDown,
@@ -296,21 +372,25 @@ impl GradePolicy {
         &self,
         stage: PlacementStage,
         history: &[&Attempt],
-        now: i64,
+        grade: Option<Grade>,
     ) -> Result<AllowedAttempt, PolicyError> {
-        let PlacementStage::Assigned { grade } = stage else {
+        let PlacementStage::Assigned { grade: current } = stage else {
             return Err(PolicyError::NotAllowed);
         };
-        let Some(higher) = grade.next() else {
+        let Some(higher) = current.next() else {
             return Err(PolicyError::NoAdjacentGrade);
         };
-        // The immediate upgrade is offered once, right after the assigning attempt, and only if
-        // that attempt was a confident placement pass. Any later attempt forecloses it.
+        if grade.is_some_and(|g| g != higher) {
+            return Err(PolicyError::NotAllowed);
+        }
+        // The up-test is offered once, after the assigning attempt, and only if that attempt
+        // was a confident placement pass. Any later attempt forecloses it. A recent failure at
+        // the higher grade postpones it (see `check_kind`) but does not cancel it.
         let Some(last) = history.last() else {
             return Err(PolicyError::NotAllowed);
         };
         let eligible = last.assigned
-            && last.grade == grade
+            && last.grade == current
             && matches!(
                 last.kind,
                 AttemptKind::Placement | AttemptKind::PlacementStepDown
@@ -318,7 +398,6 @@ impl GradePolicy {
         if !eligible {
             return Err(PolicyError::NotAllowed);
         }
-        let _ = now;
         Ok(AllowedAttempt {
             grade: higher,
             kind: AttemptKind::PlacementUpgrade,
@@ -332,7 +411,7 @@ impl GradePolicy {
         stage: PlacementStage,
         step: fn(Grade) -> Option<Grade>,
         grade: Option<Grade>,
-        now: i64,
+        wait: &mut Wait,
     ) -> Result<AllowedAttempt, PolicyError> {
         let PlacementStage::Assigned { grade: current } = stage else {
             return Err(PolicyError::NotAllowed);
@@ -340,10 +419,8 @@ impl GradePolicy {
         let Some(target) = step(current) else {
             return Err(PolicyError::NoAdjacentGrade);
         };
-        if let Some(g) = grade {
-            if g != target {
-                return Err(PolicyError::NotAllowed);
-            }
+        if grade.is_some_and(|g| g != target) {
+            return Err(PolicyError::NotAllowed);
         }
         let kind = if target > current {
             AttemptKind::Upgrade
@@ -351,19 +428,12 @@ impl GradePolicy {
             AttemptKind::Downgrade
         };
         // A failed upgrade never lowers the grade and blocks the next attempt for 30 days.
-        if let Some(block) = self.failed_upgrade_block(spec, attempts, now) {
-            return Err(PolicyError::RetryBlocked {
-                available_at: block,
-            });
+        if let Some(until) = self.failed_upgrade_until(spec, attempts) {
+            wait.retry(until);
         }
         // Grade changes are limited to once per cooldown from the last assignment.
         if let Some(assigned_at) = self.last_assignment_at(spec, attempts) {
-            let available = assigned_at + self.config.cooldown();
-            if now < available {
-                return Err(PolicyError::ChangeCooldown {
-                    available_at: available,
-                });
-            }
+            wait.cooldown(assigned_at + self.config.cooldown());
         }
         Ok(AllowedAttempt {
             grade: target,
@@ -376,7 +446,7 @@ impl GradePolicy {
         stage: PlacementStage,
         history: &[&Attempt],
         grade: Option<Grade>,
-        now: i64,
+        wait: &mut Wait,
     ) -> Result<AllowedAttempt, PolicyError> {
         if !matches!(stage, PlacementStage::Unplaced) {
             return Err(PolicyError::NotAllowed);
@@ -384,11 +454,7 @@ impl GradePolicy {
         let Some(block_until) = self.junior_fail_until(history) else {
             return Err(PolicyError::NotAllowed);
         };
-        if now < block_until {
-            return Err(PolicyError::RetryBlocked {
-                available_at: block_until,
-            });
-        }
+        wait.retry(block_until);
         Ok(AllowedAttempt {
             grade: grade.unwrap_or(Grade::Junior),
             kind: AttemptKind::Retry,
@@ -401,19 +467,14 @@ impl GradePolicy {
         let failed_junior = matches!(
             last.kind,
             AttemptKind::Placement | AttemptKind::PlacementStepDown | AttemptKind::Retry
-        ) && !last.passed
+        ) && last.unsuccessful()
             && !last.assigned
             && last.grade.prev().is_none();
         failed_junior.then(|| last.at + self.config.retry_fail())
     }
 
-    /// If the most recent post-assignment upgrade failed, returns when the next attempt opens.
-    fn failed_upgrade_block(
-        &self,
-        spec: Specialization,
-        attempts: &[Attempt],
-        now: i64,
-    ) -> Option<i64> {
+    /// If the most recent post-assignment attempt is a failed upgrade, when the next one opens.
+    fn failed_upgrade_until(&self, spec: Specialization, attempts: &[Attempt]) -> Option<i64> {
         let history = self.history(spec, attempts);
         let last_assigned_idx = history.iter().rposition(|a| a.assigned)?;
         let last = history.last()?;
@@ -422,13 +483,8 @@ impl GradePolicy {
                 last.kind,
                 AttemptKind::Upgrade | AttemptKind::PlacementUpgrade
             )
-            && !last.passed;
-        if failed_upgrade {
-            let available = last.at + self.config.retry_upgrade();
-            (now < available).then_some(available)
-        } else {
-            None
-        }
+            && last.unsuccessful();
+        failed_upgrade.then(|| last.at + self.config.retry_upgrade())
     }
 }
 
@@ -444,9 +500,20 @@ mod tests {
             specialization: Backend,
             grade,
             kind,
-            passed,
+            outcome: if passed {
+                Outcome::Passed
+            } else {
+                Outcome::Failed
+            },
             assigned,
             at,
+        }
+    }
+
+    fn abandoned(grade: Grade, kind: AttemptKind, at: i64) -> Attempt {
+        Attempt {
+            outcome: Outcome::Abandoned,
+            ..attempt(grade, kind, false, false, at)
         }
     }
 
@@ -646,6 +713,37 @@ mod tests {
     }
 
     #[test]
+    fn placement_upgrade_goes_one_grade_up_only() {
+        let history = [attempt(
+            Grade::Junior,
+            AttemptKind::Placement,
+            true,
+            true,
+            T0,
+        )];
+        assert_eq!(
+            policy().check(
+                Backend,
+                &history,
+                AttemptKind::PlacementUpgrade,
+                Grade::Senior,
+                T0 + 60
+            ),
+            Err(PolicyError::NotAllowed)
+        );
+        let up = policy()
+            .check(
+                Backend,
+                &history,
+                AttemptKind::PlacementUpgrade,
+                Grade::Middle,
+                T0 + 60,
+            )
+            .unwrap();
+        assert_eq!(up.grade, Grade::Middle);
+    }
+
+    #[test]
     fn senior_pass_has_no_upgrade() {
         let history = [attempt(
             Grade::Senior,
@@ -755,6 +853,57 @@ mod tests {
         );
     }
 
+    /// A failed up-test right after placement: 30 days, but not before the 90-day window from
+    /// the assignment ends — the date names the window that really opens last.
+    #[test]
+    fn failed_placement_upgrade_waits_for_the_change_cooldown() {
+        let p = policy();
+        for up in [
+            attempt(
+                Grade::Senior,
+                AttemptKind::PlacementUpgrade,
+                false,
+                false,
+                T0 + 3600,
+            ),
+            abandoned(Grade::Senior, AttemptKind::PlacementUpgrade, T0 + 3600),
+        ] {
+            let history = [
+                attempt(Grade::Middle, AttemptKind::Placement, true, true, T0),
+                up,
+            ];
+            assert_eq!(
+                p.check(
+                    Backend,
+                    &history,
+                    AttemptKind::PlacementUpgrade,
+                    Grade::Senior,
+                    T0 + 31 * DAY
+                ),
+                Err(PolicyError::NotAllowed),
+                "the one up-test is used up"
+            );
+            for at in [T0 + DAY, T0 + 40 * DAY] {
+                assert_eq!(
+                    p.check(Backend, &history, AttemptKind::Upgrade, Grade::Senior, at),
+                    Err(PolicyError::ChangeCooldown {
+                        available_at: T0 + 90 * DAY
+                    })
+                );
+            }
+            assert!(
+                p.check(
+                    Backend,
+                    &history,
+                    AttemptKind::Upgrade,
+                    Grade::Senior,
+                    T0 + 90 * DAY
+                )
+                .is_ok()
+            );
+        }
+    }
+
     #[test]
     fn successful_change_resets_cooldown() {
         let history = [
@@ -822,5 +971,236 @@ mod tests {
                 .check(Backend, &history, AttemptKind::Placement, Grade::Senior, T0)
                 .is_ok()
         );
+    }
+
+    /// Hole (a): walking away from a placement must not reset the clock.
+    #[test]
+    fn abandoned_placement_counts_as_a_failure() {
+        let p = policy();
+        let history = [abandoned(Grade::Middle, AttemptKind::Placement, T0)];
+        for grade in [Grade::Middle, Grade::Senior] {
+            assert_eq!(
+                p.check(Backend, &history, AttemptKind::Placement, grade, T0 + DAY),
+                Err(PolicyError::RetryBlocked {
+                    available_at: T0 + 30 * DAY
+                })
+            );
+        }
+        let down = p
+            .check(
+                Backend,
+                &history,
+                AttemptKind::PlacementStepDown,
+                Grade::Junior,
+                T0 + 60,
+            )
+            .unwrap();
+        assert_eq!(down.grade, Grade::Junior);
+        assert!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Placement,
+                Grade::Middle,
+                T0 + 30 * DAY
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn abandoned_junior_blocks_like_a_failed_one() {
+        let p = policy();
+        let history = [abandoned(Grade::Junior, AttemptKind::Placement, T0)];
+        for kind in [
+            AttemptKind::Placement,
+            AttemptKind::PlacementStepDown,
+            AttemptKind::Retry,
+        ] {
+            assert_eq!(
+                p.check(Backend, &history, kind, Grade::Junior, T0 + DAY),
+                Err(PolicyError::RetryBlocked {
+                    available_at: T0 + 30 * DAY
+                }),
+                "{kind:?}"
+            );
+        }
+        assert!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Retry,
+                Grade::Junior,
+                T0 + 30 * DAY
+            )
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn abandoned_upgrade_counts_as_a_failed_upgrade() {
+        let p = policy();
+        let history = [
+            attempt(Grade::Middle, AttemptKind::Placement, true, true, T0),
+            abandoned(Grade::Senior, AttemptKind::Upgrade, T0 + 100 * DAY),
+        ];
+        assert_eq!(p.current_grade(Backend, &history), Some(Grade::Middle));
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Upgrade,
+                Grade::Senior,
+                T0 + 101 * DAY
+            ),
+            Err(PolicyError::RetryBlocked {
+                available_at: T0 + 130 * DAY
+            })
+        );
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::Downgrade,
+                Grade::Junior,
+                T0 + 101 * DAY
+            ),
+            Err(PolicyError::RetryBlocked {
+                available_at: T0 + 130 * DAY
+            })
+        );
+    }
+
+    /// Hole (b): failed Middle, then a confident Junior pass. The up-test to Middle is still
+    /// offered once, but only after the 30 days since the Middle attempt.
+    #[test]
+    fn up_test_waits_for_a_recent_failure_at_that_grade() {
+        let p = policy();
+        for first in [
+            attempt(Grade::Middle, AttemptKind::Placement, false, false, T0),
+            abandoned(Grade::Middle, AttemptKind::Placement, T0),
+        ] {
+            let history = [
+                first,
+                attempt(
+                    Grade::Junior,
+                    AttemptKind::PlacementStepDown,
+                    true,
+                    true,
+                    T0 + 3600,
+                ),
+            ];
+            assert_eq!(
+                p.check(
+                    Backend,
+                    &history,
+                    AttemptKind::PlacementUpgrade,
+                    Grade::Middle,
+                    T0 + 2 * 3600
+                ),
+                Err(PolicyError::RetryBlocked {
+                    available_at: T0 + 30 * DAY
+                })
+            );
+            let up = p
+                .check(
+                    Backend,
+                    &history,
+                    AttemptKind::PlacementUpgrade,
+                    Grade::Middle,
+                    T0 + 30 * DAY,
+                )
+                .unwrap();
+            assert_eq!(up.grade, Grade::Middle);
+            // The regular upgrade path is still governed by the 90-day window.
+            assert!(matches!(
+                p.check(
+                    Backend,
+                    &history,
+                    AttemptKind::Upgrade,
+                    Grade::Middle,
+                    T0 + 30 * DAY
+                ),
+                Err(PolicyError::ChangeCooldown { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn up_test_is_immediate_without_a_recent_failure_at_that_grade() {
+        let p = policy();
+        let history = [
+            attempt(Grade::Middle, AttemptKind::Placement, false, false, T0),
+            attempt(
+                Grade::Junior,
+                AttemptKind::PlacementStepDown,
+                true,
+                true,
+                T0 + 31 * DAY,
+            ),
+        ];
+        let up = p
+            .check(
+                Backend,
+                &history,
+                AttemptKind::PlacementUpgrade,
+                Grade::Middle,
+                T0 + 31 * DAY + 60,
+            )
+            .unwrap();
+        assert_eq!(up.grade, Grade::Middle);
+    }
+
+    #[test]
+    fn up_test_waits_for_the_latest_failure_at_that_grade() {
+        let p = policy();
+        let history = [
+            attempt(Grade::Senior, AttemptKind::Placement, false, false, T0),
+            attempt(
+                Grade::Middle,
+                AttemptKind::PlacementStepDown,
+                false,
+                false,
+                T0 + 3600,
+            ),
+            attempt(
+                Grade::Junior,
+                AttemptKind::PlacementStepDown,
+                true,
+                true,
+                T0 + 2 * 3600,
+            ),
+        ];
+        assert_eq!(
+            p.check(
+                Backend,
+                &history,
+                AttemptKind::PlacementUpgrade,
+                Grade::Middle,
+                T0 + 3 * 3600
+            ),
+            Err(PolicyError::RetryBlocked {
+                available_at: T0 + 30 * DAY + 3600
+            })
+        );
+    }
+
+    #[test]
+    fn step_down_chain_stays_immediate_after_abandoning() {
+        let p = policy();
+        let history = [
+            attempt(Grade::Senior, AttemptKind::Placement, false, false, T0),
+            abandoned(Grade::Middle, AttemptKind::PlacementStepDown, T0 + 3600),
+        ];
+        let down = p
+            .check(
+                Backend,
+                &history,
+                AttemptKind::PlacementStepDown,
+                Grade::Junior,
+                T0 + 2 * 3600,
+            )
+            .unwrap();
+        assert_eq!(down.grade, Grade::Junior);
     }
 }
