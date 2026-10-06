@@ -1,24 +1,36 @@
 "use client";
 
 import { useRef } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { Cta, TextLink } from "@/components/site/primitives";
 
-/** The last, still empty box of the checklist: it ticks while the pointer or focus is on «Создать профиль». */
+/**
+ * The last, still empty box of the checklist. With a mouse it ticks while the pointer or focus is on «Создать профиль»;
+ * on touch screens there is no hover, so it ticks by itself right after the box lands.
+ */
 export function FinalCta({ href }: { href: string }) {
   const root = useRef<HTMLDivElement>(null);
   const tick = useRef<gsap.core.Timeline | null>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ FINE_POINTER, MOTION_OK, gsap }) => {
       const mm = gsap.matchMedia();
       mm.add(MOTION_OK, () => {
         const q = gsap.utils.selector(root);
-        tick.current = gsap
+        const check = gsap
           .timeline({ paused: true })
           .fromTo(q("[data-fill]"), { scale: 0.3, autoAlpha: 0, transformOrigin: "50% 50%" }, { scale: 1, autoAlpha: 1, duration: 0.35, ease: "back.out(2)" })
           .fromTo(q("[data-check]"), { drawSVG: "0%", opacity: 0 }, { drawSVG: "100%", opacity: 1, duration: 0.45, ease: "power2.out" }, 0.15);
-        gsap.from(q("[data-box]"), { rotation: -24, scale: 0.4, autoAlpha: 0, duration: 1.1, ease: "back.out(2)", scrollTrigger: { trigger: root.current, start: "top 80%", once: true } });
+        tick.current = check;
+        gsap.from(q("[data-box]"), {
+          rotation: -24,
+          scale: 0.4,
+          autoAlpha: 0,
+          duration: 1.1,
+          ease: "back.out(2)",
+          scrollTrigger: { trigger: root.current, start: "top 80%", once: true },
+          onComplete: window.matchMedia(FINE_POINTER).matches ? undefined : () => void check.play(),
+        });
         return () => {
           tick.current = null;
         };

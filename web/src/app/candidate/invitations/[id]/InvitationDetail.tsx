@@ -235,7 +235,7 @@ export function InvitationDetail({ id }: { id: string }) {
             <CardHeader title="Сообщение компании" action={<MessageSquare className="size-5 text-ink-subtle" aria-hidden />} />
             <p className="text-sm leading-relaxed whitespace-pre-line text-ink sm:text-base">{inv.message}</p>
             {inv.vacancy_id && (
-              <Link href={`/candidate/vacancies/${inv.vacancy_id}`} className="mt-4 inline-block text-sm font-medium text-primary hover:underline">
+              <Link href={`/candidate/vacancies/${inv.vacancy_id}`} className="tap mt-4 inline-block text-sm font-medium text-primary hover:underline">
                 Открыть связанную вакансию
               </Link>
             )}

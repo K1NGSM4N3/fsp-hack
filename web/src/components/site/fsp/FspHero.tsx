@@ -3,22 +3,28 @@
 import { ArrowDown, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useRef } from "react";
-import { MOTION_OK, ScrollTrigger, SplitText, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { Container } from "@/components/site/primitives";
 import { FlapBoard } from "./FlapBoard";
 
+/**
+ * Desktop: the headline words flip up, the rest fades in, the lane outlines draw and drift with the scroll; the lead
+ * paragraph (the LCP element) is painted at once and only slides. Phones: everything is painted at once and the flap
+ * board below carries the motion.
+ */
 export function FspHero() {
   const root = useRef<HTMLElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, SplitText, gsap, refreshAfterFonts }) => {
       const el = root.current;
       if (!el) return;
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add(MOTION_DESKTOP, () => {
         const q = gsap.utils.selector(el);
         const [title] = q("[data-hero-title]");
         const rest = q("[data-hero-fade]");
+        gsap.from(q('[data-hero="lead"]'), { y: 22, duration: 1.4, ease: "expo.out", delay: 0.5, clearProps: "transform" });
         const lanes = q("[data-lane]");
         gsap.set(title, { visibility: "visible" });
         SplitText.create(title, {
@@ -41,9 +47,9 @@ export function FspHero() {
         gsap.from(lanes, { drawSVG: "50% 50%", duration: 2.4, ease: "power3.inOut", stagger: 0.12, delay: 0.2 });
         gsap.to(q("[data-lanes]"), { yPercent: 18, ease: "none", scrollTrigger: { trigger: el, start: "top top", end: "bottom top", scrub: true } });
       });
-      void document.fonts?.ready.then(() => ScrollTrigger.refresh());
+      refreshAfterFonts();
     },
-    { scope: root },
+    { scope: root, urgent: true },
   );
 
   return (
@@ -79,7 +85,7 @@ export function FspHero() {
           Результаты с&nbsp;соревнований теперь видят <span className="text-gradient-night">компании</span>
         </h1>
         <div className="mt-8 grid grid-cols-1 gap-8 lg:mt-10 lg:grid-cols-[1fr_auto] lg:items-end lg:gap-16">
-          <p data-hero data-hero-fade className="max-w-2xl text-lg leading-relaxed text-pretty text-night-muted sm:text-xl">
+          <p data-hero="lead" className="max-w-2xl text-lg leading-relaxed text-pretty text-night-muted sm:text-xl">
             Привяжите ФСП ID к профилю, и ваши разряды и призовые места из реестра Федерации появятся в карточке. Рядом с каждым будет ссылка на официальный протокол.
           </p>
           <div data-hero data-hero-fade className="flex flex-col gap-3 sm:flex-row">

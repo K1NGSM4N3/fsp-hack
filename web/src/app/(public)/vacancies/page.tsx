@@ -14,7 +14,7 @@ export default function VacanciesPage() {
         <div aria-hidden className="pointer-events-none absolute -top-56 right-[-10rem] -z-10 size-[40rem] rounded-full bg-[radial-gradient(circle,rgb(64_47_255/0.18),transparent_64%)]" />
         <Container>
           <nav data-hero aria-label="Хлебные крошки" className="mb-6 flex items-center gap-2 font-mono text-xs tracking-[0.1em] text-ink-subtle uppercase">
-            <Link href="/" className="transition-colors hover:text-primary">
+            <Link href="/" className="tap transition-colors hover:text-primary">
               ФСП Таланты
             </Link>
             <span aria-hidden>/</span>
@@ -24,7 +24,7 @@ export default function VacanciesPage() {
             <h1 data-hero data-split="hero" className="display-2 text-balance text-ink">
               Открытые вакансии
             </h1>
-            <p data-hero className="text-lg leading-relaxed text-ink-muted">
+            <p data-hero="lead" className="text-lg leading-relaxed text-ink-muted">
               Здесь можно откликнуться по-старому. Но после теста компании пишут сами, и откликаться становится необязательно.{" "}
               <Link href="/seekers" className="font-medium text-primary underline-offset-4 hover:underline">
                 Про тест

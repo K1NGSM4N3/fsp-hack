@@ -64,7 +64,7 @@ export function Tabs<V extends string>({ items, value, onChange, ariaLabel, clas
           >
             {item.label}
             {item.count !== undefined && (
-              <span className={cn("tabular rounded-full px-1.5 py-0.5 font-mono text-[11px]", selected ? "bg-primary-50 text-primary-strong" : "bg-canvas text-ink-subtle")}>
+              <span className={cn("tabular rounded-full px-1.5 py-0.5 font-mono text-xs", selected ? "bg-primary-50 text-primary-strong" : "bg-canvas text-ink-subtle")}>
                 {item.count}
               </span>
             )}

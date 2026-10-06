@@ -7,6 +7,7 @@ import { Alert, Button, ButtonLink, Card, CardHeader, Chip, ErrorAlert, Field, P
 import { ReportButton } from "@/components/domain/ReportButton";
 import { useMe } from "@/features/auth/hooks";
 import { useMyApplications } from "@/features/candidate/hooks";
+import { useSkillNamePreload } from "@/features/catalog/hooks";
 import { useApply, useVacancy } from "@/features/vacancies/hooks";
 import { formatDate } from "@/lib/format";
 import { GRADE_LABEL, SPEC_LONG_LABEL, WORK_FORMAT_LABEL } from "@/lib/labels";
@@ -86,6 +87,7 @@ function ApplyBox({ vacancyId, loginNext }: { vacancyId: string; loginNext: stri
 }
 
 export function VacancyDetail({ id, backHref, backLabel }: { id: string; backHref: string; backLabel: string }) {
+  useSkillNamePreload();
   const query = useVacancy(id);
   if (query.isPending) return <PageSkeleton cards={2} />;
   if (query.isError) {

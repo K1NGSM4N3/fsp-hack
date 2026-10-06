@@ -12,7 +12,7 @@ interface LogoProps {
 export function Logo({ href = "/", className, compact = false, tone = "light" }: LogoProps) {
   const dark = tone === "dark";
   return (
-    <Link href={href} className={cn("inline-flex items-center gap-2.5 rounded-control", className)} aria-label="ФСП Таланты — на главную">
+    <Link href={href} className={cn("inline-flex min-h-10 items-center gap-2.5 rounded-control", className)} aria-label="ФСП Таланты — на главную">
       <Image src={dark ? "/brand/fsp-logo-dark.svg" : "/brand/fsp-logo.svg"} alt="" width={98} height={33} priority unoptimized className="h-7 w-auto sm:h-8" />
       {!compact && (
         <span className="flex items-center gap-2.5">

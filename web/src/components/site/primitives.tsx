@@ -134,7 +134,7 @@ export function TextLink({ href, children, tone = "light", className }: { href: 
     <Link
       href={href}
       className={cn(
-        "group inline-flex items-center gap-1.5 font-medium underline decoration-1 underline-offset-[6px] transition-colors",
+        "group inline-flex min-h-10 items-center gap-1.5 font-medium underline decoration-1 underline-offset-[6px] transition-colors",
         tone === "night" ? "text-white decoration-white/30 hover:decoration-white" : "text-ink decoration-ink/25 hover:text-primary hover:decoration-primary",
         className,
       )}

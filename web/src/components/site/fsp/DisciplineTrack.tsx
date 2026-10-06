@@ -2,7 +2,7 @@
 
 import { ArrowRight } from "lucide-react";
 import { useRef } from "react";
-import { MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { Emblem, type DisciplineKey } from "./Emblems";
 
 const DISCIPLINES: { key: DisciplineKey; name: string; text: string; strong: string[]; also: string[] }[] = [
@@ -52,15 +52,61 @@ const DISCIPLINES: { key: DisciplineKey; name: string; text: string; strong: str
 
 const EDGE = "pl-4 sm:pl-6 lg:pl-[max(2rem,calc((100vw-1240px)/2+2rem))]";
 
+/**
+ * Desktop: the section pins and vertical scroll drives the row sideways; emblems draw as panels arrive.
+ * Phones and tablets: the row stays a native snap-scrolling strip you swipe with a finger, the progress line follows
+ * the swipe, and each emblem draws once when its panel is actually visible (an IntersectionObserver sees the
+ * horizontal clipping too).
+ */
 export function DisciplineTrack() {
   const root = useRef<HTMLElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, gsap }) => {
       const el = root.current;
       if (!el) return;
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add(MOTION_MOBILE, () => {
+        const q = gsap.utils.selector(el);
+        const [viewport] = q("[data-viewport]");
+        const [fill] = q("[data-progress]");
+        if (!viewport) return;
+        gsap.from(q("[data-intro] > *"), { autoAlpha: 0, y: 20, duration: 0.7, ease: "power3.out", stagger: 0.08, scrollTrigger: { trigger: el, start: "top 75%", once: true } });
+
+        const draws = new Map<Element, gsap.core.Timeline>();
+        for (const panel of q("[data-panel]")) {
+          const shapes = panel.querySelectorAll("[data-emblem] path, [data-emblem] circle, [data-emblem] rect");
+          const tl = gsap
+            .timeline({ paused: true })
+            .from(shapes, { drawSVG: 0, duration: 1.1, ease: "power2.inOut", stagger: 0.05 })
+            .from(panel.querySelectorAll("[data-panel-copy]"), { autoAlpha: 0, y: 16, duration: 0.6, ease: "power3.out", stagger: 0.06 }, 0.2);
+          draws.set(panel, tl);
+        }
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const entry of entries) {
+              if (!entry.isIntersecting) continue;
+              draws.get(entry.target)?.play();
+              io.unobserve(entry.target);
+            }
+          },
+          { threshold: 0.35 },
+        );
+        draws.forEach((_, panel) => io.observe(panel));
+
+        const setFill = fill ? gsap.quickSetter(fill, "scaleX") : null;
+        const onScroll = () => {
+          const max = viewport.scrollWidth - viewport.clientWidth;
+          setFill?.(max > 0 ? viewport.scrollLeft / max : 0);
+        };
+        viewport.addEventListener("scroll", onScroll, { passive: true });
+        return () => {
+          io.disconnect();
+          viewport.removeEventListener("scroll", onScroll);
+          if (fill) gsap.set(fill, { clearProps: "transform,scale" });
+        };
+      });
+      mm.add(MOTION_DESKTOP, () => {
         const q = gsap.utils.selector(el);
         const [viewport] = q("[data-viewport]");
         const [track] = q("[data-track]");
@@ -145,7 +191,7 @@ export function DisciplineTrack() {
                   {d.text}
                 </p>
                 <div data-panel-copy className="mt-auto pt-8">
-                  <p className="font-mono text-[11px] tracking-[0.14em] text-primary-300 uppercase">Сильнее всего помогает</p>
+                  <p className="font-mono text-xs tracking-[0.14em] text-primary-300 uppercase">Сильнее всего помогает</p>
                   <ul className="mt-3 space-y-1.5">
                     {d.strong.map((s) => (
                       <li key={s} className="flex items-center gap-2.5 text-base font-medium text-white">
@@ -154,7 +200,7 @@ export function DisciplineTrack() {
                       </li>
                     ))}
                   </ul>
-                  <p className="mt-5 font-mono text-[11px] tracking-[0.14em] text-night-faint uppercase">Тоже идёт в плюс</p>
+                  <p className="mt-5 font-mono text-xs tracking-[0.14em] text-night-faint uppercase">Тоже идёт в плюс</p>
                   <p className="mt-2 text-sm leading-relaxed text-night-muted">{d.also.join(", ")}</p>
                 </div>
               </li>

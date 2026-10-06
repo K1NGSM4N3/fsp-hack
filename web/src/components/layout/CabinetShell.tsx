@@ -46,7 +46,7 @@ function NavList({ nav, pathname, onNavigate }: { nav: NavItem[]; pathname: stri
     <div className="space-y-6">
       {groups.map((g, gi) => (
         <div key={g.title ?? gi}>
-          {g.title && <p className="mb-2 px-3 font-mono text-[10px] tracking-[0.14em] text-night-faint uppercase">{g.title}</p>}
+          {g.title && <p className="mb-2 px-3 font-mono text-xs tracking-[0.12em] text-night-faint uppercase">{g.title}</p>}
           <ul className="space-y-0.5">
             {g.items.map((item) => {
               const active = isActive(item, pathname);
@@ -67,7 +67,7 @@ function NavList({ nav, pathname, onNavigate }: { nav: NavItem[]; pathname: stri
                     </span>
                     <span className="min-w-0 flex-1 truncate">{item.label}</span>
                     {item.badge ? (
-                      <span className="tabular rounded-full bg-accent px-1.5 py-0.5 font-mono text-[11px] leading-none text-white" aria-label={`новых: ${item.badge}`}>
+                      <span className="tabular rounded-full bg-accent px-1.5 py-0.5 font-mono text-xs leading-none text-white" aria-label={`новых: ${item.badge}`}>
                         {item.badge}
                       </span>
                     ) : null}
@@ -151,14 +151,14 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
           <div aria-hidden className="pointer-events-none absolute -top-32 -left-24 size-72 rounded-full bg-primary/30 blur-[90px]" />
           <div className="relative mb-8 px-2">
             <Logo href={ROLE_HOME[role]} tone="dark" />
-            <p className="mt-4 font-mono text-[10px] tracking-[0.14em] text-night-faint uppercase">{ROLE_CABINET[role]}</p>
+            <p className="mt-4 font-mono text-xs tracking-[0.12em] text-night-faint uppercase">{ROLE_CABINET[role]}</p>
           </div>
           <nav aria-label="Разделы кабинета" className="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto">
             <NavList nav={nav} pathname={pathname} />
           </nav>
           <div className="relative space-y-3 pt-4">
             <DemoReset />
-            <Link href="/" className="flex items-center justify-between rounded-[10px] px-3 py-2 text-xs text-night-faint transition-colors hover:text-white">
+            <Link href="/" className="flex min-h-10 items-center justify-between rounded-[10px] px-3 text-xs text-night-faint transition-colors hover:text-white">
               Сайт ФСП Таланты
               <ArrowUpRight className="size-3.5" aria-hidden />
             </Link>
@@ -191,7 +191,7 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
             <button type="button" aria-label="Закрыть меню" className="absolute inset-0 animate-fade-in bg-night/50 backdrop-blur-sm" onClick={() => setDrawer(false)} />
             <div className="absolute inset-y-0 right-0 flex w-[min(20rem,88vw)] animate-[toast-in_420ms_var(--ease-out-expo)_both] flex-col bg-night px-4 py-4 shadow-pop">
               <div className="mb-6 flex items-center justify-between">
-                <span className="font-mono text-[10px] tracking-[0.14em] text-night-faint uppercase">{ROLE_CABINET[role]}</span>
+                <span className="font-mono text-xs tracking-[0.12em] text-night-faint uppercase">{ROLE_CABINET[role]}</span>
                 <IconButton label="Закрыть меню" onClick={() => setDrawer(false)} className="text-night-muted hover:bg-white/10 hover:text-white">
                   <X className="size-5" aria-hidden />
                 </IconButton>

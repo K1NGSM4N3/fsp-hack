@@ -91,6 +91,8 @@ async function toApiError(res: Response): Promise<ApiError> {
     } catch {
       body = {};
     }
+  } else {
+    discard(res);
   }
   if (res.status === 429) {
     const retry = res.headers.get("retry-after");
@@ -125,6 +127,14 @@ export function toQueryString(query?: Record<string, QueryValue>): string {
   return qs ? `?${qs}` : "";
 }
 
+/**
+ * Releases a response whose body we do not need. The API marks authenticated responses `no-store`, and Chrome keeps
+ * such a response open until its body is read or cancelled; over HTTP/1.1 that pins one of six connections per host.
+ */
+export function discard(res: Response) {
+  if (res.body && !res.bodyUsed) res.body.cancel().catch(() => {});
+}
+
 let refreshInFlight: Promise<boolean> | null = null;
 
 /** Single-flight refresh: concurrent 401s share one `POST /auth/refresh`. */
@@ -134,7 +144,10 @@ function refreshSession(): Promise<boolean> {
     credentials: "include",
     headers: { Accept: "application/json" },
   })
-    .then((res) => res.ok)
+    .then((res) => {
+      discard(res);
+      return res.ok;
+    })
     .catch(() => false)
     .finally(() => {
       refreshInFlight = null;
@@ -189,6 +202,7 @@ export async function http<T>(method: string, path: string, options: HttpOptions
   const canRefresh = !options.noRefresh && !path.startsWith("/auth/");
   if (res.status === 401 && canRefresh) {
     if (await refreshSession()) {
+      discard(res);
       res = await send();
     }
     if (res.status === 401) redirectToLogin();
@@ -196,8 +210,10 @@ export async function http<T>(method: string, path: string, options: HttpOptions
 
   if (!res.ok) throw await toApiError(res);
   if (options.blob) return (await res.blob()) as T;
-  if (res.status === 204 || res.headers.get("content-length") === "0") return undefined as T;
   const type = res.headers.get("content-type") ?? "";
-  if (!type.includes("json")) return undefined as T;
+  if (res.status === 204 || res.headers.get("content-length") === "0" || !type.includes("json")) {
+    discard(res);
+    return undefined as T;
+  }
   return (await res.json()) as T;
 }

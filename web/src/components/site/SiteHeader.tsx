@@ -5,16 +5,16 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Logo } from "@/components/brand/Logo";
-import { MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { useLenis } from "@/components/motion/SmoothScroll";
-import { useMe } from "@/features/auth/hooks";
+import type { Me } from "@/api/types";
+import { useSessionRole } from "@/features/auth/session";
 import { cn } from "@/lib/cn";
 import { SITE_NAV } from "./nav";
 
-function AuthActions({ stacked = false, onNavigate }: { stacked?: boolean; onNavigate?: () => void }) {
-  const me = useMe();
-  if (me.data) {
-    const href = me.data.role === "employer" ? "/employer" : "/candidate";
+function AuthActions({ role, stacked = false, onNavigate }: { role: Me["role"] | null; stacked?: boolean; onNavigate?: () => void }) {
+  if (role) {
+    const href = role === "employer" ? "/employer" : "/candidate";
     return (
       <Link
         href={href}
@@ -59,20 +59,22 @@ function AuthActions({ stacked = false, onNavigate }: { stacked?: boolean; onNav
 export function SiteHeader() {
   const pathname = usePathname();
   const getLenis = useLenis();
+  const role = useSessionRole();
   const [open, setOpen] = useState(false);
   const shell = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const nav = useRef<HTMLElement>(null);
   const indicator = useRef<HTMLSpanElement>(null);
-  const overlay = useRef<HTMLDivElement>(null);
 
   const activeHref = SITE_NAV.find((l) => pathname === l.href || pathname.startsWith(`${l.href}/`))?.href;
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_OK, ScrollTrigger, gsap }) => {
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add(MOTION_DESKTOP, () => {
         gsap.from(bar.current, { yPercent: -160, autoAlpha: 0, duration: 1.2, ease: "expo.out", delay: 0.1 });
+      });
+      mm.add(MOTION_OK, () => {
         let hidden = false;
         ScrollTrigger.create({
           start: 0,
@@ -89,20 +91,20 @@ export function SiteHeader() {
         });
       });
     },
-    { scope: shell },
+    { scope: shell, urgent: true },
   );
 
   const moveIndicator = useCallback((target: HTMLElement | null, instant = false) => {
     const el = indicator.current;
     if (!el) return;
-    const reduce = !window.matchMedia(MOTION_OK).matches;
+    el.style.transitionDuration = instant ? "0s" : "";
     if (!target) {
-      gsap.to(el, { autoAlpha: 0, duration: reduce ? 0 : 0.25 });
+      el.style.opacity = "0";
       return;
     }
-    const props = { x: target.offsetLeft, width: target.offsetWidth, autoAlpha: 1 };
-    if (instant || reduce) gsap.set(el, props);
-    else gsap.to(el, { ...props, duration: 0.5, ease: "power3.out", overwrite: "auto" });
+    el.style.transform = `translateX(${target.offsetLeft}px)`;
+    el.style.width = `${target.offsetWidth}px`;
+    el.style.opacity = "1";
   }, []);
 
   useEffect(() => {
@@ -124,16 +126,7 @@ export function SiteHeader() {
       if (e.key === "Escape") setOpen(false);
     };
     window.addEventListener("keydown", onKey);
-    const items = overlay.current?.querySelectorAll("[data-menu-item]");
-    let tween: gsap.core.Timeline | null = null;
-    if (overlay.current && window.matchMedia(MOTION_OK).matches) {
-      tween = gsap
-        .timeline()
-        .from(overlay.current, { clipPath: "circle(0% at 100% 0%)", duration: 0.7, ease: "expo.inOut" })
-        .from(items ?? [], { y: 40, autoAlpha: 0, duration: 0.7, ease: "expo.out", stagger: 0.05 }, "-=0.35");
-    }
     return () => {
-      tween?.kill();
       lenis?.start();
       document.body.style.overflow = prev;
       window.removeEventListener("keydown", onKey);
@@ -155,7 +148,11 @@ export function SiteHeader() {
           className="relative hidden items-center lg:flex"
           onMouseLeave={() => moveIndicator(activeHref ? (nav.current?.querySelector<HTMLElement>(`[data-href="${activeHref}"]`) ?? null) : null)}
         >
-          <span ref={indicator} aria-hidden className="absolute top-0 left-0 h-full w-0 rounded-full bg-primary-50 opacity-0" />
+          <span
+            ref={indicator}
+            aria-hidden
+            className="absolute top-0 left-0 h-full w-0 rounded-full bg-primary-50 opacity-0 transition-[transform,width,opacity] duration-500 ease-out-expo"
+          />
           {SITE_NAV.map((l) => {
             const active = l.href === activeHref;
             return (
@@ -167,7 +164,7 @@ export function SiteHeader() {
                 onMouseEnter={(e) => moveIndicator(e.currentTarget)}
                 onFocus={(e) => moveIndicator(e.currentTarget)}
                 className={cn(
-                  "relative z-10 rounded-full px-3 py-2 text-sm font-medium transition-colors xl:px-3.5",
+                  "relative z-10 rounded-full px-3 py-2.5 text-sm font-medium transition-colors xl:px-3.5",
                   active ? "text-primary-strong" : "text-ink-muted hover:text-ink",
                 )}
               >
@@ -177,7 +174,7 @@ export function SiteHeader() {
           })}
         </nav>
         <div className="hidden lg:block">
-          <AuthActions />
+          <AuthActions role={role} />
         </div>
         <button
           type="button"
@@ -193,12 +190,11 @@ export function SiteHeader() {
 
       {open && (
         <div
-          ref={overlay}
           id="site-menu"
           role="dialog"
           aria-modal="true"
           aria-label="Меню сайта"
-          className="pointer-events-auto fixed inset-0 z-50 flex flex-col overflow-y-auto bg-night px-5 pt-5 pb-8 text-white lg:hidden"
+          className="pointer-events-auto fixed inset-0 z-50 flex animate-fade-in flex-col overflow-y-auto bg-night px-5 pt-5 pb-8 text-white lg:hidden"
         >
           <div className="pointer-events-none absolute -top-40 -right-40 size-[28rem] rounded-full bg-primary/40 blur-[120px]" aria-hidden />
           <div className="relative flex items-center justify-between">
@@ -212,13 +208,12 @@ export function SiteHeader() {
               <X className="size-5" aria-hidden />
             </button>
           </div>
-          <nav aria-label="Основная навигация" className="relative mt-10 flex flex-col">
+          <nav aria-label="Основная навигация" className="stagger-rise relative mt-10 flex flex-col">
             {SITE_NAV.map((l, i) => (
               <Link
                 key={l.href}
                 href={l.href}
                 onClick={close}
-                data-menu-item
                 className="group flex items-baseline justify-between gap-4 border-b border-night-line py-4"
               >
                 <span className="flex items-baseline gap-4">
@@ -229,8 +224,8 @@ export function SiteHeader() {
               </Link>
             ))}
           </nav>
-          <div className="relative mt-auto pt-10" data-menu-item>
-            <AuthActions stacked onNavigate={close} />
+          <div className="relative mt-auto animate-rise pt-10 [animation-delay:240ms]">
+            <AuthActions role={role} stacked onNavigate={close} />
           </div>
         </div>
       )}

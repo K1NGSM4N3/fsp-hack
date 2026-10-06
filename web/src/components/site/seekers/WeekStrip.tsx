@@ -2,9 +2,8 @@
 
 import { ArrowLeft, ArrowRight, Check, FileText, LockOpen, Mail, MapPin, X } from "lucide-react";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
-import { Draggable } from "./plugins";
 
 interface Day {
   day: string;
@@ -14,6 +13,8 @@ interface Day {
 }
 
 const RING = 2 * Math.PI * 14;
+
+const loadDraggable = () => import("@/components/motion/extras/draggable");
 
 function Shell({ children, className }: { children: ReactNode; className?: string }) {
   return <div className={cn("w-full max-w-[290px] rounded-[18px] bg-white p-4 shadow-pop", className)}>{children}</div>;
@@ -217,6 +218,8 @@ interface StripApi {
 /**
  * A week as a filmstrip. Without motion it is a native snap-scrolling row;
  * with motion the row becomes a Draggable with inertia that snaps to days, plus trackpad swipes and the arrow buttons.
+ * Touch drags are horizontal only: vertical swipes stay native page scroll, and address-bar resizes (height only)
+ * do not re-measure the strip.
  */
 export function WeekStrip() {
   const root = useRef<HTMLDivElement>(null);
@@ -232,8 +235,8 @@ export function WeekStrip() {
     setActive(i);
   };
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_OK, ScrollTrigger, gsap }, { Draggable }) => {
       const mm = gsap.matchMedia();
       mm.add(MOTION_OK, () => {
         const vp = viewport.current;
@@ -295,6 +298,7 @@ export function WeekStrip() {
         const drag = Draggable.create(tr, {
           type: "x",
           inertia: true,
+          allowNativeTouchScrolling: true,
           bounds: { minX, maxX: 0 },
           edgeResistance: 0.85,
           minimumMovement: 4,
@@ -335,7 +339,10 @@ export function WeekStrip() {
         vp.addEventListener("wheel", onWheel, { passive: false });
 
         let resizeCall: gsap.core.Tween | null = null;
+        let lastWidth = vp.clientWidth;
         const onResize = () => {
+          if (vp.clientWidth === lastWidth) return;
+          lastWidth = vp.clientWidth;
           resizeCall?.kill();
           resizeCall = gsap.delayedCall(0.15, () => {
             measure();
@@ -357,7 +364,7 @@ export function WeekStrip() {
         };
       });
     },
-    { scope: root },
+    { scope: root, extra: loadDraggable },
   );
 
   const nativeGoTo = (i: number) => {
@@ -463,7 +470,9 @@ export function WeekStrip() {
                 <span className={cn("absolute top-1/2 left-0 h-px", i === DAYS.length - 1 ? "right-0" : "-right-5 sm:-right-7", "bg-line-strong")} />
                 <span className={cn("relative block size-3 rounded-full ring-4 ring-canvas transition-colors", i <= active ? "bg-primary" : "bg-line-strong")} />
               </div>
-              <div className="mt-5 flex h-[250px] items-center justify-center rounded-[24px] bg-[radial-gradient(90%_80%_at_50%_100%,rgb(64_47_255/0.1),transparent_70%)] px-4">{d.scene}</div>
+              <div aria-hidden className="mt-5 flex h-[250px] items-center justify-center rounded-[24px] bg-[radial-gradient(90%_80%_at_50%_100%,rgb(64_47_255/0.1),transparent_70%)] px-4">
+                {d.scene}
+              </div>
               <h3 className="mt-6 flex items-baseline gap-3 text-2xl font-semibold tracking-tight text-ink">
                 <span className="font-mono text-sm font-medium text-primary">{String(i + 1).padStart(2, "0")}</span>
                 {d.title}

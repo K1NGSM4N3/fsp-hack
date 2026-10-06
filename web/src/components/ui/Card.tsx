@@ -45,7 +45,7 @@ export function CardHeader({ title, description, action, eyebrow, className, as:
 }
 
 export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
-  return <span className={cn("font-mono text-[11px] font-medium tracking-[0.08em] text-ink-subtle uppercase", className)}>{children}</span>;
+  return <span className={cn("font-mono text-xs font-medium tracking-[0.08em] text-ink-subtle uppercase", className)}>{children}</span>;
 }
 
 export function Divider({ className }: { className?: string }) {

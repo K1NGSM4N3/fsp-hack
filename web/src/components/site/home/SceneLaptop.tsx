@@ -21,9 +21,12 @@ function Chip({ children, confirmed = false }: { children: string; confirmed?: b
 }
 
 /** Company cabinet on a laptop. Server markup shows the final state (contacts open); the scene timeline rewinds it. */
-export function SceneLaptop({ className }: { className?: string }) {
+const PLACEMENT =
+  "w-full lg:w-[72%] group-data-live/scene:absolute group-data-live/scene:top-0 group-data-live/scene:right-0 group-data-live/scene:w-[min(100cqw,82cqh)] lg:group-data-live/scene:top-auto lg:group-data-live/scene:right-auto lg:group-data-live/scene:bottom-[5%] lg:group-data-live/scene:left-0 lg:group-data-live/scene:w-[min(63cqw,132cqh)]";
+
+export function SceneLaptop() {
   return (
-    <div data-s-laptop className={cn("@container relative", className)} aria-hidden>
+    <div data-s-laptop className={cn("@container relative", PLACEMENT)} aria-hidden>
       <div className="rounded-t-[2.4cqw] bg-ink p-[1.3cqw] pb-[1.1cqw] shadow-[0_40px_80px_-40px_rgb(27_28_33/0.55)]">
         <div data-s-screen className="relative aspect-[16/10.4] overflow-hidden rounded-[0.7cqw] bg-white text-[2.8cqw] leading-[1.35] text-ink @min-[36rem]:text-[1.8cqw]">
           <div className="flex h-[2.3em] items-center gap-[0.4em] border-b border-line bg-canvas px-[0.9em]">

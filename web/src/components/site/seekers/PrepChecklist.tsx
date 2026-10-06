@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 
 const ITEMS: { title: string; text: string }[] = [
   { title: "Стек, с которым работаете", text: "Языки, базы и инструменты последних лет. По ним компании находят вас внутри категории." },
@@ -12,13 +12,22 @@ const ITEMS: { title: string; text: string }[] = [
   { title: "ФСП ID, если выступали на соревнованиях ФСП", text: "Достижения подтянутся из реестра и поднимут вас внутри категории. Без них вы в поиске на общих основаниях." },
 ];
 
-/** Checklist whose boxes fill and tick in step with the scroll. */
+/** Checklist whose boxes fill and tick in step with the scroll on desktop; on phones each row ticks once as it enters. */
 export function PrepChecklist() {
   const root = useRef<HTMLOListElement>(null);
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, gsap }) => {
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add(MOTION_MOBILE, () => {
+        for (const row of gsap.utils.toArray<HTMLElement>("[data-item]", root.current)) {
+          gsap
+            .timeline({ scrollTrigger: { trigger: row, start: "top 82%", once: true } })
+            .fromTo(row.querySelectorAll("[data-text]"), { opacity: 0.32 }, { opacity: 1, duration: 0.5, ease: "power1.out" }, 0)
+            .fromTo(row.querySelector("[data-fill]"), { scale: 0.3, autoAlpha: 0, transformOrigin: "50% 50%" }, { scale: 1, autoAlpha: 1, duration: 0.4, ease: "back.out(2)" }, 0.1)
+            .fromTo(row.querySelector("[data-check]"), { drawSVG: "0%", opacity: 0 }, { drawSVG: "100%", opacity: 1, duration: 0.4, ease: "power2.out" }, 0.3);
+        }
+      });
+      mm.add(MOTION_DESKTOP, () => {
         const rows = gsap.utils.toArray<HTMLElement>("[data-item]", root.current);
         const tl = gsap.timeline({ scrollTrigger: { trigger: root.current, start: "top 72%", end: "bottom 62%", scrub: 0.6 } });
         rows.forEach((row, i) => {

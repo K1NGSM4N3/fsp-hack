@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 
 const RULES = [
   { label: "Зарплатная вилка", value: "обязательна", hint: "специалист видит деньги до разговора" },
@@ -26,14 +26,29 @@ function Barcode() {
   );
 }
 
-/** The rules come out of a printer as you scroll; the paper advances in small steps like a thermal printer. */
+/**
+ * The rules come out of a printer; the paper advances in small steps like a thermal printer.
+ * Desktop ties the paper to the scroll; phones print the whole receipt once, in about two seconds, as it comes into view.
+ */
 export function RulesReceipt() {
   const root = useRef<HTMLDivElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, gsap }) => {
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add(MOTION_MOBILE, () => {
+        const el = root.current;
+        const clip = el?.querySelector<HTMLElement>("[data-clip]");
+        const paper = el?.querySelector<HTMLElement>("[data-paper]");
+        if (!clip || !paper) return;
+        const led = el?.querySelector<HTMLElement>("[data-led]");
+        const blink = led ? gsap.to(led, { opacity: 0.25, duration: 0.18, repeat: -1, yoyo: true, ease: "steps(1)", paused: true }) : null;
+        gsap
+          .timeline({ scrollTrigger: { trigger: clip, start: "top 75%", once: true }, onStart: () => void blink?.play(), onComplete: () => void blink?.pause(0) })
+          .fromTo(paper, { yPercent: -100 }, { yPercent: 0, ease: "steps(24)", duration: 2 })
+          .fromTo(el?.querySelector("[data-stamp]") ?? [], { autoAlpha: 0, scale: 1.9, rotation: -26 }, { autoAlpha: 1, scale: 1, rotation: -12, ease: "back.out(2)", duration: 0.45 });
+      });
+      mm.add(MOTION_DESKTOP, () => {
         const el = root.current;
         const clip = el?.querySelector<HTMLElement>("[data-clip]");
         const paper = el?.querySelector<HTMLElement>("[data-paper]");
@@ -65,7 +80,7 @@ export function RulesReceipt() {
   return (
     <div ref={root} className="relative mx-auto w-full max-w-[26rem]">
       <div className="relative z-10 h-[4.5rem] rounded-[20px] bg-night shadow-[0_24px_50px_-24px_rgb(11_11_18/0.6)]">
-        <span className="absolute top-4 left-6 font-mono text-[10px] tracking-[0.16em] text-night-faint uppercase">ФСП Таланты · правила</span>
+        <span className="absolute top-4 left-6 font-mono text-xs tracking-[0.16em] text-night-faint uppercase">ФСП Таланты · правила</span>
         <span data-led aria-hidden className="absolute top-[18px] right-6 size-2 rounded-full bg-success-300" />
         <span aria-hidden className="absolute inset-x-5 bottom-3.5 h-2 rounded-full bg-black shadow-[inset_0_2px_4px_rgb(0_0_0/0.8)]" />
       </div>
@@ -73,7 +88,7 @@ export function RulesReceipt() {
         <div data-paper className="relative">
           <div className="bg-white px-5 pt-9 pb-6 font-mono text-ink shadow-[inset_0_14px_14px_-12px_rgb(11_11_18/0.25)] sm:px-6">
             <p className="text-center text-sm font-semibold tracking-[0.18em] uppercase">Правила контакта</p>
-            <p className="mt-1 text-center text-[11px] text-ink-subtle">для всех компаний на платформе</p>
+            <p className="mt-1 text-center text-xs text-ink-subtle">для всех компаний на платформе</p>
             <div aria-hidden className="mt-5 border-t border-dashed border-line-strong" />
             <ol className="mt-4 space-y-3.5">
               {RULES.map((r, i) => (
@@ -84,7 +99,7 @@ export function RulesReceipt() {
                     <span aria-hidden className="mb-1 min-w-4 flex-1 border-b border-dotted border-ink-faint" />
                     <span className="font-semibold whitespace-nowrap">{r.value}</span>
                   </div>
-                  <p className="mt-0.5 pl-6 text-[11px] leading-snug text-ink-subtle">{r.hint}</p>
+                  <p className="mt-0.5 pl-6 text-xs leading-snug text-ink-subtle">{r.hint}</p>
                 </li>
               ))}
             </ol>
@@ -95,12 +110,12 @@ export function RulesReceipt() {
                 <div className="mt-3">
                   <Barcode />
                 </div>
-                <p aria-hidden className="mt-1.5 text-[10px] tracking-[0.3em] text-ink-faint">FSP-TALENTS-RULES</p>
+                <p aria-hidden className="mt-1.5 text-xs tracking-[0.3em] text-ink-faint">FSP-TALENTS-RULES</p>
               </div>
               <div
                 data-stamp
                 aria-hidden
-                className="relative flex size-24 shrink-0 items-center justify-center rounded-full border-[3px] border-accent-strong/80 text-center text-[10px] leading-tight font-bold tracking-[0.12em] text-accent-strong/80 uppercase"
+                className="relative flex size-24 shrink-0 items-center justify-center rounded-full border-[3px] border-accent-strong/80 text-center text-xs leading-tight font-bold tracking-[0.12em] text-accent-strong/80 uppercase"
                 style={{ transform: "rotate(-12deg)" }}
               >
                 <span className="absolute inset-1.5 rounded-full border border-accent-strong/50" />

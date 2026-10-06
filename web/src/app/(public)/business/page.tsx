@@ -7,6 +7,7 @@ import { InboxCompare } from "@/components/site/business/InboxCompare";
 import { KineticLines } from "@/components/site/business/KineticLines";
 import { ProductTour } from "@/components/site/business/ProductTour";
 import { RulesReceipt } from "@/components/site/business/RulesReceipt";
+import { SCREENS } from "@/components/site/business/TourScreens";
 import { Container, Eyebrow, Section, TextLink } from "@/components/site/primitives";
 
 export const metadata: Metadata = {
@@ -46,7 +47,7 @@ export default function BusinessPage() {
       </Section>
 
       <section id="tour" className="relative overflow-x-clip bg-white">
-        <ProductTour />
+        <ProductTour screens={SCREENS.map((Screen, i) => <Screen key={i} />)} />
       </section>
 
       <Section tone="night" className="overflow-x-clip">

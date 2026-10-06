@@ -16,10 +16,10 @@ import type {
   TaskInput,
   VacancyInput,
 } from "@/api/types";
-import { qk } from "../keys";
+import { fresh, qk } from "../keys";
 
 export function useTrustStatus() {
-  return useQuery({ queryKey: qk.trust, queryFn: api.getTrustStatus });
+  return useQuery({ queryKey: qk.trust, queryFn: api.getTrustStatus, ...fresh.account });
 }
 
 /** `null` while the range is incomplete; callers debounce the inputs. */
@@ -39,7 +39,7 @@ export function useSimilarVacancies() {
 }
 
 export function useCompany() {
-  return useQuery({ queryKey: qk.company, queryFn: api.getCompany });
+  return useQuery({ queryKey: qk.company, queryFn: api.getCompany, ...fresh.account });
 }
 
 export function useUpdateCompany() {
@@ -56,11 +56,11 @@ export function useUpdateCompany() {
 }
 
 export function useNeeds() {
-  return useQuery({ queryKey: qk.needs, queryFn: api.listNeeds });
+  return useQuery({ queryKey: qk.needs, queryFn: api.listNeeds, ...fresh.detail });
 }
 
 export function useNeed(id: string, enabled = true) {
-  return useQuery({ queryKey: qk.need(id), queryFn: () => api.getNeed(id), enabled: enabled && Boolean(id) });
+  return useQuery({ queryKey: qk.need(id), queryFn: () => api.getNeed(id), enabled: enabled && Boolean(id), ...fresh.detail });
 }
 
 export function useCreateNeed() {
@@ -96,7 +96,7 @@ export function useParseNeed() {
 }
 
 export function useNeedCategories(id: string) {
-  return useQuery({ queryKey: qk.needCategories(id), queryFn: () => api.getNeedCategories(id) });
+  return useQuery({ queryKey: qk.needCategories(id), queryFn: () => api.getNeedCategories(id), ...fresh.account });
 }
 
 export function useNeedTestPlan(id: string, enabled = true) {
@@ -104,7 +104,7 @@ export function useNeedTestPlan(id: string, enabled = true) {
 }
 
 export function useShortlist(id: string) {
-  return useQuery({ queryKey: qk.shortlist(id), queryFn: () => api.getShortlist(id) });
+  return useQuery({ queryKey: qk.shortlist(id), queryFn: () => api.getShortlist(id), ...fresh.detail });
 }
 
 export function useRefineShortlist(id: string) {
@@ -136,7 +136,7 @@ export function useCandidateSearch(params: CandidateSearchParams) {
 }
 
 export function useEmployerCandidate(id: string, needId?: string | null) {
-  return useQuery({ queryKey: qk.candidate(id, needId), queryFn: () => api.getCandidateForEmployer(id, needId) });
+  return useQuery({ queryKey: qk.candidate(id, needId), queryFn: () => api.getCandidateForEmployer(id, needId), ...fresh.detail });
 }
 
 export function useCandidateContacts(id: string, enabled: boolean) {
@@ -144,11 +144,11 @@ export function useCandidateContacts(id: string, enabled: boolean) {
 }
 
 export function useSentInvitations() {
-  return useQuery({ queryKey: qk.sent, queryFn: api.listSentInvitations });
+  return useQuery({ queryKey: qk.sent, queryFn: api.listSentInvitations, ...fresh.live });
 }
 
 export function useSentInvitation(id: string) {
-  return useQuery({ queryKey: qk.sentOne(id), queryFn: () => api.getSentInvitation(id) });
+  return useQuery({ queryKey: qk.sentOne(id), queryFn: () => api.getSentInvitation(id), ...fresh.live });
 }
 
 export function useSendInvitation() {
@@ -177,15 +177,15 @@ export function useWithdrawInvitation() {
 }
 
 export function useInvitationStats() {
-  return useQuery({ queryKey: qk.stats, queryFn: api.getInvitationStats });
+  return useQuery({ queryKey: qk.stats, queryFn: api.getInvitationStats, ...fresh.detail });
 }
 
 export function useOwnVacancies() {
-  return useQuery({ queryKey: qk.ownVacancies, queryFn: api.listOwnVacancies });
+  return useQuery({ queryKey: qk.ownVacancies, queryFn: api.listOwnVacancies, ...fresh.detail });
 }
 
 export function useOwnVacancy(id: string) {
-  return useQuery({ queryKey: qk.ownVacancy(id), queryFn: () => api.getOwnVacancy(id) });
+  return useQuery({ queryKey: qk.ownVacancy(id), queryFn: () => api.getOwnVacancy(id), ...fresh.detail });
 }
 
 export function useSaveVacancy(id?: string) {
@@ -202,7 +202,7 @@ export function useSaveVacancy(id?: string) {
 }
 
 export function useVacancyApplications(vacancyId: string) {
-  return useQuery({ queryKey: qk.applications(vacancyId), queryFn: () => api.listVacancyApplications(vacancyId) });
+  return useQuery({ queryKey: qk.applications(vacancyId), queryFn: () => api.listVacancyApplications(vacancyId), ...fresh.live });
 }
 
 export function useSetApplicationStatus(vacancyId: string) {
@@ -214,7 +214,7 @@ export function useSetApplicationStatus(vacancyId: string) {
 }
 
 export function useEmployerTasks() {
-  return useQuery({ queryKey: qk.tasks, queryFn: api.listEmployerTasks });
+  return useQuery({ queryKey: qk.tasks, queryFn: api.listEmployerTasks, ...fresh.detail });
 }
 
 export function useCreateTask() {
@@ -234,7 +234,7 @@ export function useSetTaskActive() {
 }
 
 export function useTaskSubmissions(taskId: string, enabled = true) {
-  return useQuery({ queryKey: qk.submissions(taskId), queryFn: () => api.listTaskSubmissions(taskId), enabled });
+  return useQuery({ queryKey: qk.submissions(taskId), queryFn: () => api.listTaskSubmissions(taskId), enabled, ...fresh.live });
 }
 
 export function useReviewSubmission(taskId: string) {

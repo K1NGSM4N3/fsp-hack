@@ -56,7 +56,7 @@ export function ShortlistCard({ item, need, onPin, onDismiss, onInvite, busy }: 
             Скрыть
           </Button>
           <span className="flex-1" />
-          <Link href={`/employer/candidates/${c.id}?need=${need.id}`} className="rounded px-2 text-sm font-medium text-primary hover:underline">
+          <Link href={`/employer/candidates/${c.id}?need=${need.id}`} className="tap inline-flex min-h-8 items-center rounded px-2 text-sm font-medium text-primary hover:underline">
             Профиль
           </Link>
           <Button size="sm" icon={<Send className="size-4" aria-hidden />} onClick={onInvite} disabled={activeInvite || status === "accepted"}>
@@ -111,7 +111,7 @@ export function RefinePanel({ need, pending, onApply }: RefinePanelProps) {
   const [open, setOpen] = useState(false);
   const set = (patch: Partial<Draft>) => setD((x) => ({ ...x, ...patch }));
   return (
-    <Card padding="none" className="h-fit lg:sticky lg:top-20">
+    <Card padding="none" className="scrollbar-thin h-fit lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto">
       <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-2 px-5 py-4 text-left lg:pointer-events-none lg:cursor-default">
         <span className="flex items-center gap-2 text-base font-semibold tracking-[-0.01em] text-ink">
           <SlidersHorizontal className="size-4 text-primary" aria-hidden />

@@ -290,7 +290,7 @@ function ConsentsSection() {
           </ul>
           {(mine.data?.length ?? 0) > 0 && (
             <details className="group mt-4 border-t border-line pt-3 text-sm">
-              <summary className="cursor-pointer text-ink-muted marker:text-ink-faint hover:text-ink">История согласий</summary>
+              <summary className="tap cursor-pointer text-ink-muted marker:text-ink-faint hover:text-ink">История согласий</summary>
               <ul className="mt-2 space-y-1.5 text-xs text-ink-subtle">
                 {mine.data?.map((c) => (
                   <li key={c.id}>

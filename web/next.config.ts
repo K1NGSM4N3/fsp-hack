@@ -7,6 +7,8 @@ const apiProxyUrl = process.env.API_PROXY_URL ?? "http://localhost:8000";
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // Caddy compresses every response (zstd, then gzip); compressing here as well would hand it gzip it cannot improve.
+  compress: false,
   async rewrites() {
     return [
       {

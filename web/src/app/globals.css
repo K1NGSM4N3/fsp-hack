@@ -179,16 +179,51 @@ html.lenis body {
 }
 
 /*
- * Hero copy is hidden only when the inline head script found motion allowed; GSAP reveals it.
- * The delayed keyframe is a safety net so a failed script never leaves the hero blank.
+ * Hero copy is hidden before first paint only where the desktop reveal runs (motion allowed, fine pointer, wide
+ * screen); phones and tablets paint it immediately so LCP never waits for hydration. The lead paragraph is never
+ * hidden: it is the LCP element and only drifts in with a transform. The delayed keyframe is a safety net so a
+ * failed script never leaves the hero blank.
  */
-html.motion [data-hero] {
-  visibility: hidden;
-  animation: hero-failsafe 0s linear 3.5s forwards;
+@media (prefers-reduced-motion: no-preference) and (pointer: fine) and (min-width: 1024px) {
+  html.motion [data-hero]:not([data-hero="lead"]) {
+    visibility: hidden;
+    animation: hero-failsafe 0s linear 3.5s forwards;
+  }
 }
 @keyframes hero-failsafe {
   to {
     visibility: visible;
+  }
+}
+@keyframes marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+/* Same condition as MOTION_DESKTOP in components/motion/core.ts, for layouts that only exist with the desktop choreography. */
+@custom-variant motion-desk {
+  @media (prefers-reduced-motion: no-preference) and (pointer: fine) and (min-width: 1024px) {
+    html.motion & {
+      @slot;
+    }
+  }
+}
+
+/*
+ * Touch target of at least 40×40 px around a visually smaller control (compact buttons, switches, text links in
+ * lists) without changing its look or layout: a centred transparent ::after takes the pointer events for it.
+ */
+@utility tap {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: max(100%, 2.5rem);
+    height: max(100%, 2.5rem);
+    transform: translate(-50%, -50%);
   }
 }
 
@@ -367,7 +402,7 @@ html.motion [data-hero] {
 }
 
 @media print {
-  html.motion [data-hero] {
+  html.motion [data-hero]:not([data-hero="lead"]) {
     visibility: visible;
   }
 }

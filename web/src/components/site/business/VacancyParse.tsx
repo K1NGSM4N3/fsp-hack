@@ -1,9 +1,8 @@
 "use client";
 
-import { MotionPathPlugin } from "gsap/MotionPathPlugin";
 import { ArrowDown, Check, PenLine, RotateCcw } from "lucide-react";
 import { useRef } from "react";
-import { MOTION_OK, ScrollTrigger, SplitText, gsap, useGSAP } from "@/components/motion/gsap";
+import { type Kit, useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
 
 interface Piece {
@@ -37,6 +36,8 @@ interface Field {
 }
 
 const PUNCT = /^[,.]/;
+
+const loadMotionPath = () => import("@/components/motion/extras/motion-path");
 
 /** Punctuation right after a phrase is glued to it, so a line never starts with a comma once the text is split into words. */
 const SEGMENTS = VACANCY.map((p, i) => {
@@ -80,7 +81,7 @@ function boxOf(el: Element): Box {
 }
 
 /** Flies a chip from the phrase it was read from to its field along a bowed arc. */
-function flight(chip: HTMLElement, from: Box) {
+function flight({ gsap }: Pick<Kit, "gsap">, chip: HTMLElement, from: Box) {
   const to = boxOf(chip);
   const dx = from.left - to.left;
   const dy = from.top - to.top + (from.height - to.height) / 2;
@@ -116,17 +117,60 @@ function flight(chip: HTMLElement, from: Box) {
 }
 
 /**
+ * Phones: the text is already there; recognised phrases light up one by one and each chip pops into its field.
+ * No per-letter split, no flight paths, a dozen short tweens in total.
+ */
+function mobileParse({ gsap, ScrollTrigger }: Pick<Kit, "gsap" | "ScrollTrigger">, el: HTMLElement, ctx: gsap.Context, replay: HTMLButtonElement) {
+  const q = gsap.utils.selector(el);
+  const go = q("[data-go]");
+  let tl: gsap.core.Timeline | null = null;
+  const build = () => {
+    tl = gsap.timeline({ onComplete: () => void (replay.disabled = false) });
+    tl.set(q("[data-mark]"), { scaleX: 0, transformOrigin: "0% 50%" })
+      .set(q("[data-chip]"), { autoAlpha: 0 })
+      .set(q("[data-empty]"), { autoAlpha: 1 })
+      .set(q("[data-check]"), { autoAlpha: 0, scale: 0.4 })
+      .set(go, { autoAlpha: 0.35 });
+    gsap.utils.toArray<HTMLElement>("[data-phrase]", el).forEach((phrase, i) => {
+      const chip = el.querySelector<HTMLElement>(`[data-chip="${phrase.dataset.phrase}"]`);
+      const field = chip?.closest("[data-field]");
+      const at = 0.35 + i * 0.42;
+      tl?.to(phrase.querySelector("[data-mark]"), { scaleX: 1, duration: 0.3, ease: "power2.out" }, at);
+      if (!chip || !field) return;
+      tl?.fromTo(chip, { autoAlpha: 0, y: -8, scale: 0.7 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.45, ease: "back.out(2.2)" }, at + 0.15);
+      tl?.to(field.querySelector("[data-empty]"), { autoAlpha: 0, duration: 0.2 }, at + 0.15);
+      if (field.querySelector("[data-chip]:last-of-type") === chip) {
+        tl?.to(field.querySelector("[data-check]"), { autoAlpha: 1, scale: 1, duration: 0.35, ease: "back.out(2.4)" }, at + 0.4);
+      }
+    });
+    tl.to(go, { autoAlpha: 1, duration: 0.4 }, "+=0.1").fromTo(q("[data-go-ring]"), { autoAlpha: 0.7, scale: 1 }, { autoAlpha: 0, scale: 1.35, duration: 1.1, ease: "power2.out" }, "<");
+  };
+  const onReplay = () => {
+    replay.disabled = true;
+    tl?.restart();
+  };
+  replay.disabled = true;
+  replay.addEventListener("click", onReplay);
+  ScrollTrigger.create({ trigger: el, start: "top 80%", once: true, onEnter: () => ctx.add(build) });
+  return () => replay.removeEventListener("click", onReplay);
+}
+
+/**
  * Hero demo: a vacancy types itself, recognised phrases light up and fly into the structured need.
  * The server markup is the finished state, so without JS or with reduced motion the result is simply shown.
  */
 export function VacancyParse() {
   const root = useRef<HTMLDivElement>(null);
 
-  useGSAP(
-    () => {
-      gsap.registerPlugin(MotionPathPlugin);
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, ScrollTrigger, SplitText, gsap }) => {
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, (ctx) => {
+      mm.add(MOTION_MOBILE, (ctx) => {
+        const el = root.current;
+        const replay = el?.querySelector<HTMLButtonElement>("[data-replay]");
+        if (el && replay) return mobileParse({ gsap, ScrollTrigger }, el, ctx, replay);
+      });
+      mm.add(MOTION_DESKTOP, (ctx) => {
         const el = root.current;
         const text = el?.querySelector<HTMLElement>("[data-text]");
         const caret = el?.querySelector<HTMLElement>("[data-caret]");
@@ -182,7 +226,7 @@ export function VacancyParse() {
             const check = field?.querySelector("[data-check]");
             const lastInField = field?.querySelector("[data-chip]:last-of-type") === chip;
             tl.to(mark, { scaleX: 1, duration: 0.35, ease: "power2.out" }, t + 0.05);
-            tl.add(flight(chip, boxOf(phrase)), t + 0.18);
+            tl.add(flight({ gsap }, chip, boxOf(phrase)), t + 0.18);
             if (empty) tl.to(empty, { autoAlpha: 0, duration: 0.2 }, t + 0.7);
             if (check && lastInField) tl.to(check, { autoAlpha: 1, scale: 1, duration: 0.45, ease: "back.out(2.4)" }, t + 1.1);
           }
@@ -213,17 +257,17 @@ export function VacancyParse() {
         return () => replay.removeEventListener("click", onReplay);
       });
     },
-    { scope: root },
+    { scope: root, extra: loadMotionPath },
   );
 
   return (
     <div ref={root} className="relative overflow-hidden rounded-panel border border-white/10 bg-night-raised/80 shadow-[0_40px_120px_-40px_rgb(64_47_255/0.6)] backdrop-blur">
       <div className="flex items-center justify-between gap-4 border-b border-white/8 px-4 py-3 sm:px-6">
-        <p className="font-mono text-[11px] tracking-[0.14em] text-night-faint uppercase">Новая потребность</p>
+        <p className="font-mono text-xs tracking-[0.14em] text-night-faint uppercase">Новая потребность</p>
         <button
           type="button"
           data-replay
-          className="hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-night-muted transition-colors hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-0 [html.motion_&]:inline-flex"
+          className="tap hidden items-center gap-1.5 rounded-full px-2.5 py-1 text-xs text-night-muted transition-colors hover:bg-white/5 hover:text-white disabled:pointer-events-none disabled:opacity-0 [html.motion_&]:inline-flex"
         >
           <RotateCcw className="size-3.5" aria-hidden />
           Повторить
@@ -247,8 +291,8 @@ export function VacancyParse() {
                 <span key={i}>{p.text}</span>
               ),
             )}
-            <span aria-hidden className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[0.18em] bg-primary-300 [html.motion_&]:hidden" />
-            <span data-caret aria-hidden className="pointer-events-none absolute top-0 left-0 hidden w-[2px] bg-primary-300 [html.motion_&]:block" />
+            <span aria-hidden className="ml-0.5 inline-block h-[1.1em] w-[2px] translate-y-[0.18em] bg-primary-300 motion-desk:hidden" />
+            <span data-caret aria-hidden className="pointer-events-none absolute top-0 left-0 hidden w-[2px] bg-primary-300 motion-desk:block" />
           </p>
         </div>
         <span aria-hidden className="absolute -bottom-4 left-1/2 z-10 flex size-8 -translate-x-1/2 items-center justify-center rounded-full border border-white/15 bg-night-soft text-primary-300">

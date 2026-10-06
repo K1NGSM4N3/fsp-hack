@@ -2,9 +2,8 @@
 
 import { ArrowDown, EyeOff, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
-import "./plugins";
 
 type Status = "active" | "open" | "closed";
 
@@ -13,6 +12,8 @@ const STATUSES: { value: Status; label: string; hint: string }[] = [
   { value: "open", label: "Открыт к предложениям", hint: "Вы в поиске без отметки. Подходит, если текущая работа устраивает, но хорошее предложение вы рассмотрите." },
   { value: "closed", label: "Не ищу", hint: "Профиль скрыт из поиска, новые приглашения не приходят." },
 ];
+
+const loadMorph = () => import("@/components/motion/extras/morph");
 
 const SHACKLE_CLOSED = "M23 32 V23 C23 15.8 28.8 10 36 10 C43.2 10 49 15.8 49 23 V32";
 const SHACKLE_OPEN = "M23 32 V17 C23 9.8 28.8 4 36 4 C43.2 4 49 9.8 49 17 V21";
@@ -36,7 +37,7 @@ function Toggle({ checked, onChange, label, hint }: { checked: boolean; onChange
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={cn("relative mt-0.5 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-300", checked ? "bg-primary" : "bg-night-line")}
+        className={cn("tap mt-0.5 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-300", checked ? "bg-primary" : "bg-night-line")}
       >
         <span className={cn("ml-1 size-5 rounded-full bg-white shadow-[0_2px_6px_rgb(11_11_18/0.4)] transition-transform duration-300 ease-out-expo", checked && "translate-x-5")} />
       </button>
@@ -53,8 +54,8 @@ export function PrivacyPanel() {
   const [showCompanies, setShowCompanies] = useState(true);
   const prev = useRef({ accepted, status, showFsp, showCompanies });
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_OK, gsap }) => {
       const was = prev.current;
       prev.current = { accepted, status, showFsp, showCompanies };
       const mm = gsap.matchMedia();
@@ -86,7 +87,7 @@ export function PrivacyPanel() {
         }
       });
     },
-    { scope: root, dependencies: [accepted, status, showFsp, showCompanies] },
+    { scope: root, dependencies: [accepted, status, showFsp, showCompanies], extra: loadMorph },
   );
 
   const activeStatus = STATUSES.findIndex((s) => s.value === status);
@@ -97,7 +98,7 @@ export function PrivacyPanel() {
       <div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[20px] border border-night-line bg-night-raised p-3 pl-4 sm:flex-nowrap">
           <div className="min-w-0 flex-1">
-            <p className="font-mono text-[10.5px] tracking-[0.12em] text-night-faint uppercase">Ваш экран</p>
+            <p className="font-mono text-xs tracking-[0.12em] text-night-faint uppercase">Ваш экран</p>
             <p className="mt-1 text-[15px] leading-snug font-medium text-white">Кедр Платежи приглашает</p>
             <p className="tabular text-sm text-night-muted">Бэкенд · 280–350 тыс. ₽</p>
           </div>
@@ -113,7 +114,7 @@ export function PrivacyPanel() {
             {accepted ? "Вернуть замок" : "Принять"}
           </button>
         </div>
-        <div aria-hidden className="flex items-center gap-2 py-3 pl-6 font-mono text-[10.5px] tracking-[0.12em] text-night-faint uppercase">
+        <div aria-hidden className="flex items-center gap-2 py-3 pl-6 font-mono text-xs tracking-[0.12em] text-night-faint uppercase">
           <ArrowDown className="size-3.5" />
           экран компании
         </div>

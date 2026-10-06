@@ -144,7 +144,7 @@ export function SkillInput({ value, onChange, placeholder = "Начните вв
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
           onKeyDown={onKeyDown}
-          className="h-7 min-w-32 flex-1 bg-transparent px-1 text-sm outline-none placeholder:text-ink-faint"
+          className="-my-1.5 h-10 min-w-32 flex-1 bg-transparent px-1 text-base outline-none placeholder:text-ink-faint sm:text-sm"
         />
       </div>
       {open && options.length > 0 && (

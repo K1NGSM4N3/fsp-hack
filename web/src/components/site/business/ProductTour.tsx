@@ -1,11 +1,10 @@
 "use client";
 
 import { useRef, type ReactNode } from "react";
-import { MOTION_DESKTOP, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { useLenis } from "@/components/motion/SmoothScroll";
 import { Container, Eyebrow } from "@/components/site/primitives";
 import { cn } from "@/lib/cn";
-import { SCREENS } from "./TourScreens";
 
 const STEPS = [
   {
@@ -45,15 +44,28 @@ function Laptop({ children }: { children: ReactNode }) {
   );
 }
 
-/** Pinned on desktop with motion: the laptop screen changes as you scroll; elsewhere the four steps simply stack. */
-export function ProductTour() {
+/**
+ * Desktop: pinned, the laptop screen changes as you scroll. Phones and tablets: the four steps stack, and each screen
+ * fills in once as it enters (its cards rise one after another). Without motion the steps simply stack.
+ * The four screens are server components passed in as props, so their markup ships no JS.
+ */
+export function ProductTour({ screens: shots }: { screens: ReactNode[] }) {
   const root = useRef<HTMLDivElement>(null);
   const getLenis = useLenis();
   const trigger = useRef<ScrollTrigger | null>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, ScrollTrigger, gsap }) => {
       const mm = gsap.matchMedia();
+      mm.add(MOTION_MOBILE, () => {
+        for (const shot of gsap.utils.toArray<HTMLElement>("[data-stack] [data-shot]", root.current)) {
+          gsap.fromTo(
+            shot.querySelectorAll("[data-pop]"),
+            { autoAlpha: 0, y: 12 },
+            { autoAlpha: 1, y: 0, duration: 0.55, ease: "power3.out", stagger: 0.07, delay: 0.25, scrollTrigger: { trigger: shot, start: "top 80%", once: true } },
+          );
+        }
+      });
       mm.add(MOTION_DESKTOP, () => {
         const wrap = root.current?.querySelector<HTMLElement>("[data-pin-wrap]");
         const pin = wrap?.querySelector<HTMLElement>("[data-pin]");
@@ -126,7 +138,7 @@ export function ProductTour() {
 
   return (
     <div ref={root}>
-      <div data-pin-wrap className="hidden lg:[html.motion_&]:block">
+      <div data-pin-wrap className="hidden motion-desk:block">
         <div data-pin className="flex h-svh items-center pt-16">
           <Container className="grid grid-cols-[minmax(0,0.72fr)_minmax(0,1.28fr)] items-center gap-10 xl:gap-14">
             <div>
@@ -163,9 +175,9 @@ export function ProductTour() {
             </div>
             <Laptop>
               <div className="grid h-full [grid-template-areas:'s'] *:[grid-area:s]">
-                {SCREENS.map((Screen, i) => (
+                {shots.map((shot, i) => (
                   <div key={i} data-screen className="h-full min-h-0" aria-hidden>
-                    <Screen />
+                    {shot}
                   </div>
                 ))}
               </div>
@@ -174,7 +186,7 @@ export function ProductTour() {
         </div>
       </div>
 
-      <Container className="py-20 sm:py-28 lg:[html.motion_&]:hidden">
+      <Container data-stack className="py-20 sm:py-28 motion-desk:hidden">
         <div className="max-w-2xl">
           <div data-reveal="fade">
             <Eyebrow>{HEAD.eyebrow}</Eyebrow>
@@ -185,7 +197,7 @@ export function ProductTour() {
         </div>
         <ol className="mt-14 space-y-16 sm:space-y-20">
           {STEPS.map((s, i) => {
-            const Screen = SCREENS[i];
+            const shot = shots[i];
             return (
               <li key={s.title} className={cn("grid grid-cols-1 gap-6 md:items-center md:gap-12", i % 2 === 1 ? "md:grid-cols-[1.2fr_0.8fr]" : "md:grid-cols-[0.8fr_1.2fr]")}>
                 <div data-reveal>
@@ -193,8 +205,8 @@ export function ProductTour() {
                   <h3 className="mt-2 text-2xl font-semibold tracking-tight text-ink">{s.title}</h3>
                   <p className="mt-3 text-base leading-relaxed text-ink-muted sm:text-lg">{s.text}</p>
                 </div>
-                <div data-reveal aria-hidden className={cn("overflow-hidden rounded-[18px] border border-line shadow-lift", i % 2 === 1 && "md:order-first")}>
-                  {Screen && <Screen />}
+                <div data-reveal data-shot aria-hidden className={cn("overflow-hidden rounded-[18px] border border-line shadow-lift", i % 2 === 1 && "md:order-first")}>
+                  {shot}
                 </div>
               </li>
             );

@@ -156,11 +156,11 @@ function InviteForm({ target, need, onClose, onSent }: { target: InviteTarget; n
           title={conflict.title}
           action={
             conflict.code === "invitation_already_active" ? (
-              <Link href="/employer/invitations" className="text-sm font-medium text-primary hover:underline">
+              <Link href="/employer/invitations" className="tap text-sm font-medium text-primary hover:underline">
                 Открыть приглашения
               </Link>
             ) : conflict.code === "invitation_quota_exceeded" ? (
-              <Link href="/employer/trust" className="text-sm font-medium text-primary hover:underline">
+              <Link href="/employer/trust" className="tap text-sm font-medium text-primary hover:underline">
                 Как поднять квоту
               </Link>
             ) : undefined

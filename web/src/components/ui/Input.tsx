@@ -11,7 +11,7 @@ interface InputProps extends ComponentProps<"input"> {
 
 export function Input({ className, leading, trailing, ...props }: InputProps) {
   const field = useFieldControl(props);
-  const input = <input {...props} {...field} className={cn(controlBase, "h-10 px-3 text-sm", leading ? "pl-9" : "", trailing ? "pr-10" : "", className)} />;
+  const input = <input {...props} {...field} className={cn(controlBase, "h-10 px-3 text-base sm:text-sm", leading ? "pl-9" : "", trailing ? "pr-10" : "", className)} />;
   if (!leading && !trailing) return input;
   return (
     <div className="relative">
@@ -24,14 +24,14 @@ export function Input({ className, leading, trailing, ...props }: InputProps) {
 
 export function Textarea({ className, rows = 4, ...props }: ComponentProps<"textarea">) {
   const field = useFieldControl(props);
-  return <textarea rows={rows} {...props} {...field} className={cn(controlBase, "min-h-20 px-3 py-2 text-sm leading-relaxed", className)} />;
+  return <textarea rows={rows} {...props} {...field} className={cn(controlBase, "min-h-20 px-3 py-2 text-base leading-relaxed sm:text-sm", className)} />;
 }
 
 export function Select({ className, children, ...props }: ComponentProps<"select">) {
   const field = useFieldControl(props);
   return (
     <div className="relative">
-      <select {...props} {...field} className={cn(controlBase, "h-10 appearance-none pr-9 pl-3 text-sm", className)}>
+      <select {...props} {...field} className={cn(controlBase, "h-10 appearance-none pr-9 pl-3 text-base sm:text-sm", className)}>
         {children}
       </select>
       <svg className="pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-ink-subtle" viewBox="0 0 16 16" fill="none" aria-hidden>

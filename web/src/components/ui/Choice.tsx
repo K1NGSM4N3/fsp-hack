@@ -14,13 +14,15 @@ export function Checkbox({ label, description, className, id, ...props }: Checkb
   const inputId = id ?? autoId;
   return (
     <div className={cn("flex items-start gap-3", className)}>
-      <input
-        id={inputId}
-        type="checkbox"
-        className="mt-0.5 size-4 shrink-0 cursor-pointer rounded border-line-strong accent-primary"
-        aria-describedby={description ? `${inputId}-desc` : undefined}
-        {...props}
-      />
+      <label htmlFor={inputId} className="tap mt-0.5 flex size-4 shrink-0 cursor-pointer">
+        <input
+          id={inputId}
+          type="checkbox"
+          className="size-4 cursor-pointer rounded border-line-strong accent-primary"
+          aria-describedby={description ? `${inputId}-desc` : undefined}
+          {...props}
+        />
+      </label>
       <div className="min-w-0 text-sm">
         <label htmlFor={inputId} className="cursor-pointer text-ink">
           {label}
@@ -67,7 +69,7 @@ export function Switch({ checked, onChange, label, description, disabled, classN
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "relative mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50",
+          "tap mt-0.5 inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors disabled:opacity-50",
           checked ? "border-primary bg-primary" : "border-line-strong bg-surface",
         )}
       >

@@ -54,7 +54,7 @@ function CategoryMatrix({ spec, grade, onPick }: { spec: Specialization; grade: 
                       aria-pressed={active}
                       aria-label={`${SPEC_LABEL[s]} ${GRADE_LABEL[g]}: ${c?.candidates ?? 0} кандидатов`}
                       className={cn(
-                        "flex w-full items-center justify-between gap-2 rounded-control border px-2.5 py-2 text-left transition-colors",
+                        "flex min-h-10 w-full items-center justify-between gap-2 rounded-control border px-2.5 py-2 text-left transition-colors",
                         active ? "border-primary bg-primary text-white" : "border-line bg-white hover:border-primary",
                       )}
                     >
@@ -136,7 +136,7 @@ function SearchView() {
         }}
       />
       <div className="grid gap-6 lg:grid-cols-[17rem_1fr]">
-        <aside aria-label="Фильтры" className="h-fit space-y-4 rounded-card border border-line bg-white p-5 lg:sticky lg:top-20">
+        <aside aria-label="Фильтры" className="scrollbar-thin h-fit space-y-4 rounded-card border border-line bg-white p-5 lg:sticky lg:top-20 lg:max-h-[calc(100dvh-6rem)] lg:overflow-y-auto">
           <Field label="Поиск по навыкам и описанию">
             <Input type="search" leading={<Search className="size-4" aria-hidden />} value={q} onChange={(e) => setQ(e.target.value)} placeholder="kafka, платежи…" />
           </Field>
@@ -237,7 +237,7 @@ function SearchView() {
                       }
                       footer={
                         <>
-                          <Link href={`/employer/candidates/${c.id}${needId ? `?need=${needId}` : ""}`} className="rounded px-2 text-sm font-medium text-primary hover:underline">
+                          <Link href={`/employer/candidates/${c.id}${needId ? `?need=${needId}` : ""}`} className="tap inline-flex min-h-8 items-center rounded px-2 text-sm font-medium text-primary hover:underline">
                             Открыть профиль
                           </Link>
                           <span className="flex-1" />

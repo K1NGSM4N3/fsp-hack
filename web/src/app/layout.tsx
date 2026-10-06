@@ -3,10 +3,11 @@ import type { ReactNode } from "react";
 import { JetBrains_Mono, Onest } from "next/font/google";
 import "./globals.css";
 import { MotionFlag } from "@/components/motion/MotionFlag";
-import { Providers } from "./providers";
 
 const onest = Onest({ subsets: ["latin", "cyrillic"], variable: "--font-onest", display: "swap" });
-const jetbrains = JetBrains_Mono({ subsets: ["latin", "cyrillic"], variable: "--font-jetbrains", display: "swap" });
+// Mono is only for eyebrows, codes and sums: no preload, so it never competes with Onest, CSS and JS for the first
+// bytes. Listing the weights in use makes Google serve a narrower variable file (52 KB instead of 68 KB for 3 subsets).
+const jetbrains = JetBrains_Mono({ weight: ["400", "500", "600", "700"], subsets: ["latin", "cyrillic"], variable: "--font-jetbrains", display: "swap", preload: false });
 
 export const metadata: Metadata = {
   title: { default: "ФСП Таланты: компании пишут первыми и сразу называют зарплату", template: "%s · ФСП Таланты" },
@@ -30,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <a href="#main" className="sr-only z-[60] rounded-control bg-primary px-4 py-2 text-white focus:not-sr-only focus:fixed focus:top-3 focus:left-3">
           Перейти к содержимому
         </a>
-        <Providers>{children}</Providers>
+        {children}
       </body>
     </html>
   );

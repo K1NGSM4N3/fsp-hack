@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { MOTION_OK, gsap } from "@/components/motion/gsap";
+import { MOTION_DESKTOP, matches } from "@/components/motion/config";
 import { cn } from "@/lib/cn";
 
 interface GraphNode {
@@ -35,10 +35,10 @@ function mulberry32(start: number) {
   };
 }
 
-function buildGraph(w: number, h: number) {
+function buildGraph(w: number, h: number, sparse: boolean) {
   const rand = mulberry32(20260405);
   const mobile = w < 768;
-  const count = Math.round(Math.min(96, Math.max(24, (w * h) / (mobile ? 22000 : 16500))));
+  const count = sparse ? Math.round(Math.min(40, Math.max(14, (w * h) / 30000))) : Math.round(Math.min(96, Math.max(24, (w * h) / (mobile ? 22000 : 16500))));
   const minDist = mobile ? 34 : 52;
   const nodes: GraphNode[] = [];
   for (let tries = 0; nodes.length < count && tries < count * 40; tries++) {
@@ -85,6 +85,11 @@ function pointOnConnector(ax: number, ay: number, bx: number, by: number, t: num
   return [bx, ay + Math.sign(dy) * (s - Math.abs(dx))];
 }
 
+/**
+ * Desktop: the graph breathes, pulses travel along edges and nodes lean away from the pointer; the ticker runs only
+ * while the canvas is on screen and the tab is visible. Phones, tablets and reduced motion get one sparse static frame
+ * at DPR 1, drawn when the main thread is idle, so the hero costs nothing per frame.
+ */
 export function HeroGraph({ className }: { className?: string }) {
   const wrap = useRef<HTMLDivElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
@@ -94,30 +99,31 @@ export function HeroGraph({ className }: { className?: string }) {
     const el = canvas.current;
     const ctx = el?.getContext("2d");
     if (!box || !el || !ctx) return;
-    const animate = window.matchMedia(MOTION_OK).matches;
+    const animate = matches(MOTION_DESKTOP);
     let w = 0;
     let h = 0;
-    let graph = buildGraph(1, 1);
+    let graph = buildGraph(1, 1, !animate);
     let pulses: Pulse[] = [];
     const pointer = { x: -9999, y: -9999, tx: -9999, ty: -9999, active: false };
-    let visible = true;
     const rand = Math.random;
 
     const spawn = (): Pulse => ({ edge: Math.floor(rand() * Math.max(1, graph.edges.length)), t: 0, speed: 0.18 + rand() * 0.3, red: rand() < 0.14 });
 
     const resize = () => {
       const rect = box.getBoundingClientRect();
+      if (rect.width === w && rect.height === h) return;
       w = rect.width;
       h = rect.height;
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = animate ? Math.min(window.devicePixelRatio || 1, 2) : 1;
       el.width = Math.round(w * dpr);
       el.height = Math.round(h * dpr);
       el.style.width = `${w}px`;
       el.style.height = `${h}px`;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      graph = buildGraph(w, h);
-      pulses = Array.from({ length: Math.max(6, Math.round(graph.edges.length / 9)) }, () => ({ ...spawn(), t: rand() }));
+      graph = buildGraph(w, h, !animate);
+      pulses = animate ? Array.from({ length: Math.max(6, Math.round(graph.edges.length / 9)) }, () => ({ ...spawn(), t: rand() })) : [];
       if (!animate) draw(0, 0);
+      el.style.opacity = "1";
     };
 
     const draw = (time: number, dt: number) => {
@@ -209,10 +215,24 @@ export function HeroGraph({ className }: { className?: string }) {
       }
     };
 
+    if (!animate) {
+      let frame = 0;
+      const ro = new ResizeObserver(() => {
+        cancelAnimationFrame(frame);
+        frame = requestAnimationFrame(resize);
+      });
+      const idle = window.requestIdleCallback ? window.requestIdleCallback(() => ro.observe(box), { timeout: 1500 }) : window.setTimeout(() => ro.observe(box), 300);
+      return () => {
+        if (window.cancelIdleCallback) window.cancelIdleCallback(idle);
+        else window.clearTimeout(idle);
+        cancelAnimationFrame(frame);
+        ro.disconnect();
+      };
+    }
+
     resize();
     const ro = new ResizeObserver(resize);
     ro.observe(box);
-    if (!animate) return () => ro.disconnect();
 
     const onMove = (e: PointerEvent) => {
       const rect = box.getBoundingClientRect();
@@ -229,23 +249,37 @@ export function HeroGraph({ className }: { className?: string }) {
     const onLeave = () => {
       pointer.active = false;
     };
+    let frame = 0;
+    let last = 0;
+    const tick = (now: number) => {
+      draw(now / 1000, Math.min(now - (last || now), 50) / 1000);
+      last = now;
+      frame = requestAnimationFrame(tick);
+    };
+    let inView = false;
+    let running = false;
+    const sync = () => {
+      const run = inView && !document.hidden;
+      if (run === running) return;
+      running = run;
+      if (run) {
+        last = 0;
+        frame = requestAnimationFrame(tick);
+      } else cancelAnimationFrame(frame);
+    };
     const io = new IntersectionObserver(([entry]) => {
-      visible = Boolean(entry?.isIntersecting);
+      inView = Boolean(entry?.isIntersecting);
+      sync();
     });
     io.observe(box);
-    const tick = (time: number, deltaMs: number) => {
-      if (!visible || document.hidden) return;
-      draw(time, Math.min(deltaMs, 50) / 1000);
-    };
-    gsap.ticker.add(tick);
+    document.addEventListener("visibilitychange", sync);
     window.addEventListener("pointermove", onMove, { passive: true });
     document.documentElement.addEventListener("pointerleave", onLeave);
-    const fade = gsap.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 2.2, ease: "power2.out", delay: 0.2 });
     return () => {
-      fade.kill();
-      gsap.ticker.remove(tick);
+      cancelAnimationFrame(frame);
       ro.disconnect();
       io.disconnect();
+      document.removeEventListener("visibilitychange", sync);
       window.removeEventListener("pointermove", onMove);
       document.documentElement.removeEventListener("pointerleave", onLeave);
     };
@@ -253,7 +287,7 @@ export function HeroGraph({ className }: { className?: string }) {
 
   return (
     <div ref={wrap} aria-hidden className={cn("pointer-events-none absolute inset-0", className)}>
-      <canvas ref={canvas} className="block" />
+      <canvas ref={canvas} className="block opacity-0 transition-opacity duration-[2000ms] ease-out" />
     </div>
   );
 }

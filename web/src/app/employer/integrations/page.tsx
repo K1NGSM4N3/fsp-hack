@@ -342,7 +342,7 @@ function DeliveryRow({ d }: { d: DeliveryView }) {
   return (
     <li className="py-3 first:pt-0 last:pb-0">
       <div className="grid grid-cols-[1fr_auto] items-start gap-x-3 gap-y-2 sm:grid-cols-[minmax(0,1fr)_13rem_auto] sm:items-center">
-        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="group min-w-0 text-left">
+        <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="group tap min-w-0 text-left">
           <span className="flex items-center gap-1.5 text-sm font-medium text-ink group-hover:text-primary">
             <ChevronDown className={cn("size-4 shrink-0 text-ink-subtle transition-transform", open && "rotate-180")} aria-hidden />
             <span className="truncate">{EVENT_LABEL[d.event_type]}</span>

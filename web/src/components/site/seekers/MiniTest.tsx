@@ -2,9 +2,8 @@
 
 import { ArrowDown, ArrowUp, RotateCcw, TimerOff } from "lucide-react";
 import { useRef, useState } from "react";
-import { MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { loadedKit, useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
-import { motionAllowed } from "./plugins";
 
 interface Question {
   text: string;
@@ -145,8 +144,8 @@ export function MiniTest() {
     });
   };
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_OK, ScrollTrigger, gsap }) => {
       const mm = gsap.matchMedia();
       mm.add(MOTION_OK, () => {
         const box = body.current;
@@ -177,7 +176,8 @@ export function MiniTest() {
                 duration: LIMIT,
                 ease: "none",
                 onUpdate: () => {
-                  t.textContent = clock(left.s);
+                  const label = clock(left.s);
+                  if (t.textContent !== label) t.textContent = label;
                 },
                 onComplete: () => {
                   if (!busy.current) advance(-1);
@@ -207,11 +207,12 @@ export function MiniTest() {
     if (busy.current || done) return;
     busy.current = true;
     setState((s) => ({ ...s, picked: choice }));
-    if (!motionAllowed() || !body.current) {
+    const motion = loadedKit();
+    if (!motion || !motion.matches(motion.MOTION_OK) || !body.current) {
       advance(choice);
       return;
     }
-    gsap.to(body.current, { autoAlpha: 0, x: -28, duration: 0.3, ease: "power2.in", delay: 0.35, onComplete: () => advance(choice) });
+    motion.gsap.to(body.current, { autoAlpha: 0, x: -28, duration: 0.3, ease: "power2.in", delay: 0.35, onComplete: () => advance(choice) });
   };
 
   const restart = () => {
@@ -230,14 +231,14 @@ export function MiniTest() {
           <span className="size-2.5 rounded-full bg-line-strong" />
         </span>
         <span className="truncate text-[13px] font-medium text-ink-muted">Тест · Бэкенд · Middle</span>
-        <span className="ml-auto rounded-full bg-white px-2.5 py-0.5 font-mono text-[10px] tracking-[0.1em] text-ink-subtle uppercase shadow-card">пример</span>
+        <span className="ml-auto rounded-full bg-white px-2.5 py-0.5 font-mono text-xs tracking-[0.1em] text-ink-subtle uppercase shadow-card">пример</span>
       </div>
 
       <div className="grid grid-cols-[1fr_auto]">
         <div className="min-h-[468px] p-5 sm:p-7">
           {done ? (
             <div ref={body} aria-live="polite">
-              <p className="font-mono text-[11px] tracking-[0.12em] text-primary uppercase">Пример окончен</p>
+              <p className="font-mono text-xs tracking-[0.12em] text-primary uppercase">Пример окончен</p>
               <p className="mt-3 text-[22px] leading-snug font-semibold tracking-tight text-ink sm:text-2xl">Так тест подбирает задания под ваши ответы</p>
               <p className="mt-3 text-[15px] leading-relaxed text-ink-muted">
                 Здесь три задания. В настоящем тесте их от 8 до 20: он идёт, пока ваш уровень не станет понятен, а затем показывает результат.
@@ -265,7 +266,7 @@ export function MiniTest() {
             <div ref={body}>
               <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="font-mono text-[11px] tracking-[0.12em] text-ink-subtle uppercase">Задание {state.round + 1}</p>
+                  <p className="font-mono text-xs tracking-[0.12em] text-ink-subtle uppercase">Задание {state.round + 1}</p>
                   <p ref={hint} aria-live="polite" className={cn("mt-1 flex items-center gap-1 text-[12.5px] font-medium", lastMove === "up" ? "text-success" : "text-accent-strong", !lastMove && "invisible")}>
                     {lastMove === "up" ? <ArrowUp className="size-3.5" aria-hidden /> : <ArrowDown className="size-3.5" aria-hidden />}
                     {lastMove === "up" ? "Это задание сложнее" : lastMove === "timeout" ? "Время вышло, это задание проще" : "Это задание проще"}
@@ -299,7 +300,7 @@ export function MiniTest() {
                     >
                       <span
                         className={cn(
-                          "flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-semibold",
+                          "flex size-6 shrink-0 items-center justify-center rounded-full font-mono text-xs font-semibold",
                           picked ? "bg-primary text-white" : "bg-canvas text-ink-muted",
                         )}
                       >
@@ -315,7 +316,7 @@ export function MiniTest() {
         </div>
 
         <aside aria-label="Уровень" className="relative w-[64px] border-l border-line bg-canvas/60 sm:w-[92px]">
-          <p className="pt-5 text-center font-mono text-[8.5px] tracking-[0.12em] text-ink-subtle uppercase sm:text-[9.5px]">Уровень</p>
+          <p className="pt-5 text-center font-mono text-xs tracking-[0.04em] text-ink-subtle uppercase">Уровень</p>
           <div className="absolute inset-x-0 top-14 bottom-10">
             {BANDS.map((b) => (
               <span

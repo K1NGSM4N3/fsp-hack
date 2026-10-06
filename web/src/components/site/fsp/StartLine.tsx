@@ -3,7 +3,7 @@
 import { ArrowRight, EyeOff } from "lucide-react";
 import Link from "next/link";
 import { useRef } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { Container } from "@/components/site/primitives";
 
 const LANES = ["Алгоритмы", "Продукт", "ИБ", "ИИ", "Роботы", "БАС"];
@@ -12,8 +12,8 @@ const COUNT = ["3", "2", "1"];
 export function StartLine() {
   const root = useRef<HTMLElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_OK, gsap }) => {
       const el = root.current;
       if (!el) return;
       const mm = gsap.matchMedia();

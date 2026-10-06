@@ -1,10 +1,8 @@
 "use client";
 
-import { Draggable } from "gsap/Draggable";
-import { InertiaPlugin } from "gsap/InertiaPlugin";
 import { Check, ChevronsLeftRight, Inbox, Minus, Paperclip, Sparkles } from "lucide-react";
 import { useRef } from "react";
-import { MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
 
 interface Mail {
@@ -53,6 +51,8 @@ const PICKS: Pick[] = [
 
 const START = 0.5;
 
+const loadDraggable = () => import("@/components/motion/extras/draggable");
+
 function ScoreRing({ value }: { value: number }) {
   const c = 2 * Math.PI * 17;
   return (
@@ -93,13 +93,13 @@ function MailCard({ m }: { m: Mail }) {
 /**
  * Before/after comparison. The "after" scene is revealed by translating a clipping wrapper and counter-translating
  * its content, so the divider moves with transforms only. Drag, click, or use the arrow keys on the handle.
+ * Touch drags are horizontal only, vertical swipes scroll the page; the idle floating of the mails is desktop-only.
  */
 export function InboxCompare() {
   const root = useRef<HTMLDivElement>(null);
 
-  useGSAP(
-    () => {
-      gsap.registerPlugin(Draggable, InertiaPlugin);
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_OK, ScrollTrigger, gsap }, { Draggable }) => {
       const el = root.current;
       const clip = el?.querySelector<HTMLElement>("[data-clip]");
       const inner = el?.querySelector<HTMLElement>("[data-inner]");
@@ -123,14 +123,16 @@ export function InboxCompare() {
       apply();
 
       const mm = gsap.matchMedia();
-      mm.add({ motion: MOTION_OK, reduce: "(prefers-reduced-motion: reduce)" }, (ctx) => {
+      mm.add({ motion: MOTION_OK, desktop: MOTION_DESKTOP, reduce: "(prefers-reduced-motion: reduce)" }, (ctx) => {
         const motion = Boolean(ctx.conditions?.motion);
+        const desktop = Boolean(ctx.conditions?.desktop);
         const proxy = document.createElement("div");
         const width = () => el.offsetWidth || 1;
         const [drag] = Draggable.create(proxy, {
           type: "x",
           trigger: el,
           inertia: motion,
+          allowNativeTouchScrolling: true,
           minimumMovement: 4,
           onPressInit() {
             gsap.killTweensOf(state);
@@ -163,8 +165,10 @@ export function InboxCompare() {
               gsap.to(state, { p: rest, duration: 1.8, ease: "expo.inOut", delay: 0.2, onUpdate: apply });
             },
           });
-          for (const card of gsap.utils.toArray<HTMLElement>("[data-mail]", el)) {
-            gsap.to(card, { y: gsap.utils.random(-7, 7), rotation: `+=${gsap.utils.random(-1.6, 1.6)}`, duration: gsap.utils.random(2.2, 3.6), ease: "sine.inOut", yoyo: true, repeat: -1 });
+          if (desktop) {
+            for (const card of gsap.utils.toArray<HTMLElement>("[data-mail]", el)) {
+              gsap.to(card, { y: gsap.utils.random(-7, 7), rotation: `+=${gsap.utils.random(-1.6, 1.6)}`, duration: gsap.utils.random(2.2, 3.6), ease: "sine.inOut", yoyo: true, repeat: -1 });
+            }
           }
         }
         return () => drag?.kill();
@@ -183,7 +187,7 @@ export function InboxCompare() {
       handle.addEventListener("keydown", onKey);
       return () => handle.removeEventListener("keydown", onKey);
     },
-    { scope: root },
+    { scope: root, extra: loadDraggable },
   );
 
   return (

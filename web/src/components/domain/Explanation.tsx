@@ -3,7 +3,7 @@
 import { Check, ChevronDown, X } from "lucide-react";
 import { useId, useRef, useState } from "react";
 import type { ScoreBreakdown } from "@/api/types";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { MOTION_OK, gsap, useGSAP } from "@/components/motion/core";
 import { AnimatedNumber } from "@/components/ui";
 import { cn } from "@/lib/cn";
 import { SKILL_SOURCE_SHORT } from "@/lib/labels";
@@ -51,7 +51,7 @@ export function ScoreRing({ score, size = 56, label = "Соответствие"
       </svg>
       <span className={cn("tabular absolute inset-0 flex flex-col items-center justify-center font-semibold", size >= 96 ? "font-display text-3xl tracking-tight" : "font-mono text-base", night ? "text-white" : "text-ink")}>
         <AnimatedNumber value={value} duration={1.3} />
-        {caption && <span className={cn("mt-0.5 font-mono text-[10px] font-normal tracking-[0.12em] uppercase", night ? "text-night-muted" : "text-ink-subtle")}>{caption}</span>}
+        {caption && <span className={cn("mt-0.5 font-mono text-xs font-normal tracking-[0.12em] uppercase", night ? "text-night-muted" : "text-ink-subtle")}>{caption}</span>}
       </span>
     </div>
   );
@@ -108,7 +108,7 @@ export function ExplanationPanel({ breakdown, defaultOpen = false, className }: 
         aria-expanded={open}
         aria-controls={id}
         onClick={toggle}
-        className="mt-3 inline-flex items-center gap-1 rounded text-sm font-medium text-primary hover:underline"
+        className="tap mt-3 inline-flex items-center gap-1 rounded text-sm font-medium text-primary hover:underline"
       >
         {open ? "Скрыть расчёт" : "Как посчитан балл"}
         <ChevronDown className={cn("size-4 transition-transform", open && "rotate-180")} aria-hidden />

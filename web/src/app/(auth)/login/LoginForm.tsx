@@ -1,27 +1,35 @@
 "use client";
 
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useQueryClient } from "@tanstack/react-query";
 import { Building2, LogIn, UserRound } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
+import { useState, type ChangeEvent, type FormEvent } from "react";
 import { isApiError, USE_MOCKS } from "@/api/client";
-
-const DEMO_PASSWORD = "demo12345";
 import type { Me } from "@/api/types";
 import { Alert, Button, Field, Input, useToast } from "@/components/ui";
 import { useLogin, useResendVerification } from "@/features/auth/hooks";
 import { qk } from "@/features/keys";
-import { useQueryClient } from "@tanstack/react-query";
 
-const schema = z.object({
-  email: z.string().trim().min(1, "Введите email").email("Некорректный email"),
-  password: z.string().min(1, "Введите пароль"),
-});
+const DEMO_PASSWORD = "demo12345";
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-type Values = z.infer<typeof schema>;
+interface Values {
+  email: string;
+  password: string;
+}
+
+type Errors = Partial<Record<keyof Values, string>>;
+
+/** Two fields do not need a schema library; keeping zod out of this route keeps it out of every public page that prefetches «Войти». */
+function validate(v: Values): Errors {
+  const email = v.email.trim();
+  const errors: Errors = {};
+  if (!email) errors.email = "Введите email";
+  else if (!EMAIL.test(email)) errors.email = "Некорректный email";
+  if (!v.password) errors.password = "Введите пароль";
+  return errors;
+}
 
 function destination(me: Me | undefined, next: string | null): string {
   const home = me?.role === "employer" ? "/employer" : "/candidate";
@@ -41,15 +49,28 @@ export function LoginForm() {
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: { email: "", password: "" } });
+  const [values, setValues] = useState<Values>({ email: "", password: "" });
+  const [errors, setErrors] = useState<Errors>({});
+  const [submitted, setSubmitted] = useState(false);
 
-  const submit = (values: Values) => {
+  const change = (key: keyof Values) => (e: ChangeEvent<HTMLInputElement>) => {
+    const updated = { ...values, [key]: e.target.value };
+    setValues(updated);
+    if (submitted) setErrors(validate(updated));
+  };
+
+  const submit = (raw: Values) => {
+    setSubmitted(true);
+    const found = validate(raw);
+    setErrors(found);
+    if (found.email || found.password) return;
+    const body = { ...raw, email: raw.email.trim() };
     setFormError(null);
     setUnverifiedEmail(null);
-    login.mutate(values, {
+    login.mutate(body, {
       onSuccess: () => router.replace(destination(qc.getQueryData<Me>(qk.me), next)),
       onError: (err) => {
-        if (isApiError(err) && err.code === "email_not_verified") setUnverifiedEmail(values.email);
+        if (isApiError(err) && err.code === "email_not_verified") setUnverifiedEmail(body.email);
         else if (isApiError(err) && err.status === 401) setFormError("Неверный email или пароль");
         else setFormError(isApiError(err) ? err.title : "Не удалось войти");
       },
@@ -57,9 +78,14 @@ export function LoginForm() {
   };
 
   const demo = (email: string) => {
-    form.setValue("email", email);
-    form.setValue("password", DEMO_PASSWORD);
-    void form.handleSubmit(submit)();
+    const filled = { email, password: DEMO_PASSWORD };
+    setValues(filled);
+    submit(filled);
+  };
+
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    submit(values);
   };
 
   return (
@@ -84,12 +110,12 @@ export function LoginForm() {
       )}
       {formError && <Alert tone="danger" title={formError} />}
 
-      <form noValidate onSubmit={form.handleSubmit(submit)} className="space-y-4">
-        <Field label="Email" error={form.formState.errors.email?.message} required>
-          <Input type="email" autoComplete="email" placeholder="name@example.ru" {...form.register("email")} />
+      <form noValidate onSubmit={onSubmit} className="space-y-4">
+        <Field label="Email" error={errors.email} required>
+          <Input type="email" name="email" autoComplete="email" placeholder="name@example.ru" value={values.email} onChange={change("email")} />
         </Field>
-        <Field label="Пароль" error={form.formState.errors.password?.message} required>
-          <Input type="password" autoComplete="current-password" {...form.register("password")} />
+        <Field label="Пароль" error={errors.password} required>
+          <Input type="password" name="password" autoComplete="current-password" value={values.password} onChange={change("password")} />
         </Field>
         <Button type="submit" size="lg" className="w-full" loading={login.isPending} icon={<LogIn className="size-5" aria-hidden />}>
           Войти

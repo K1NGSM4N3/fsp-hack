@@ -2,10 +2,12 @@
 
 import { ArrowUpRight, BadgeCheck, CloudOff, Link2, Lock, Unlink, UserRound, UsersRound } from "lucide-react";
 import { useRef, useState } from "react";
-import { Flip, MOTION_OK, ScrollTrigger, SplitText, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { Container } from "@/components/site/primitives";
 import { cn } from "@/lib/cn";
 import { Medal, type Metal } from "./Medal";
+
+const loadFlip = () => import("@/components/motion/extras/flip");
 
 type Phase = "idle" | "auth" | "drop" | "linked" | "leaving";
 
@@ -37,22 +39,27 @@ export function LinkDemo() {
     setPhase(next);
   };
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_OK, ScrollTrigger, SplitText, gsap }) => {
       const el = root.current;
       if (!el) return;
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add({ ok: MOTION_OK, desktop: MOTION_DESKTOP }, (ctx) => {
+        if (!ctx.conditions?.ok) return;
         motion.current = true;
         go("idle");
         const q = gsap.utils.selector(el);
         const [title] = q("[data-link-title]");
-        SplitText.create(title, {
-          type: "words",
-          mask: "words",
-          autoSplit: true,
-          onSplit: (self) => gsap.from(self.words, { yPercent: 105, duration: 0.9, ease: "power4.out", stagger: 0.06, scrollTrigger: { trigger: title, start: "top 85%", once: true } }),
-        });
+        if (ctx.conditions.desktop) {
+          SplitText.create(title, {
+            type: "words",
+            mask: "words",
+            autoSplit: true,
+            onSplit: (self) => gsap.from(self.words, { yPercent: 105, duration: 0.9, ease: "power4.out", stagger: 0.06, scrollTrigger: { trigger: title, start: "top 85%", once: true } }),
+          });
+        } else {
+          gsap.from(title, { autoAlpha: 0, y: 24, duration: 0.7, ease: "power3.out", scrollTrigger: { trigger: title, start: "top 88%", once: true } });
+        }
         gsap.from(q("[data-link-copy] > :not(h2)"), { autoAlpha: 0, y: 26, duration: 0.9, ease: "expo.out", stagger: 0.08, scrollTrigger: { trigger: el, start: "top 70%", once: true } });
         ScrollTrigger.create({
           trigger: q("[data-stage]")[0],
@@ -71,8 +78,8 @@ export function LinkDemo() {
     { scope: root },
   );
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ gsap }, { Flip }) => {
       const el = root.current;
       if (!el || !motion.current) return;
       const q = gsap.utils.selector(el);
@@ -116,7 +123,7 @@ export function LinkDemo() {
           .fromTo(q("[data-pill]"), { scale: 0.6, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: 0.7, ease: "back.out(2.6)" }, 0.7);
       }
     },
-    { scope: root, dependencies: [phase] },
+    { scope: root, dependencies: [phase], extra: loadFlip },
   );
 
   const onClick = () => {
@@ -163,7 +170,7 @@ export function LinkDemo() {
         <div data-stage className="relative overflow-hidden rounded-[28px] border border-line bg-canvas p-4 sm:p-7">
           <div aria-hidden className="bg-grid mask-radial pointer-events-none absolute inset-0" />
           <div data-tray className="relative h-28 sm:h-32">
-            <p className="font-mono text-[10px] tracking-[0.14em] text-ink-subtle uppercase sm:text-[11px]">Реестр ФСП</p>
+            <p className="font-mono text-xs tracking-[0.14em] text-ink-subtle uppercase sm:text-xs">Реестр ФСП</p>
             {phase !== "drop" && (
               <p aria-hidden className="absolute inset-x-0 bottom-5 text-center text-sm text-ink-faint">
                 {linked ? "Достижения перенесены в профиль" : "Достижения появятся после входа"}

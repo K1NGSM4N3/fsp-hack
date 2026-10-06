@@ -103,7 +103,7 @@ export default function NewNeedPage() {
       />
 
       <Card padding="lg" className="mb-6">
-        <Field label="Описание" hint="Можно вставить текст вакансии целиком" labelAction={<button type="button" className="text-sm font-medium text-primary hover:underline" onClick={() => setText(EXAMPLE)}>Вставить пример</button>}>
+        <Field label="Описание" hint="Можно вставить текст вакансии целиком" labelAction={<button type="button" className="tap text-sm font-medium text-primary hover:underline" onClick={() => setText(EXAMPLE)}>Вставить пример</button>}>
           <Textarea rows={7} value={text} onChange={(e) => setText(e.target.value)} placeholder="Ищем middle backend-разработчика на Go в финтех. Обязательно PostgreSQL и Kafka, будет плюсом Kubernetes. Удалённо, 250–320 тыс." />
         </Field>
         {parse.isError && !(isApiError(parse.error) && parse.error.status === 422) && <ErrorAlert error={parse.error} className="mt-4" />}

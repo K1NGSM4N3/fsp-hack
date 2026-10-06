@@ -63,7 +63,7 @@ export function CandidateCardView({ candidate: c, href, highlightSkills, aside, 
             <span className="flex size-8 items-center justify-center rounded-full bg-canvas text-ink-subtle" aria-hidden>
               <UserRound className="size-4" />
             </span>
-            <Link href={href} className="rounded font-mono text-[15px] font-semibold text-ink hover:text-primary hover:underline">
+            <Link href={href} className="tap rounded font-mono text-[15px] font-semibold text-ink hover:text-primary hover:underline">
               {candidateTitle(c)}
             </Link>
             {c.category && <CategoryBadge category={c.category} size="sm" />}

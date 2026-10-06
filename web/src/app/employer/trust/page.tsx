@@ -98,7 +98,7 @@ function AdviceCard({ t }: { t: TrustStatus }) {
         <ol className="space-y-3">
           {t.advice.map((a, i) => (
             <li key={a} className="flex items-start gap-3 text-sm text-ink">
-              <span className="tabular mt-px flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-50 font-mono text-[11px] font-semibold text-primary">{i + 1}</span>
+              <span className="tabular mt-px flex size-5 shrink-0 items-center justify-center rounded-full bg-primary-50 font-mono text-xs font-semibold text-primary">{i + 1}</span>
               <span>{a}</span>
             </li>
           ))}
@@ -132,7 +132,7 @@ function DomainCard({ t }: { t: TrustStatus }) {
         </p>
       ) : (
         t.domain.check.status !== "public_mail" && (
-          <Link href="/employer/company" className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
+          <Link href="/employer/company" className="tap mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline">
             Указать сайт в профиле компании
             <ArrowRight className="size-4" aria-hidden />
           </Link>

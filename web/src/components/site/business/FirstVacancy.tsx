@@ -2,7 +2,7 @@
 
 import { ClipboardPaste } from "lucide-react";
 import { useRef } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { Container, Cta } from "@/components/site/primitives";
 import { cn } from "@/lib/cn";
 
@@ -14,26 +14,30 @@ const EXAMPLES = [
 
 const SLOTS = ["Специализация", "Грейд", "Навыки", "Вилка", "Формат"];
 
-/** Closing block: an empty vacancy field with a blinking caret and rotating examples as the placeholder. */
+/** Closing block: an empty vacancy field with a blinking caret and rotating examples as the placeholder; both loops sleep off screen. */
 export function FirstVacancy() {
   const root = useRef<HTMLDivElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_OK, ScrollTrigger, gsap }) => {
       const mm = gsap.matchMedia();
       mm.add(MOTION_OK, () => {
         const el = root.current;
         const caret = el?.querySelector("[data-caret]");
         const examples = gsap.utils.toArray<HTMLElement>("[data-example]", el);
-        if (caret) gsap.to(caret, { opacity: 0, duration: 0.55, repeat: -1, yoyo: true, ease: "steps(1)" });
-        if (examples.length < 2) return;
-        gsap.set(examples.slice(1), { autoAlpha: 0, y: 24 });
-        const tl = gsap.timeline({ repeat: -1 });
-        examples.forEach((ex, i) => {
-          const next = examples[(i + 1) % examples.length];
-          tl.to(ex, { autoAlpha: 0, y: -24, duration: 0.6, ease: "power2.in" }, "+=3.2");
-          tl.fromTo(next ?? ex, { autoAlpha: 0, y: 24 }, { autoAlpha: 1, y: 0, duration: 0.8, ease: "expo.out" }, "-=0.15");
-        });
+        const loops: gsap.core.Animation[] = [];
+        if (caret) loops.push(gsap.to(caret, { opacity: 0, duration: 0.55, repeat: -1, yoyo: true, ease: "steps(1)", paused: true }));
+        if (examples.length > 1) {
+          gsap.set(examples.slice(1), { autoAlpha: 0, y: 24 });
+          const tl = gsap.timeline({ repeat: -1, paused: true });
+          examples.forEach((ex, i) => {
+            const next = examples[(i + 1) % examples.length];
+            tl.to(ex, { autoAlpha: 0, y: -24, duration: 0.6, ease: "power2.in" }, "+=3.2");
+            tl.fromTo(next ?? ex, { autoAlpha: 0, y: 24 }, { autoAlpha: 1, y: 0, duration: 0.8, ease: "expo.out" }, "-=0.15");
+          });
+          loops.push(tl);
+        }
+        ScrollTrigger.create({ trigger: el, start: "top bottom", end: "bottom top", onToggle: (self) => loops.forEach((a) => void (self.isActive ? a.play() : a.pause())) });
       });
     },
     { scope: root },

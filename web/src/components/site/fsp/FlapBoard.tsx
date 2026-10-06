@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { type Kit, useMotion } from "@/components/motion/lazy";
 
 const WIDTH = 14;
 const ROWS = 3;
@@ -78,7 +78,7 @@ function paint(c: Cell, ch: string) {
 }
 
 /** Each flip shows a run of random glyphs before the target, like a Solari board drum. */
-function cellTimeline(c: Cell, target: string, spins: number): gsap.core.Timeline {
+function cellTimeline({ gsap }: Pick<Kit, "gsap">, c: Cell, target: string, spins: number): gsap.core.Timeline {
   const tl = gsap.timeline();
   if (c.ch === target && target === " ") return tl;
   const seq: string[] = [];
@@ -104,16 +104,20 @@ function cellTimeline(c: Cell, target: string, spins: number): gsap.core.Timelin
   return tl;
 }
 
+/**
+ * Desktop: the board slides in, all rows spin up from blank, then one row flips every 2.6 s.
+ * Phones: the server-rendered rows are on screen from the first paint; while the board is visible one row flips every
+ * 3.6 s with short drum runs, so about a third of the transforms per flip and none while it is off screen.
+ */
 export function FlapBoard() {
   const root = useRef<HTMLDivElement>(null);
   const initial = POOL.slice(0, ROWS);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, ScrollTrigger, gsap }) => {
       const board = root.current;
       if (!board) return;
-      const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      const setup = (mobile: boolean) => {
         const rows = gsap.utils.toArray<HTMLElement>("[data-row]", board).map((row) => ({
           cells: Array.from(row.querySelectorAll("[data-flap]")).map(readCell),
           lamp: row.querySelector<HTMLElement>("[data-lamp-on]"),
@@ -121,43 +125,47 @@ export function FlapBoard() {
         const flaps = rows.flatMap((r) => r.cells.flatMap((c) => [c.flapTop, c.flapBottom]));
         const lamps = rows.map((r) => r.lamp).filter((l): l is HTMLElement => l !== null);
         const live = new Set<gsap.core.Animation>();
+        const spins: [number, number] = mobile ? [1, 3] : [3, 8];
         let loop: gsap.core.Tween | null = null;
-        let visible = true;
+        let visible = !mobile;
 
         gsap.set(flaps, { rotationX: (i: number) => (i % 2 ? 90 : -90) });
-        gsap.set(lamps, { autoAlpha: 0, scale: 0.4 });
-        for (const r of rows) for (const c of r.cells) paint(c, " ");
 
-        const flipRow = (index: number, text: string, delay = 0, spins: [number, number] = [3, 8]) => {
+        const flipRow = (index: number, text: string, delay = 0, range: [number, number] = spins) => {
           const row = rows[index];
           const tl = gsap.timeline({ delay, onComplete: () => void live.delete(tl) });
           if (row.lamp) tl.to(row.lamp, { autoAlpha: 0, scale: 0.4, duration: 0.2, ease: "power2.in" }, 0);
           row.cells.forEach((c, i) => {
             const target = text[i] ?? " ";
-            const spin = target === " " && c.ch === " " ? 0 : gsap.utils.random(spins[0], spins[1], 1);
-            tl.add(cellTimeline(c, target, spin), 0.05 + (i % WIDTH) * 0.032 + (i >= WIDTH ? 0.12 : 0));
+            const spin = target === " " && c.ch === " " ? 0 : gsap.utils.random(range[0], range[1], 1);
+            tl.add(cellTimeline({ gsap }, c, target, spin), 0.05 + (i % WIDTH) * 0.032 + (i >= WIDTH ? 0.12 : 0));
           });
           if (row.lamp) tl.to(row.lamp, { autoAlpha: 1, scale: 1, duration: 0.5, ease: "back.out(3)" });
           live.add(tl);
           return tl;
         };
 
-        gsap.set(board, { visibility: "visible" });
-        const intro = gsap.timeline({ delay: 0.5 });
-        intro.from(board, { autoAlpha: 0, y: 40, duration: 1, ease: "expo.out" });
-        initial.forEach((entry, i) => intro.add(flipRow(i, rowText(entry), 0, [4, 10]), 0.35 + i * 0.22));
+        if (!mobile) {
+          gsap.set(lamps, { autoAlpha: 0, scale: 0.4 });
+          for (const r of rows) for (const c of r.cells) paint(c, " ");
+          gsap.set(board, { visibility: "visible" });
+          const intro = gsap.timeline({ delay: 0.5 });
+          intro.from(board, { autoAlpha: 0, y: 40, duration: 1, ease: "expo.out" });
+          initial.forEach((entry, i) => intro.add(flipRow(i, rowText(entry), 0, [4, 10]), 0.35 + i * 0.22));
+        }
 
         let poolIndex = ROWS;
         let rowIndex = 0;
+        const every = mobile ? 3.6 : 2.6;
         const cycle = () => {
           if (visible && !document.hidden) {
             flipRow(rowIndex, rowText(POOL[poolIndex % POOL.length]));
             poolIndex += 1;
             rowIndex = (rowIndex + 1) % ROWS;
           }
-          loop = gsap.delayedCall(2.6, cycle);
+          loop = gsap.delayedCall(every, cycle);
         };
-        loop = gsap.delayedCall(5.2, cycle);
+        loop = gsap.delayedCall(mobile ? 2 : 5.2, cycle);
 
         ScrollTrigger.create({ trigger: board, start: "top bottom", end: "bottom top", onToggle: (self) => (visible = self.isActive) });
 
@@ -167,9 +175,12 @@ export function FlapBoard() {
           gsap.set(flaps, { clearProps: "transform" });
           for (const r of rows) for (const c of r.cells) paint(c, c.initial);
         };
-      });
+      };
+      const mm = gsap.matchMedia();
+      mm.add(MOTION_DESKTOP, () => setup(false));
+      mm.add(MOTION_MOBILE, () => setup(true));
     },
-    { scope: root },
+    { scope: root, urgent: true },
   );
 
   return (

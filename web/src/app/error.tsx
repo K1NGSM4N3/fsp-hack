@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, ButtonLink } from "@/components/ui";
+import { Button, ButtonLink } from "@/components/ui/Button";
 
 export default function GlobalError({ reset }: { error: Error & { digest?: string }; reset: () => void }) {
   return (

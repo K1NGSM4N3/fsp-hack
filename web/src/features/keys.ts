@@ -50,3 +50,15 @@ export const qk = {
   vacancies: (p: VacancyQuery) => ["vacancies", p] as const,
   vacancy: (id: string) => ["vacancies", "one", id] as const,
 };
+
+/**
+ * Freshness per kind of data. Reference data and documents change only with a deploy. Account settings change only
+ * through this UI, where mutations write the new value into the cache. Lists the other side changes (invitations,
+ * replies, applications) go stale quickly and also refresh when the tab regains focus.
+ */
+export const fresh = {
+  reference: { staleTime: Infinity },
+  account: { staleTime: 5 * 60_000 },
+  detail: { staleTime: 60_000 },
+  live: { staleTime: 20_000, refetchOnWindowFocus: true },
+} as const;

@@ -2,10 +2,9 @@
 
 import { Check, Clock, LockOpen, MapPin, RotateCcw, X } from "lucide-react";
 import { useRef, useState } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { loadedKit, useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
 import { DECLINE_REASON_LABEL, DECLINE_REASONS } from "@/lib/labels";
-import { Draggable, InertiaPlugin, motionAllowed } from "./plugins";
 
 interface Invite {
   company: string;
@@ -55,9 +54,11 @@ type Overlay = { kind: "accepted"; invite: Invite } | { kind: "reasons"; invite:
 
 const THRESHOLD = 110;
 
+const loadDraggable = () => import("@/components/motion/extras/draggable");
+
 function Pin({ n }: { n: number }) {
   return (
-    <span aria-hidden className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-ink font-mono text-[10px] font-semibold text-white">
+    <span aria-hidden className="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-ink font-mono text-xs font-semibold text-white">
       {n}
     </span>
   );
@@ -85,7 +86,7 @@ function Card({ invite, top }: { invite: Invite; top: boolean }) {
           </span>
           <span className="block text-xs text-ink-subtle">{invite.industry}</span>
         </span>
-        <span className="ml-auto shrink-0 rounded-full bg-primary-50 px-2.5 py-1 text-[11px] font-medium text-primary-strong">Новое</span>
+        <span className="ml-auto shrink-0 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-strong">Новое</span>
       </header>
       <h3 className="mt-6 text-[20px] leading-tight font-semibold tracking-tight text-ink sm:text-[21px]">
         {invite.role} <Pin n={1} />
@@ -134,10 +135,12 @@ export function InviteSwipe() {
     busy.current = true;
     const invite = topInvite;
     const card = root.current?.querySelector<HTMLElement>("[data-card=top]");
-    if (!motionAllowed() || !card) {
+    const motion = loadedKit();
+    if (!motion || !motion.matches(motion.MOTION_OK) || !card) {
       finish(dir, invite);
       return;
     }
+    const { gsap } = motion;
     gsap.to(card.querySelector(dir > 0 ? "[data-yes]" : "[data-no]"), { opacity: 1, duration: 0.15 });
     gsap.to(card, {
       x: dir * (card.offsetWidth * 1.4 + 120),
@@ -151,8 +154,8 @@ export function InviteSwipe() {
     });
   };
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_OK, gsap }, { Draggable, InertiaPlugin }) => {
       const mm = gsap.matchMedia();
       mm.add(MOTION_OK, () => {
         const box = root.current;
@@ -210,8 +213,10 @@ export function InviteSwipe() {
         };
       });
     },
-    { scope: root, dependencies: [topIndex, overlay?.kind], revertOnUpdate: true },
+    { scope: root, dependencies: [topIndex, overlay?.kind], revertOnUpdate: true, extra: loadDraggable },
   );
+
+
 
   const reset = () => {
     busy.current = false;
@@ -282,7 +287,7 @@ export function InviteSwipe() {
             )}
             {overlay.kind === "reasons" && (
               <>
-                <p className="font-mono text-[11px] tracking-[0.12em] text-accent-strong uppercase">Отклонено</p>
+                <p className="font-mono text-xs tracking-[0.12em] text-accent-strong uppercase">Отклонено</p>
                 <p className="mt-3 text-[22px] leading-snug font-semibold tracking-tight text-ink">Отметьте, что не подошло</p>
                 <p className="mt-2.5 text-[15px] leading-relaxed text-ink-muted">{overlay.invite.company} увидит причину. Ваши имя и контакты остаются закрыты.</p>
                 <div role="group" aria-label="Причина отказа" className="mt-6 flex flex-wrap gap-2">

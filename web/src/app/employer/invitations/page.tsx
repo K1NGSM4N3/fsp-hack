@@ -71,7 +71,7 @@ function Row({ inv }: { inv: SentInvitation }) {
                 {inv.status === "accepted" ? "Профиль и контакты" : "Профиль кандидата"}
               </ButtonLink>
               {inv.need_id && (
-                <Link href={`/employer/needs/${inv.need_id}`} className="inline-flex items-center rounded px-2 text-sm font-medium text-primary hover:underline">
+                <Link href={`/employer/needs/${inv.need_id}`} className="tap inline-flex items-center rounded px-2 text-sm font-medium text-primary hover:underline">
                   К подборке
                 </Link>
               )}

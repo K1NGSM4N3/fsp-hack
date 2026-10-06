@@ -3,14 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/endpoints";
 import type { LoginRequest, RegisterRequest } from "@/api/types";
-import { qk } from "../keys";
+import { fresh, qk } from "../keys";
 
 export function useMe(enabled = true) {
-  return useQuery({ queryKey: qk.me, queryFn: api.getMe, enabled, retry: false, staleTime: 60_000 });
+  return useQuery({ queryKey: qk.me, queryFn: api.getMe, enabled, retry: false, ...fresh.account });
 }
 
 export function useConsentDocuments() {
-  return useQuery({ queryKey: qk.consents, queryFn: api.getCurrentConsents, staleTime: 10 * 60_000 });
+  return useQuery({ queryKey: qk.consents, queryFn: api.getCurrentConsents, ...fresh.reference });
 }
 
 export function useLogin() {
@@ -45,7 +45,7 @@ export function useLogout() {
 }
 
 export function useMyConsents() {
-  return useQuery({ queryKey: qk.myConsents, queryFn: api.getMyConsents });
+  return useQuery({ queryKey: qk.myConsents, queryFn: api.getMyConsents, ...fresh.account });
 }
 
 export function useRevokeConsent() {

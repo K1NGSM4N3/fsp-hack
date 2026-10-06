@@ -30,10 +30,10 @@ export function SiteFooter() {
               {FOOTER_COLUMNS.map((col) => (
                 <nav key={col.title} aria-label={col.title}>
                   <p className="eyebrow text-night-faint">{col.title}</p>
-                  <ul className="mt-5 space-y-3">
+                  <ul className="mt-3 space-y-0.5">
                     {col.links.map((l) => (
                       <li key={l.href}>
-                        <Link href={l.href} className="group inline-flex items-center gap-1 text-[15px] text-night-muted transition-colors hover:text-white">
+                        <Link href={l.href} className="group inline-flex min-h-10 items-center gap-1 text-[15px] text-night-muted transition-colors hover:text-white">
                           {l.label}
                           <ArrowUpRight className="size-3.5 opacity-0 transition-opacity group-hover:opacity-100" aria-hidden />
                         </Link>
@@ -53,11 +53,11 @@ export function SiteFooter() {
 
           <div className="mt-10 flex flex-col gap-4 border-t border-night-line pt-6 text-sm text-night-faint md:flex-row md:items-center md:justify-between">
             <p>© 2026 ФСП Таланты · Хакатон «Лидеры цифровой трансформации 2026», спецтрек ФСП</p>
-            <div className="flex flex-wrap gap-x-6 gap-y-2">
-              <Link href="/privacy" className="transition-colors hover:text-white">
+            <div className="flex flex-wrap gap-x-6">
+              <Link href="/privacy" className="inline-flex min-h-10 items-center transition-colors hover:text-white">
                 Политика обработки данных
               </Link>
-              <a href="https://fsp-russia.com" target="_blank" rel="noreferrer" className="transition-colors hover:text-white">
+              <a href="https://fsp-russia.com" target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center transition-colors hover:text-white">
                 fsp-russia.com
               </a>
             </div>

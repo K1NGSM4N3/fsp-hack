@@ -3,10 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/endpoints";
 import type { ApiKeyInput, WebhookInput } from "@/api/types";
-import { qk } from "../keys";
+import { fresh, qk } from "../keys";
 
 export function useIntegrations() {
-  return useQuery({ queryKey: qk.integrations, queryFn: api.getIntegrations });
+  return useQuery({ queryKey: qk.integrations, queryFn: api.getIntegrations, ...fresh.account });
 }
 
 /** Pending deliveries are retried in the background, so the log refreshes while any are queued. */
@@ -19,7 +19,7 @@ export function useDeliveries() {
 }
 
 export function useApiKeys() {
-  return useQuery({ queryKey: qk.apiKeys, queryFn: api.listApiKeys });
+  return useQuery({ queryKey: qk.apiKeys, queryFn: api.listApiKeys, ...fresh.account });
 }
 
 function useInvalidateIntegrations() {

@@ -39,7 +39,9 @@ async function currentDocuments(): Promise<ConsentDocument[] | null> {
   const api = process.env.API_PROXY_URL ?? "http://localhost:8000";
   try {
     const res = await fetch(`${api}/api/v1/consents/current`, { cache: "no-store", signal: AbortSignal.timeout(3000) });
-    return res.ok ? ((await res.json()) as ConsentDocument[]) : null;
+    if (res.ok) return (await res.json()) as ConsentDocument[];
+    await res.body?.cancel();
+    return null;
   } catch {
     return null;
   }
@@ -81,10 +83,10 @@ export default async function PrivacyPage() {
       <Container className="pt-28 pb-20 sm:pt-32 lg:pb-28">
         <div className="grid gap-12 lg:grid-cols-[220px_minmax(0,1fr)] lg:gap-16">
           <nav aria-label="Разделы политики" className="hidden lg:block">
-            <ol className="sticky top-28 space-y-2 border-l border-line text-sm">
+            <ol className="sticky top-28 border-l border-line text-sm">
               {SECTIONS.map((s) => (
                 <li key={s.id}>
-                  <a href={`#${s.id}`} className="-ml-px block border-l border-transparent pl-4 text-ink-subtle transition-colors hover:border-primary hover:text-ink">
+                  <a href={`#${s.id}`} className="-ml-px flex min-h-10 items-center border-l border-transparent pl-4 text-ink-subtle transition-colors hover:border-primary hover:text-ink">
                     {s.title}
                   </a>
                 </li>

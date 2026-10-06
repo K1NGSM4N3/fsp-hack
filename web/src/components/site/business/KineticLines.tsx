@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { MOTION_OK, SplitText, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { Container } from "@/components/site/primitives";
 
 interface Line {
@@ -46,14 +46,25 @@ const LINES: Line[] = [
 
 const SIZE = "font-display text-[clamp(2rem,0.9rem+4.1vw,4.6rem)] leading-[1.02] font-semibold tracking-[-0.045em] text-balance";
 
-/** Each benefit is one sentence drawn as an outline; scrolling fills it in letter by letter. */
+/**
+ * Each benefit is one sentence drawn as an outline. Desktop: scrolling fills it in letter by letter.
+ * Phones: no letter split; the filled copy fades in over the outline once, then the note rises.
+ */
 export function KineticLines() {
   const root = useRef<HTMLDivElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, SplitText, gsap }) => {
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add(MOTION_MOBILE, () => {
+        for (const line of gsap.utils.toArray<HTMLElement>("[data-line]", root.current)) {
+          gsap
+            .timeline({ scrollTrigger: { trigger: line, start: "top 78%", once: true } })
+            .fromTo(line.querySelector("[data-fill-text]"), { autoAlpha: 0 }, { autoAlpha: 1, duration: 1.1, ease: "power1.inOut" })
+            .fromTo(line.querySelector("[data-note]"), { autoAlpha: 0, y: 14 }, { autoAlpha: 1, y: 0, duration: 0.6, ease: "power3.out" }, 0.5);
+        }
+      });
+      mm.add(MOTION_DESKTOP, () => {
         gsap.utils.toArray<HTMLElement>("[data-line]", root.current).forEach((line, i) => {
           const fill = line.querySelector<HTMLElement>("[data-fill-text]");
           const sentence = line.querySelector<HTMLElement>("[data-sentence]");
@@ -65,10 +76,9 @@ export function KineticLines() {
             { opacity: 0 },
             { opacity: 1, ease: "none", stagger: 0.05, scrollTrigger: { trigger: line, start: "top 82%", end: "bottom 42%", scrub: 0.4 } },
           );
-          const drift = window.innerWidth < 768 ? 0 : 4;
           gsap.fromTo(
             sentence,
-            { xPercent: i % 2 ? -drift : drift },
+            { xPercent: i % 2 ? -4 : 4 },
             { xPercent: 0, ease: "none", scrollTrigger: { trigger: line, start: "top bottom", end: "bottom 42%", scrub: 0.6 } },
           );
           if (note) {

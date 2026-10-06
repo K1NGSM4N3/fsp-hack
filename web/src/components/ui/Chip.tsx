@@ -34,7 +34,7 @@ export function Chip({ children, tone = "neutral", icon, onRemove, removeLabel, 
           type="button"
           onClick={onRemove}
           aria-label={removeLabel ?? `Убрать «${typeof children === "string" ? children : ""}»`}
-          className="inline-flex size-5 items-center justify-center rounded-full text-current opacity-70 hover:bg-black/5 hover:opacity-100"
+          className="tap inline-flex size-5 items-center justify-center rounded-full text-current opacity-70 hover:bg-black/5 hover:opacity-100"
         >
           <X className="size-3.5" aria-hidden />
         </button>
@@ -60,7 +60,7 @@ export function ToggleChip({ selected, onToggle, children, icon, disabled, class
       disabled={disabled}
       onClick={onToggle}
       className={cn(
-        "inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors disabled:opacity-50",
+        "tap inline-flex h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors disabled:opacity-50",
         selected ? "border-primary bg-primary text-white" : "border-line-strong bg-white text-ink hover:border-primary hover:text-primary",
         className,
       )}

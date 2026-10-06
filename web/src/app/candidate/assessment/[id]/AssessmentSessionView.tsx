@@ -35,7 +35,7 @@ const SCALE_ZONES = [
 function GradeScale({ level, spread }: { level: number; spread: number }) {
   return (
     <div className="relative mt-3 mb-1" role="img" aria-label="Положение результата на шкале грейдов">
-      <div className="flex h-9 overflow-hidden rounded-control border border-line text-[11px]">
+      <div className="flex h-9 overflow-hidden rounded-control border border-line text-xs">
         {SCALE_ZONES.map((z) => (
           <span key={z.label} className="flex items-end justify-center border-r border-line bg-canvas pb-1 text-ink-subtle last:border-r-0" style={{ width: `${scalePos(z.to) - scalePos(z.from)}%` }}>
             {z.label}

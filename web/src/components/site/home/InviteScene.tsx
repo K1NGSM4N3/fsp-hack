@@ -1,15 +1,12 @@
 "use client";
 
 import { Check, Mail } from "lucide-react";
-import { MotionPathPlugin } from "gsap/MotionPathPlugin";
-import { useRef } from "react";
-import { MOTION_OK, ScrollTrigger, SplitText, gsap, useGSAP } from "@/components/motion/gsap";
+import { useRef, type ReactNode } from "react";
+import { type Kit, useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
 import { Container } from "../primitives";
-import { SceneLaptop } from "./SceneLaptop";
-import { ScenePhone } from "./ScenePhone";
 
-gsap.registerPlugin(MotionPathPlugin);
+const loadMotionPath = () => import("@/components/motion/extras/motion-path");
 
 type Side = "seeker" | "company";
 
@@ -64,17 +61,74 @@ function centerWithin(el: HTMLElement, root: HTMLElement, fx = 0.5, fy = 0.5) {
 }
 
 /**
- * Pinned split-screen story: the company's laptop and the job seeker's phone, one invitation travelling between them.
- * Server markup is the static version (all captions listed, devices in their final state); with motion allowed the
- * root gets data-live, switches to the pinned layout and the timeline rewinds the devices to the first stage.
+ * Phones and tablets: the five steps stay a vertical list that rises in step by step, and once the devices scroll into
+ * view the last act plays by itself in about three seconds: the push lands on the lock screen, the invitation opens,
+ * «Принять» is tapped and the laptop unlocks the contacts. Time-based, transforms and opacity only.
  */
-export function InviteScene() {
+function mobileStory({ gsap, ScrollTrigger }: Pick<Kit, "gsap" | "ScrollTrigger">, el: HTMLElement) {
+  const one = (sel: string) => el.querySelector<HTMLElement>(sel);
+  const devices = one("[data-s-devices]");
+  const fold = window.innerHeight;
+  const devicesTop = devices?.getBoundingClientRect().top ?? 0;
+  const caps = gsap.utils.toArray<HTMLElement>("[data-s-cap]", el).filter((cap) => cap.getBoundingClientRect().top > fold * 0.92);
+  if (caps.length) {
+    gsap.set(caps, { autoAlpha: 0, y: 22 });
+    ScrollTrigger.batch(caps, {
+      start: "top 90%",
+      once: true,
+      onEnter: (batch) => gsap.to(batch, { autoAlpha: 1, y: 0, duration: 0.7, ease: "power3.out", stagger: 0.1, overwrite: true }),
+    });
+  }
+  if (!devices || devicesTop < fold * 0.75) return;
+
+  const phone = one("[data-s-phone]");
+  const push = one("[data-s-push]");
+  const openItems = gsap.utils.toArray<HTMLElement>("[data-s-open-item]", el);
+  gsap.set(one("[data-s-scr-lock]"), { autoAlpha: 1 });
+  gsap.set(push, { autoAlpha: 0, yPercent: -140 });
+  gsap.set(one("[data-s-scr-inv]"), { autoAlpha: 0 });
+  gsap.set(one("[data-s-actions]"), { autoAlpha: 1 });
+  gsap.set(one("[data-s-accepted]"), { autoAlpha: 0 });
+  gsap.set(one("[data-s-lock]"), { autoAlpha: 1 });
+  gsap.set(openItems, { autoAlpha: 0, y: 6 });
+  gsap.set(one("[data-s-btn-sent]"), { autoAlpha: 1 });
+  gsap.set(one("[data-s-btn-accepted]"), { autoAlpha: 0 });
+
+  gsap
+    .timeline({ delay: 0.3, scrollTrigger: { trigger: devices, start: "top 70%", once: true } })
+    .to(push, { autoAlpha: 1, yPercent: 0, duration: 0.55, ease: "back.out(1.5)" })
+    .to(phone, { scale: 1.02, duration: 0.18, ease: "power2.out", transformOrigin: "50% 100%" }, "<0.1")
+    .to(phone, { scale: 1, duration: 0.3, ease: "power2.inOut" })
+    .to(push, { autoAlpha: 0, scale: 1.05, duration: 0.25 }, "+=0.7")
+    .to(one("[data-s-scr-lock]"), { autoAlpha: 0, duration: 0.25 }, "<")
+    .fromTo(one("[data-s-scr-inv]"), { scale: 0.95 }, { autoAlpha: 1, scale: 1, duration: 0.4, ease: "power3.out" }, "<0.1")
+    .set(one("[data-s-tap]"), { autoAlpha: 0.8, scale: 0.2 }, "+=0.6")
+    .to(one("[data-s-tap]"), { autoAlpha: 0, scale: 1.8, duration: 0.4, ease: "power2.out" })
+    .to(one("[data-s-accept-btn]"), { scale: 0.94, duration: 0.08, yoyo: true, repeat: 1 }, "<")
+    .to(one("[data-s-actions]"), { autoAlpha: 0, y: 6, duration: 0.2 }, "<0.2")
+    .fromTo(one("[data-s-accepted]"), { y: 8 }, { autoAlpha: 1, y: 0, duration: 0.35, ease: "power3.out" })
+    .to(one("[data-s-lock]"), { autoAlpha: 0, duration: 0.25 }, "+=0.15")
+    .to(openItems, { autoAlpha: 1, y: 0, duration: 0.35, ease: "power3.out", stagger: 0.08 }, "<0.1")
+    .to(one("[data-s-btn-sent]"), { autoAlpha: 0, duration: 0.2 }, "<")
+    .fromTo(one("[data-s-btn-accepted]"), { y: 6 }, { autoAlpha: 1, y: 0, duration: 0.3, ease: "power3.out" }, "<0.1");
+}
+
+/**
+ * Desktop: a pinned split-screen story, the company's laptop and the job seeker's phone, one invitation travelling
+ * between them. Server markup is the static version (all captions listed, devices in their final state); the desktop
+ * profile gives the root data-live, switches to the pinned layout and the timeline rewinds the devices to the first stage.
+ * The devices are server components passed in as props, so their markup ships no JS.
+ */
+export function InviteScene({ laptop, phone }: { laptop: ReactNode; phone: ReactNode }) {
   const root = useRef<HTMLElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, ScrollTrigger, SplitText, gsap }) => {
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, (context) => {
+      mm.add(MOTION_MOBILE, () => {
+        if (root.current) mobileStory({ gsap, ScrollTrigger }, root.current);
+      });
+      mm.add(MOTION_DESKTOP, (context) => {
         const el = root.current;
         if (!el) return;
         const one = (sel: string) => el.querySelector<HTMLElement>(sel);
@@ -282,7 +336,7 @@ export function InviteScene() {
         };
       });
     },
-    { scope: root },
+    { scope: root, extra: loadMotionPath },
   );
 
   return (
@@ -327,7 +381,7 @@ export function InviteScene() {
                     {String(i + 1).padStart(2, "0")}
                   </span>
                   <div>
-                    <p data-s-cap-line className={cn("font-mono text-[11px] tracking-[0.14em] uppercase", s.side === "seeker" ? "text-primary-strong" : "text-accent-strong")}>
+                    <p data-s-cap-line className={cn("font-mono text-xs tracking-[0.14em] uppercase", s.side === "seeker" ? "text-primary-strong" : "text-accent-strong")}>
                       <span className={cn("mr-2 inline-block size-1.5 rounded-full align-middle", s.side === "seeker" ? "bg-primary" : "bg-accent")} aria-hidden />
                       {s.tag}
                     </p>
@@ -347,13 +401,14 @@ export function InviteScene() {
           </div>
 
           <div
+            data-s-devices
             className={cn(
               "relative flex flex-col lg:flex-row lg:items-end lg:justify-between",
               "group-data-live/scene:mt-5 group-data-live/scene:min-h-0 group-data-live/scene:flex-1 group-data-live/scene:[container-type:size] lg:group-data-live/scene:mt-8",
             )}
           >
-            <SceneLaptop className="w-full lg:w-[72%] group-data-live/scene:absolute group-data-live/scene:top-0 group-data-live/scene:right-0 group-data-live/scene:w-[min(100cqw,82cqh)] lg:group-data-live/scene:top-auto lg:group-data-live/scene:right-auto lg:group-data-live/scene:bottom-[5%] lg:group-data-live/scene:left-0 lg:group-data-live/scene:w-[min(63cqw,132cqh)]" />
-            <ScenePhone className="-mt-[22%] ml-[4%] w-[48%] lg:mt-0 lg:ml-0 lg:w-[25%] group-data-live/scene:absolute group-data-live/scene:bottom-0 group-data-live/scene:left-0 group-data-live/scene:m-0 group-data-live/scene:w-[min(50cqw,35cqh)] lg:group-data-live/scene:right-[2%] lg:group-data-live/scene:left-auto lg:group-data-live/scene:w-[min(25cqw,44cqh)]" />
+            {laptop}
+            {phone}
           </div>
         </Container>
 

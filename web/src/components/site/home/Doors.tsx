@@ -4,11 +4,9 @@ import { ArrowRight, ArrowUpRight, Check, Clock } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRef } from "react";
-import { MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { type Kit, useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
 import { Container } from "../primitives";
-
-const DOORS_WIDE = "(prefers-reduced-motion: no-preference) and (min-width: 1024px)";
 
 const OFFERS = [
   { role: "Go-разработчик", pay: "280 000 – 350 000 ₽", meta: "Финтех · гибрид" },
@@ -84,7 +82,7 @@ function PeopleList() {
   );
 }
 
-function offersLoop(scope: HTMLElement) {
+function offersLoop({ gsap }: Pick<Kit, "gsap">, scope: HTMLElement) {
   const items = gsap.utils.toArray<HTMLElement>("[data-offer]", scope);
   const n = items.length;
   const tl = gsap.timeline({ repeat: -1, paused: true, defaults: { duration: 0.8, ease: "expo.out" } });
@@ -99,7 +97,7 @@ function offersLoop(scope: HTMLElement) {
   return tl;
 }
 
-function peopleLoop(scope: HTMLElement) {
+function peopleLoop({ gsap }: Pick<Kit, "gsap">, scope: HTMLElement) {
   const rows = gsap.utils.toArray<HTMLElement>("[data-person]", scope);
   const pick = (row: HTMLElement, sel: string) => row.querySelector(sel);
   const tl = gsap.timeline({ repeat: -1, paused: true, repeatDelay: 0.6, defaults: { duration: 0.35, ease: "power2.out" } });
@@ -125,12 +123,15 @@ function peopleLoop(scope: HTMLElement) {
   return tl;
 }
 
-/** Final chooser: two full-bleed halves; on wide screens the hovered or focused half widens. */
+/**
+ * Final chooser: two full-bleed halves with small looping demos that sleep off screen (same on phones: four cards and
+ * three rows, transforms and opacity only). With a mouse on a wide screen the hovered or focused half widens.
+ */
 export function Doors() {
   const root = useRef<HTMLElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_OK, ScrollTrigger, gsap }) => {
       const el = root.current;
       if (!el) return;
       const mm = gsap.matchMedia();
@@ -139,13 +140,13 @@ export function Doors() {
         const business = el.querySelector<HTMLElement>("[data-door='business']");
         if (!seeker || !business) return;
         for (const [door, loop] of [
-          [seeker, offersLoop(seeker)],
-          [business, peopleLoop(business)],
+          [seeker, offersLoop({ gsap }, seeker)],
+          [business, peopleLoop({ gsap }, business)],
         ] as const) {
           ScrollTrigger.create({ trigger: door, start: "top bottom", end: "bottom top", onToggle: (self) => (self.isActive ? loop.play() : loop.pause()) });
         }
       });
-      mm.add(DOORS_WIDE, (context) => {
+      mm.add(MOTION_DESKTOP, (context) => {
         const doors = gsap.utils.toArray<HTMLElement>("[data-door]", el);
         const grow = context.add("grow", (active: HTMLElement | null) => {
           for (const door of doors) {

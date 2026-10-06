@@ -39,7 +39,7 @@ function CategoryCard() {
       <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h2 className="font-mono text-[11px] tracking-[0.14em] text-primary-300 uppercase">Ваша категория</h2>
+            <h2 className="font-mono text-xs tracking-[0.14em] text-primary-300 uppercase">Ваша категория</h2>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-success-300/15 px-2.5 py-0.5 text-xs font-medium text-success-300">
               <span className="size-1.5 rounded-full bg-success-300" aria-hidden />
               Подтверждена тестом
@@ -65,7 +65,7 @@ function CategoryCard() {
             )}
           </span>
         </p>
-        <Link href="/candidate/assessment" className="inline-flex items-center gap-1.5 font-medium text-white underline decoration-white/30 underline-offset-4 hover:decoration-white">
+        <Link href="/candidate/assessment" className="tap inline-flex items-center gap-1.5 font-medium text-white underline decoration-white/30 underline-offset-4 hover:decoration-white">
           {c.available.length ? "Пройти тест на другой грейд" : "История тестов"}
           <ArrowRight className="size-4" aria-hidden />
         </Link>
@@ -81,7 +81,7 @@ function InvitationsCard() {
       <CardHeader
         title="Приглашения"
         action={
-          <Link href="/candidate/invitations" className="text-sm font-medium text-primary hover:underline">
+          <Link href="/candidate/invitations" className="tap text-sm font-medium text-primary hover:underline">
             Все
           </Link>
         }
@@ -161,7 +161,7 @@ function FspBlock() {
         description="Поднимают вас внутри категории"
         action={
           q.data?.linked ? (
-            <Link href="/candidate/settings#fsp" className="text-sm font-medium text-primary hover:underline">
+            <Link href="/candidate/settings#fsp" className="tap text-sm font-medium text-primary hover:underline">
               Управлять
             </Link>
           ) : undefined

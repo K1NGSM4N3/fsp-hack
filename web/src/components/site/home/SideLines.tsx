@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { cn } from "@/lib/cn";
 import { Container } from "../primitives";
 
@@ -21,15 +21,26 @@ const LABEL: Record<Side, string> = { seeker: "Соискателю", company: "
 /**
  * Seeker and company lines alternate like a dialogue. Each line is an outline with a filled copy on top;
  * the copy is uncovered by two opposite translations (mask moves in, text moves back), so only transforms animate.
- * Without motion the filled copy is simply in place.
+ * Desktop scrubs the fill with the scroll; phones play it once per line as it enters, which costs nothing while
+ * scrolling. Without motion the filled copy is simply in place.
  */
 export function SideLines() {
   const root = useRef<HTMLElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, gsap }) => {
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add(MOTION_MOBILE, () => {
+        for (const line of gsap.utils.toArray<HTMLElement>("[data-line]", root.current)) {
+          const dir = line.dataset.side === "company" ? 1 : -1;
+          gsap
+            .timeline({ scrollTrigger: { trigger: line, start: "top 82%", once: true } })
+            .fromTo(line.querySelector("[data-label]"), { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 0.45, ease: "power3.out" }, 0)
+            .fromTo(line.querySelector("[data-fill]"), { xPercent: dir * 101 }, { xPercent: 0, duration: 1.1, ease: "power2.inOut" }, 0.1)
+            .fromTo(line.querySelector("[data-fill-inner]"), { xPercent: -dir * 101 }, { xPercent: 0, duration: 1.1, ease: "power2.inOut" }, 0.1);
+        }
+      });
+      mm.add(MOTION_DESKTOP, () => {
         for (const line of gsap.utils.toArray<HTMLElement>("[data-line]", root.current)) {
           const dir = line.dataset.side === "company" ? 1 : -1;
           const mask = line.querySelector("[data-fill]");

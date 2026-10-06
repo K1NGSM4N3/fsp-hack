@@ -15,7 +15,7 @@ const VARIANTS: Record<ButtonVariant, string> = {
 };
 
 const SIZES: Record<ButtonSize, string> = {
-  sm: "h-8 gap-1.5 px-3 text-sm",
+  sm: "tap h-8 gap-1.5 px-3 text-sm",
   md: "h-10 gap-2 px-4 text-sm",
   lg: "h-12 gap-2 px-6 text-base",
 };
@@ -74,7 +74,7 @@ export function IconButton({ label, size = "md", className, children, type = "bu
       title={label}
       className={cn(
         "inline-flex shrink-0 items-center justify-center rounded-control text-ink-muted transition-colors hover:bg-canvas hover:text-ink disabled:opacity-50",
-        size === "sm" ? "size-8" : "size-10",
+        size === "sm" ? "tap size-8" : "size-10",
         className,
       )}
       {...props}

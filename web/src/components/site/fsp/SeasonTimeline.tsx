@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { MOTION_OK, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 import { Container } from "@/components/site/primitives";
 import { Medal } from "./Medal";
 
@@ -14,15 +14,22 @@ const SEASONS = [
 
 const AT = (i: number) => 12.5 + i * 25;
 
+/**
+ * The «now» cursor walks from the oldest season to this one while earlier medals shrink and fade.
+ * Desktop pins the section and scrubs the walk with the scroll; phones play the same walk once, eased, in under three
+ * seconds when the scale comes into view, and the page keeps scrolling normally.
+ */
 export function SeasonTimeline() {
   const root = useRef<HTMLElement>(null);
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, ScrollTrigger, gsap }) => {
       const el = root.current;
       if (!el) return;
       const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+      mm.add({ desktop: MOTION_DESKTOP, mobile: MOTION_MOBILE }, (ctx) => {
+        const { desktop, mobile } = ctx.conditions ?? {};
+        if (!desktop && !mobile) return;
         const q = gsap.utils.selector(el);
         const medals = q("[data-season-medal]");
         const names = q("[data-season-name]");
@@ -31,12 +38,21 @@ export function SeasonTimeline() {
         const step = 1 / last;
         const pop = 0.07;
 
-        gsap.from(q("[data-fresh-head] > *"), { autoAlpha: 0, y: 30, duration: 1, ease: "expo.out", stagger: 0.1, scrollTrigger: { trigger: el, start: "top 70%", once: true } });
+        gsap.from(q("[data-fresh-head] > *"), { autoAlpha: 0, y: desktop ? 30 : 20, duration: desktop ? 1 : 0.7, ease: desktop ? "expo.out" : "power3.out", stagger: 0.1, scrollTrigger: { trigger: el, start: "top 70%", once: true } });
 
         const tl = gsap.timeline({
           defaults: { ease: "none" },
-          scrollTrigger: { trigger: el, pin: true, pinSpacing: true, start: "top top", end: "+=140%", scrub: 0.6, invalidateOnRefresh: true },
+          paused: !desktop,
+          scrollTrigger: desktop ? { trigger: el, pin: true, pinSpacing: true, start: "top top", end: "+=140%", scrub: 0.6, invalidateOnRefresh: true } : undefined,
         });
+        if (!desktop) {
+          ScrollTrigger.create({
+            trigger: q("[data-scale]")[0],
+            start: "top 75%",
+            once: true,
+            onEnter: () => ctx.add(() => gsap.to(tl, { progress: 1, duration: 2.8, ease: "power1.inOut", delay: 0.2 })),
+          });
+        }
         tl.fromTo(q("[data-cursor]"), { x: 0, xPercent: AT(0) }, { xPercent: AT(last), duration: 1 }, 0)
           .fromTo(q("[data-fill]"), { scaleX: AT(0) / 100 }, { scaleX: AT(last) / 100, duration: 1 }, 0)
           .fromTo(labels, { opacity: 0.35 }, { opacity: 1, duration: pop, stagger: step }, 0);
@@ -74,14 +90,14 @@ export function SeasonTimeline() {
             </p>
           </div>
 
-          <div className="relative mt-14 h-[320px] sm:mt-20 sm:h-[360px]">
+          <div data-scale className="relative mt-14 h-[320px] sm:mt-20 sm:h-[360px]">
             <div aria-hidden className="absolute inset-x-0 top-[76%] h-[3px] -translate-y-1/2 rounded-full bg-line">
               <span data-fill className="absolute inset-0 origin-left rounded-full bg-primary" style={{ transform: `scaleX(${AT(SEASONS.length - 1) / 100})` }} />
             </div>
             <ol className="absolute inset-0">
               {SEASONS.map((s, i) => (
                 <li key={s.label} className="absolute inset-y-0 w-[25%] -translate-x-1/2" style={{ left: `${AT(i)}%` }}>
-                  <span data-season-label className="absolute inset-x-0 top-0 px-1 text-center font-mono text-[10px] leading-snug tracking-[0.1em] text-ink-muted uppercase sm:text-xs">
+                  <span data-season-label className="absolute inset-x-0 top-0 px-1 text-center font-mono text-xs leading-snug tracking-[0.04em] text-ink-muted uppercase sm:tracking-[0.1em]">
                     {s.label}
                   </span>
                   <div className="absolute inset-x-0 bottom-[24%] flex flex-col items-center pb-5">

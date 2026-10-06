@@ -1,5 +1,5 @@
 import { NodeLines } from "@/components/brand/Logo";
-import { ButtonLink } from "@/components/ui";
+import { ButtonLink } from "@/components/ui/Button";
 
 export default function NotFound() {
   return (

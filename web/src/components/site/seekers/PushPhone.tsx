@@ -3,7 +3,7 @@
 import { BadgeCheck, Camera, Flashlight, Lock } from "lucide-react";
 import Image from "next/image";
 import { useRef } from "react";
-import { MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import { useMotion } from "@/components/motion/lazy";
 
 interface Push {
   company: string;
@@ -53,23 +53,27 @@ function Notification({ push, index }: { push: Push; index: number }) {
   );
 }
 
-/** Lock-screen mock: invitations drop in with a spring and push the older ones down; the radar rings pulse on every arrival. */
+/**
+ * Lock-screen mock. Desktop: invitations drop in with a spring and a 3D tilt, push the older ones down, and radar rings
+ * pulse on every arrival. Phones: the server-rendered stack stays on screen, and only while the phone is visible a new
+ * invitation slides in every few seconds with a plain ease; no rings, no floating badges, nothing hidden at load.
+ */
 export function PushPhone() {
   const root = useRef<HTMLDivElement>(null);
 
-  useGSAP(
-    () => {
-      const mm = gsap.matchMedia();
-      mm.add(MOTION_OK, () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_MOBILE, ScrollTrigger, gsap }) => {
+      const setup = (mobile: boolean) => {
         const items = gsap.utils.toArray<HTMLElement>("[data-push]", root.current);
         const rings = gsap.utils.toArray<HTMLElement>("[data-ring]", root.current);
         const floats = gsap.utils.toArray<HTMLElement>("[data-float]", root.current);
-        gsap.set(items, { autoAlpha: 0, y: -SLOT * 0.5, scale: 0.9 });
-        gsap.set(rings, { autoAlpha: 0, scale: 0.55 });
-
-        const shown: HTMLElement[] = [];
-        let next = 0;
-        let onScreen = true;
+        const shown: HTMLElement[] = mobile ? items.slice(0, VISIBLE) : [];
+        let next = shown.length;
+        let onScreen = !mobile;
+        if (!mobile) {
+          gsap.set(items, { autoAlpha: 0, y: -SLOT * 0.5, scale: 0.9 });
+          gsap.set(rings, { autoAlpha: 0, scale: 0.55 });
+        }
 
         const drop = () => {
           const el = items[next % items.length];
@@ -78,12 +82,17 @@ export function PushPhone() {
           const was = shown.indexOf(el);
           if (was >= 0) shown.splice(was, 1);
           shown.unshift(el);
-          gsap.set(el, { zIndex: next, rotationX: -40, transformPerspective: 600 });
-          gsap.fromTo(
-            el,
-            { y: -SLOT * 0.4, scale: 0.88, autoAlpha: 0 },
-            { y: 0, scale: 1, rotationX: 0, autoAlpha: 1, duration: 1.15, ease: "elastic.out(1, 0.6)", overwrite: true },
-          );
+          gsap.set(el, { zIndex: next });
+          if (mobile) {
+            gsap.fromTo(el, { y: -SLOT * 0.35, scale: 0.96, autoAlpha: 0 }, { y: 0, scale: 1, autoAlpha: 1, duration: 0.6, ease: "power3.out", overwrite: true });
+          } else {
+            gsap.set(el, { rotationX: -40, transformPerspective: 600 });
+            gsap.fromTo(
+              el,
+              { y: -SLOT * 0.4, scale: 0.88, autoAlpha: 0 },
+              { y: 0, scale: 1, rotationX: 0, autoAlpha: 1, duration: 1.15, ease: "elastic.out(1, 0.6)", overwrite: true },
+            );
+          }
           shown.forEach((item, slot) => {
             const when = item.querySelector("[data-when]");
             if (when) when.textContent = whenLabel(slot);
@@ -91,24 +100,14 @@ export function PushPhone() {
           shown.slice(1).forEach((older, i) => {
             const slot = i + 1;
             if (slot < VISIBLE) {
-              gsap.to(older, { y: slot * SLOT, scale: 1, autoAlpha: 1, duration: 0.75, ease: "power3.out", delay: 0.04 * slot, overwrite: true });
+              gsap.to(older, { y: slot * SLOT, scale: 1, autoAlpha: 1, duration: mobile ? 0.5 : 0.75, ease: "power3.out", delay: 0.04 * slot, overwrite: true });
             } else {
               gsap.to(older, { y: slot * SLOT - 18, scale: 0.92, autoAlpha: 0, duration: 0.5, ease: "power2.in", overwrite: true });
             }
           });
           if (shown.length > VISIBLE + 1) shown.length = VISIBLE + 1;
-          gsap.fromTo(rings, { autoAlpha: 0.5, scale: 0.55 }, { autoAlpha: 0, scale: 1.35, duration: 2.2, ease: "power2.out", stagger: 0.22, overwrite: true });
+          if (!mobile) gsap.fromTo(rings, { autoAlpha: 0.5, scale: 0.55 }, { autoAlpha: 0, scale: 1.35, duration: 2.2, ease: "power2.out", stagger: 0.22, overwrite: true });
         };
-
-        const loop = () => {
-          gsap.delayedCall(2.9, () => {
-            if (onScreen) drop();
-            loop();
-          });
-        };
-
-        const intro = gsap.timeline({ delay: 0.9 });
-        intro.call(drop).call(drop, [], "+=0.55").call(drop, [], "+=0.55").call(loop);
 
         ScrollTrigger.create({
           trigger: root.current,
@@ -119,11 +118,17 @@ export function PushPhone() {
           },
         });
 
+        gsap.to({}, { duration: mobile ? 3.4 : 2.9, delay: mobile ? 0 : 2, repeat: -1, onRepeat: () => void (onScreen && drop()) });
+        if (mobile) return;
+        gsap.timeline({ delay: 0.9 }).call(drop).call(drop, [], "+=0.55").call(drop, [], "+=0.55");
         floats.forEach((el, i) => {
           gsap.fromTo(el, { autoAlpha: 0, y: 18, scale: 0.9 }, { autoAlpha: 1, y: 0, scale: 1, duration: 1, ease: "back.out(1.8)", delay: 1.6 + i * 0.25 });
           gsap.to(el, { y: i % 2 ? 8 : -8, duration: 2.6 + i * 0.4, ease: "sine.inOut", yoyo: true, repeat: -1, delay: 2.6 + i * 0.25 });
         });
-      });
+      };
+      const mm = gsap.matchMedia();
+      mm.add(MOTION_DESKTOP, () => setup(false));
+      mm.add(MOTION_MOBILE, () => setup(true));
     },
     { scope: root },
   );

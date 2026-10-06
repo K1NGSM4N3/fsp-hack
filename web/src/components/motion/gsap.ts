@@ -1,28 +1,19 @@
-"use client";
-
-import { useGSAP } from "@gsap/react";
 import gsap from "gsap";
 import { DrawSVGPlugin } from "gsap/DrawSVGPlugin";
-import { Flip } from "gsap/Flip";
 import { ScrambleTextPlugin } from "gsap/ScrambleTextPlugin";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { SplitText } from "gsap/SplitText";
 
-gsap.registerPlugin(useGSAP, ScrollTrigger, SplitText, DrawSVGPlugin, ScrambleTextPlugin, Flip);
+gsap.registerPlugin(ScrollTrigger, SplitText, DrawSVGPlugin, ScrambleTextPlugin);
+if (typeof window !== "undefined") ScrollTrigger.config({ ignoreMobileResize: true });
 
-export { DrawSVGPlugin, Flip, ScrambleTextPlugin, ScrollTrigger, SplitText, gsap, useGSAP };
+export { DrawSVGPlugin, ScrambleTextPlugin, ScrollTrigger, SplitText, gsap };
+export * from "./config";
 
-export const MOTION_OK = "(prefers-reduced-motion: no-preference)";
-export const MOTION_DESKTOP = "(prefers-reduced-motion: no-preference) and (min-width: 1024px)";
-export const FINE_POINTER = "(prefers-reduced-motion: no-preference) and (pointer: fine)";
+let fontsSettled: Promise<void> | null = null;
 
-const numberFormats = new Map<number, Intl.NumberFormat>();
-
-export function formatCounter(value: number, decimals: number): string {
-  let f = numberFormats.get(decimals);
-  if (!f) {
-    f = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
-    numberFormats.set(decimals, f);
-  }
-  return f.format(value);
+/** One refresh per page load once web fonts settle, however many motion roots ask for it. */
+export function refreshAfterFonts() {
+  if (fontsSettled || typeof document === "undefined" || !document.fonts) return;
+  fontsSettled = document.fonts.ready.then(() => ScrollTrigger.refresh());
 }

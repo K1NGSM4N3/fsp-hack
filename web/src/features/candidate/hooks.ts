@@ -3,10 +3,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as api from "@/api/endpoints";
 import type { AnswerInput, DeclineRequest, GuardianAction, GuardianContact, GuardianStatus, Privacy, ProfileInput, StartInput, SurveyInput } from "@/api/types";
-import { qk } from "../keys";
+import { fresh, qk } from "../keys";
 
 export function useProfile() {
-  return useQuery({ queryKey: qk.profile, queryFn: api.getProfile });
+  return useQuery({ queryKey: qk.profile, queryFn: api.getProfile, ...fresh.account });
 }
 
 export function useUpdateProfile() {
@@ -25,11 +25,11 @@ export function useUploadResume() {
 }
 
 export function usePrivacy() {
-  return useQuery({ queryKey: qk.privacy, queryFn: api.getPrivacy });
+  return useQuery({ queryKey: qk.privacy, queryFn: api.getPrivacy, ...fresh.account });
 }
 
 export function useContactAccess() {
-  return useQuery({ queryKey: qk.contactAccess, queryFn: api.getContactAccess });
+  return useQuery({ queryKey: qk.contactAccess, queryFn: api.getContactAccess, ...fresh.detail });
 }
 
 export function useUpdatePrivacy() {
@@ -42,7 +42,7 @@ export function useUpdatePrivacy() {
 
 /** Only minors have anything here; adults skip the request. */
 export function useGuardianStatus(enabled: boolean) {
-  return useQuery({ queryKey: qk.guardian, queryFn: api.getGuardianStatus, enabled });
+  return useQuery({ queryKey: qk.guardian, queryFn: api.getGuardianStatus, enabled, ...fresh.detail });
 }
 
 function useGuardianMutation<V>(fn: (v: V) => Promise<GuardianStatus>) {
@@ -65,7 +65,7 @@ export function useChangeGuardian() {
 }
 
 export function useGuardianConsent(token: string | null) {
-  return useQuery({ queryKey: qk.guardianConsent(token ?? ""), queryFn: () => api.getGuardianConsent(token ?? ""), enabled: Boolean(token) });
+  return useQuery({ queryKey: qk.guardianConsent(token ?? ""), queryFn: () => api.getGuardianConsent(token ?? ""), enabled: Boolean(token), ...fresh.detail });
 }
 
 export function useAnswerGuardianConsent(token: string) {
@@ -77,7 +77,7 @@ export function useAnswerGuardianConsent(token: string) {
 }
 
 export function useSurveyHistory() {
-  return useQuery({ queryKey: qk.surveys, queryFn: api.getSurveyHistory });
+  return useQuery({ queryKey: qk.surveys, queryFn: api.getSurveyHistory, ...fresh.account });
 }
 
 export function useSubmitSurvey() {
@@ -94,11 +94,11 @@ export function useSubmitSurvey() {
 }
 
 export function useCategory() {
-  return useQuery({ queryKey: qk.category, queryFn: api.getCandidateCategory });
+  return useQuery({ queryKey: qk.category, queryFn: api.getCandidateCategory, ...fresh.account });
 }
 
 export function useAssessments() {
-  return useQuery({ queryKey: qk.assessments, queryFn: api.listAssessments });
+  return useQuery({ queryKey: qk.assessments, queryFn: api.listAssessments, ...fresh.detail });
 }
 
 /** Reads through `current-item`, which also advances a timed-out item. */
@@ -135,7 +135,7 @@ export function useAnswerItem(sessionId: string) {
 }
 
 export function useReceivedInvitations() {
-  return useQuery({ queryKey: qk.received, queryFn: api.listReceivedInvitations });
+  return useQuery({ queryKey: qk.received, queryFn: api.listReceivedInvitations, ...fresh.live });
 }
 
 export function useReceivedInvitation(id: string) {
@@ -147,6 +147,7 @@ export function useReceivedInvitation(id: string) {
       void qc.invalidateQueries({ queryKey: qk.received });
       return inv;
     },
+    ...fresh.live,
   });
 }
 
@@ -174,11 +175,11 @@ export function useDeclineInvitation() {
 }
 
 export function useMarket(enabled = true) {
-  return useQuery({ queryKey: qk.market, queryFn: api.getCandidateMarket, enabled });
+  return useQuery({ queryKey: qk.market, queryFn: api.getCandidateMarket, enabled, ...fresh.account });
 }
 
 export function useMyApplications(enabled = true) {
-  return useQuery({ queryKey: qk.myApplications, queryFn: api.listMyApplications, enabled });
+  return useQuery({ queryKey: qk.myApplications, queryFn: api.listMyApplications, enabled, ...fresh.live });
 }
 
 export function useWithdrawApplication() {
@@ -190,7 +191,7 @@ export function useWithdrawApplication() {
 }
 
 export function useMyTasks() {
-  return useQuery({ queryKey: qk.myTasks, queryFn: api.listMyTasks });
+  return useQuery({ queryKey: qk.myTasks, queryFn: api.listMyTasks, ...fresh.detail });
 }
 
 export function useSubmitTask() {
@@ -210,7 +211,7 @@ export function useSkipTask() {
 }
 
 export function useFspStatus() {
-  return useQuery({ queryKey: qk.fsp, queryFn: api.getFspStatus });
+  return useQuery({ queryKey: qk.fsp, queryFn: api.getFspStatus, ...fresh.account });
 }
 
 function useFspMutation<A, R>(fn: (arg: A) => Promise<R>) {

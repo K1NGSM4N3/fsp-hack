@@ -40,7 +40,7 @@ function Hero() {
           <h1 data-hero data-split="hero" className="display-hero mt-7 text-balance text-ink">
             Один тест, и&nbsp;приглашения <span className="text-gradient">приходят к&nbsp;вам сами</span>
           </h1>
-          <p data-hero className="mt-7 max-w-xl text-lg leading-relaxed text-pretty text-ink-muted sm:text-xl">
+          <p data-hero="lead" className="mt-7 max-w-xl text-lg leading-relaxed text-pretty text-ink-muted sm:text-xl">
             Заполните короткий профиль и пройдите один тест на 10–25 минут. По его итогам вы получите категорию, например «Бэкенд · Middle». Компании ищут людей по
             категориям и присылают приглашения, где вилка от и до стоит в первом же сообщении.
           </p>
@@ -143,7 +143,7 @@ function Inbox() {
           <ol data-stagger="0.06" className="mt-10 max-w-xl border-t border-line">
             {INVITE_PARTS.map(([title, text], i) => (
               <li key={title} className="flex items-baseline gap-4 border-b border-line py-4">
-                <span className="inline-flex size-6 shrink-0 translate-y-[-1px] items-center justify-center rounded-full bg-ink font-mono text-[11px] font-semibold text-white">{i + 1}</span>
+                <span className="inline-flex size-6 shrink-0 translate-y-[-1px] items-center justify-center rounded-full bg-ink font-mono text-xs font-semibold text-white">{i + 1}</span>
                 <span className="text-[16px] leading-relaxed">
                   <span className="font-semibold text-ink">{title}.</span> <span className="text-ink-muted">{text}</span>
                 </span>

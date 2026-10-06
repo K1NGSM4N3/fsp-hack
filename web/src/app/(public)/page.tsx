@@ -2,9 +2,11 @@ import { ArrowDown, Check, Clock, LockKeyhole } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { MotionRoot } from "@/components/motion/MotionRoot";
-import { HeroGraph } from "@/components/site/HeroGraph";
+import { HeroGraphLazy } from "@/components/site/HeroGraphLazy";
 import { Doors } from "@/components/site/home/Doors";
 import { InviteScene } from "@/components/site/home/InviteScene";
+import { SceneLaptop } from "@/components/site/home/SceneLaptop";
+import { ScenePhone } from "@/components/site/home/ScenePhone";
 import { SideLines } from "@/components/site/home/SideLines";
 import { Marquee } from "@/components/site/Marquee";
 import { Container, Cta } from "@/components/site/primitives";
@@ -82,19 +84,19 @@ function Hero() {
         <div className="absolute bottom-[-30%] left-[-15%] size-[44rem] rounded-full bg-[radial-gradient(circle,rgb(123_111_255/0.28),transparent_65%)]" />
         <div className="bg-grid-night mask-radial absolute inset-0 opacity-70" />
       </div>
-      <HeroGraph />
+      <HeroGraphLazy />
 
       <Container className="relative flex flex-1 flex-col justify-center pt-32 pb-24 sm:pt-36 lg:pt-40 lg:pb-28">
         <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-[1.25fr_0.75fr] lg:gap-14">
           <div>
             <p data-hero className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/5 py-1.5 pr-4 pl-1.5 text-sm text-night-muted backdrop-blur">
-              <span className="rounded-full bg-primary px-2.5 py-0.5 font-mono text-[11px] tracking-[0.1em] text-white uppercase">ФСП</span>
+              <span className="rounded-full bg-primary px-2.5 py-0.5 font-mono text-xs tracking-[0.1em] text-white uppercase">ФСП</span>
               Подбор ИТ-специалистов
             </p>
             <h1 data-hero data-split="hero" className="display-hero max-w-[17ch] text-balance">
               Компании пишут вам первыми <span className="text-gradient-night">и сразу называют зарплату</span>
             </h1>
-            <p data-hero className="mt-8 max-w-xl text-lg leading-relaxed text-night-muted sm:text-xl">
+            <p data-hero="lead" className="mt-8 max-w-xl text-lg leading-relaxed text-night-muted sm:text-xl">
               Один раз пройдите тест по своему направлению. Компании найдут вас по категории и пришлют приглашение, в котором уже указана зарплата от и до. Имя и телефон они увидят, только если вы согласитесь.
             </p>
             <div data-hero className="mt-10 flex flex-wrap items-center gap-3">
@@ -120,7 +122,7 @@ function Hero() {
       </Container>
       <a
         href="#scene"
-        className="group absolute inset-x-0 bottom-6 mx-auto hidden w-fit items-center gap-2 font-mono whitespace-nowrap text-xs tracking-[0.12em] text-night-faint uppercase transition-colors hover:text-white sm:inline-flex"
+        className="group absolute inset-x-0 bottom-6 mx-auto hidden min-h-10 w-fit items-center gap-2 font-mono whitespace-nowrap text-xs tracking-[0.12em] text-night-faint uppercase transition-colors hover:text-white sm:inline-flex"
       >
         Как это выглядит
         <ArrowDown className="size-4 transition-transform group-hover:translate-y-0.5" aria-hidden />
@@ -140,7 +142,7 @@ export default function HomePage() {
         <Marquee items={CATEGORIES.slice(9).map((c) => <CategoryChip key={c.label} {...c} />)} reverse duration={66} className="mt-3" />
       </div>
 
-      <InviteScene />
+      <InviteScene laptop={<SceneLaptop />} phone={<ScenePhone />} />
       <SideLines />
       <Doors />
     </MotionRoot>

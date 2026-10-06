@@ -2,9 +2,12 @@
 
 import { ChevronsUp, Trophy, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
-import { Flip, MOTION_OK, ScrollTrigger, gsap, useGSAP } from "@/components/motion/gsap";
+import type { Flip as FlipPlugin } from "gsap/Flip";
+import { useMotion } from "@/components/motion/lazy";
 import { Container } from "@/components/site/primitives";
 import { cn } from "@/lib/cn";
+
+const loadFlip = () => import("@/components/motion/extras/flip");
 
 interface Row {
   id: string;
@@ -37,24 +40,35 @@ export function RankLadder() {
   const root = useRef<HTMLElement>(null);
   const [linked, setLinked] = useState(true);
   const before = useRef<Flip.FlipState | null>(null);
+  const flip = useRef<typeof FlipPlugin | null>(null);
   const motion = useRef(false);
   const touched = useRef(false);
 
   const toggle = (next: boolean) => {
-    if (root.current && motion.current) before.current = Flip.getState(root.current.querySelectorAll("[data-row]"));
+    if (root.current && motion.current && flip.current) before.current = flip.current.getState(root.current.querySelectorAll("[data-row]"));
     setLinked(next);
   };
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ MOTION_DESKTOP, MOTION_OK, ScrollTrigger, gsap }, { Flip }) => {
       const el = root.current;
       if (!el) return;
+      flip.current = Flip;
       const mm = gsap.matchMedia();
       mm.add(MOTION_OK, () => {
         motion.current = true;
         setLinked(false);
         const q = gsap.utils.selector(el);
-        gsap.from(q("[data-rank-head] > *"), { autoAlpha: 0, x: -40, duration: 1, ease: "expo.out", stagger: 0.1, scrollTrigger: { trigger: el, start: "top 75%", once: true } });
+        const wide = window.matchMedia(MOTION_DESKTOP).matches;
+        gsap.from(q("[data-rank-head] > *"), {
+          autoAlpha: 0,
+          x: wide ? -40 : 0,
+          y: wide ? 0 : 20,
+          duration: wide ? 1 : 0.7,
+          ease: wide ? "expo.out" : "power3.out",
+          stagger: 0.1,
+          scrollTrigger: { trigger: el, start: "top 75%", once: true },
+        });
         gsap.from(q("[data-bar]"), { scaleX: 0, duration: 1.2, ease: "expo.out", stagger: 0.06, scrollTrigger: { trigger: q("[data-board]")[0], start: "top 80%", once: true } });
         ScrollTrigger.create({
           trigger: q("[data-board]")[0],
@@ -68,11 +82,11 @@ export function RankLadder() {
         };
       });
     },
-    { scope: root },
+    { scope: root, extra: loadFlip },
   );
 
-  useGSAP(
-    () => {
+  useMotion(
+    ({ gsap }, { Flip }) => {
       const state = before.current;
       before.current = null;
       const el = root.current;
@@ -84,7 +98,7 @@ export function RankLadder() {
         gsap.from(q("[data-climb]"), { autoAlpha: 0, y: 10, duration: 0.6, delay: 0.9, ease: "back.out(2.5)" });
       }
     },
-    { scope: root, dependencies: [linked] },
+    { scope: root, dependencies: [linked], extra: loadFlip },
   );
 
   const rows = order(linked);
@@ -114,7 +128,7 @@ export function RankLadder() {
                 touched.current = true;
                 toggle(!linked);
               }}
-              className="group inline-flex items-center gap-3 self-start rounded-full py-1 text-sm font-medium text-ink sm:self-auto"
+              className="group inline-flex min-h-10 items-center gap-3 self-start rounded-full text-sm font-medium text-ink sm:self-auto"
             >
               <span className={cn("relative h-8 w-14 rounded-full transition-colors duration-300", linked ? "bg-primary" : "bg-line-strong")}>
                 <span className={cn("absolute top-1 left-1 size-6 rounded-full bg-white shadow-card transition-transform duration-300 ease-out", linked && "translate-x-6")} />
@@ -123,7 +137,7 @@ export function RankLadder() {
             </button>
           </div>
 
-          <div className="hidden grid-cols-[3.5rem_1.2fr_1fr_1fr] gap-6 border-b border-line py-3 font-mono text-[11px] tracking-[0.12em] text-ink-faint uppercase sm:grid">
+          <div className="hidden grid-cols-[3.5rem_1.2fr_1fr_1fr] gap-6 border-b border-line py-3 font-mono text-xs tracking-[0.12em] text-ink-faint uppercase sm:grid">
             <span>Место</span>
             <span>Профиль</span>
             <span>Результат теста</span>
@@ -153,9 +167,9 @@ export function RankLadder() {
                         <UserRound className="size-4" aria-hidden />
                       </span>
                       <span className={cn("truncate font-mono text-sm font-semibold", r.you ? "text-white" : "text-ink")}>{r.label}</span>
-                      {r.note && <span className="hidden rounded-full border border-line-strong px-2 py-0.5 text-[11px] whitespace-nowrap text-ink-muted lg:inline">{r.note}</span>}
+                      {r.note && <span className="hidden rounded-full border border-line-strong px-2 py-0.5 text-xs whitespace-nowrap text-ink-muted lg:inline">{r.note}</span>}
                       {r.you && linked && (
-                        <span data-climb className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-medium whitespace-nowrap text-white">
+                        <span data-climb className="inline-flex items-center gap-1 rounded-full bg-white/15 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-white">
                           <ChevronsUp className="size-3.5" aria-hidden />
                           выше
                         </span>

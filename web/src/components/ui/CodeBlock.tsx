@@ -53,7 +53,7 @@ export function CodeBlock({ code, language, className, showLanguage = true }: Co
   const lines = code.replace(/\n$/, "").split("\n");
   return (
     <div className={cn("relative overflow-hidden rounded-control border border-line bg-canvas", className)}>
-      {showLanguage && language && <span className="absolute top-2 right-3 font-mono text-[11px] tracking-wide text-ink-subtle uppercase">{language}</span>}
+      {showLanguage && language && <span className="absolute top-2 right-3 font-mono text-xs tracking-wide text-ink-subtle uppercase">{language}</span>}
       <pre className="scrollbar-thin overflow-x-auto p-4 font-mono text-[13px] leading-6 text-ink sm:text-sm">
         <code>
           {lines.map((line, n) => (

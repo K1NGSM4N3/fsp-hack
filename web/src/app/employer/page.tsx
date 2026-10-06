@@ -103,7 +103,7 @@ function QuotaCard({ s }: { s: InvitationStats }) {
         title="Квота приглашений"
         description={`До ${s.quota_max} за 7 дней — лимит зависит от уровня доверия к компании, кандидаты получают только точечные предложения`}
         action={
-          <Link href="/employer/trust" className="text-sm font-medium text-primary hover:underline">
+          <Link href="/employer/trust" className="tap text-sm font-medium text-primary hover:underline">
             Как поднять
           </Link>
         }
@@ -130,7 +130,7 @@ function FunnelCard({ s }: { s: InvitationStats }) {
         title="Воронка приглашений"
         description={`Всего ${total}`}
         action={
-          <Link href="/employer/invitations" className="text-sm font-medium text-primary hover:underline">
+          <Link href="/employer/invitations" className="tap text-sm font-medium text-primary hover:underline">
             Все приглашения
           </Link>
         }

@@ -306,7 +306,7 @@ export function RegisterForm() {
                       label={
                         <>
                           Я принимаю: {d.title.charAt(0).toLowerCase() + d.title.slice(1)}{" "}
-                          <button type="button" className="font-medium text-primary underline-offset-2 hover:underline" onClick={() => setOpenDoc(d)}>
+                          <button type="button" className="inline font-medium text-primary underline-offset-2 hover:underline" onClick={() => setOpenDoc(d)}>
                             (текст)
                           </button>
                         </>

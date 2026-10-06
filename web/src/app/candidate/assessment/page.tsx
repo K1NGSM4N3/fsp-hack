@@ -113,7 +113,7 @@ function StartCard() {
               title: (
                 <span className="flex items-center gap-2">
                   {GRADE_LABEL[g]}
-                  {c.category?.grade === g && <span className="rounded bg-success-50 px-1.5 py-0.5 text-[11px] font-medium text-success">текущий</span>}
+                  {c.category?.grade === g && <span className="rounded bg-success-50 px-1.5 py-0.5 text-xs font-medium text-success">текущий</span>}
                 </span>
               ),
               description: GRADE_HINT[g],

@@ -16,7 +16,7 @@ export function PageHeader({ title, description, actions, back, eyebrow, classNa
   return (
     <header className={cn("mb-7 sm:mb-9", className)}>
       {back && (
-        <Link href={back.href} className="mb-3 inline-flex items-center gap-1.5 rounded text-sm text-ink-muted hover:text-primary">
+        <Link href={back.href} className="tap mb-3 inline-flex items-center gap-1.5 rounded text-sm text-ink-muted hover:text-primary">
           <ArrowLeft className="size-4" aria-hidden />
           {back.label}
         </Link>

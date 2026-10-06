@@ -270,7 +270,7 @@ export function EmployerCandidateView({ id, needId }: { id: string; needId: stri
             </dl>
           </Card>
           {needId && need.data && (
-            <Link href={`/employer/needs/${needId}`} className="block text-sm font-medium text-primary hover:underline">
+            <Link href={`/employer/needs/${needId}`} className="tap block text-sm font-medium text-primary hover:underline">
               ← Вернуться к подборке «{need.data.title}»
             </Link>
           )}

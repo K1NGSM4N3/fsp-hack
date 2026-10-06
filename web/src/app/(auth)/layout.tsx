@@ -2,7 +2,8 @@ import { BadgeCheck, Banknote, ShieldCheck, Trophy } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { Logo } from "@/components/brand/Logo";
-import { HeroGraph } from "@/components/site/HeroGraph";
+import { HeroGraphLazy } from "@/components/site/HeroGraphLazy";
+import { Providers } from "../providers";
 
 const POINTS = [
   { icon: BadgeCheck, text: "Тест по вашему направлению: 8–20 заданий, на каждое до трёх минут" },
@@ -18,18 +19,20 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <div aria-hidden className="bg-grid mask-radial pointer-events-none absolute inset-0 opacity-50" />
         <header className="relative flex h-16 items-center justify-between px-4 sm:px-8">
           <Logo />
-          <Link href="/" className="text-sm text-ink-muted transition-colors hover:text-primary">
+          <Link href="/" className="tap text-sm text-ink-muted transition-colors hover:text-primary">
             На сайт
           </Link>
         </header>
         <main id="main" className="relative flex flex-1 items-start justify-center px-4 pt-6 pb-12 sm:px-8 sm:pt-12">
-          <div className="w-full max-w-md animate-rise">{children}</div>
+          <div className="w-full max-w-md animate-rise">
+            <Providers>{children}</Providers>
+          </div>
         </main>
       </div>
       <aside className="relative isolate hidden overflow-hidden bg-night text-white lg:flex lg:flex-col lg:justify-center lg:px-12">
         <div aria-hidden className="pointer-events-none absolute -top-40 -right-40 -z-10 size-[34rem] rounded-full bg-[radial-gradient(circle,rgb(64_47_255/0.6),transparent_65%)]" />
         <div aria-hidden className="absolute inset-0 -z-10 opacity-45">
-          <HeroGraph />
+          <HeroGraphLazy />
         </div>
         <div className="relative">
           <p className="font-mono text-xs tracking-[0.14em] text-primary-300 uppercase">ФСП Таланты</p>

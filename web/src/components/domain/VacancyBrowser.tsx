@@ -4,6 +4,7 @@ import { Search, SearchX } from "lucide-react";
 import { useDeferredValue, useState } from "react";
 import type { Grade, Specialization, VacancyQuery, WorkFormat } from "@/api/types";
 import { Button, EmptyState, ErrorAlert, Field, Input, MoneyInput, Select, SkeletonCard } from "@/components/ui";
+import { useSkillNamePreload } from "@/features/catalog/hooks";
 import { useVacancies } from "@/features/vacancies/hooks";
 import { pluralize } from "@/lib/format";
 import { GRADES, GRADE_LABEL, SPECIALIZATIONS, SPEC_LONG_LABEL, WORK_FORMATS, WORK_FORMAT_LABEL } from "@/lib/labels";
@@ -12,6 +13,7 @@ import { VacancyCard } from "./VacancyCard";
 const PAGE = 10;
 
 export function VacancyBrowser({ hrefFor }: { hrefFor: (id: string) => string }) {
+  useSkillNamePreload();
   const [q, setQ] = useState("");
   const [specialization, setSpecialization] = useState<Specialization | "">("");
   const [grade, setGrade] = useState<Grade | "">("");
@@ -42,7 +44,7 @@ export function VacancyBrowser({ hrefFor }: { hrefFor: (id: string) => string })
 
   return (
     <div className="grid gap-6 lg:grid-cols-[17rem_1fr]">
-      <aside aria-label="Фильтры вакансий" className="h-fit space-y-4 rounded-card border border-line bg-white p-5 lg:sticky lg:top-24">
+      <aside aria-label="Фильтры вакансий" className="scrollbar-thin h-fit space-y-4 rounded-card border border-line bg-white p-5 lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:overflow-y-auto">
         <Field label="Поиск">
           <Input leading={<Search className="size-4" aria-hidden />} placeholder="Go, React, финтех…" value={q} onChange={(e) => setQ(e.target.value)} type="search" />
         </Field>

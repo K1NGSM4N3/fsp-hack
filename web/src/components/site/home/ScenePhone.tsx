@@ -19,9 +19,12 @@ function StatusBar({ time, dark = false }: { time?: string; dark?: boolean }) {
 const OPTIONS = ["Добавлю ещё серверов", "Найду, где запрос ждёт дольше всего", "Перепишу сервис с нуля"];
 
 /** Job seeker's phone. Server markup shows the accepted invitation; the scene timeline rewinds it to the test screen. */
-export function ScenePhone({ className }: { className?: string }) {
+const PLACEMENT =
+  "-mt-[22%] ml-[4%] w-[48%] lg:mt-0 lg:ml-0 lg:w-[25%] group-data-live/scene:absolute group-data-live/scene:bottom-0 group-data-live/scene:left-0 group-data-live/scene:m-0 group-data-live/scene:w-[min(50cqw,35cqh)] lg:group-data-live/scene:right-[2%] lg:group-data-live/scene:left-auto lg:group-data-live/scene:w-[min(25cqw,44cqh)]";
+
+export function ScenePhone() {
   return (
-    <div data-s-phone className={cn("@container relative", className)} aria-hidden>
+    <div data-s-phone className={cn("@container relative", PLACEMENT)} aria-hidden>
       <div className="rounded-[15cqw] bg-ink p-[2.6cqw] shadow-[0_50px_90px_-40px_rgb(11_11_18/0.7)] ring-1 ring-night-line">
         <div className="relative aspect-[9/19.4] overflow-hidden rounded-[12.6cqw] bg-white text-[5.3cqw] leading-[1.35] text-ink">
           <span className="absolute top-[0.55em] left-1/2 z-30 -ml-[2.9em] h-[1.5em] w-[5.8em] rounded-full bg-black" />
