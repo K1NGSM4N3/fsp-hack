@@ -1,5 +1,7 @@
+use std::time::Duration;
+
 use sqlx::{
-    PgPool,
+    Connection, PgPool,
     migrate::{Migrate, MigrateError},
     postgres::{PgConnectOptions, PgPoolOptions},
 };
@@ -12,10 +14,29 @@ pub enum DbSetupError {
     Migration(#[from] MigrateError),
 }
 
-pub fn pool(database_url: &str) -> Result<PgPool, DbSetupError> {
+/// Default connections per replica (`DATABASE_POOL_SIZE`): about as many queries as the
+/// database host's cores run at once. A larger pool only moves the queue into Postgres, where it
+/// stretches tail latency instead of throughput (docs/solution.md §12.4).
+pub const POOL_SIZE: u32 = 16;
+/// A connection idle at least this long is pinged before use.
+const PING_AFTER_IDLE: Duration = Duration::from_secs(1);
+
+/// sqlx pings every connection it hands out by default: a second round trip per query. Only a
+/// connection that sat idle is pinged here; one in steady use proved alive moments ago, and if
+/// the server went away since, the query fails and the pool drops the connection.
+pub fn pool(database_url: &str, size: u32) -> Result<PgPool, DbSetupError> {
     let options: PgConnectOptions = database_url.parse()?;
     Ok(PgPoolOptions::new()
-        .max_connections(16)
+        .max_connections(size)
+        .test_before_acquire(false)
+        .before_acquire(|conn, meta| {
+            Box::pin(async move {
+                if meta.idle_for >= PING_AFTER_IDLE {
+                    conn.ping().await?;
+                }
+                Ok(true)
+            })
+        })
         .connect_lazy_with(options))
 }
 

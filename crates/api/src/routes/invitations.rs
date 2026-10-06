@@ -187,7 +187,7 @@ async fn send(
     Json(req): Json<SendInvitation>,
 ) -> ApiResult<(StatusCode, Json<SentInvitation>)> {
     validate(&req)?;
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let idempotency_key = headers
         .get("idempotency-key")
         .and_then(|v| v.to_str().ok())
@@ -294,7 +294,7 @@ async fn list_sent(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<SentInvitation>>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     expire_invitations(&state).await?;
     Ok(Json(sent_views(&state.pool, company).await?))
 }
@@ -318,7 +318,7 @@ async fn get_sent(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<SentInvitation>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     expire_invitations(&state).await?;
     let row = db::invitations::employer_invitation(&state.pool, company, id)
         .await?
@@ -349,7 +349,7 @@ async fn withdraw(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let mut tx = state.pool.begin().await?;
     if db::invitations::withdraw_invitation(&mut *tx, id, company).await? == 0 {
         return Err(ApiError::conflict(
@@ -416,7 +416,7 @@ async fn invitation_stats(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<InvitationStats>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     expire_invitations(&state).await?;
     let used = db::invitations::company_invitations_since(
         &state.pool,
@@ -476,7 +476,7 @@ async fn candidate_contacts(
     headers: HeaderMap,
     Path(candidate_id): Path<Uuid>,
 ) -> ApiResult<Json<CandidateContacts>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let ip = client_ip(&headers);
     let ua = user_agent(&headers);
     let ctx = AccessContext {

@@ -11,7 +11,7 @@ use api::{
     kv::Kv,
     mail::Mailer,
     proctoring::{ProctoringMode, RecordingStore},
-    state::AppState,
+    state::{AppState, Services},
 };
 use reqwest::{StatusCode, header};
 use serde_json::{Value, json};
@@ -20,6 +20,7 @@ async fn start() -> String {
     let config = Config {
         bind: ([127, 0, 0, 1], 0).into(),
         database_url: String::new(),
+        database_pool_size: api::db::POOL_SIZE,
         valkey_url: None,
         public_url: "http://localhost:3000".into(),
         cookie_secure: false,
@@ -45,7 +46,7 @@ async fn start() -> String {
         log_json: false,
     };
     let kv = Kv::connect(None).await.unwrap();
-    let state = AppState {
+    let state = AppState::from(Services {
         crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
         jwt: Arc::new(JwtKeys::new(config.jwt_seed).unwrap()),
         mailer: Arc::new(Mailer::new(&config.mail).unwrap()),
@@ -55,9 +56,9 @@ async fn start() -> String {
         metrics: None,
         recordings: Arc::new(RecordingStore::new(config.proctoring.dir.clone())),
         webhooks: WebhookSender::new(Vec::new()).unwrap(),
-        pool: api::db::pool("postgres://nobody@127.0.0.1:1/none").unwrap(),
+        pool: api::db::pool("postgres://nobody@127.0.0.1:1/none", 1).unwrap(),
         config: Arc::new(config),
-    };
+    });
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!(
         "http://{}/api/v1/eval/pairs",

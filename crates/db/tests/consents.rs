@@ -84,11 +84,16 @@ async fn publication_grant_gates_search(pool: PgPool) {
             .unwrap()
             .published
     );
+    let mut cards = db::pool::candidate_cards(&pool, Uuid::now_v7(), &[id, other])
+        .await
+        .unwrap();
+    cards.sort_by_key(|c| c.user_id != id);
     assert_eq!(
-        db::pool::searchable_among(&pool, &[id, other])
-            .await
-            .unwrap(),
-        [other]
+        cards
+            .iter()
+            .map(|c| (c.published, c.searchable()))
+            .collect::<Vec<_>>(),
+        [(false, false), (true, true)]
     );
     let overview = db::market::category_overview(&pool).await.unwrap();
     assert_eq!(overview.iter().map(|c| c.candidates).sum::<i64>(), 1);

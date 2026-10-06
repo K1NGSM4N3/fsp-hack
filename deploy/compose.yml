@@ -23,10 +23,14 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
+    # 50 compressed pages in flight peak at ~150 MB; at 64 MB Caddy was OOM-killed in a loop.
+    # GOMEMLIMIT makes Go collect garbage before the container limit, not after.
+    environment:
+      GOMEMLIMIT: 200MiB
     depends_on:
       - api
       - web
-    mem_limit: 64m
+    mem_limit: 256m
     logging: *logging
 
   web:

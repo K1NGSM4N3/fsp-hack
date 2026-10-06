@@ -96,18 +96,34 @@ pub struct CandidateCard {
     pub relation: Relation,
 }
 
+/// A card with what decides whether it may be shown; the flags never reach the response.
+pub struct Loaded {
+    pub card: CandidateCard,
+    /// Visible with the publication consents in force: the profile can be opened.
+    pub published: bool,
+    /// Published and not closed to offers: search and shortlists may list it.
+    pub searchable: bool,
+}
+
+impl Loaded {
+    /// An application or invitation keeps the candidate in the company's view.
+    pub fn related(&self) -> bool {
+        self.card.relation.applied || self.card.relation.invitation_status.is_some()
+    }
+}
+
+/// Cards of `ids` in their order, one database round trip.
 pub async fn load(
     pg: &PgPool,
     crypto: &Crypto,
     company_id: Uuid,
     ids: &[Uuid],
     now: i64,
-) -> ApiResult<Vec<CandidateCard>> {
-    let rows = db::pool::candidate_cards(pg, ids).await?;
-    let relations = db::pool::company_relations(pg, company_id, ids).await?;
-    let badges = db::proctoring::card_badges(pg, ids).await?;
+) -> ApiResult<Vec<Loaded>> {
+    let rows = db::pool::candidate_cards(pg, company_id, ids).await?;
     let mut cards = Vec::with_capacity(rows.len());
     for r in rows {
+        let (published, searchable) = (r.published, r.searchable());
         let category = match (r.specialization.as_deref(), r.grade.as_deref()) {
             (Some(s), Some(g)) => Some(Category::new(s.parse()?, g.parse()?)),
             _ => None,
@@ -148,69 +164,71 @@ pub async fn load(
             _ => None,
         };
 
+        let proctoring = r.proctoring().as_ref().map(proctoring::badge);
         let experience: Vec<ExperienceEntry> =
             serde_json::from_value(r.experience).unwrap_or_default();
-        let relation = relations.iter().find(|x| x.candidate_id == r.user_id);
-        let invitation_status = relation
-            .and_then(|x| x.invitation_status)
-            .map(InvitationStatus::from);
-        let applied = relation.is_some_and(|x| x.applied);
-        cards.push(CandidateCard {
-            id: r.user_id,
-            code: r.public_code,
-            display_name: if r.show_name {
-                r.full_name_enc
-                    .as_deref()
-                    .map(|b| crypto.decrypt_str(b))
-                    .transpose()?
-            } else {
-                None
-            },
-            category_name: category.map(Category::name_ru),
-            test_strength: match (category, r.theta) {
-                (Some(c), Some(t)) => Some(matching::test_strength(c.grade, t as f32)),
-                _ => None,
-            },
-            category,
-            category_assigned_at: r.category_assigned_at,
-            skills: card_skills,
-            fsp,
-            experience_years: r.experience_years,
-            roles: r.roles,
-            soft_skills: r.soft_skills,
-            industries: parse_slugs(&r.industries),
-            experience: experience
-                .into_iter()
-                .map(|e| CardExperience {
-                    company: r.show_experience.then_some(e.company),
-                    position: e.position,
-                    start: e.start,
-                    end: e.end,
-                    description: e.description,
-                })
-                .collect(),
-            about: r.about,
-            city: r.city,
-            relocation: r.relocation,
-            work_formats: parse_slugs(&r.work_formats),
-            salary_expectation_min: r.salary_expectation_min,
-            search_status: r.search_status.into(),
-            last_activity_at: r.last_activity_at,
-            task_rating: r.task_rating,
-            tasks_done: r.tasks_done,
-            proctoring: badges
-                .iter()
-                .find(|b| b.candidate_id == r.user_id)
-                .map(proctoring::badge),
-            minor: r.minor,
-            relation: Relation {
-                contacts_available: applied
-                    || invitation_status == Some(InvitationStatus::Accepted),
-                invitation_status,
-                applied,
+        let invitation_status = r.invitation_status.map(InvitationStatus::from);
+        cards.push(Loaded {
+            published,
+            searchable,
+            card: CandidateCard {
+                id: r.user_id,
+                code: r.public_code,
+                display_name: if r.show_name {
+                    r.full_name_enc
+                        .as_deref()
+                        .map(|b| crypto.decrypt_str(b))
+                        .transpose()?
+                } else {
+                    None
+                },
+                category_name: category.map(Category::name_ru),
+                test_strength: match (category, r.theta) {
+                    (Some(c), Some(t)) => Some(matching::test_strength(c.grade, t as f32)),
+                    _ => None,
+                },
+                category,
+                category_assigned_at: r.category_assigned_at,
+                skills: card_skills,
+                fsp,
+                experience_years: r.experience_years,
+                roles: r.roles,
+                soft_skills: r.soft_skills,
+                industries: parse_slugs(&r.industries),
+                experience: experience
+                    .into_iter()
+                    .map(|e| CardExperience {
+                        company: r.show_experience.then_some(e.company),
+                        position: e.position,
+                        start: e.start,
+                        end: e.end,
+                        description: e.description,
+                    })
+                    .collect(),
+                about: r.about,
+                city: r.city,
+                relocation: r.relocation,
+                work_formats: parse_slugs(&r.work_formats),
+                salary_expectation_min: r.salary_expectation_min,
+                search_status: r.search_status.into(),
+                last_activity_at: r.last_activity_at,
+                task_rating: r.task_rating,
+                tasks_done: r.tasks_done,
+                proctoring,
+                minor: r.minor,
+                relation: Relation {
+                    contacts_available: r.applied
+                        || invitation_status == Some(InvitationStatus::Accepted),
+                    invitation_status,
+                    applied: r.applied,
+                },
             },
         });
     }
-    cards.sort_by_key(|c| ids.iter().position(|id| *id == c.id).unwrap_or(usize::MAX));
+    cards.sort_by_key(|c| {
+        ids.iter()
+            .position(|id| *id == c.card.id)
+            .unwrap_or(usize::MAX)
+    });
     Ok(cards)
 }

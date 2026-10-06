@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT candidate_id, score, rank, breakdown, in_current, pinned, dismissed, first_seen_at\n         FROM shortlist_items\n         WHERE need_id = $1\n         ORDER BY in_current DESC, rank",
+  "query": "SELECT candidate_id, score, rank, breakdown AS \"breakdown: Json<Box<RawValue>>\",\n                  in_current, pinned, dismissed, first_seen_at\n           FROM shortlist_items\n           WHERE need_id = $1 AND (in_current OR pinned)\n           ORDER BY in_current DESC, rank",
   "describe": {
     "columns": [
       {
@@ -20,8 +20,8 @@
       },
       {
         "ordinal": 3,
-        "name": "breakdown",
-        "type_info": "Jsonb"
+        "name": "breakdown: Json<Box<RawValue>>",
+        "type_info": "Json"
       },
       {
         "ordinal": 4,
@@ -60,5 +60,5 @@
       false
     ]
   },
-  "hash": "a895c1a1852090640afaa80577ea0cfd2a59a5bf5ce473adbf4b3c354ee9a8b0"
+  "hash": "8bf45b022fac1c2ea4ec7c13c7885f34bf4033895dd0963ff4c4f7fc83c7f95d"
 }

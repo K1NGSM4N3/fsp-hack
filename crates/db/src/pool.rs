@@ -3,7 +3,10 @@ use serde_json::Value;
 use sqlx::PgExecutor;
 use uuid::Uuid;
 
-use crate::types::{InvitationStatus, SearchStatus};
+use crate::{
+    proctoring::CardBadge,
+    types::{InvitationStatus, SearchStatus},
+};
 
 #[derive(Debug, Clone)]
 pub struct PoolCandidate {
@@ -30,6 +33,8 @@ pub struct TextRank {
     pub rank: f32,
 }
 
+/// An employer's card of one candidate with the company's relation to them and the visibility
+/// flags, as one row.
 #[derive(Debug, Clone)]
 pub struct CandidateCard {
     pub user_id: Uuid,
@@ -54,7 +59,6 @@ pub struct CandidateCard {
     pub theta: Option<f64>,
     pub category_assigned_at: Option<DateTime<Utc>>,
     pub last_activity_at: DateTime<Utc>,
-    pub visible: bool,
     pub achievements: Option<Value>,
     pub skills: Vec<String>,
     pub skill_sources: Vec<String>,
@@ -62,13 +66,43 @@ pub struct CandidateCard {
     pub tasks_done: i64,
     /// Under 18 today; the birth date itself never leaves the database for employers.
     pub minor: bool,
+    /// Visible, publication consent in force and, under 18, the representative's consent.
+    pub published: bool,
+    /// The company's latest invitation to the candidate.
+    pub invitation_status: Option<InvitationStatus>,
+    /// Applied to one of the company's vacancies and did not withdraw.
+    pub applied: bool,
+    /// Proctoring of the test behind the current category; `None` when it was not proctored.
+    pub proctoring_camera: Option<bool>,
+    pub proctoring_chunks: Option<i64>,
+    pub tab_hidden: Option<i64>,
+    pub window_blur: Option<i64>,
+    pub fullscreen_exit: Option<i64>,
+    pub paste: Option<i64>,
+    pub camera_lost: Option<i64>,
+    pub recording_failed: Option<i64>,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct CompanyRelation {
-    pub candidate_id: Uuid,
-    pub invitation_status: Option<InvitationStatus>,
-    pub applied: bool,
+impl CandidateCard {
+    /// Published and not closed to offers: the rule of [`searchable_pool`]. Derived here rather
+    /// than in SQL, where a second reference to `published` evaluated its subqueries twice.
+    pub fn searchable(&self) -> bool {
+        self.published && self.search_status != SearchStatus::Closed
+    }
+
+    pub fn proctoring(&self) -> Option<CardBadge> {
+        Some(CardBadge {
+            candidate_id: self.user_id,
+            camera: self.proctoring_camera?,
+            chunks: self.proctoring_chunks.unwrap_or(0),
+            tab_hidden: self.tab_hidden.unwrap_or(0),
+            window_blur: self.window_blur.unwrap_or(0),
+            fullscreen_exit: self.fullscreen_exit.unwrap_or(0),
+            paste: self.paste.unwrap_or(0),
+            camera_lost: self.camera_lost.unwrap_or(0),
+            recording_failed: self.recording_failed.unwrap_or(0),
+        })
+    }
 }
 
 /// Searchable candidates of one specialization with everything the matching engine needs,
@@ -143,77 +177,86 @@ pub async fn text_ranks(
     .await
 }
 
+/// Cards of `ids` as `company_id` sees them, in one round trip. Nullability is spelled out:
+/// inferred from the plan, it depends on the join order the planner picks for the data at hand. Skills and task stats are
+/// aggregated per candidate in lateral subqueries (a group-by over the wide joined rows cost twice
+/// as much); the company's relation and the proctoring of the latest grade assignment ride along.
+/// Shown shortlists and search pages are re-checked with the live [`CandidateCard::searchable`],
+/// so hiding a profile takes effect on the next request whatever the age of the cached pool.
+///
+/// The ids go through a subquery so the planner cannot see them: with a visible one-element
+/// array it kept re-planning this statement on every call (about 0.7 ms, four times the
+/// execution) instead of switching to the cached generic plan, which suits any number of ids.
 pub async fn candidate_cards(
     db: impl PgExecutor<'_>,
+    company_id: Uuid,
     ids: &[Uuid],
 ) -> Result<Vec<CandidateCard>, sqlx::Error> {
     sqlx::query_as!(
         CandidateCard,
-        r#"SELECT c.user_id, c.public_code, c.full_name_enc, c.show_name, c.show_fsp, c.show_experience,
-                  c.city, c.relocation, c.work_formats, c.salary_expectation_min, c.about,
-                  c.experience_years, c.roles, c.soft_skills, c.industries, c.experience,
-                  c.search_status AS "search_status: SearchStatus", c.specialization, c.grade, c.theta,
-                  c.category_assigned_at, c.last_activity_at, c.visible, f.achievements AS "achievements?",
-                  coalesce(array_agg(s.skill ORDER BY s.skill, s.source)
-                           FILTER (WHERE s.skill IS NOT NULL), '{}') AS "skills!",
-                  coalesce(array_agg(s.source ORDER BY s.skill, s.source)
-                           FILTER (WHERE s.skill IS NOT NULL), '{}') AS "skill_sources!",
-                  (SELECT avg(a.rating)::real FROM task_assignments a
-                    WHERE a.candidate_id = c.user_id AND a.status = 'reviewed') AS task_rating,
-                  (SELECT count(*) FROM task_assignments a
-                    WHERE a.candidate_id = c.user_id AND a.status IN ('submitted', 'reviewed')) AS "tasks_done!",
-                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS "minor!"
-           FROM candidates c
-           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id
-           LEFT JOIN candidate_skills s ON s.candidate_id = c.user_id
-           WHERE c.user_id = ANY ($1)
-           GROUP BY c.user_id, f.achievements"#,
-        ids,
-    )
-    .fetch_all(db)
-    .await
-}
-
-/// Of `ids`, those an employer may currently find: the same rule as [`searchable_pool`].
-/// Shown shortlists and search pages are re-checked with it against the live tables, so hiding a
-/// profile takes effect on the next request whatever the age of the cached pool.
-pub async fn searchable_among(
-    db: impl PgExecutor<'_>,
-    ids: &[Uuid],
-) -> Result<Vec<Uuid>, sqlx::Error> {
-    sqlx::query_scalar!(
-        "SELECT c.user_id FROM candidates c
-         WHERE c.user_id = ANY ($1)
-           AND c.visible
-           AND c.search_status <> 'closed'
-           AND EXISTS (SELECT 1 FROM user_consents uc
-                        JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
-                        WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
-           AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
-                OR EXISTS (SELECT 1 FROM user_consents gc
-                            JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
-                            WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL))",
-        ids,
-    )
-    .fetch_all(db)
-    .await
-}
-
-pub async fn company_relations(
-    db: impl PgExecutor<'_>,
-    company_id: Uuid,
-    ids: &[Uuid],
-) -> Result<Vec<CompanyRelation>, sqlx::Error> {
-    sqlx::query_as!(
-        CompanyRelation,
-        r#"SELECT c.user_id AS candidate_id,
+        r#"SELECT c.user_id AS "user_id!", c.public_code AS "public_code!", c.full_name_enc,
+                  c.show_name AS "show_name!", c.show_fsp AS "show_fsp!",
+                  c.show_experience AS "show_experience!", c.city, c.relocation AS "relocation!",
+                  c.work_formats AS "work_formats!", c.salary_expectation_min, c.about AS "about!",
+                  c.experience_years, c.roles AS "roles!", c.soft_skills AS "soft_skills!",
+                  c.industries AS "industries!", c.experience AS "experience!",
+                  c.search_status AS "search_status!: SearchStatus", c.specialization, c.grade, c.theta,
+                  c.category_assigned_at, c.last_activity_at AS "last_activity_at!",
+                  f.achievements AS "achievements?",
+                  sk.skills AS "skills!", sk.sources AS "skill_sources!",
+                  ta.task_rating, ta.tasks_done AS "tasks_done!",
+                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS "minor!",
+                  vis.published AS "published!",
                   (SELECT i.status FROM invitations i WHERE i.company_id = $1 AND i.candidate_id = c.user_id
-                    ORDER BY i.created_at DESC LIMIT 1) AS "invitation_status: InvitationStatus",
+                    ORDER BY i.created_at DESC LIMIT 1) AS "invitation_status?: InvitationStatus",
                   EXISTS (SELECT 1 FROM applications a JOIN vacancies v ON v.id = a.vacancy_id
                            WHERE v.company_id = $1 AND a.candidate_id = c.user_id
-                             AND a.status <> 'withdrawn') AS "applied!"
+                             AND a.status <> 'withdrawn') AS "applied!",
+                  pb.camera AS "proctoring_camera?", pb.chunks AS "proctoring_chunks?",
+                  pb.tab_hidden AS "tab_hidden?", pb.window_blur AS "window_blur?",
+                  pb.fullscreen_exit AS "fullscreen_exit?", pb.paste AS "paste?",
+                  pb.camera_lost AS "camera_lost?", pb.recording_failed AS "recording_failed?"
            FROM candidates c
-           WHERE c.user_id = ANY ($2)"#,
+           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id
+           CROSS JOIN LATERAL (
+               SELECT coalesce(array_agg(s.skill ORDER BY s.skill, s.source), '{}') AS skills,
+                      coalesce(array_agg(s.source ORDER BY s.skill, s.source), '{}') AS sources
+               FROM candidate_skills s
+               WHERE s.candidate_id = c.user_id
+           ) sk
+           CROSS JOIN LATERAL (
+               SELECT (avg(a.rating) FILTER (WHERE a.status = 'reviewed'))::real AS task_rating,
+                      count(*) FILTER (WHERE a.status IN ('submitted', 'reviewed')) AS tasks_done
+               FROM task_assignments a
+               WHERE a.candidate_id = c.user_id
+           ) ta
+           CROSS JOIN LATERAL (
+               SELECT c.visible
+                      AND EXISTS (SELECT 1 FROM user_consents uc
+                                   JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'
+                                   WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)
+                      AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date
+                           OR EXISTS (SELECT 1 FROM user_consents gc
+                                       JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'
+                                       WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL)) AS published
+           ) vis
+           LEFT JOIN LATERAL (
+               SELECT p.camera,
+                      (SELECT count(*) FROM proctoring_chunks pc WHERE pc.session_id = p.session_id) AS chunks,
+                      count(e.kind) FILTER (WHERE e.kind = 'tab_hidden') AS tab_hidden,
+                      count(e.kind) FILTER (WHERE e.kind = 'window_blur') AS window_blur,
+                      count(e.kind) FILTER (WHERE e.kind = 'fullscreen_exit') AS fullscreen_exit,
+                      count(e.kind) FILTER (WHERE e.kind = 'paste') AS paste,
+                      count(e.kind) FILTER (WHERE e.kind = 'camera_lost') AS camera_lost,
+                      count(e.kind) FILTER (WHERE e.kind = 'recording_failed') AS recording_failed
+               FROM (SELECT g.session_id FROM grade_assignments g
+                     WHERE g.candidate_id = c.user_id
+                     ORDER BY g.assigned_at DESC LIMIT 1) latest
+               JOIN proctoring_sessions p ON p.session_id = latest.session_id
+               LEFT JOIN proctoring_events e ON e.session_id = p.session_id
+               GROUP BY p.session_id
+           ) pb ON true
+           WHERE c.user_id = ANY ((SELECT $2::uuid[])::uuid[])"#,
         company_id,
         ids,
     )

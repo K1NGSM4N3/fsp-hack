@@ -12,7 +12,7 @@ use api::{
     kv::Kv,
     mail::Mailer,
     proctoring::{ProctoringMode, RecordingStore},
-    state::AppState,
+    state::{AppState, Services},
 };
 use chrono::Utc;
 use reqwest::{Method, StatusCode};
@@ -49,6 +49,7 @@ impl Api {
         let config = Config {
             bind: ([127, 0, 0, 1], 0).into(),
             database_url: String::new(),
+            database_pool_size: api::db::POOL_SIZE,
             valkey_url: None,
             public_url: "http://localhost:3000".into(),
             cookie_secure: false,
@@ -74,7 +75,7 @@ impl Api {
             log_json: false,
         };
         let kv = Kv::connect(None).await.unwrap();
-        let state = AppState {
+        let state = AppState::from(Services {
             crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
             jwt: Arc::new(JwtKeys::new(config.jwt_seed).unwrap()),
             mailer: Arc::new(Mailer::new(&config.mail).unwrap()),
@@ -86,7 +87,7 @@ impl Api {
             webhooks: WebhookSender::new(Vec::new()).unwrap(),
             pool,
             config: Arc::new(config),
-        };
+        });
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let app = api::app(state.clone());

@@ -11,7 +11,7 @@ use api::{
     kv::Kv,
     mail::Mailer,
     proctoring::{ProctoringMode, RecordingStore},
-    state::AppState,
+    state::{AppState, Services},
 };
 use chrono::{Duration, Months, NaiveDate, Utc};
 use reqwest::{Method, StatusCode, header};
@@ -47,6 +47,7 @@ impl Api {
         let config = Config {
             bind: ([127, 0, 0, 1], 0).into(),
             database_url: String::new(),
+            database_pool_size: api::db::POOL_SIZE,
             valkey_url: None,
             public_url: "http://localhost:3000".into(),
             cookie_secure: false,
@@ -72,7 +73,7 @@ impl Api {
             log_json: false,
         };
         let kv = Kv::connect(valkey).await.unwrap();
-        let state = AppState {
+        let state = AppState::from(Services {
             crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
             jwt: Arc::new(JwtKeys::new(config.jwt_seed).unwrap()),
             mailer: Arc::new(Mailer::new(&config.mail).unwrap()),
@@ -84,7 +85,7 @@ impl Api {
             webhooks: WebhookSender::new(Vec::new()).unwrap(),
             pool,
             config: Arc::new(config),
-        };
+        });
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let app = api::app(state.clone());
@@ -1496,6 +1497,27 @@ async fn other_replica_never_shows_a_hidden_profile(pool: PgPool) {
     let r = b.call(Method::GET, search, Some(&et), None).await;
     assert_eq!(r.status, StatusCode::OK);
     assert!(!found(&r, anna), "replica b has no Valkey generation yet");
+}
+
+/// The company of an employer is cached; deleting the account must end it for every session at
+/// once, not only for the one that deleted it.
+#[sqlx::test(migrations = "../../db/migrations")]
+async fn deleted_employer_loses_its_company_in_every_session(pool: PgPool) {
+    let api = Api::start(pool).await;
+    let (hr, _) = api.employer("hr@example.ru").await;
+    let (deleting, other) = (api.token(hr, Role::Employer), api.token(hr, Role::Employer));
+    let search = "/employer/candidates?specialization=backend";
+    assert_eq!(
+        api.call(Method::GET, search, Some(&other), None)
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let r = api.call(Method::DELETE, "/me", Some(&deleting), None).await;
+    assert_eq!(r.status, StatusCode::NO_CONTENT);
+    let r = api.call(Method::GET, search, Some(&other), None).await;
+    assert_eq!(r.status, StatusCode::CONFLICT, "{}", r.body);
+    assert_eq!(r.body["code"], "company_profile_required");
 }
 
 fn cache_control(r: &Reply) -> &str {

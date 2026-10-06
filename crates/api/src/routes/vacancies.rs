@@ -146,7 +146,7 @@ async fn list_own(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<Vacancy>>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     Ok(Json(company_vacancy_views(&state.pool, company).await?))
 }
 
@@ -202,7 +202,7 @@ async fn create(
     Json(v): Json<VacancyInput>,
 ) -> ApiResult<(StatusCode, Json<Vacancy>)> {
     validate(&v)?;
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let id = Uuid::now_v7();
     let status: db::types::VacancyStatus = v.status.into();
     let published_at = (v.status == VacancyStatus::Published).then(Utc::now);
@@ -225,7 +225,7 @@ async fn get_own(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vacancy>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let row = db::vacancies::company_vacancy(&state.pool, company, id)
         .await?
         .ok_or_else(ApiError::not_found)?;
@@ -245,7 +245,7 @@ async fn update(
     Json(v): Json<VacancyInput>,
 ) -> ApiResult<Json<Vacancy>> {
     validate(&v)?;
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let status: db::types::VacancyStatus = v.status.into();
     let updated =
         db::vacancies::update_vacancy(&state.pool, id, company, status, &fields(&v)).await?;
@@ -281,7 +281,7 @@ async fn list_applications(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<IncomingApplication>>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let rows = db::vacancies::vacancy_applications(&state.pool, id, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
@@ -328,7 +328,7 @@ async fn set_application_status(
             "Допустимо: viewed, accepted, rejected",
         ));
     }
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let status: db::types::ApplicationStatus = input.status.into();
     let mut tx = state.pool.begin().await?;
     let before = db::integrations::application_status(&mut *tx, company, id).await?;

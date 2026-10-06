@@ -153,12 +153,14 @@ async fn chunk_metadata_events_and_badge(pool: PgPool) {
     );
     assert_eq!(db::proctoring::events(&pool, sid).await.unwrap().len(), 3);
 
-    assert!(
-        db::proctoring::card_badges(&pool, &[cand])
+    let card = |pool: PgPool| async move {
+        db::pool::candidate_cards(&pool, Uuid::now_v7(), &[cand])
             .await
             .unwrap()
-            .is_empty()
-    );
+            .pop()
+            .unwrap()
+    };
+    assert!(card(pool.clone()).await.proctoring().is_none());
     db::grades::insert_grade_assignment(
         &pool,
         &db::grades::NewGradeAssignment {
@@ -175,13 +177,9 @@ async fn chunk_metadata_events_and_badge(pool: PgPool) {
     )
     .await
     .unwrap();
-    let badges = db::proctoring::card_badges(&pool, &[cand]).await.unwrap();
-    assert_eq!(badges.len(), 1);
-    assert!(badges[0].camera);
-    assert_eq!(
-        (badges[0].chunks, badges[0].tab_hidden, badges[0].paste),
-        (2, 2, 1)
-    );
+    let badge = card(pool.clone()).await.proctoring().unwrap();
+    assert!(badge.camera);
+    assert_eq!((badge.chunks, badge.tab_hidden, badge.paste), (2, 2, 1));
 
     db::consents::revoke_user_consent(&pool, grant, cand)
         .await

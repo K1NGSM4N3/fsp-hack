@@ -102,7 +102,7 @@ async fn list_tasks(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<EmployerTask>>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     Ok(Json(company_task_views(&state.pool, company).await?))
 }
 
@@ -166,7 +166,7 @@ async fn create_task(
         format!("Неизвестные навыки: {}", unknown.join(", "))
     });
     v.finish()?;
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let id = Uuid::now_v7();
     let grades: Vec<String> = t.grades.iter().map(|g| g.slug().to_owned()).collect();
     db::tasks::insert_task(
@@ -218,7 +218,7 @@ async fn set_active(
     Path(id): Path<Uuid>,
     Json(input): Json<ActiveInput>,
 ) -> ApiResult<StatusCode> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     if db::tasks::set_task_active(&state.pool, input.active, id, company).await? == 0 {
         return Err(ApiError::not_found());
     }
@@ -248,7 +248,7 @@ async fn submissions(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<Submission>>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let rows = db::tasks::task_submissions(&state.pool, id, company).await?;
     let mut out = Vec::with_capacity(rows.len());
     for r in rows {
@@ -292,7 +292,7 @@ async fn review(
     if !(1..=5).contains(&input.rating) {
         return Err(ApiError::field("rating", "Оценка от 1 до 5"));
     }
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let comment = input
         .comment
         .as_deref()

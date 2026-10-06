@@ -985,7 +985,7 @@ async fn need_test_plan(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<TestPlanDemo>> {
-    let company = super::company::company_id(&state.pool, user.id).await?;
+    let company = super::company::company_id(&state, user.id).await?;
     let need = super::needs::effective_need(&state.pool, company, id).await?;
     let grade = need.grades.first().copied().unwrap_or(Grade::Middle);
     let skills: Vec<String> = need

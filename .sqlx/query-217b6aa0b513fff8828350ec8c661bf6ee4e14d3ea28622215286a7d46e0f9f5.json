@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE shortlist_items SET in_current = false, updated_at = now()\n         WHERE need_id = $1 AND in_current AND NOT (candidate_id = ANY ($2))",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "217b6aa0b513fff8828350ec8c661bf6ee4e14d3ea28622215286a7d46e0f9f5"
+}

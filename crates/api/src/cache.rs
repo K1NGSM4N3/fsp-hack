@@ -1,5 +1,6 @@
 //! In-process caches of data derived from the candidate tables: the search pool of every
-//! specialization, the category cards and the demand stats of each category (architecture.md §12.2).
+//! specialization, the category cards and the demand stats of each category (architecture.md §12.2),
+//! plus the company of each employer account, read by every employer request.
 //!
 //! They are invalidated by a generation. A write that changes what employers can find calls
 //! [`CandidateCache::invalidate`] after its commit: the local epoch makes the next request on this
@@ -9,6 +10,7 @@
 
 use std::{
     future::Future,
+    hash::BuildHasher,
     pin::pin,
     sync::{
         Arc,
@@ -21,6 +23,7 @@ use arc_swap::ArcSwapOption;
 use catalog::{Grade, Specialization};
 use sqlx::PgPool;
 use tokio::sync::Notify;
+use uuid::Uuid;
 
 use crate::{error::ApiResult, kv::Kv, pool::SpecPool};
 
@@ -30,6 +33,8 @@ const GENERATION_KEY: &str = "cache:candidates:generation";
 const NEVER: u64 = u64::MAX;
 const SPECS: usize = Specialization::ALL.len();
 const CATEGORIES: usize = SPECS * Grade::ALL.len();
+/// Employer accounts whose company is remembered; a power of two, direct-mapped.
+const COMPANY_SLOTS: usize = 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stamp {
@@ -177,11 +182,20 @@ impl<T> Slot<T> {
     }
 }
 
+struct CompanyOf {
+    owner: Uuid,
+    company: Uuid,
+    stamp: Stamp,
+    born: Instant,
+}
+
 pub struct CandidateCache {
     generation: Generation,
     pools: [Slot<SpecPool>; SPECS],
     overview: Slot<Vec<db::market::CategoryOverview>>,
     demand: [Slot<db::market::CategoryDemand>; CATEGORIES],
+    companies: Box<[ArcSwapOption<CompanyOf>]>,
+    hasher: std::hash::RandomState,
 }
 
 impl CandidateCache {
@@ -191,7 +205,36 @@ impl CandidateCache {
             pools: std::array::from_fn(|_| Slot::default()),
             overview: Slot::default(),
             demand: std::array::from_fn(|_| Slot::default()),
+            companies: (0..COMPANY_SLOTS).map(|_| ArcSwapOption::empty()).collect(),
+            hasher: std::hash::RandomState::new(),
         }
+    }
+
+    /// The company an employer account owns. It is created with the account, never changes
+    /// owner and is deleted only with the account, and account deletion invalidates the cache:
+    /// an entry serves only the generation it was read in, so another replica drops it within
+    /// [`REMOTE_TTL`] (the deleted session's own token is revoked at once). A missing company is
+    /// not remembered.
+    pub async fn company_of(&self, pg: &PgPool, owner: Uuid) -> ApiResult<Option<Uuid>> {
+        let stamp = self.generation.stamp().await;
+        let slot = &self.companies[self.hasher.hash_one(owner) as usize & (COMPANY_SLOTS - 1)];
+        if let Some(e) = &*slot.load()
+            && e.owner == owner
+            && e.stamp == stamp
+            && e.born.elapsed() < HARD_TTL
+        {
+            return Ok(Some(e.company));
+        }
+        let company = db::me::company_by_owner(pg, owner).await?.map(|c| c.id);
+        if let Some(company) = company {
+            slot.store(Some(Arc::new(CompanyOf {
+                owner,
+                company,
+                stamp,
+                born: Instant::now(),
+            })));
+        }
+        Ok(company)
     }
 
     /// After the commit of any write to what the pool is built from: profile, skills, category,

@@ -10,7 +10,7 @@ use api::{
     kv::{Kv, KvError},
     mail::{MailError, Mailer},
     proctoring::{ProctoringMode, RecordingStore},
-    state::AppState,
+    state::{AppState, Services},
 };
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 
@@ -49,7 +49,7 @@ async fn main() -> Result<(), StartupError> {
     init_tracing(std::env::var("LOG_FORMAT").is_ok_and(|v| v == "json"));
     let config = Config::from_env()?;
 
-    let pool = api::db::pool(&config.database_url)?;
+    let pool = api::db::pool(&config.database_url, config.database_pool_size)?;
     api::db::migrate(&pool).await?;
     if command == "migrate" {
         return Ok(());
@@ -118,7 +118,7 @@ async fn main() -> Result<(), StartupError> {
     .spawn();
 
     let kv = Kv::connect(config.valkey_url.as_deref()).await?;
-    let state = AppState {
+    let state = AppState::from(Services {
         crypto,
         jwt: Arc::new(JwtKeys::new(config.jwt_seed)?),
         mailer: Arc::new(Mailer::new(&config.mail)?),
@@ -132,7 +132,7 @@ async fn main() -> Result<(), StartupError> {
         webhooks,
         pool,
         config: Arc::new(config),
-    };
+    });
 
     let listener = tokio::net::TcpListener::bind(state.config.bind).await?;
     tracing::info!(addr = %state.config.bind, "listening");

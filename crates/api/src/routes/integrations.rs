@@ -101,7 +101,7 @@ async fn integrations_overview(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<IntegrationsOverview>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let counts = db::integrations::event_counts(&state.pool, company).await?;
     Ok(Json(IntegrationsOverview {
         webhook: db::integrations::webhook(&state.pool, company)
@@ -169,7 +169,7 @@ async fn put_webhook(
     user: EmployerUser,
     Json(input): Json<WebhookInput>,
 ) -> ApiResult<(StatusCode, Json<WebhookSaved>)> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let url = checked_url(&state, &input.url).await?;
     if db::integrations::update_webhook_url(&state.pool, company, &url).await? > 0 {
         return Ok((
@@ -212,7 +212,7 @@ async fn delete_webhook(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<StatusCode> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let mut tx = state.pool.begin().await?;
     if db::integrations::delete_webhook(&mut *tx, company).await? == 0 {
         return Err(ApiError::not_found());
@@ -231,7 +231,7 @@ async fn rotate_webhook_secret(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<WebhookSaved>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let secret = signature::new_secret();
     let rotated = db::integrations::rotate_webhook_secret(
         &state.pool,
@@ -272,7 +272,7 @@ async fn send_test_event(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<TestDelivery>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let hits = state
         .kv
         .hit(
@@ -358,7 +358,7 @@ async fn list_deliveries(
     user: EmployerUser,
     Query(q): Query<DeliveriesQuery>,
 ) -> ApiResult<Json<Vec<DeliveryView>>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let limit = q.limit.unwrap_or(50).clamp(1, 200);
     let events = db::integrations::company_events(&state.pool, company, limit).await?;
     let ids: Vec<Uuid> = events.iter().map(|e| e.id).collect();
@@ -408,7 +408,7 @@ async fn retry_delivery(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     if !db::integrations::webhook_enabled(&state.pool, company).await? {
         return Err(ApiError::conflict(
             "webhook_missing",
@@ -456,7 +456,7 @@ async fn list_api_keys(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<Vec<ApiKeyView>>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     Ok(Json(
         db::integrations::company_api_keys(&state.pool, company)
             .await?
@@ -509,7 +509,7 @@ async fn create_api_key(
     )
     .check(!scopes.is_empty(), "scopes", "Выберите хотя бы одно право");
     v.finish()?;
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     if db::integrations::active_api_keys(&state.pool, company).await? >= MAX_ACTIVE_KEYS {
         return Err(ApiError::conflict(
             "api_key_limit",
@@ -556,7 +556,7 @@ async fn revoke_api_key(
     user: EmployerUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     if db::integrations::revoke_api_key(&state.pool, company, id).await? == 0 {
         return Err(ApiError::not_found());
     }

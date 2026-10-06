@@ -106,7 +106,7 @@ async fn trust_status(
     State(state): State<AppState>,
     user: EmployerUser,
 ) -> ApiResult<Json<TrustStatus>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let check = trust::refresh_domain(&state.pool, &state.crypto, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
@@ -243,7 +243,7 @@ async fn similar_vacancies(
             "Не длиннее 10 000 символов",
         );
     v.finish()?;
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let similar = trust::similar_own(
         &state.pool,
         company,

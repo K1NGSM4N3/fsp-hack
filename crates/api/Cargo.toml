@@ -15,7 +15,7 @@ db.workspace = true
 thiserror.workspace = true
 time.workspace = true
 serde.workspace = true
-serde_json.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
 tokio = { workspace = true, features = ["fs"] }
 tracing.workspace = true
 tracing-subscriber.workspace = true
@@ -29,6 +29,7 @@ axum-extra = { version = "0.12", features = ["cookie"] }
 utoipa = { workspace = true, features = ["chrono"] }
 utoipa-axum = "0.3"
 utoipa-swagger-ui = { version = "10", features = ["axum", "vendored"] }
+tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = ["trace", "request-id", "util", "limit", "timeout", "catch-panic", "sensitive-headers"] }
 
 chrono.workspace = true
@@ -52,4 +53,3 @@ pdf-extract = "0.12"
 
 [dev-dependencies]
 ats-mock = { path = "../ats-mock" }
-tower = { version = "0.5", features = ["util"] }

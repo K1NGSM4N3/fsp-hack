@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
-use serde_json::Value;
-use sqlx::PgExecutor;
+use serde_json::{Value, value::RawValue};
+use sqlx::{PgExecutor, types::Json};
 use uuid::Uuid;
 
 pub struct NeedFields<'a> {
@@ -48,12 +48,13 @@ pub struct ShortlistGeneration {
     pub generated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct ShortlistItem {
     pub candidate_id: Uuid,
     pub score: f64,
     pub rank: i32,
-    pub breakdown: Value,
+    /// The JSON text the API stored, unparsed.
+    pub breakdown: Json<Box<RawValue>>,
     pub in_current: bool,
     pub pinned: bool,
     pub dismissed: bool,
@@ -205,6 +206,8 @@ pub async fn start_shortlist_generation(
     .await
 }
 
+/// Rows already out of the current set are left alone: rewriting them on every rebuild only
+/// added dead tuples under the need's row lock.
 pub async fn mark_shortlist_stale(
     db: impl PgExecutor<'_>,
     need_id: Uuid,
@@ -212,7 +215,7 @@ pub async fn mark_shortlist_stale(
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
         "UPDATE shortlist_items SET in_current = false, updated_at = now()
-         WHERE need_id = $1 AND NOT (candidate_id = ANY ($2))",
+         WHERE need_id = $1 AND in_current AND NOT (candidate_id = ANY ($2))",
         need_id,
         keep,
     )
@@ -221,41 +224,47 @@ pub async fn mark_shortlist_stale(
     .map(|r| r.rows_affected())
 }
 
-pub async fn upsert_shortlist_item(
+/// The current set in one statement; the arrays are parallel, one entry per candidate, and
+/// `breakdowns` are JSON texts. Runs under the need's row lock, so it is a single round trip.
+pub async fn upsert_shortlist_items(
     db: impl PgExecutor<'_>,
     need_id: Uuid,
-    candidate_id: Uuid,
-    score: f64,
-    rank: i32,
-    breakdown: &Value,
+    candidates: &[Uuid],
+    scores: &[f64],
+    ranks: &[i32],
+    breakdowns: &[String],
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
         "INSERT INTO shortlist_items (need_id, candidate_id, score, rank, breakdown, in_current)
-         VALUES ($1, $2, $3, $4, $5, true)
+         SELECT $1, t.candidate_id, t.score, t.rank, t.breakdown::json, true
+         FROM UNNEST($2::uuid[], $3::float8[], $4::int4[], $5::text[])
+              AS t (candidate_id, score, rank, breakdown)
          ON CONFLICT (need_id, candidate_id) DO UPDATE
          SET score = EXCLUDED.score, rank = EXCLUDED.rank, breakdown = EXCLUDED.breakdown,
              in_current = true, updated_at = now()",
         need_id,
-        candidate_id,
-        score,
-        rank,
-        breakdown,
+        candidates,
+        scores,
+        ranks,
+        breakdowns,
     )
     .execute(db)
     .await
     .map(|r| r.rows_affected())
 }
 
+/// What the shortlist shows: the current set and pinned candidates from earlier ones.
 pub async fn shortlist_items(
     db: impl PgExecutor<'_>,
     need_id: Uuid,
 ) -> Result<Vec<ShortlistItem>, sqlx::Error> {
     sqlx::query_as!(
         ShortlistItem,
-        "SELECT candidate_id, score, rank, breakdown, in_current, pinned, dismissed, first_seen_at
-         FROM shortlist_items
-         WHERE need_id = $1
-         ORDER BY in_current DESC, rank",
+        r#"SELECT candidate_id, score, rank, breakdown AS "breakdown: Json<Box<RawValue>>",
+                  in_current, pinned, dismissed, first_seen_at
+           FROM shortlist_items
+           WHERE need_id = $1 AND (in_current OR pinned)
+           ORDER BY in_current DESC, rank"#,
         need_id,
     )
     .fetch_all(db)

@@ -13,7 +13,7 @@ use api::{
     kv::Kv,
     mail::Mailer,
     proctoring::{ProctoringMode, RecordingStore},
-    state::AppState,
+    state::{AppState, Services},
 };
 use chrono::Utc;
 use reqwest::{Method, StatusCode, header};
@@ -42,6 +42,7 @@ impl Api {
         let config = Config {
             bind: ([127, 0, 0, 1], 0).into(),
             database_url: String::new(),
+            database_pool_size: api::db::POOL_SIZE,
             valkey_url: None,
             public_url: "http://localhost:3000".into(),
             cookie_secure: false,
@@ -72,7 +73,7 @@ impl Api {
         };
         let webhooks = WebhookSender::new(config.integrations.webhook_dev_hosts.clone()).unwrap();
         let kv = Kv::connect(None).await.unwrap();
-        let state = AppState {
+        let state = AppState::from(Services {
             crypto: Arc::new(Crypto::new(&config.field_key, &config.bidx_key)),
             jwt: Arc::new(JwtKeys::new(config.jwt_seed).unwrap()),
             mailer: Arc::new(Mailer::new(&config.mail).unwrap()),
@@ -84,7 +85,7 @@ impl Api {
             webhooks: webhooks.clone(),
             pool,
             config: Arc::new(config),
-        };
+        });
         if dispatch {
             Dispatcher::new(
                 state.pool.clone(),

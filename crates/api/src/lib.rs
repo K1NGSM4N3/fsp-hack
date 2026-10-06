@@ -26,19 +26,22 @@ pub mod skills;
 pub mod state;
 pub mod trust;
 
-use std::time::Duration;
+use std::{convert::Infallible, time::Duration};
 
 use axum::{
-    Router,
-    extract::DefaultBodyLimit,
-    http::{HeaderName, StatusCode},
+    BoxError, Router, ServiceExt,
+    body::{Body, Bytes, HttpBody},
+    extract::{DefaultBodyLimit, Request},
+    http::{HeaderName, HeaderValue, StatusCode},
     middleware,
-    routing::get,
+    response::Response,
+    routing::{IntoMakeService, get},
 };
+use tower::{Service, ServiceBuilder};
 use tower_http::{
     catch_panic::CatchPanicLayer,
     limit::RequestBodyLimitLayer,
-    request_id::{MakeRequestUuid, PropagateRequestIdLayer, SetRequestIdLayer},
+    request_id::{MakeRequestId, PropagateRequestIdLayer, RequestId, SetRequestIdLayer},
     sensitive_headers::SetSensitiveRequestHeadersLayer,
     timeout::TimeoutLayer,
     trace::TraceLayer,
@@ -192,13 +195,38 @@ pub fn openapi() -> utoipa::openapi::OpenApi {
     api
 }
 
-pub fn app(state: AppState) -> Router {
+/// UUIDv4 from the thread-local generator: `MakeRequestUuid` asks the OS for entropy on every
+/// request, a syscall that showed up in the profile of the cheapest routes.
+#[derive(Clone, Copy)]
+struct RandomRequestId;
+
+impl MakeRequestId for RandomRequestId {
+    fn make_request_id<B>(&mut self, _: &axum::http::Request<B>) -> Option<RequestId> {
+        let id = uuid::Builder::from_random_bytes(rand::random()).into_uuid();
+        let mut buf = uuid::Uuid::encode_buffer();
+        HeaderValue::from_str(id.hyphenated().encode_lower(&mut buf))
+            .ok()
+            .map(RequestId::new)
+    }
+}
+
+/// The server. Middleware that does not need the matched route wraps the router once, as a
+/// plain tower stack: added with `Router::layer` it would wrap every route, and axum clones a
+/// route's whole stack for each request and again inside every `from_fn` of it. Metrics read the
+/// route template and count CSRF rejections, so these two stay per route.
+pub fn app(
+    state: AppState,
+) -> IntoMakeService<
+    impl Service<Request, Response = Response, Error = Infallible, Future: Send>
+    + Clone
+    + Send
+    + 'static,
+> {
     let (api_router, api) = OpenApiRouter::with_openapi(ApiDoc::openapi())
         .nest("/api/v1", api_v1())
         .split_for_parts();
 
-    let x_request_id = HeaderName::from_static("x-request-id");
-    Router::new()
+    let router: Router = Router::new()
         .merge(api_router)
         .merge(SwaggerUi::new("/api/docs").url("/api/v1/openapi.json", api))
         .route("/healthz", get(routes::health::healthz))
@@ -209,22 +237,53 @@ pub fn app(state: AppState) -> Router {
             auth::csrf_guard,
         ))
         .layer(middleware::from_fn(metrics::track))
-        .layer(middleware::from_fn(http_cache::private_by_default))
-        .layer(DefaultBodyLimit::max(256 * 1024))
-        .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
-        .layer(TimeoutLayer::with_status_code(
-            StatusCode::REQUEST_TIMEOUT,
-            Duration::from_secs(30),
+        .with_state(state);
+
+    let x_request_id = HeaderName::from_static("x-request-id");
+    let service = ServiceBuilder::new()
+        .map_response(boxed_response)
+        .layer(CatchPanicLayer::new())
+        .layer(SetRequestIdLayer::new(
+            x_request_id.clone(),
+            RandomRequestId,
         ))
-        .layer(TraceLayer::new_for_http())
+        .layer(PropagateRequestIdLayer::new(x_request_id))
         .layer(SetSensitiveRequestHeadersLayer::new([
             axum::http::header::AUTHORIZATION,
             axum::http::header::COOKIE,
         ]))
-        .layer(PropagateRequestIdLayer::new(x_request_id.clone()))
-        .layer(SetRequestIdLayer::new(x_request_id, MakeRequestUuid))
-        .layer(CatchPanicLayer::new())
-        .with_state(state)
+        .layer(TraceLayer::new_for_http())
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
+        .map_response(boxed_response)
+        .layer(RequestBodyLimitLayer::new(10 * 1024 * 1024))
+        .layer(DefaultBodyLimit::max(256 * 1024))
+        .map_request(boxed_request)
+        .layer(middleware::from_fn::<_, (Request,)>(
+            http_cache::private_by_default,
+        ))
+        .service(router);
+    ServiceExt::<Request>::into_make_service(service)
+}
+
+/// `from_fn` takes an axum `Body` and `TimeoutLayer` a body with `Default`: the conversions that
+/// `Router::layer` makes between layers.
+fn boxed_request<B>(req: axum::http::Request<B>) -> Request
+where
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: Into<BoxError>,
+{
+    req.map(Body::new)
+}
+
+fn boxed_response<B>(res: axum::http::Response<B>) -> Response
+where
+    B: HttpBody<Data = Bytes> + Send + 'static,
+    B::Error: Into<BoxError>,
+{
+    res.map(Body::new)
 }
 
 #[cfg(test)]

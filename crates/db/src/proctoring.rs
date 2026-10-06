@@ -122,33 +122,6 @@ pub async fn summary(
     .await
 }
 
-pub async fn card_badges(
-    db: impl PgExecutor<'_>,
-    candidate_ids: &[Uuid],
-) -> Result<Vec<CardBadge>, sqlx::Error> {
-    sqlx::query_as!(
-        CardBadge,
-        r#"SELECT p.candidate_id, p.camera,
-                  (SELECT count(*) FROM proctoring_chunks c WHERE c.session_id = p.session_id) AS "chunks!",
-                  count(e.kind) FILTER (WHERE e.kind = 'tab_hidden') AS "tab_hidden!",
-                  count(e.kind) FILTER (WHERE e.kind = 'window_blur') AS "window_blur!",
-                  count(e.kind) FILTER (WHERE e.kind = 'fullscreen_exit') AS "fullscreen_exit!",
-                  count(e.kind) FILTER (WHERE e.kind = 'paste') AS "paste!",
-                  count(e.kind) FILTER (WHERE e.kind = 'camera_lost') AS "camera_lost!",
-                  count(e.kind) FILTER (WHERE e.kind = 'recording_failed') AS "recording_failed!"
-           FROM (SELECT DISTINCT ON (g.candidate_id) g.session_id
-                 FROM grade_assignments g
-                 WHERE g.candidate_id = ANY ($1)
-                 ORDER BY g.candidate_id, g.assigned_at DESC) latest
-           JOIN proctoring_sessions p ON p.session_id = latest.session_id
-           LEFT JOIN proctoring_events e ON e.session_id = p.session_id
-           GROUP BY p.session_id"#,
-        candidate_ids,
-    )
-    .fetch_all(db)
-    .await
-}
-
 /// Row-locks the proctoring session so concurrent uploads see consistent counts.
 pub async fn upload_target(
     db: impl PgExecutor<'_>,

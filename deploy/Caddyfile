@@ -4,7 +4,17 @@
 }
 
 :8080 {
-	encode {
+	@api path /api/* /healthz /readyz
+	@site not path /api/* /healthz /readyz
+
+	# API JSON is compressed anew for every response: the default zstd level spends half the
+	# CPU of `better` on it for 1-11 % more bytes (docs/solution.md §12.4). Pages and assets
+	# keep `better`.
+	encode @api {
+		zstd
+		gzip 6
+	}
+	encode @site {
 		zstd better
 		gzip 6
 	}
@@ -34,7 +44,6 @@
 	}
 
 	# The API sets Cache-Control itself: private, no-store unless a route is public reference data.
-	@api path /api/* /healthz /readyz
 	handle @api {
 		reverse_proxy api:8000
 	}

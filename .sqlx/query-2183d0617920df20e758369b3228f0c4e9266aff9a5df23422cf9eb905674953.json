@@ -1,0 +1,276 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.user_id AS \"user_id!\", c.public_code AS \"public_code!\", c.full_name_enc,\n                  c.show_name AS \"show_name!\", c.show_fsp AS \"show_fsp!\",\n                  c.show_experience AS \"show_experience!\", c.city, c.relocation AS \"relocation!\",\n                  c.work_formats AS \"work_formats!\", c.salary_expectation_min, c.about AS \"about!\",\n                  c.experience_years, c.roles AS \"roles!\", c.soft_skills AS \"soft_skills!\",\n                  c.industries AS \"industries!\", c.experience AS \"experience!\",\n                  c.search_status AS \"search_status!: SearchStatus\", c.specialization, c.grade, c.theta,\n                  c.category_assigned_at, c.last_activity_at AS \"last_activity_at!\",\n                  f.achievements AS \"achievements?\",\n                  sk.skills AS \"skills!\", sk.sources AS \"skill_sources!\",\n                  ta.task_rating, ta.tasks_done AS \"tasks_done!\",\n                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS \"minor!\",\n                  vis.published AS \"published!\",\n                  (SELECT i.status FROM invitations i WHERE i.company_id = $1 AND i.candidate_id = c.user_id\n                    ORDER BY i.created_at DESC LIMIT 1) AS \"invitation_status?: InvitationStatus\",\n                  EXISTS (SELECT 1 FROM applications a JOIN vacancies v ON v.id = a.vacancy_id\n                           WHERE v.company_id = $1 AND a.candidate_id = c.user_id\n                             AND a.status <> 'withdrawn') AS \"applied!\",\n                  pb.camera AS \"proctoring_camera?\", pb.chunks AS \"proctoring_chunks?\",\n                  pb.tab_hidden AS \"tab_hidden?\", pb.window_blur AS \"window_blur?\",\n                  pb.fullscreen_exit AS \"fullscreen_exit?\", pb.paste AS \"paste?\",\n                  pb.camera_lost AS \"camera_lost?\", pb.recording_failed AS \"recording_failed?\"\n           FROM candidates c\n           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id\n           CROSS JOIN LATERAL (\n               SELECT coalesce(array_agg(s.skill ORDER BY s.skill, s.source), '{}') AS skills,\n                      coalesce(array_agg(s.source ORDER BY s.skill, s.source), '{}') AS sources\n               FROM candidate_skills s\n               WHERE s.candidate_id = c.user_id\n           ) sk\n           CROSS JOIN LATERAL (\n               SELECT (avg(a.rating) FILTER (WHERE a.status = 'reviewed'))::real AS task_rating,\n                      count(*) FILTER (WHERE a.status IN ('submitted', 'reviewed')) AS tasks_done\n               FROM task_assignments a\n               WHERE a.candidate_id = c.user_id\n           ) ta\n           CROSS JOIN LATERAL (\n               SELECT c.visible\n                      AND EXISTS (SELECT 1 FROM user_consents uc\n                                   JOIN consent_documents d ON d.id = uc.document_id AND d.kind = 'pd_publication'\n                                   WHERE uc.user_id = c.user_id AND uc.revoked_at IS NULL)\n                      AND (c.birth_date IS NULL OR c.birth_date + interval '18 years' <= current_date\n                           OR EXISTS (SELECT 1 FROM user_consents gc\n                                       JOIN consent_documents gd ON gd.id = gc.document_id AND gd.kind = 'guardian_consent'\n                                       WHERE gc.user_id = c.user_id AND gc.revoked_at IS NULL)) AS published\n           ) vis\n           LEFT JOIN LATERAL (\n               SELECT p.camera,\n                      (SELECT count(*) FROM proctoring_chunks pc WHERE pc.session_id = p.session_id) AS chunks,\n                      count(e.kind) FILTER (WHERE e.kind = 'tab_hidden') AS tab_hidden,\n                      count(e.kind) FILTER (WHERE e.kind = 'window_blur') AS window_blur,\n                      count(e.kind) FILTER (WHERE e.kind = 'fullscreen_exit') AS fullscreen_exit,\n                      count(e.kind) FILTER (WHERE e.kind = 'paste') AS paste,\n                      count(e.kind) FILTER (WHERE e.kind = 'camera_lost') AS camera_lost,\n                      count(e.kind) FILTER (WHERE e.kind = 'recording_failed') AS recording_failed\n               FROM (SELECT g.session_id FROM grade_assignments g\n                     WHERE g.candidate_id = c.user_id\n                     ORDER BY g.assigned_at DESC LIMIT 1) latest\n               JOIN proctoring_sessions p ON p.session_id = latest.session_id\n               LEFT JOIN proctoring_events e ON e.session_id = p.session_id\n               GROUP BY p.session_id\n           ) pb ON true\n           WHERE c.user_id = ANY ((SELECT $2::uuid[])::uuid[])",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id!",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "public_code!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "full_name_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "show_name!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 4,
+        "name": "show_fsp!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "show_experience!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "relocation!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "work_formats!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 9,
+        "name": "salary_expectation_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "about!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "experience_years",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 12,
+        "name": "roles!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 13,
+        "name": "soft_skills!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 14,
+        "name": "industries!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 15,
+        "name": "experience!",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 16,
+        "name": "search_status!: SearchStatus",
+        "type_info": {
+          "Custom": {
+            "name": "search_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "open",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 18,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 19,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 20,
+        "name": "category_assigned_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 21,
+        "name": "last_activity_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 22,
+        "name": "achievements?",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 23,
+        "name": "skills!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 24,
+        "name": "skill_sources!",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 25,
+        "name": "task_rating",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 26,
+        "name": "tasks_done!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 27,
+        "name": "minor!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 28,
+        "name": "published!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 29,
+        "name": "invitation_status?: InvitationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "invitation_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "declined",
+                "expired",
+                "withdrawn"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 30,
+        "name": "applied!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 31,
+        "name": "proctoring_camera?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 32,
+        "name": "proctoring_chunks?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 33,
+        "name": "tab_hidden?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 34,
+        "name": "window_blur?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 35,
+        "name": "fullscreen_exit?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 36,
+        "name": "paste?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 37,
+        "name": "camera_lost?",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 38,
+        "name": "recording_failed?",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      null,
+      null,
+      null,
+      null,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "2183d0617920df20e758369b3228f0c4e9266aff9a5df23422cf9eb905674953"
+}

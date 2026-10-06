@@ -34,6 +34,9 @@ pub struct PoolFilter<'a> {
     pub required_skills: &'a [String],
     /// «Только 18+»: a filter, never a ranking penalty.
     pub adults_only: bool,
+    /// Keep only this candidate (one profile's explanation); text relevance is still normalized
+    /// over the whole filtered pool.
+    pub only: Option<Uuid>,
 }
 
 /// Searchable candidates of one specialization as of one generation, ordered by id.
@@ -228,7 +231,9 @@ pub async fn load(
         {
             continue;
         }
-        if !required.iter().all(|&s| snap.pool.has_skill(i, s)) {
+        if !required.iter().all(|&s| snap.pool.has_skill(i, s))
+            || filter.only.is_some_and(|id| snap.ids[i] != id)
+        {
             continue;
         }
         picks.push((i, rank));

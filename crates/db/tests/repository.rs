@@ -146,11 +146,17 @@ async fn shortlist_keeps_pins_across_generations(pool: PgPool) {
         .await
         .unwrap();
     assert!(first.previous.is_none());
-    for (rank, id) in [a, b].into_iter().enumerate() {
-        db::needs::upsert_shortlist_item(&mut *tx, need_id, id, 0.9, rank as i32 + 1, &json!({}))
-            .await
-            .unwrap();
-    }
+    let breakdowns = ["{}".to_owned(), "{}".to_owned()];
+    db::needs::upsert_shortlist_items(
+        &mut *tx,
+        need_id,
+        &[a, b],
+        &[0.9, 0.9],
+        &[1, 2],
+        &breakdowns,
+    )
+    .await
+    .unwrap();
     db::needs::mark_shortlist_stale(&mut *tx, need_id, &[a, b])
         .await
         .unwrap();
@@ -176,7 +182,7 @@ async fn shortlist_keeps_pins_across_generations(pool: PgPool) {
             .await
             .unwrap();
     assert_eq!(second.previous, Some(first.generated_at));
-    db::needs::upsert_shortlist_item(&mut *tx, need_id, a, 0.95, 1, &json!({}))
+    db::needs::upsert_shortlist_items(&mut *tx, need_id, &[a], &[0.95], &[1], &breakdowns[..1])
         .await
         .unwrap();
     db::needs::mark_shortlist_stale(&mut *tx, need_id, &[a])
@@ -375,13 +381,12 @@ async fn pool_rows_without_fsp_link(pool: PgPool) {
             .is_empty()
     );
 
-    let cards = db::pool::candidate_cards(&pool, &[id]).await.unwrap();
+    let cards = db::pool::candidate_cards(&pool, company_id, &[id])
+        .await
+        .unwrap();
     assert_eq!(cards.len(), 1);
     assert!(cards[0].achievements.is_none() && cards[0].task_rating.is_none());
     assert_eq!(cards[0].tasks_done, 0);
-
-    let relations = db::pool::company_relations(&pool, company_id, &[id])
-        .await
-        .unwrap();
-    assert!(relations[0].invitation_status.is_none() && !relations[0].applied);
+    assert!(cards[0].invitation_status.is_none() && !cards[0].applied);
+    assert!(cards[0].proctoring().is_none());
 }

@@ -16,6 +16,8 @@ pub enum ConfigError {
 pub struct Config {
     pub bind: SocketAddr,
     pub database_url: String,
+    /// Connections of this replica's pool (`DATABASE_POOL_SIZE`).
+    pub database_pool_size: u32,
     pub valkey_url: Option<String>,
     pub public_url: String,
     pub cookie_secure: bool,
@@ -236,6 +238,7 @@ impl Config {
             integrations,
             seed_demo: flag("SEED_DEMO", false),
             seed_per_spec: parsed("SEED_CANDIDATES_PER_SPEC", crate::seed::CANDIDATES_PER_SPEC)?,
+            database_pool_size: parsed("DATABASE_POOL_SIZE", crate::db::POOL_SIZE)?,
             log_json: var("LOG_FORMAT").as_deref() == Some("json"),
             public_url,
         })

@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{ops::Deref, sync::Arc};
 
 use metrics_exporter_prometheus::PrometheusHandle;
 use sqlx::PgPool;
@@ -8,8 +8,27 @@ use crate::{
     integrations::webhook::WebhookSender, kv::Kv, mail::Mailer, proctoring::RecordingStore,
 };
 
+/// Handle to [`Services`]. axum clones the state several times per request (every `from_fn`
+/// layer clones its inner stack, every handler its `State`); one reference count keeps that to a
+/// single atomic instead of one per field, all contended across worker threads.
 #[derive(Clone)]
-pub struct AppState {
+pub struct AppState(Arc<Services>);
+
+impl Deref for AppState {
+    type Target = Services;
+
+    fn deref(&self) -> &Services {
+        &self.0
+    }
+}
+
+impl From<Services> for AppState {
+    fn from(services: Services) -> Self {
+        Self(Arc::new(services))
+    }
+}
+
+pub struct Services {
     pub config: Arc<Config>,
     pub pool: PgPool,
     pub crypto: Arc<Crypto>,

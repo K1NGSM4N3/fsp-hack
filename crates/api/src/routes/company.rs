@@ -41,10 +41,11 @@ pub struct CompanyResponse {
     pub updated_at: DateTime<Utc>,
 }
 
-pub async fn company_id(pool: &PgPool, owner: Uuid) -> ApiResult<Uuid> {
-    db::me::company_by_owner(pool, owner)
+pub async fn company_id(state: &AppState, owner: Uuid) -> ApiResult<Uuid> {
+    state
+        .candidates
+        .company_of(&state.pool, owner)
         .await?
-        .map(|c| c.id)
         .ok_or_else(|| {
             ApiError::conflict(
                 "company_profile_required",

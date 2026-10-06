@@ -94,7 +94,7 @@ async fn search(
     let limit = q.limit.unwrap_or(20).clamp(1, 100);
     let offset = q.offset.unwrap_or(0);
 
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let now = Utc::now().timestamp();
     let need = match q.need_id {
         Some(id) => Some(super::needs::effective_need(&state.pool, company, id).await?),
@@ -111,6 +111,7 @@ async fn search(
             max_expectation: q.max_expectation,
             required_skills: &required,
             adults_only: q.adults_only,
+            only: None,
         },
     )
     .await?;
@@ -155,17 +156,15 @@ async fn search(
     let ids: Vec<Uuid> = page.iter().map(|(i, ..)| loaded.ids[*i]).collect();
     let mut cards = cards::load(&state.pool, &state.crypto, company, &ids, now).await?;
     // The pool may be up to a generation old on another replica; the page is checked live.
-    let mut searchable = db::pool::searchable_among(&state.pool, &ids).await?;
-    searchable.sort_unstable();
-    cards.retain(|c| searchable.binary_search(&c.id).is_ok());
+    cards.retain(|c| c.searchable);
     let mut items = Vec::with_capacity(page.len());
     for (i, strength, score, breakdown) in page {
-        let Some(pos) = cards.iter().position(|c| c.id == loaded.ids[i]) else {
+        let Some(pos) = cards.iter().position(|c| c.card.id == loaded.ids[i]) else {
             continue;
         };
         let (reasons, gaps) = breakdown.map(|b| (b.reasons, b.gaps)).unwrap_or_default();
         items.push(BankItem {
-            candidate: cards.swap_remove(pos),
+            candidate: cards.swap_remove(pos).card,
             strength,
             score,
             reasons,
@@ -198,20 +197,16 @@ async fn profile(
     Path(id): Path<Uuid>,
     Query(q): Query<ProfileQuery>,
 ) -> ApiResult<Json<CandidateProfileView>> {
-    let company = company_id(&state.pool, user.id).await?;
+    let company = company_id(&state, user.id).await?;
     let now = Utc::now().timestamp();
-    let candidate = cards::load(&state.pool, &state.crypto, company, &[id], now)
+    let found = cards::load(&state.pool, &state.crypto, company, &[id], now)
         .await?
         .pop()
         .ok_or_else(ApiError::not_found)?;
-    let related = candidate.relation.applied || candidate.relation.invitation_status.is_some();
-    let published = db::candidates::candidate_invitable(&state.pool, id)
-        .await?
-        .ok_or(sqlx::Error::RowNotFound)?
-        .published;
-    if !published && !related {
+    if !found.published && !found.related() {
         return Err(ApiError::not_found());
     }
+    let candidate = found.card;
     db::market::record_profile_view(&state.pool, company, id).await?;
 
     let breakdown = match (q.need_id, candidate.category) {
@@ -222,15 +217,13 @@ async fn profile(
                 category.specialization,
                 &PoolFilter {
                     text: Some(&need.description),
+                    only: Some(id),
                     ..PoolFilter::default()
                 },
             )
             .await?;
-            loaded
-                .ids
-                .iter()
-                .position(|x| *x == id)
-                .map(|i| matching::explain_at(&need, &loaded.pool, i, &Weights::default(), now))
+            (loaded.ids.first() == Some(&id))
+                .then(|| matching::explain_at(&need, &loaded.pool, 0, &Weights::default(), now))
         }
         _ => None,
     };
