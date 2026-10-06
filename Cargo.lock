@@ -66,6 +66,7 @@ dependencies = [
 name = "api"
 version = "0.1.0"
 dependencies = [
+ "arc-swap",
  "argon2",
  "assessment",
  "ats-mock",
@@ -97,6 +98,7 @@ dependencies = [
  "thiserror",
  "time",
  "tokio",
+ "tower",
  "tower-http",
  "tracing",
  "tracing-subscriber",
