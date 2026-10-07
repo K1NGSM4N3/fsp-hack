@@ -10,6 +10,24 @@ pub enum ConfigError {
     Missing(&'static str),
     #[error("{name}: {reason}")]
     Invalid { name: &'static str, reason: String },
+    #[error("{name}: {source}")]
+    Parse {
+        name: &'static str,
+        source: ParseError,
+    },
+    #[error("{name}: {source}")]
+    Base64 {
+        name: &'static str,
+        source: base64::DecodeError,
+    },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum ParseError {
+    #[error(transparent)]
+    Int(#[from] std::num::ParseIntError),
+    #[error(transparent)]
+    Addr(#[from] std::net::AddrParseError),
 }
 
 #[derive(Clone)]
@@ -154,12 +172,12 @@ fn flag(name: &str, default: bool) -> bool {
 
 fn parsed<T: std::str::FromStr>(name: &'static str, default: T) -> Result<T, ConfigError>
 where
-    T::Err: std::fmt::Display,
+    T::Err: Into<ParseError>,
 {
     match var(name) {
-        Some(v) => v.parse().map_err(|e: T::Err| ConfigError::Invalid {
+        Some(v) => v.parse().map_err(|e: T::Err| ConfigError::Parse {
             name,
-            reason: e.to_string(),
+            source: e.into(),
         }),
         None => Ok(default),
     }
@@ -169,10 +187,9 @@ fn key32(name: &'static str) -> Result<Option<[u8; 32]>, ConfigError> {
     let Some(raw) = var(name) else {
         return Ok(None);
     };
-    let bytes = B64.decode(raw.trim()).map_err(|e| ConfigError::Invalid {
-        name,
-        reason: e.to_string(),
-    })?;
+    let bytes = B64
+        .decode(raw.trim())
+        .map_err(|source| ConfigError::Base64 { name, source })?;
     bytes
         .try_into()
         .map(Some)
@@ -257,9 +274,9 @@ impl Config {
                 .map(|v| {
                     v.parse::<u64>()
                         .map(std::time::Duration::from_millis)
-                        .map_err(|e| ConfigError::Invalid {
+                        .map_err(|e| ConfigError::Parse {
                             name: "WEBHOOK_DISPATCH_INTERVAL_MS",
-                            reason: e.to_string(),
+                            source: e.into(),
                         })
                 })
                 .transpose()?,

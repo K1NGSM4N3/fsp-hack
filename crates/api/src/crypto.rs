@@ -22,7 +22,7 @@ use sha2::{Digest, Sha256};
 #[derive(Debug, thiserror::Error)]
 pub enum CryptoError {
     #[error("password hashing failed: {0}")]
-    Hash(String),
+    Hash(#[source] argon2::password_hash::Error),
     #[error("unknown ciphertext version")]
     UnknownVersion,
     #[error("ciphertext too short")]
@@ -36,7 +36,7 @@ pub enum CryptoError {
     #[error("decrypted value is not valid json: {0}")]
     Json(#[from] serde_json::Error),
     #[error("key encoding: {0}")]
-    KeyEncoding(String),
+    KeyEncoding(#[source] ed25519_dalek::pkcs8::Error),
 }
 
 pub trait PasswordHasher: Send + Sync {
@@ -63,7 +63,7 @@ impl PasswordHasher for Argon2id {
         self.0
             .hash_password(password.as_bytes(), &salt)
             .map(|h| h.to_string())
-            .map_err(|e| CryptoError::Hash(e.to_string()))
+            .map_err(CryptoError::Hash)
     }
 
     fn verify(&self, password: &str, phc: &str) -> bool {

@@ -65,9 +65,7 @@ impl JwtKeys {
             s
         });
         let signing = SigningKey::from_bytes(&seed);
-        let der = signing
-            .to_pkcs8_der()
-            .map_err(|e| CryptoError::KeyEncoding(e.to_string()))?;
+        let der = signing.to_pkcs8_der().map_err(CryptoError::KeyEncoding)?;
         let mut validation = Validation::new(Algorithm::EdDSA);
         validation.set_issuer(&[ISSUER]);
         validation.leeway = LEEWAY_SECS as u64;

@@ -36,7 +36,7 @@ tower-http = { version = "0.6", features = ["trace", "request-id", "util", "limi
 chrono.workspace = true
 sqlx.workspace = true
 
-argon2 = "0.5"
+argon2 = { version = "0.5", features = ["std"] }
 chacha20poly1305 = "0.10"
 hmac = "0.12"
 sha2 = "0.10"

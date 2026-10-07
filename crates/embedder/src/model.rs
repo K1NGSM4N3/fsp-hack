@@ -93,7 +93,7 @@ pub enum ModelError {
         source: serde_json::Error,
     },
     #[error("tokenizer: {0}")]
-    Tokenizer(String),
+    Tokenizer(#[source] tokenizers::Error),
     #[error(transparent)]
     Unigram(#[from] unigram::UnigramError),
     #[error("{0}: unexpected shape or type of the token embeddings")]
@@ -136,12 +136,14 @@ impl Tokens {
         if unigram::is_unigram(&raw) {
             let mut t = unigram::load(&raw)?;
             t.with_padding(None);
-            t.with_truncation(truncation).map_err(tokenizer_error)?;
+            t.with_truncation(truncation)
+                .map_err(ModelError::Tokenizer)?;
             return Ok(Tokens::Compact(Box::new(t)));
         }
-        let mut t = Tokenizer::from_bytes(&raw).map_err(tokenizer_error)?;
+        let mut t = Tokenizer::from_bytes(&raw).map_err(ModelError::Tokenizer)?;
         t.with_padding(None);
-        t.with_truncation(truncation).map_err(tokenizer_error)?;
+        t.with_truncation(truncation)
+            .map_err(ModelError::Tokenizer)?;
         Ok(Tokens::Library(Box::new(t)))
     }
 
@@ -150,7 +152,7 @@ impl Tokens {
             Tokens::Library(t) => t.encode_batch(inputs, true),
             Tokens::Compact(t) => t.encode_batch(inputs, true),
         }
-        .map_err(tokenizer_error)
+        .map_err(ModelError::Tokenizer)
     }
 }
 
@@ -181,10 +183,6 @@ impl WordRows {
         }
         Ok(out)
     }
-}
-
-fn tokenizer_error(e: impl std::fmt::Display) -> ModelError {
-    ModelError::Tokenizer(e.to_string())
 }
 
 /// `(batch, seq)` mask of ones and zeros → additive `(batch, 1, 1, seq)` mask for the attention

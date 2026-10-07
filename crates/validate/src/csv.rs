@@ -15,14 +15,33 @@ pub enum CsvError {
         file: String,
         source: std::io::Error,
     },
-    #[error("{file}, строка {line}: {message}")]
-    Row {
+    #[error("{file}, строка {line}: незакрытая кавычка")]
+    UnclosedQuote { file: String, line: usize },
+    #[error("{file}, строка {line}: {column}: {source}")]
+    Cell {
         file: String,
         line: usize,
-        message: String,
+        column: &'static str,
+        source: CellError,
+    },
+    #[error("{file}, строка {line}: {source}")]
+    Record {
+        file: String,
+        line: usize,
+        source: serde_json::Error,
     },
     #[error("{file}: нет колонки «{column}»")]
     MissingColumn { file: String, column: &'static str },
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CellError {
+    #[error("«{0}» — не число")]
+    NotNumber(String),
+    #[error("«{0}» — ожидается true или false")]
+    NotBool(String),
+    #[error("некорректный JSON: {0}")]
+    Json(#[source] serde_json::Error),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,10 +158,9 @@ fn records(text: &str, file: &str) -> Result<Vec<Record>, CsvError> {
         }
     }
     if quoted {
-        return Err(CsvError::Row {
+        return Err(CsvError::UnclosedQuote {
             file: file.to_owned(),
             line: row_line,
-            message: "незакрытая кавычка".into(),
         });
     }
     if field_started || !row.is_empty() {
@@ -152,7 +170,7 @@ fn records(text: &str, file: &str) -> Result<Vec<Record>, CsvError> {
     Ok(out)
 }
 
-fn cell(kind: Kind, raw: &str) -> Result<Option<Value>, String> {
+fn cell(kind: Kind, raw: &str) -> Result<Option<Value>, CellError> {
     let s = raw.trim();
     if s.is_empty() {
         return Ok(None);
@@ -171,7 +189,7 @@ fn cell(kind: Kind, raw: &str) -> Result<Option<Value>, String> {
             let n: f64 = compact
                 .replace(',', ".")
                 .parse()
-                .map_err(|_| format!("«{s}» — не число"))?;
+                .map_err(|_| CellError::NotNumber(s.to_owned()))?;
             if n.fract() == 0.0 && n.abs() < 1e15 {
                 Value::from(n as i64)
             } else {
@@ -181,9 +199,9 @@ fn cell(kind: Kind, raw: &str) -> Result<Option<Value>, String> {
         Bool => match s.to_lowercase().as_str() {
             "true" | "1" | "yes" | "да" => Value::Bool(true),
             "false" | "0" | "no" | "нет" => Value::Bool(false),
-            _ => return Err(format!("«{s}» — ожидается true или false")),
+            _ => return Err(CellError::NotBool(s.to_owned())),
         },
-        Json => serde_json::from_str(s).map_err(|e| format!("некорректный JSON: {e}"))?,
+        Json => serde_json::from_str(s).map_err(CellError::Json)?,
     }))
 }
 
@@ -224,20 +242,24 @@ fn read_table<T: DeserializeOwned>(
         }
     }
     rows.map(|(line, row)| {
-        let err = |message: String| CsvError::Row {
-            file: name.to_owned(),
-            line,
-            message,
-        };
         let mut obj = Map::new();
         for (raw, col) in row.iter().zip(&layout) {
             if let Some((key, kind)) = col
-                && let Some(v) = cell(*kind, raw).map_err(|m| err(format!("{key}: {m}")))?
+                && let Some(v) = cell(*kind, raw).map_err(|source| CsvError::Cell {
+                    file: name.to_owned(),
+                    line,
+                    column: key,
+                    source,
+                })?
             {
                 obj.insert((*key).to_owned(), v);
             }
         }
-        serde_json::from_value(Value::Object(obj)).map_err(|e| err(e.to_string()))
+        serde_json::from_value(Value::Object(obj)).map_err(|source| CsvError::Record {
+            file: name.to_owned(),
+            line,
+            source,
+        })
     })
     .collect()
 }

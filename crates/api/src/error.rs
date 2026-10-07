@@ -90,7 +90,15 @@ pub enum InternalError {
     #[error("recording storage: {0}")]
     Io(#[from] std::io::Error),
     #[error("corrupt stored value: {0}")]
-    Corrupt(String),
+    Corrupt(&'static str),
+    #[error("stored item: {0}")]
+    Item(#[from] assessment::ItemError),
+    #[error("stored session: {0}")]
+    Session(#[from] assessment::RecordError),
+    #[error("stored slug: {0}")]
+    Slug(#[from] catalog::UnknownSlug),
+    #[error("path extractor: {0}")]
+    Path(#[from] PathRejection),
     #[error("response body: {0}")]
     Body(#[from] axum::Error),
     #[error("no free public code after {0} attempts")]
@@ -148,6 +156,9 @@ internal_from!(
     PdfError,
     std::io::Error,
     axum::Error,
+    assessment::ItemError,
+    assessment::RecordError,
+    catalog::UnknownSlug,
 );
 
 /// Input of `POST /eval/pairs` over a limit or inconsistent: 422 naming the top-level field.
@@ -187,7 +198,7 @@ impl From<JsonRejection> for ApiError {
 impl From<PathRejection> for ApiError {
     fn from(r: PathRejection) -> Self {
         if r.status().is_server_error() {
-            return ApiError::Internal(InternalError::Corrupt(r.body_text()));
+            return ApiError::Internal(r.into());
         }
         ApiError::bad_request("invalid_path", "Некорректный параметр в адресе")
             .with_detail(r.body_text())
@@ -198,12 +209,6 @@ impl From<QueryRejection> for ApiError {
     fn from(r: QueryRejection) -> Self {
         ApiError::bad_request("invalid_query", "Некорректные параметры запроса")
             .with_detail(r.body_text())
-    }
-}
-
-impl From<catalog::UnknownSlug> for ApiError {
-    fn from(e: catalog::UnknownSlug) -> Self {
-        ApiError::Internal(InternalError::Corrupt(e.to_string()))
     }
 }
 

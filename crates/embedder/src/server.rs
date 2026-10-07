@@ -77,8 +77,8 @@ pub fn router(state: AppState) -> Router {
 
 #[derive(Debug, thiserror::Error)]
 enum ServiceError {
-    #[error("{0}")]
-    Body(String),
+    #[error(transparent)]
+    Body(#[from] JsonRejection),
     #[error(transparent)]
     Invalid(#[from] RequestError),
     #[error("busy: no inference slot within {0:?}")]
@@ -123,7 +123,7 @@ async fn embed(
     State(state): State<AppState>,
     body: Result<Json<EmbedRequest>, JsonRejection>,
 ) -> Result<Json<EmbedResponse>, ServiceError> {
-    let Json(req) = body.map_err(|e| ServiceError::Body(e.body_text()))?;
+    let Json(req) = body?;
     req.validate()?;
     let service = Arc::clone(&state.0);
     let _permit = tokio::time::timeout(service.queue_wait, service.permits.acquire())

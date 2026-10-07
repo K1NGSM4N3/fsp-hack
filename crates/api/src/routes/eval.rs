@@ -15,7 +15,7 @@ use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     auth::client_ip,
-    embeddings::EmbedderClient,
+    embeddings::{EmbedError, EmbedderClient},
     error::{ApiError, ApiResult, Problem},
     extract::Json,
     state::AppState,
@@ -41,12 +41,26 @@ pub fn keyword_reason(embeddings_on: bool, texts: usize) -> Option<String> {
     })
 }
 
-async fn embed_pairs(client: &EmbedderClient, input: &PairsInput) -> Result<PairsVectors, String> {
+/// Why a set meant for meaning fell back to keywords; the message goes into the report.
+#[derive(Debug, thiserror::Error)]
+enum MeaningError {
+    #[error("эмбеддер сменил модель посреди запроса")]
+    ModelChanged,
+    #[error("эмбеддер недоступен: {0}")]
+    Embedder(#[from] EmbedError),
+    #[error("эмбеддер не ответил за {} с", MEANING_DEADLINE.as_secs())]
+    Timeout,
+}
+
+async fn embed_pairs(
+    client: &EmbedderClient,
+    input: &PairsInput,
+) -> Result<PairsVectors, MeaningError> {
     let (vacancies, candidates) = matching::pairs::texts(input);
     let run = async {
         let v = client.embed(&vacancies, TextKind::Query).await?;
         let c = client.embed(&candidates, TextKind::Passage).await?;
-        Ok::<_, crate::embeddings::EmbedError>((v, c))
+        Ok::<_, EmbedError>((v, c))
     };
     match tokio::time::timeout(MEANING_DEADLINE, run).await {
         Ok(Ok((v, c))) if v.model == c.model || vacancies.is_empty() || candidates.is_empty() => {
@@ -56,12 +70,9 @@ async fn embed_pairs(client: &EmbedderClient, input: &PairsInput) -> Result<Pair
                 candidates: c.vectors.into_iter().map(Some).collect(),
             })
         }
-        Ok(Ok(_)) => Err("эмбеддер сменил модель посреди запроса".to_owned()),
-        Ok(Err(e)) => Err(format!("эмбеддер недоступен: {e}")),
-        Err(_) => Err(format!(
-            "эмбеддер не ответил за {} с",
-            MEANING_DEADLINE.as_secs()
-        )),
+        Ok(Ok(_)) => Err(MeaningError::ModelChanged),
+        Ok(Err(e)) => Err(e.into()),
+        Err(_) => Err(MeaningError::Timeout),
     }
 }
 
@@ -179,7 +190,7 @@ async fn eval_pairs(
         &state.embedder,
         keyword_reason(state.embedder.is_some(), texts),
     ) {
-        (Some(client), None) => embed_pairs(client, &input).await,
+        (Some(client), None) => embed_pairs(client, &input).await.map_err(|e| e.to_string()),
         (_, Some(reason)) => Err(reason),
         (None, None) => Err("эмбеддинги выключены (EMBEDDINGS=off)".to_owned()),
     };

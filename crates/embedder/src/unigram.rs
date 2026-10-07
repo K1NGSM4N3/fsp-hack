@@ -42,7 +42,7 @@ pub enum UnigramError {
     #[error("tokenizer.json: byte fallback is not supported")]
     ByteFallback,
     #[error("tokenizer: {0}")]
-    Library(String),
+    Library(#[source] tokenizers::Error),
 }
 
 /// Pieces, their scores and the unknown id, as `tokenizers` stores a Unigram model.
@@ -270,11 +270,10 @@ pub fn is_unigram(json: &[u8]) -> bool {
 
 pub fn load(json: &[u8]) -> Result<CompactTokenizer, UnigramError> {
     let parsed: TokenizerJson = serde_json::from_slice(json)?;
-    let library = |e: tokenizers::Error| UnigramError::Library(e.to_string());
     let mut tokenizer = TokenizerImpl::new(CompactUnigram::from_json(parsed.model)?);
     tokenizer
         .with_normalizer(parsed.normalizer)
-        .map_err(library)?;
+        .map_err(UnigramError::Library)?;
     tokenizer.with_pre_tokenizer(parsed.pre_tokenizer);
     tokenizer.with_post_processor(parsed.post_processor);
     tokenizer.with_decoder(parsed.decoder);
@@ -290,10 +289,10 @@ pub fn load(json: &[u8]) -> Result<CompactTokenizer, UnigramError> {
     };
     tokenizer
         .add_special_tokens(special.into_iter().map(added))
-        .map_err(library)?;
+        .map_err(UnigramError::Library)?;
     tokenizer
         .add_tokens(plain.into_iter().map(added))
-        .map_err(library)?;
+        .map_err(UnigramError::Library)?;
     Ok(tokenizer)
 }
 

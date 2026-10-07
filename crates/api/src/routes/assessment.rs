@@ -98,8 +98,8 @@ async fn expire_abandoned(db: impl sqlx::PgExecutor<'_>, candidate: Uuid) -> Api
     Ok(())
 }
 
-fn corrupt(e: impl std::fmt::Display) -> ApiError {
-    ApiError::Internal(InternalError::Corrupt(e.to_string()))
+const fn corrupt(what: &'static str) -> ApiError {
+    ApiError::Internal(InternalError::Corrupt(what))
 }
 
 struct History {
@@ -447,7 +447,7 @@ pub struct AssessmentSession {
 }
 
 fn load_state(v: serde_json::Value) -> ApiResult<SessionState> {
-    serde_json::from_value(v).map_err(corrupt)
+    Ok(serde_json::from_value(v)?)
 }
 
 fn topic_results(state: &SessionState) -> Vec<TopicResult> {
@@ -472,13 +472,13 @@ fn topic_results(state: &SessionState) -> Vec<TopicResult> {
 fn render_current(item: &ItemRef, seq: u16, deadline: DateTime<Utc>) -> ApiResult<CurrentItem> {
     Ok(CurrentItem {
         seq,
-        item: assessment::render(item).map_err(corrupt)?,
+        item: assessment::render(item)?,
         deadline,
     })
 }
 
 fn deadline_for(item: &ItemRef, now: DateTime<Utc>) -> ApiResult<DateTime<Utc>> {
-    let view = assessment::render(item).map_err(corrupt)?;
+    let view = assessment::render(item)?;
     Ok(now + Duration::seconds(i64::from(view.time_limit_secs)))
 }
 
@@ -681,7 +681,7 @@ async fn advance(
     let elapsed_ms = (now - shown)
         .num_milliseconds()
         .clamp(0, i64::from(u32::MAX)) as u32;
-    assessment::record(session, item.clone(), correct, elapsed_ms).map_err(corrupt)?;
+    assessment::record(session, item.clone(), correct, elapsed_ms)?;
     let seq = session.administered.len() as i32 - 1;
     db::assessment::insert_response(
         &mut *tx,
@@ -812,7 +812,7 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
     let status = AssessmentStatus::from(r.status);
     let current = match (status, r.current_item, r.current_item_deadline) {
         (AssessmentStatus::InProgress, Some(item), Some(deadline)) => {
-            let item: ItemRef = serde_json::from_value(item).map_err(corrupt)?;
+            let item: ItemRef = serde_json::from_value(item)?;
             Some(render_current(
                 &item,
                 s.administered.len() as u16,
@@ -951,7 +951,7 @@ async fn current_item(
         && timed_out(deadline, now)
     {
         let mut session = load_state(row.state.clone())?;
-        let item: ItemRef = serde_json::from_value(item.clone()).map_err(corrupt)?;
+        let item: ItemRef = serde_json::from_value(item.clone())?;
         let finished = advance(&mut tx, user.id, &row, &mut session, item, None, now).await?;
         notify_finished(&state, &mut tx, user.id, &row, finished).await?;
         graded = finished == Some(true);
@@ -1009,8 +1009,7 @@ async fn answer(
         .current_item
         .clone()
         .map(serde_json::from_value)
-        .transpose()
-        .map_err(corrupt)?
+        .transpose()?
         .ok_or_else(|| corrupt("no current item"))?;
     let finished = advance(
         &mut tx,

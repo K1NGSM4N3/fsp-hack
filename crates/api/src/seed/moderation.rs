@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 use crate::{
     crypto::{Crypto, normalize_email},
-    error::{ApiResult, InternalError},
+    error::ApiResult,
 };
 
 pub const DEMO_MODERATOR_EMAIL: &str = "moderator@demo.fsp";
@@ -133,8 +133,7 @@ async fn reshape(
         })
         .collect();
     let mut state: assessment::SessionState =
-        serde_json::from_value(db::seed::seed_session_state(&mut *tx, r.session).await?)
-            .map_err(|e| InternalError::Corrupt(e.to_string()))?;
+        serde_json::from_value(db::seed::seed_session_state(&mut *tx, r.session).await?)?;
     let theta = state.summary.theta;
     let before: Vec<bool> = answers.iter().map(|a| a.correct).collect();
     let flagged = shape != Shape::RemarksOnly;

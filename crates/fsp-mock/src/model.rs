@@ -2,7 +2,7 @@
 //! (architecture.md §7.2): enum spellings here are part of the contract.
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use serde::{Deserialize, Serialize};
 
@@ -134,10 +134,11 @@ pub enum AchievementError {
 }
 
 /// Raised only while loading the embedded data at startup, never per request.
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum DataError {
+    /// `Arc` keeps the error `Clone`: the embedded registry hands out its load error from a static.
     #[error("participants JSON is malformed: {0}")]
-    Json(String),
+    Json(#[source] Arc<serde_json::Error>),
     #[error("invalid fsp_id {0:?}, expected FSP-NNNNNN")]
     InvalidFspId(String),
     #[error("{fsp_id}: {field} is empty")]
@@ -322,7 +323,7 @@ impl Registry {
 
     pub fn from_json(json: &str) -> Result<Self, DataError> {
         let list: Vec<Participant> =
-            serde_json::from_str(json).map_err(|e| DataError::Json(e.to_string()))?;
+            serde_json::from_str(json).map_err(|e| DataError::Json(Arc::new(e)))?;
         Self::from_participants(list)
     }
 
@@ -426,7 +427,7 @@ impl Registry {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum EditError {
     #[error("participant not found")]
     UnknownParticipant,
@@ -449,7 +450,7 @@ impl Achievement {
 fn render(value: &impl Serialize) -> Result<Box<str>, DataError> {
     serde_json::to_string(value)
         .map(String::into_boxed_str)
-        .map_err(|e| DataError::Json(e.to_string()))
+        .map_err(|e| DataError::Json(Arc::new(e)))
 }
 
 fn is_fsp_id(s: &str) -> bool {

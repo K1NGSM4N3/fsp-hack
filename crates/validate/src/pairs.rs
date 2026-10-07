@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use catalog::WorkFormat;
-use embedder::TextKind;
+use embedder::{TextKind, model::ModelError};
 use matching::{
     pairs::{
         CandidateSummary, Mean, MeanMetrics, Metrics, Origin, PairsError, PairsInput, PairsReport,
@@ -132,22 +132,29 @@ impl StoredVectors {
     }
 }
 
-/// Embeds the input with the local model; `Err` carries the reason for the report.
-fn embed(input: &PairsInput, choice: &Choice) -> Result<PairsVectors, String> {
-    let model = choice.load().ok_or_else(|| {
-        format!(
-            "модель {} не найдена в {}",
-            choice.name,
-            choice.dir.display()
-        )
+/// Why the set is ranked by keywords; the message goes into the report.
+#[derive(Debug, thiserror::Error)]
+enum Fallback {
+    #[error("эмбеддинги выключены (--model none)")]
+    Off,
+    #[error("модель {name} не найдена в {}", dir.display())]
+    Missing { name: String, dir: PathBuf },
+    #[error("эмбеддинги не посчитаны: {0}")]
+    Embed(#[from] ModelError),
+}
+
+/// Embeds the input with the local model.
+fn embed(input: &PairsInput, choice: &Choice) -> Result<PairsVectors, Fallback> {
+    let model = choice.load().ok_or_else(|| Fallback::Missing {
+        name: choice.name.clone(),
+        dir: choice.dir.clone(),
     })?;
     let (vacancies, candidates) = matching::pairs::texts(input);
-    let run = |texts: &[String], kind| -> Result<Vec<Option<Vec<f32>>>, String> {
+    let run = |texts: &[String], kind| -> Result<Vec<Option<Vec<f32>>>, ModelError> {
         let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
         model
             .embed(&refs, kind)
             .map(|v| v.into_iter().map(Some).collect())
-            .map_err(|e| format!("эмбеддинги не посчитаны: {e}"))
     };
     Ok(PairsVectors {
         model: model.id().to_owned(),
@@ -212,13 +219,13 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), PairsCliError> {
         .map_or(0, |d| d.as_secs() as i64);
     input.check()?;
     let vectors = if args.model.name == "none" {
-        Err("эмбеддинги выключены (--model none)".to_owned())
+        Err(Fallback::Off)
     } else {
         embed(&input, &args.model)
     };
     let source = match &vectors {
         Ok(v) => TextSource::Meaning(v),
-        Err(reason) => TextSource::Keywords(reason.clone()),
+        Err(reason) => TextSource::Keywords(reason.to_string()),
     };
     let report = matching::pairs::evaluate(&input, now, source)?;
     let md = markdown(&report);

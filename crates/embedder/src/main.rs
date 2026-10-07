@@ -10,8 +10,13 @@ use tracing_subscriber::EnvFilter;
 enum RunError {
     #[error("EMBEDDER_MODEL: {0}")]
     Model(#[from] ModelError),
-    #[error("{name}: {reason}")]
-    Config { name: &'static str, reason: String },
+    #[error("{name}: {source}")]
+    Config {
+        name: &'static str,
+        source: std::num::ParseIntError,
+    },
+    #[error("model loading task: {0}")]
+    Load(#[from] tokio::task::JoinError),
     #[error("metrics: {0}")]
     Metrics(#[from] metrics_exporter_prometheus::BuildError),
     #[error("cannot bind {addr}: {source}")]
@@ -39,15 +44,15 @@ fn env(name: &str) -> Option<String> {
     std::env::var(name).ok().filter(|v| !v.trim().is_empty())
 }
 
-fn parsed<T: std::str::FromStr>(name: &'static str, default: T) -> Result<T, RunError>
-where
-    T::Err: std::fmt::Display,
-{
+fn parsed<T: std::str::FromStr<Err = std::num::ParseIntError>>(
+    name: &'static str,
+    default: T,
+) -> Result<T, RunError> {
     match env(name) {
-        Some(v) => v.trim().parse().map_err(|e: T::Err| RunError::Config {
-            name,
-            reason: e.to_string(),
-        }),
+        Some(v) => v
+            .trim()
+            .parse()
+            .map_err(|source| RunError::Config { name, source }),
         None => Ok(default),
     }
 }
@@ -62,12 +67,7 @@ async fn run() -> Result<(), RunError> {
     let queue_wait = Duration::from_millis(parsed("EMBEDDER_QUEUE_WAIT_MS", 10_000u64)?);
 
     let started = std::time::Instant::now();
-    let embedder = tokio::task::spawn_blocking(move || Embedder::load(&dir, spec))
-        .await
-        .map_err(|e| RunError::Config {
-            name: "EMBEDDER_MODEL_DIR",
-            reason: e.to_string(),
-        })??;
+    let embedder = tokio::task::spawn_blocking(move || Embedder::load(&dir, spec)).await??;
     tracing::info!(
         model = embedder.id(),
         dim = embedder.dim(),
