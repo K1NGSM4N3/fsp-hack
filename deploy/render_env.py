@@ -3,9 +3,10 @@
 
 Fills the domain, generates fresh secrets, refuses to overwrite an existing
 .env unless --force (rotating FIELD_ENC_KEY/BIDX_KEY makes existing data
-unreadable and drops all sessions). Also writes deploy/.env with SITE_URL —
-docker compose reads that file for ${...} interpolation when baking the web
-image. Stdlib only; run on the box or locally:
+unreadable and drops all sessions). Also writes deploy/.env with SITE_URL and
+the demo inbox password — docker compose reads that file for ${...}
+interpolation (the web image bakes SITE_URL in). Stdlib only; run on the box
+or locally:
 
     python3 deploy/render_env.py --domain demo.arewehireyet.ru
 """
@@ -65,14 +66,17 @@ def main() -> None:
     os.chmod(args.output, 0o600)
 
     site = f"https://{args.domain}"
+    mail_auth = f"demo:{gen_token()}"
     with open(args.compose_env, "w", encoding="utf-8") as f:
         f.write(
             "# written by deploy/render_env.py — compose ${...} interpolation only\n"
             f"SITE_URL={site}\n"
+            f"MAILPIT_UI_AUTH={mail_auth}\n"
         )
+    os.chmod(args.compose_env, 0o600)
 
     print(f"rendered {args.output} (0600) for {site}")
-    print(f"wrote {args.compose_env} (SITE_URL for the web build)")
+    print(f"wrote {args.compose_env} (SITE_URL for the web build, password of {site}/mail/)")
     print(
         "save JWT_ED25519_SEED_B64 / FIELD_ENC_KEY / BIDX_KEY now: "
         "they cannot be recovered or rotated without losing data"

@@ -13,6 +13,9 @@
 demo.arewehireyet.ru {
 	@api path /api/* /healthz /readyz
 	@site not path /api/* /healthz /readyz
+	# Keycloak (/auth) and Mailpit (/mail) send their own security headers: the app's CSP below
+	# would break their pages.
+	@app not path /auth /auth/* /mail /mail/*
 
 	# API JSON is compressed anew for every response: the default zstd level spends half the
 	# CPU of `better` on it for 1-11 % more bytes (docs/solution.md §12.4). Pages and assets
@@ -26,7 +29,7 @@ demo.arewehireyet.ru {
 		gzip 6
 	}
 
-	header {
+	header @app {
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -36,6 +39,8 @@ demo.arewehireyet.ru {
 		# 'unsafe-inline' scripts: Next.js App Router inlines its RSC payload scripts (no nonce
 		# middleware); Swagger UI at /api/docs also needs inline styles and data: images.
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+	}
+	header {
 		-Server
 		-X-Powered-By
 	}
@@ -48,6 +53,20 @@ demo.arewehireyet.ru {
 	@metrics path /metrics /metrics/*
 	handle @metrics {
 		respond 404
+	}
+
+	# ФСП ID login pages and the token endpoints; the admin console stays on the ssh tunnel.
+	@kc_admin path /auth/admin /auth/admin/*
+	handle @kc_admin {
+		respond 404
+	}
+	handle /auth/* {
+		reverse_proxy keycloak:8080
+	}
+
+	# The demo inbox (compose.demo.yml); Mailpit asks for its own password.
+	handle /mail* {
+		reverse_proxy mailpit:8025
 	}
 
 	# The API sets Cache-Control itself: private, no-store unless a route is public reference data.

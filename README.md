@@ -38,8 +38,21 @@ docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \
 
 Обновление: `git pull && docker compose -f deploy/compose.yml -f deploy/compose.demo.yml --profile fsp --profile ats up -d --build`.
 Секреты `.env` генерируются один раз (`render_env.py` без `--force` откажется пересоздавать); `SITE_URL`
-запекается в образ web при сборке. Вход через ФСП ID в этом режиме — встроенный демо-стенд
-(`FSP_OIDC_ISSUER` в `deploy/.env.template` закомментирован).
+запекается в образ web при сборке.
+
+Наружу открыт только Caddy (80/443), всё на одном домене:
+
+| Путь | Что |
+|---|---|
+| `/` | Сайт и кабинеты |
+| `/api/docs` | Swagger UI |
+| `/auth/…` | ФСП ID (Keycloak): «Привязать ФСП ID» в настройках соискателя, вход `fsp-000001` … `fsp-000010` / `demo12345`; админка Keycloak наружу не отдаётся |
+| `/mail/` | Демо-почта (Mailpit): писем наружу демо не шлёт, подтверждение регистрации и согласие представителя — здесь. Логин и пароль — `MAILPIT_UI_AUTH` в `deploy/.env` |
+
+Остальные порты (Keycloak 8081, Mailpit 8025, демо-ATS 8082, реестр 8091) слушают только
+127.0.0.1: опубликованные Docker порты идут в обход ufw, поэтому закрыты в самом оверлее.
+Демо-ATS и админка Keycloak — через туннель: `ssh -L 8082:127.0.0.1:8082 -L 8081:127.0.0.1:8081 …`,
+затем http://localhost:8082 и http://localhost:8081/auth/admin.
 
 
 | Что | Где |
