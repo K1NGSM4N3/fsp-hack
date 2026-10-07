@@ -3111,7 +3111,7 @@ export interface components {
             linked_at?: string | null;
             /** Format: date-time */
             last_sync_at?: string | null;
-            /** @description Snapshot from the registry (architecture.md §7.2). An empty list is a valid state. */
+            /** @description Snapshot from the registry (docs/architecture.md §7.2). An empty list is a valid state. */
             achievements: components["schemas"]["AchievementView"][];
             score?: components["schemas"]["FspScore"] | null;
         };

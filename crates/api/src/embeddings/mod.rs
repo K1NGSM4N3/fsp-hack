@@ -1,4 +1,4 @@
-//! Sentence embeddings in the API (architecture.md §6.4). The embedder service computes them; a
+//! Sentence embeddings in the API (docs/architecture.md §6.4). The embedder service computes them; a
 //! background [`worker`] embeds what the queue holds, and requests only read stored vectors, never
 //! the model. With `EMBEDDINGS=off` nothing here is used; with the embedder down the stored vectors
 //! keep working and new texts fall back to keywords until the queue drains.

@@ -1,4 +1,4 @@
-//! Age gate (architecture.md §9.5): candidates are 18+ by declaration, or 14–17 with the consent
+//! Age gate (docs/architecture.md §9.5): candidates are 18+ by declaration, or 14–17 with the consent
 //! of a legal representative; younger people cannot register. Every function takes `today`.
 //!
 //! SQL derives the same «minor» as `birth_date + interval '18 years' > current_date`. Both chrono

@@ -1,4 +1,4 @@
-//! `Cache-Control` of API responses (architecture.md §12.1). The default is `private, no-store`:
+//! `Cache-Control` of API responses (docs/architecture.md §12.1). The default is `private, no-store`:
 //! every response that is not explicitly public carries it, which covers everything behind a
 //! cookie, a bearer token or an API key, and anything with personal data (152-ФЗ: no shared or
 //! intermediary cache may keep it). A router group opts into public caching with

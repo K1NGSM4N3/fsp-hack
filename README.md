@@ -142,9 +142,9 @@ Docker; браузер Chromium ставит сам Playwright. Тесты хо�
 
 - `docs/solution.md` — описание решения для жюри: архитектура, механики, валидация, 152-ФЗ, API, запуск; `make docs` собирает из него `docs/solution.pdf` и `docs/solution.docx`
 - `docs/presentation.pdf`, `docs/presentation.pptx` — презентация
-- `architecture.md` — зафиксированные решения: стек, механики тестирования и подбора, ФСП, безопасность, модель данных, развёртывание
-- `api.md` — соглашения API и список эндпоинтов; актуальная спецификация — `/api/v1/openapi.json`
-- `specs.md` — требования организаторов и статус их выполнения
+- `docs/architecture.md` — зафиксированные решения: стек, механики тестирования и подбора, ФСП, безопасность, модель данных, развёртывание
+- `docs/api.md` — соглашения API и список эндпоинтов; актуальная спецификация — `/api/v1/openapi.json`
+- `docs/ТЗ.pdf` — техническое задание организаторов; покрытие требований — `docs/solution.md` §1.2
 - `web/README.md` — фронтенд: страницы, устройство, анимации, переменные окружения
 - `docs/validation/` — отчёты валидации тестирования (`assessment.md`), подбора (`matching.md`) и пересказов вакансий (`paraphrase.md`), `make validate`; сравнение моделей эмбеддингов (`embeddings.md`) — `cargo run -p validate --release -- models` (нужны обе модели: `make model MODEL=rubert-tiny2`)
 - `docs/validation/pairs-example/` — проверка подбора на своих данных: пример входа и отчёта; запуск — `cargo run -p validate --release -- pairs --input data.json --out report.md` или `POST /api/v1/eval/pairs` в Swagger (`docs/solution.md` §6.4)

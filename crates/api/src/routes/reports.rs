@@ -1,5 +1,5 @@
 //! Complaints about vacancies, invitations and companies (X-1). Unresolved complaints from
-//! candidates lower the company's trust level and invitation quota (architecture.md §11.1).
+//! candidates lower the company's trust level and invitation quota (docs/architecture.md §11.1).
 
 use std::time::Duration;
 

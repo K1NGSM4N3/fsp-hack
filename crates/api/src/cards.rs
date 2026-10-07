@@ -2,7 +2,7 @@
 //! contacts are only reachable through `contacts::ContactGrant`.
 //!
 //! The company-independent part of a card is kept in the pool snapshot of the candidate's
-//! specialization (architecture.md §12.2) and lives exactly as long as it: every write that
+//! specialization (docs/architecture.md §12.2) and lives exactly as long as it: every write that
 //! changes a card bumps the cache generation. What must never lag — publication, search status,
 //! the privacy flags — and what changes without a bump — activity time, age, the company's
 //! relation — is read live on every display ([`db::pool::card_live`]).

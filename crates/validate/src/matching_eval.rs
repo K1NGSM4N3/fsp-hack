@@ -1,4 +1,4 @@
-//! Matching validation (architecture.md §8.2). Candidates carry a hidden truth (real skills,
+//! Matching validation (docs/architecture.md §8.2). Candidates carry a hidden truth (real skills,
 //! real ability) and an observed profile (declared skills with inflation, test category with
 //! measurement error, partial verification, a profile text). Relevance is judged on the truth by
 //! a function that is deliberately different from the production scoring.
@@ -533,7 +533,7 @@ pub struct MatchingReport {
     pub ablations: Vec<RankerResult>,
 }
 
-/// The first version from architecture.md §6.3, kept to show what tuning changed.
+/// The first version from docs/architecture.md §6.3, kept to show what tuning changed.
 const WEIGHTS_V1: Weights = Weights {
     must: 0.30,
     test: 0.25,

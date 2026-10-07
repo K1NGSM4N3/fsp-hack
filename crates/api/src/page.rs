@@ -1,4 +1,4 @@
-//! Keyset pagination of lists that keep growing (api.md, «Пагинация»): the client passes back an
+//! Keyset pagination of lists that keep growing (docs/api.md, «Пагинация»): the client passes back an
 //! opaque `next_cursor`, the next page starts strictly after that `(time, id)` position.
 
 use chrono::{DateTime, TimeZone, Utc};

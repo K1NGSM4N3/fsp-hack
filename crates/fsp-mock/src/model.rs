@@ -1,5 +1,5 @@
 //! Registry data model. The achievement vocabulary is shared with the `matching` crate
-//! (architecture.md §7.2): enum spellings here are part of the contract.
+//! (docs/architecture.md §7.2): enum spellings here are part of the contract.
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::{Arc, LazyLock};

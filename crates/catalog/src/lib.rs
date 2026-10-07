@@ -114,7 +114,7 @@ slug_enum! {
 impl Grade {
     /// Lower bound of the grade on the IRT ability scale (θ) of a specialization.
     /// A candidate passes a grade test when the ability estimate is at or above it.
-    /// See architecture.md §5.3.
+    /// See docs/architecture.md §5.3.
     pub const fn theta_cut(self) -> f64 {
         match self {
             Grade::Junior => -1.0,
