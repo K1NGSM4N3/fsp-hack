@@ -37,6 +37,7 @@ static CITIES: &[(&str, &[&str])] = &[
     ("Ижевск", &["ижевск", "izhevsk"]),
     ("Хабаровск", &["хабаровск", "khabarovsk"]),
     ("Барнаул", &["барнаул", "barnaul"]),
+    ("Белебей", &["белебей", "belebey"]),
 ];
 
 static CITY_MATCHER: LazyLock<Matcher<u16>> = LazyLock::new(|| {
