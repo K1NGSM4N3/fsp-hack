@@ -17,6 +17,31 @@ docker compose -f deploy/compose.yml --profile full up -d --build   # то же 
 
 На macOS без Docker Desktop движок даёт Colima из `nix develop`: сначала `colima start`.
 
+### Демо-сервер (отдельная машина)
+
+Стек поднимается теми же образами поверх оверлея: caddy на 80/443 с собственным сертификатом
+Let's Encrypt для домена, остальное — без изменений. Локальный запуск и `make blackbox`
+базовый `deploy/Caddyfile` (:8080) не затрагивают.
+
+```sh
+# 1) на сервере (чистый Ubuntu, root): firewall, swap, docker, ключи deploy
+bash deploy/bootstrap.sh          # выведет публичный ключ — добавить в GitHub → Deploy keys (read-only)
+
+# 2) код и окружение: шаблон рендерит секреты, существующий .env не перезаписывает
+git clone git@github.com:K1NGSM4N3/fsp-hack.git && cd fsp-hack
+python3 deploy/render_env.py --domain demo.arewehireyet.ru
+
+# 3) сборка и запуск (ядро + ФСП ID + демо-ATS; obs-профиль не нужен)
+docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \
+  --profile fsp --profile ats up -d --build
+```
+
+Обновление: `git pull && docker compose -f deploy/compose.yml -f deploy/compose.demo.yml --profile fsp --profile ats up -d --build`.
+Секреты `.env` генерируются один раз (`render_env.py` без `--force` откажется пересоздавать); `SITE_URL`
+запекается в образ web при сборке. Вход через ФСП ID в этом режиме — встроенный демо-стенд
+(`FSP_OIDC_ISSUER` в `deploy/.env.template` закомментирован).
+
+
 | Что | Где |
 |---|---|
 | Приложение | http://localhost:8080 |
