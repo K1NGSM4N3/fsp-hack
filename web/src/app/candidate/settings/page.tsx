@@ -137,7 +137,7 @@ function FspSection() {
   const [confirm, setConfirm] = useState(false);
   return (
     <Card id="fsp" className="scroll-mt-24">
-      <CardHeader title="ФСП ID" description="Связь с профилем участника Федерации спортивного программирования. Достижения синхронизируются из реестра ФСП." />
+      <CardHeader title="ФСП ID" description="Разряды и места на соревнованиях подтягиваются из реестра ФСП. Членство в Федерации для этого не нужно и в подборе не учитывается." />
       {q.isPending ? (
         <SkeletonCard lines={2} className="border-0 p-0" />
       ) : q.isError ? (
