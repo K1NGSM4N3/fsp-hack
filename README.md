@@ -138,3 +138,7 @@ Docker; браузер Chromium ставит сам Playwright. Тесты хо�
 - `docs/validation/` — отчёты валидации тестирования (`assessment.md`) и подбора (`matching.md`), `make validate`
 - `docs/validation/pairs-example/` — проверка подбора на своих данных: пример входа и отчёта; запуск — `cargo run -p validate --release -- pairs --input data.json --out report.md` или `POST /api/v1/eval/pairs` в Swagger (`docs/solution.md` §6.4)
 - `AGENTS.md` — структура репозитория, команды, правила кода
+
+## Лицензия
+
+MIT — см. `LICENSE`. Все зависимости — под открытыми лицензиями (MIT, Apache-2.0, BSD, ISC, MPL, OFL); исключение — GSAP (бесплатная Standard License), подробности в `docs/solution.md` §11.
