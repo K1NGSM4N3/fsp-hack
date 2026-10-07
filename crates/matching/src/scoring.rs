@@ -11,6 +11,7 @@ use crate::profile::{
     Bits, CandidatePool, CandidateProfile, CandidateSnapshot, SkillHit, SkillSource,
 };
 use crate::ru;
+use crate::semantic::CLOSE_BY_MEANING;
 use crate::skills::SkillId;
 
 /// An employer's hiring need as stored and sent over the API.
@@ -81,7 +82,7 @@ impl FeatureKey {
             FeatureKey::Nice => "Желательные навыки",
             FeatureKey::Salary => "Зарплатные ожидания",
             FeatureKey::Fresh => "Актуальность профиля",
-            FeatureKey::Text => "Близость опыта",
+            FeatureKey::Text => "Близость описаний",
         }
     }
 }
@@ -749,6 +750,8 @@ fn skill_report(
 }
 
 const FSP_CONFIRMED: &str = "подтверждено ФСП";
+pub const MEANING_REASON: &str = "Опыт близок к задаче по смыслу";
+const KEYWORDS_REASON: &str = "Опыт близок к задачам команды";
 
 /// Builds the employer-facing explanation. Reasons are ranked by the points their feature
 /// contributed; gaps list what is missing. Absence of FSP data is never a gap (F-3).
@@ -981,16 +984,18 @@ fn explain(
         "Описание задач не задано".to_owned()
     } else {
         let mut parts = Vec::new();
-        if cn.has_text {
+        if cn.has_text && p.text_by_meaning {
+            parts.push(format!("Близость описаний по смыслу: {:.0} %", rel * 100.0));
+            if rel >= CLOSE_BY_MEANING {
+                reasons.push((points(FeatureKey::Text), MEANING_REASON.to_owned()));
+            }
+        } else if cn.has_text {
             parts.push(format!(
-                "Близость описания опыта к задачам: {:.0} %",
+                "Близость описаний по ключевым словам: {:.0} %",
                 rel * 100.0
             ));
             if rel >= 0.5 {
-                reasons.push((
-                    points(FeatureKey::Text),
-                    "Опыт близок к задачам команды".to_owned(),
-                ));
+                reasons.push((points(FeatureKey::Text), KEYWORDS_REASON.to_owned()));
             }
         }
         if !cn.industries.is_empty() {
@@ -1096,6 +1101,7 @@ mod tests {
             last_activity_unix: NOW - 3 * DAY,
             industries: vec![],
             text_relevance: 0.3,
+            text_by_meaning: false,
         }
     }
 
@@ -1446,5 +1452,59 @@ mod tests {
         let ranked = rank_snapshots(&need(), &[weak(), strong()], &Weights::default(), NOW, 1);
         assert!(ranked[0].breakdown.is_some());
         assert!(ranked[1].breakdown.is_none());
+    }
+
+    #[test]
+    fn text_closeness_explains_its_method() {
+        let text = |b: &ScoreBreakdown| {
+            b.features
+                .iter()
+                .find(|f| f.key == FeatureKey::Text)
+                .unwrap()
+                .clone()
+        };
+        let mut c = strong();
+        c.text_relevance = 0.72;
+        c.text_by_meaning = true;
+        let mut n = need();
+        n.industries.clear();
+        // Heavy text weight: the reason must make the top four.
+        let w = Weights {
+            text: 0.6,
+            ..Weights::default()
+        };
+        let b = score(&n, &c, &w, NOW);
+        let f = text(&b);
+        assert_eq!(f.label_ru, "Близость описаний");
+        assert_eq!(f.explanation_ru, "Близость описаний по смыслу: 72 %");
+        assert!((f.value - 0.72).abs() < 1e-6);
+        assert!(
+            b.reasons.iter().any(|r| r == MEANING_REASON),
+            "{:?}",
+            b.reasons
+        );
+
+        c.text_relevance = 0.5;
+        let b = score(&n, &c, &w, NOW);
+        assert_eq!(text(&b).explanation_ru, "Близость описаний по смыслу: 50 %");
+        assert!(
+            !b.reasons.iter().any(|r| r == MEANING_REASON),
+            "below the threshold"
+        );
+
+        c.text_by_meaning = false;
+        c.text_relevance = 0.6;
+        let b = score(&n, &c, &w, NOW);
+        assert_eq!(
+            text(&b).explanation_ru,
+            "Близость описаний по ключевым словам: 60 %"
+        );
+        assert!(b.reasons.iter().any(|r| r == KEYWORDS_REASON));
+
+        n.description.clear();
+        assert_eq!(
+            text(&score(&n, &c, &w, NOW)).explanation_ru,
+            "Описание задач не задано"
+        );
     }
 }

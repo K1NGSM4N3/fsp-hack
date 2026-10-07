@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT v.id, v.title, v.description, v.specialization, v.grade, v.skills, v.salary_min,\n                  v.salary_max, v.work_format, v.city, v.status AS \"status: VacancyStatus\",\n                  v.published_at, v.created_at, v.updated_at,\n                  (SELECT count(*) FROM applications a\n                    WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS \"applications!\",\n                  v.unpublished_at\n           FROM vacancies v\n           WHERE v.company_id = $1\n           ORDER BY v.created_at DESC",
+  "query": "SELECT v.id, v.title, v.description, v.specialization, v.grade, v.skills, v.salary_min,\n                  v.salary_max, v.work_format, v.city, v.status AS \"status: VacancyStatus\",\n                  v.published_at, v.created_at, v.updated_at,\n                  (SELECT count(*) FROM applications a\n                    WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS \"applications!\",\n                  v.unpublished_at, v.trust_flags\n           FROM vacancies v\n           WHERE v.company_id = $1 AND v.id = $2",
   "describe": {
     "columns": [
       {
@@ -93,10 +93,16 @@
         "ordinal": 15,
         "name": "unpublished_at",
         "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "trust_flags",
+        "type_info": "Jsonb"
       }
     ],
     "parameters": {
       "Left": [
+        "Uuid",
         "Uuid"
       ]
     },
@@ -116,8 +122,9 @@
       false,
       false,
       null,
-      true
+      true,
+      false
     ]
   },
-  "hash": "9ff5fb2f396691d863eeed381528145cf70af17f15f13e0ae5f39cc7c1e5c976"
+  "hash": "6c8bd1cf2e63e08835a3e4ece6fa73d359b996c32c75858a0db19ad89d3c2f33"
 }

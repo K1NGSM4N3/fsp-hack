@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.user_id, c.about, c.roles, c.experience,\n                  e.model AS \"model?\", e.text_hash AS \"text_hash?\"\n           FROM candidates c\n           LEFT JOIN candidate_embeddings e ON e.candidate_id = c.user_id\n           WHERE c.user_id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "about",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "roles",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 3,
+        "name": "experience",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 4,
+        "name": "model?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "text_hash?",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "61f3ce1fc161d44b801192354a1bed88a37259791759ec5f136fa3e5b4cb1b9f"
+}

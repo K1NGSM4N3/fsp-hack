@@ -7,9 +7,10 @@ COMPOSE := $(DOCKER_COMPOSE) -f deploy/compose.yml
 # on every run. Keycloak and observability are left out: no test goes through them.
 # `--profile full` lets `down` reach the profiled mocks too; `up` starts only BLACKBOX_SERVICES.
 BLACKBOX := $(DOCKER_COMPOSE) -p fsp-hack-blackbox -f deploy/compose.yml -f deploy/compose.blackbox.yml --profile full
-BLACKBOX_SERVICES := caddy web api postgres valkey mailpit fsp-mock ats-mock
+BLACKBOX_SERVICES := caddy web api embedder postgres valkey mailpit fsp-mock ats-mock
+MODEL ?= multilingual-e5-small
 
-.PHONY: db db-prepare api fsp-mock ats-mock gen-api web test blackbox blackbox-down lint validate docs up down logs
+.PHONY: db db-prepare api fsp-mock ats-mock embedder model gen-api web test blackbox blackbox-degraded blackbox-down lint validate docs up down logs
 
 db:
 	@psql "$(PG_ADMIN_URL)/postgres" -tAc "select 1 from pg_database where datname='fsp_hack'" | grep -q 1 \
@@ -21,7 +22,15 @@ db-prepare:
 
 api:
 	DATABASE_URL="$(DATABASE_URL)" PUBLIC_URL=$${PUBLIC_URL:-http://localhost:3000} FSP_DEV_LINK=$${FSP_DEV_LINK:-true} \
-		cargo run -p api
+		EMBEDDER_URL=$${EMBEDDER_URL:-http://localhost:8093} cargo run -p api
+
+# Embedding model weights at the pinned revision, sha256-checked (models/, gitignored).
+model:
+	sh crates/embedder/fetch-model.sh $(MODEL) models
+
+embedder: model
+	EMBEDDER_BIND=$${EMBEDDER_BIND:-127.0.0.1:8093} EMBEDDER_MODEL=$(MODEL) EMBEDDER_MODEL_DIR=models/$(MODEL) \
+		cargo run --release -p embedder
 
 fsp-mock:
 	cargo run -p fsp-mock
@@ -51,6 +60,13 @@ blackbox:
 	cd tests/blackbox && npx playwright test $(ARGS); status=$$?; \
 		if [ "$(DOWN)" = "1" ]; then cd ../.. && $(BLACKBOX) down -v --remove-orphans; fi; exit $$status
 
+# After `make blackbox`, on its stack: the embedder is stopped and the app must keep working on
+# keywords (tests/blackbox/degraded). The container is stopped here, not by the test.
+blackbox-degraded:
+	$(BLACKBOX) stop embedder
+	cd tests/blackbox && BLACKBOX_DEGRADED=1 npx playwright test --project=degraded; status=$$?; \
+		cd ../.. && $(BLACKBOX) start embedder; exit $$status
+
 blackbox-down:
 	$(BLACKBOX) down -v --remove-orphans
 
@@ -59,7 +75,7 @@ lint:
 	cargo clippy --workspace --all-targets -- -D warnings
 	cd web && npm run lint
 
-validate:
+validate: model
 	cargo run --release -p validate -- --out docs/validation
 
 docs:

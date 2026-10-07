@@ -8,6 +8,15 @@ pub struct Cursor {
     pub id: Uuid,
 }
 
+/// What a sentence embedding belongs to (migration 0017).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, sqlx::Type)]
+#[sqlx(type_name = "embedding_kind", rename_all = "snake_case")]
+pub enum EmbeddingKind {
+    Candidate,
+    Need,
+    Vacancy,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, sqlx::Type)]
 #[sqlx(type_name = "user_role", rename_all = "snake_case")]
 pub enum UserRole {

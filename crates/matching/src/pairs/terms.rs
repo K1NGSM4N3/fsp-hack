@@ -85,7 +85,7 @@ fn stems(text: &str) -> impl Iterator<Item = u32> + '_ {
 }
 
 /// First [`QUERY_TERMS`] distinct stems, sorted for [`overlap`].
-pub(crate) fn query(text: &str) -> Vec<u32> {
+pub fn query(text: &str) -> Vec<u32> {
     let mut out: Vec<u32> = Vec::with_capacity(QUERY_TERMS);
     for s in stems(text) {
         if !out.contains(&s) {
@@ -100,7 +100,7 @@ pub(crate) fn query(text: &str) -> Vec<u32> {
 }
 
 /// Appends the distinct stems of a document, sorted, to `out`; returns how many were added.
-pub(crate) fn document(text: &str, out: &mut Vec<u32>) -> usize {
+pub fn document(text: &str, out: &mut Vec<u32>) -> usize {
     let start = out.len();
     out.extend(stems(text));
     out[start..].sort_unstable();
@@ -116,7 +116,7 @@ pub(crate) fn document(text: &str, out: &mut Vec<u32>) -> usize {
 }
 
 /// Query stems present in the (sorted) document.
-pub(crate) fn overlap(query: &[u32], doc: &[u32]) -> u16 {
+pub fn overlap(query: &[u32], doc: &[u32]) -> u16 {
     query
         .iter()
         .filter(|q| doc.binary_search(q).is_ok())

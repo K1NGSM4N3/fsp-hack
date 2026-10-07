@@ -24,6 +24,7 @@ crates/db          доступ к PostgreSQL на sqlx: запросы с пр�
 crates/api         axum-сервер: HTTP, auth, OpenAPI, сервисы
 crates/fsp-mock    заглушка реестра ФСП
 crates/ats-mock    демо-ATS работодателя: подписанные вебхуки, этапы найма обратно
+crates/embedder    локальная модель эмбеддингов текстов (candle, multilingual-e5-small), POST /embed
 crates/validate    симуляция и отчёт валидации
 db/migrations      миграции sqlx: NNNN_name.sql
 .sqlx/             метаданные запросов для офлайн-сборки (make db-prepare)
@@ -40,10 +41,13 @@ make db-prepare  # применить миграции к DATABASE_URL и обн
 make api         # запустить API на :8000 (миграции при старте; демо-данные — SEED_DEMO=true make api)
 make fsp-mock    # заглушка реестра ФСП на :8090
 make ats-mock    # демо-ATS на :8082
+make model       # скачать веса модели эмбеддингов в models/ (ревизия и sha256 закреплены)
+make embedder    # сервис эмбеддингов на :8093
 make gen-api     # выгрузить OpenAPI в web/openapi.json и сгенерировать TS-типы
 make web         # Next.js dev-сервер на :3000
 make test        # модульные тесты (cargo test --workspace, без БД и сети) + проверка типов web
 make blackbox    # чистый стек (свои тома) → Playwright по публичным портам; DOWN=1 — снести стек после, ARGS=… — аргументы playwright
+make blackbox-degraded # после make blackbox: остановить эмбеддер и проверить, что всё работает на ключевых словах
 make blackbox-down # остановить стек black-box тестов и удалить его тома
 make lint        # cargo fmt --check, clippy -D warnings, eslint
 make validate    # прогнать валидацию → docs/validation/

@@ -47,6 +47,17 @@ pub enum TrustFlag {
         title: String,
         similarity: f32,
     },
+    /// Another company's published vacancy retold in other words: the cosine of the two texts'
+    /// embeddings is at or above the paraphrase threshold of `semantic::Calibration`. Goes to
+    /// moderation but does not lower the quota: closeness by meaning errs more often than a
+    /// verbatim match.
+    ParaphraseOfOther {
+        vacancy_id: String,
+        company: String,
+        title: String,
+        cosine: f32,
+        threshold: f32,
+    },
 }
 
 fn ratio(a: i64, b: i64) -> String {
@@ -63,6 +74,11 @@ impl TrustFlag {
             self,
             TrustFlag::SalaryAboveMarket { .. } | TrustFlag::SalaryWideRange { .. }
         )
+    }
+
+    /// Written by the embedding worker after publication, not by the publish check.
+    pub fn is_paraphrase(&self) -> bool {
+        matches!(self, TrustFlag::ParaphraseOfOther { .. })
     }
 
     /// Soft warning for the employer while filling the form: what we noticed and that nothing is
@@ -89,6 +105,9 @@ impl TrustFlag {
             ),
             TrustFlag::CopyOfOther { .. } => {
                 "Текст почти совпадает с вакансией другой компании.".into()
+            }
+            TrustFlag::ParaphraseOfOther { .. } => {
+                "По смыслу описание очень похоже на вакансию другой компании. Если это совпадение — ничего делать не нужно: квоту это не снижает, вакансию посмотрит модератор.".into()
             }
         }
     }
@@ -124,8 +143,23 @@ impl TrustFlag {
                 "Почти дословно совпадает с вакансией «{title}» компании «{company}» ({} %)",
                 percent(*similarity)
             ),
+            TrustFlag::ParaphraseOfOther {
+                company,
+                title,
+                cosine,
+                threshold,
+                ..
+            } => format!(
+                "Похоже на пересказ вакансии «{title}» компании «{company}»: по смыслу тексты совпадают (косинус эмбеддингов {} при пороге {}), дословных совпадений мало",
+                decimal3(*cosine),
+                decimal3(*threshold)
+            ),
         }
     }
+}
+
+fn decimal3(v: f32) -> String {
+    format!("{v:.3}").replace('.', ",")
 }
 
 #[cfg(test)]
@@ -199,6 +233,27 @@ mod tests {
             "Вилка 300\u{a0}000\u{a0}₽ – 900\u{a0}000\u{a0}₽ очень широкая: верхняя граница больше нижней в 3,0 раза. Так обычно описывают сразу несколько грейдов — кандидаты доверяют такой вилке меньше."
         );
         assert!(flags.iter().all(TrustFlag::is_salary));
+    }
+
+    #[test]
+    fn paraphrase_flag_explains_meaning_and_keeps_the_quota() {
+        let flag = TrustFlag::ParaphraseOfOther {
+            vacancy_id: "y".into(),
+            company: "Северный Код".into(),
+            title: "Go-разработчик".into(),
+            cosine: 0.9612,
+            threshold: 0.953,
+        };
+        let json = serde_json::to_value(&flag).unwrap();
+        assert_eq!(json["kind"], "paraphrase_of_other");
+        assert_eq!(serde_json::from_value::<TrustFlag>(json).unwrap(), flag);
+        assert_eq!(
+            flag.moderator_text(),
+            "Похоже на пересказ вакансии «Go-разработчик» компании «Северный Код»: по смыслу тексты совпадают (косинус эмбеддингов 0,961 при пороге 0,953), дословных совпадений мало"
+        );
+        assert!(flag.employer_text().contains("квоту это не снижает"));
+        assert!(!flag.employer_text().contains("Северный Код"));
+        assert!(flag.is_paraphrase() && !flag.is_salary());
     }
 
     #[test]

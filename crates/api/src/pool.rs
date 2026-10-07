@@ -1,7 +1,8 @@
 //! The candidate pool behind shortlists, bank search and category cards. Each specialization's
 //! searchable candidates are loaded once into a [`SpecPool`] (compact scoring data only) and cached
 //! by [`crate::cache::CandidateCache`]; a request filters it in memory and attaches its own text
-//! relevance. Display data is read for the final top-N only and kept in the same snapshot
+//! closeness: by meaning where the need and the profile have vectors of one model, by keywords
+//! otherwise. Display data is read for the final top-N only and kept in the same snapshot
 //! ([`crate::cards`]).
 
 use std::{hash::BuildHasher, pin::pin, sync::Arc};
@@ -10,13 +11,15 @@ use arc_swap::ArcSwapOption;
 use catalog::{Category, Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
 use matching::{
-    Achievement, CandidatePool, CandidateSkill, CandidateSnapshot, FspSummary, SkillId, SkillSource,
+    Achievement, CandidatePool, CandidateSkill, CandidateSnapshot, FspSummary, SkillId,
+    SkillSource, TextCloseness, semantic::Embeddings,
 };
 use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
-    cache::Flight, cards::CachedCard, dto::parse_slugs, error::ApiResult, state::AppState,
+    cache::Flight, cards::CachedCard, dto::parse_slugs, embeddings::NeedVector, error::ApiResult,
+    state::AppState,
 };
 
 /// Distinct need texts whose ranks a snapshot keeps; a direct-mapped table, so a new text evicts
@@ -40,6 +43,8 @@ pub struct PoolFilter<'a> {
     /// Keep only this candidate (one profile's explanation); text relevance is still normalized
     /// over the whole filtered pool.
     pub only: Option<Uuid>,
+    /// The need's vector: closeness by meaning for every candidate with a vector of its model.
+    pub meaning: Option<&'a NeedVector>,
 }
 
 /// Searchable candidates of one specialization as of one generation, ordered by id.
@@ -56,6 +61,26 @@ pub struct SpecPool {
     /// Employer card of each candidate, by index, filled on first display: cold data, kept apart
     /// from the scoring pool and dropped with the snapshot.
     cards: Box<[ArcSwapOption<CachedCard>]>,
+    /// Profile vectors by index, `i8`-quantized (316 bytes for 384 dimensions); read only when a
+    /// need with a vector is ranked, so they stay out of the hot scoring records.
+    vectors: Embeddings,
+    /// The model of each row's vector, as an index into `models`.
+    vector_models: Box<[u8]>,
+    models: Vec<Box<str>>,
+    /// Closeness by meaning of each candidate to a need, per need vector; like `texts`.
+    meaning: [ArcSwapOption<MeaningScores>; TEXT_SLOTS],
+}
+
+/// A row without a vector of the need's model: its closeness falls back to keywords.
+const NO_VECTOR: f32 = f32::NAN;
+const NO_MODEL: u8 = u8::MAX;
+
+/// 0..1 closeness by meaning per snapshot index for one need vector; [`NO_VECTOR`] where missing.
+struct MeaningScores {
+    need: NeedVector,
+    closeness: Box<[f32]>,
+    /// Every row has a vector: the keyword ranks are not needed at all.
+    complete: bool,
 }
 
 /// Raw `ts_rank_cd` per snapshot index for one query; 0 where the text does not match.
@@ -65,13 +90,18 @@ struct TextRanks {
 }
 
 impl SpecPool {
-    pub async fn load(pg: &PgPool, spec: Specialization) -> ApiResult<Self> {
+    /// `vectors`: also load the profile vectors (embeddings on).
+    pub async fn load(pg: &PgPool, spec: Specialization, vectors: bool) -> ApiResult<Self> {
         let started = std::time::Instant::now();
         let rows = db::pool::searchable_pool(pg, spec.slug()).await?;
-        let pool = Self::from_rows(spec, rows, Utc::now().timestamp());
+        let mut pool = Self::from_rows(spec, rows, Utc::now().timestamp());
+        if vectors {
+            pool.attach_vectors(db::embeddings::pool_vectors(pg, spec.slug()).await?);
+        }
         tracing::debug!(
             specialization = spec.slug(),
             candidates = pool.ids.len(),
+            with_vectors = pool.vectors.len(),
             elapsed_ms = started.elapsed().as_millis() as u64,
             "candidate pool loaded"
         );
@@ -119,17 +149,76 @@ impl SpecPool {
                 last_activity_unix: unix(r.last_activity_at),
                 industries: parse_slugs::<Industry>(&r.industries),
                 text_relevance: 0.0,
+                text_by_meaning: false,
             });
         }
         Self {
             pool: CandidatePool::from_snapshots(&snapshots),
             cards: ids.iter().map(|_| ArcSwapOption::empty()).collect(),
+            vectors: Embeddings::default(),
+            vector_models: vec![NO_MODEL; ids.len()].into_boxed_slice(),
+            models: Vec::new(),
             ids,
             minors,
             texts: Default::default(),
             text_flights: Default::default(),
+            meaning: Default::default(),
             hasher: std::hash::RandomState::new(),
         }
+    }
+
+    /// Attaches the stored profile vectors (ordered by id) to the snapshot's rows; vectors of
+    /// candidates not in it are skipped. Up to 254 distinct models are told apart.
+    fn attach_vectors(&mut self, rows: Vec<db::embeddings::StoredVector>) {
+        let dim = rows.first().map_or(0, |r| r.embedding.as_slice().len());
+        let mut table = Embeddings::with_capacity(dim, self.ids.len());
+        let mut rows = rows.into_iter().peekable();
+        for (i, id) in self.ids.iter().enumerate() {
+            while rows.next_if(|r| r.id < *id).is_some() {}
+            let Some(r) = rows.next_if(|r| r.id == *id) else {
+                table.push(None);
+                continue;
+            };
+            let model = match self.models.iter().position(|m| **m == *r.model) {
+                Some(m) => m,
+                None if self.models.len() < usize::from(NO_MODEL) => {
+                    self.models.push(r.model.into_boxed_str());
+                    self.models.len() - 1
+                }
+                None => {
+                    table.push(None);
+                    continue;
+                }
+            };
+            self.vector_models[i] = model as u8;
+            table.push(Some(r.embedding.as_slice()));
+        }
+        self.vectors = table;
+    }
+
+    /// Closeness by meaning of every row to the need, computed once per snapshot and need vector.
+    fn meaning_scores(&self, need: &NeedVector) -> Arc<MeaningScores> {
+        let i = self.hasher.hash_one(need.query.codes()) as usize % TEXT_SLOTS;
+        let slot = &self.meaning[i];
+        if let Some(cached) = slot.load_full().filter(|c| c.need == *need) {
+            return cached;
+        }
+        let model = self.models.iter().position(|m| **m == *need.model);
+        let closeness: Box<[f32]> = (0..self.ids.len())
+            .map(|row| {
+                model
+                    .filter(|&m| self.vector_models.get(row) == Some(&(m as u8)))
+                    .and_then(|_| self.vectors.cosine(row, &need.query))
+                    .map_or(NO_VECTOR, |cos| need.calibration.closeness(cos))
+            })
+            .collect();
+        let computed = Arc::new(MeaningScores {
+            need: need.clone(),
+            complete: closeness.iter().all(|c| !c.is_nan()),
+            closeness,
+        });
+        slot.store(Some(Arc::clone(&computed)));
+        computed
     }
 
     pub fn card(&self, id: Uuid) -> Option<Arc<CachedCard>> {
@@ -152,7 +241,12 @@ impl SpecPool {
             .is_some_and(|w| w & (1 << (index % 64)) != 0)
     }
 
-    fn filtered(&self, filter: &PoolFilter<'_>, ranks: Option<&TextRanks>) -> LoadedPool {
+    fn filtered(
+        &self,
+        filter: &PoolFilter<'_>,
+        ranks: Option<&TextRanks>,
+        meaning: Option<&MeaningScores>,
+    ) -> LoadedPool {
         let required: Vec<SkillId> = filter
             .required_skills
             .iter()
@@ -188,8 +282,14 @@ impl SpecPool {
         }
         let ids = picks.iter().map(|&(i, _)| self.ids[i]).collect();
         let pool = self.pool.subset(picks.into_iter().map(|(i, rank)| {
-            let relevance = if max_rank > 0.0 { rank / max_rank } else { 0.0 };
-            (i, relevance)
+            let by_meaning = meaning
+                .and_then(|m| m.closeness.get(i).copied())
+                .filter(|c| !c.is_nan());
+            let text = match by_meaning {
+                Some(c) => TextCloseness::meaning(c),
+                None => TextCloseness::keywords(if max_rank > 0.0 { rank / max_rank } else { 0.0 }),
+            };
+            (i, text)
         }));
         LoadedPool { pool, ids }
     }
@@ -283,11 +383,14 @@ pub async fn load(
 ) -> ApiResult<LoadedPool> {
     let cached = state.candidates.pool(&state.pool, spec).await?;
     let snap = &cached.value;
+    let meaning = filter.meaning.map(|need| snap.meaning_scores(need));
     let ranks = match filter.text.and_then(or_tsquery) {
-        Some(query) => Some(snap.text_ranks(&state.pool, spec, query).await?),
-        None => None,
+        Some(query) if !meaning.as_ref().is_some_and(|m| m.complete) => {
+            Some(snap.text_ranks(&state.pool, spec, query).await?)
+        }
+        _ => None,
     };
-    Ok(snap.filtered(filter, ranks.as_deref()))
+    Ok(snap.filtered(filter, ranks.as_deref(), meaning.as_deref()))
 }
 
 #[cfg(test)]
@@ -343,7 +446,7 @@ mod tests {
         let snap = snapshot(rows);
         assert_eq!(snap.ids, [id(1), id(3)]);
         assert_eq!(snap.pool.id(1), Some(id(3).to_string().as_str()));
-        let all = snap.filtered(&PoolFilter::default(), None);
+        let all = snap.filtered(&PoolFilter::default(), None, None);
         assert_eq!(all.ids, [id(1), id(3)]);
     }
 
@@ -359,7 +462,7 @@ mod tests {
             .collect();
         let snap = snapshot(rows);
         assert_eq!(
-            snap.filtered(&PoolFilter::default(), None).ids.len(),
+            snap.filtered(&PoolFilter::default(), None, None).ids.len(),
             130,
             "minors with the representative's consent are in the pool"
         );
@@ -368,6 +471,7 @@ mod tests {
                 adults_only: true,
                 ..PoolFilter::default()
             },
+            None,
             None,
         );
         assert_eq!(adults.ids.len(), 126);
@@ -396,6 +500,7 @@ mod tests {
                 ..PoolFilter::default()
             },
             None,
+            None,
         );
         assert_eq!(adults.ids, [id(3)]);
     }
@@ -420,7 +525,7 @@ mod tests {
             row(4),
         ];
         let snap = snapshot(rows);
-        let pick = |filter: PoolFilter<'_>| snap.filtered(&filter, None).ids;
+        let pick = |filter: PoolFilter<'_>| snap.filtered(&filter, None, None).ids;
         assert_eq!(
             pick(PoolFilter {
                 grade: Some(Grade::Middle),
@@ -482,7 +587,7 @@ mod tests {
                 .map(|i| loaded.pool.profile(i).unwrap().text_relevance())
                 .collect()
         };
-        let all = snap.filtered(&PoolFilter::default(), Some(&text));
+        let all = snap.filtered(&PoolFilter::default(), Some(&text), None);
         assert_eq!(relevance(&all), [0.125, 0.5, 0.0, 1.0]);
         let middle_on_budget = snap.filtered(
             &PoolFilter {
@@ -491,6 +596,7 @@ mod tests {
                 ..PoolFilter::default()
             },
             Some(&text),
+            None,
         );
         assert_eq!(middle_on_budget.ids, [id(1), id(3)]);
         assert_eq!(
@@ -498,7 +604,7 @@ mod tests {
             [0.25, 0.0],
             "normalized by the best middle, even though the budget then drops them"
         );
-        let unranked = snap.filtered(&PoolFilter::default(), None);
+        let unranked = snap.filtered(&PoolFilter::default(), None, None);
         assert!(relevance(&unranked).iter().all(|r| *r == 0.0));
     }
 

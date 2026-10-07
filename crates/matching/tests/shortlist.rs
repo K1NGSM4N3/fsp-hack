@@ -32,6 +32,7 @@ fn base(id: &str, grade: Grade, theta: f64) -> CandidateSnapshot {
         last_activity_unix: NOW - 5 * DAY,
         industries: Vec::new(),
         text_relevance: 0.2,
+        text_by_meaning: false,
     }
 }
 

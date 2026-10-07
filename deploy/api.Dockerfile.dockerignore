@@ -15,3 +15,5 @@ target/
 ФСП/
 web/
 deploy/
+# Local model weights (`make model`): the image fetches its own.
+models/

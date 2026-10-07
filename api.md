@@ -1,7 +1,7 @@
 # API (рабочий контракт)
 
 > Источник правды — OpenAPI, который генерирует бэкенд (utoipa): `GET /api/v1/openapi.json`,
-> Swagger UI — `/api/docs`; 130 операций на 110 путях. Этот файл — соглашения и сводка на время
+> Swagger UI — `/api/docs`; 131 операция на 111 путях. Этот файл — соглашения и сводка на время
 > разработки: добавил или поменял эндпоинт — обнови таблицу. Статусы: ⬜ план · ✅ реализован.
 
 ## Соглашения
@@ -24,7 +24,7 @@
 - **Создание:** 201 у вакансии, потребности, приглашения и сессии теста приходит с заголовком `Location` — путь, по которому созданное читается (`/api/v1/employer/vacancies/{id}` и т. п.).
 - **Идемпотентность:** `POST /employer/invitations` и `POST /employer/vacancies` принимают заголовок `Idempotency-Key` (до 100 символов, в пределах компании): повтор — и одновременная отправка с тем же ключом — возвращает 200 и уже созданное; ключ длиннее 100 символов — 422 (`idempotency_key`), у приглашения — и ключ, уже использованный для другого кандидата. Кабинет делает один ключ на открытую форму, поэтому двойной клик не создаёт дубль вакансии и не снижает квоту отметкой «дубль своей». `POST /integrations/needs` с `external_id` (id вакансии в ATS, уникален в компании) при повторе возвращает 200 и уже импортированную потребность. Жалоба (`POST /reports`) — одна открытая на человека и объект: повтор возвращает её же с 200 и `already_open: true`. Этапы найма от ATS идемпотентны по паре «приглашение или отклик + этап». События реестра ФСП (`POST /fsp/registry/events`) применяются один раз на `event_id`. Двойной клик «Начать тест» — 409 `assessment_in_progress`, а не 500.
 - **Длина текста** считается в символах, не в байтах: лимит «до 4000 символов» одинаков для кириллицы и латиницы.
-- **Кеширование:** по умолчанию `Cache-Control: private, no-store` — всё, что за cookie, токеном или API-ключом, и всё с ПДн. Публично: `GET /catalog`, `/catalog/skills`, `/consents/current` — `public, max-age=300, stale-while-revalidate=86400`; `GET /vacancies`, `/vacancies/{id}` — `public, max-age=30, stale-while-revalidate=120`. У публичных ответов есть `ETag`, `If-None-Match` → 304. `/guardian/consent`, `POST /eval/pairs`, `GET /catalog/test-plan` — `no-store`. Ошибки и ответы с `Set-Cookie` в публичных группах — `no-store`; 401 — `private, no-cache` (данных в нём нет, architecture.md §12.1). Тело ответа, которое клиенту не нужно, всё равно прочитать или отменить (`res.body?.cancel()`): Chrome не завершает непрочитанный ответ с `no-store` и держит соединение.
+- **Кеширование:** по умолчанию `Cache-Control: private, no-store` — всё, что за cookie, токеном или API-ключом, и всё с ПДн. Публично: `GET /catalog`, `/catalog/skills`, `/consents/current` — `public, max-age=300, stale-while-revalidate=86400`; `GET /vacancies`, `/vacancies/{id}`, `/vacancies/{id}/similar` — `public, max-age=30, stale-while-revalidate=120`. У публичных ответов есть `ETag`, `If-None-Match` → 304. `/guardian/consent`, `POST /eval/pairs`, `GET /catalog/test-plan` — `no-store`. Ошибки и ответы с `Set-Cookie` в публичных группах — `no-store`; 401 — `private, no-cache` (данных в нём нет, architecture.md §12.1). Тело ответа, которое клиенту не нужно, всё равно прочитать или отменить (`res.body?.cancel()`): Chrome не завершает непрочитанный ответ с `no-store` и держит соединение.
 
 ## Служебные
 
@@ -145,7 +145,7 @@
 | POST | `/api/v1/employer/needs/parse` | 🅴 | Свободный текст → специализация, грейд, навыки (черновик) | ✅ |
 | GET | `/api/v1/employer/needs/{id}/categories` | 🅴 | Рекомендованные категории со статистикой | ✅ |
 | GET | `/api/v1/employer/needs/{id}/test-plan` | 🅴 | Каким будет тест под эту потребность (T-4) | ✅ |
-| POST | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Сформировать или уточнить подборку; тело — фильтры `{grades, allow_adjacent_grades, must_skills, nice_skills, work_formats, city, fsp_only, adults_only, max_expectation, limit}`; закреплённые сохраняются | ✅ |
+| POST | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Сформировать или уточнить подборку; тело — фильтры `{grades, allow_adjacent_grades, must_skills, nice_skills, work_formats, city, fsp_only, adults_only, max_expectation, limit}`; закреплённые сохраняются. Признак `text` в объяснении — «Близость описаний»: по смыслу (косинус эмбеддингов потребности и профиля), если векторы у обоих посчитаны, иначе по ключевым словам; `explanation_ru` говорит, как именно | ✅ |
 | GET | `/api/v1/employer/needs/{id}/shortlist` | 🅴 | Подборка с объяснениями | ✅ |
 | PATCH | `/api/v1/employer/needs/{id}/shortlist/{candidate_id}` | 🅴 | `{pinned?, dismissed?}` | ✅ |
 | GET | `/api/v1/employer/categories` | 🅴 | Все категории: число кандидатов, с ФСП, медианные ожидания | ✅ |
@@ -157,7 +157,7 @@
 | POST | `/api/v1/employer/invitations/{id}/withdraw` | 🅴 | Отозвать; 404 — не приглашение этой компании; 409 `invitation_closed` — уже не ждёт ответа | ✅ |
 | GET | `/api/v1/employer/invitations/stats` | 🅴 | Квота (`quota_limit` по уровню доверия, `quota_max`, `trust_level`), отклик кандидатов, причины отказов; `hiring` — сколько приглашений и откликов дошли до собеседования, оффера, найма, отказа (по данным ATS) | ✅ |
 | GET / POST | `/api/v1/employer/vacancies` | 🅴 | Вакансии / создать; с `Idempotency-Key` повтор и двойной клик возвращают 200 и уже созданную вакансию (422 `idempotency_key` — ключ длиннее 100 символов) | ✅ |
-| GET / PUT | `/api/v1/employer/vacancies/{id}` | 🅴 | Вакансия; статус `draft` / `published` / `closed`. Каждое сохранение подписывает текст; публикация пишет отметки антифейка (вилка, дубль своей, копия чужой) — не блокирует. `unpublished_by_moderator_at` — вакансию снял модератор: править можно, опубликовать — 409 `vacancy_unpublished` | ✅ |
+| GET / PUT | `/api/v1/employer/vacancies/{id}` | 🅴 | Вакансия; статус `draft` / `published` / `closed`. Каждое сохранение подписывает текст; публикация пишет отметки антифейка (вилка, дубль своей, копия чужой) — не блокирует. `warnings` — отметки вакансии словами (`TrustWarning`: `kind`, `text`); `paraphrase_of_other` («по смыслу похоже на вакансию другой компании», без её названия) появляется через несколько секунд после публикации, когда посчитан вектор текста, и квоту не снижает. `unpublished_by_moderator_at` — вакансию снял модератор: править можно, опубликовать — 409 `vacancy_unpublished` | ✅ |
 | GET | `/api/v1/employer/vacancies/{id}/applications?cursor=&limit=` | 🅴 | Отклики, новые сверху, `{items, next_cursor}`: код и категория кандидата, сопроводительное письмо, статус. Контакты — через `/employer/candidates/{id}/contacts` (отклик — основание). 404 — не вакансия этой компании | ✅ |
 | POST | `/api/v1/employer/applications/{id}/status` | 🅴 | `viewed` / `accepted` / `rejected` в любом порядке, пока кандидат не отозвал отклик | ✅ |
 | GET / POST | `/api/v1/employer/tasks` | 🅴 | Регулярные задания | ✅ |
@@ -240,6 +240,7 @@
 |---|---|---|---|---|
 | GET | `/api/v1/vacancies` | 🅰 | Опубликованные вакансии с фильтрами; `company_verified_domain` → отметка «Домен подтверждён» (также в `GET /candidate/invitations`) | ✅ |
 | GET | `/api/v1/vacancies/{id}` | 🅰 | Вакансия | ✅ |
+| GET | `/api/v1/vacancies/{id}/similar?limit=` | 🅰 | «Похожие вакансии»: `{method, items: [{vacancy, similarity}]}`, `limit` 1–12 (по умолчанию 4). `method: meaning` — ближайшие опубликованные по косинусу эмбеддингов, сначала той же специализации; `skills` — эмбеддингов нет (выключены или вектор ещё не посчитан): той же специализации по доле общих навыков. Сама вакансия в список не входит; 404 — не опубликована | ✅ |
 | POST | `/api/v1/vacancies/{id}/applications` | 🅲 | Откликнуться `{cover_letter?}`. До 18 лет — только с действующим согласием представителя, иначе 409 `guardian_consent_required`: отклик открывает компании контакты; 409 `already_applied` — отклик уже есть | ✅ |
 | POST | `/api/v1/reports` | 🅼 | Жалоба на вакансию, приглашение или компанию (до 20 в сутки) → 201 `{id, already_open: false}`. Одна открытая на человека и объект: повтор, пока модератор не решил, — 200 и та же жалоба с `already_open: true`, в лимит не идёт. Открыта, пока модератор не решит: отклонённая перестаёт снижать квоту компании, подтверждённая — считается свои 90 дней | ✅ |
 
@@ -258,7 +259,7 @@
 
 | Метод | Путь | Роль | Описание | Статус |
 |---|---|---|---|---|
-| POST | `/api/v1/eval/pairs` | 🅰 | `{vacancies: [{id, text, …}], candidates: [{id, resume_text, …}], labels?: [{vacancy_id, candidate_id, relevance 0–3}], k?, now?}` → как распознана каждая вакансия, топ-k нашего подбора с объяснениями и топ-k базовой линии «ключевые слова + стаж», Precision@5/@k, nDCG@k, MAP, MRR по вакансиям и в среднем, покрытие. Тело ≤ 8 МиБ (413 `payload_too_large`), ≤ 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты ≤ 20 000 символов (422 `validation_failed`, поле в `errors`); синтаксическая ошибка JSON — 400, JSON не по схеме — 422 `invalid_json`, не тот `Content-Type` — 415 `unsupported_media_type`; `k` — 1–20, по умолчанию 10; 10 запросов за 10 минут с IP (429). Достижения ФСП кандидата (`fsp_achievements`) подтверждают навыки по тому же правилу, что в API | ✅ |
+| POST | `/api/v1/eval/pairs` | 🅰 | `{vacancies: [{id, text, …}], candidates: [{id, resume_text, …}], labels?: [{vacancy_id, candidate_id, relevance 0–3}], k?, now?}` → как распознана каждая вакансия, топ-k нашего подбора с объяснениями и топ-k базовой линии «ключевые слова + стаж», Precision@5/@k, nDCG@k, MAP, MRR по вакансиям и в среднем, покрытие. Тело ≤ 8 МиБ (413 `payload_too_large`), ≤ 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты ≤ 20 000 символов (422 `validation_failed`, поле в `errors`); синтаксическая ошибка JSON — 400, JSON не по схеме — 422 `invalid_json`, не тот `Content-Type` — 415 `unsupported_media_type`; `k` — 1–20, по умолчанию 10; 10 запросов за 10 минут с IP (429). Достижения ФСП кандидата (`fsp_achievements`) подтверждают навыки по тому же правилу, что в API. Близость описаний — по смыслу (эмбеддинги локальной модели), если в наборе не больше 300 текстов и эмбеддер отвечает (не дольше 60 с), иначе по ключевым словам; `text: {by_meaning, model, fallback}` в отчёте говорит, как посчитано и почему | ✅ |
 
 ## Статусы
 

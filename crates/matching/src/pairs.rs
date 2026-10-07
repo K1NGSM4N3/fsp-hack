@@ -6,7 +6,7 @@
 
 mod input;
 mod report;
-mod terms;
+pub mod terms;
 
 use std::collections::HashMap;
 
@@ -19,7 +19,7 @@ pub use input::{
 };
 pub use report::{
     BaselinePair, CandidateSummary, Coverage, Mean, MeanMetrics, Metrics, MetricsSummary, Origin,
-    OriginCounts, PairsReport, RankedPair, VacancyReport, VacancySummary,
+    OriginCounts, PairsReport, RankedPair, TextMethod, VacancyReport, VacancySummary,
 };
 
 use crate::fsp::{confirmed_skills, fsp_score};
@@ -28,6 +28,7 @@ use crate::need_parse::parse_need;
 use crate::profile::{CandidatePool, CandidateSkill, CandidateSnapshot, FspSummary, SkillSource};
 use crate::resume::parse_resume;
 use crate::scoring::{FeatureKey, Need, ScoreBreakdown, Weights, rank, theta_for_strength};
+use crate::semantic::{self, Calibration, Embeddings, Query, TextCloseness};
 use crate::skills::SkillId;
 use crate::text::fnv1a;
 
@@ -43,6 +44,37 @@ const UNLABELED: u8 = u8::MAX;
 const TITLE_CHARS: usize = 120;
 const SUMMARY_SKILLS: usize = 30;
 const DAY: i64 = 86_400;
+
+/// Vectors of the input texts ([`texts`]) from the embedding model, index-aligned with the input
+/// lists; `None` where a text got no vector.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct PairsVectors {
+    /// `name@revision`.
+    pub model: String,
+    pub vacancies: Vec<Option<Vec<f32>>>,
+    pub candidates: Vec<Option<Vec<f32>>>,
+}
+
+/// Where the text feature comes from.
+pub enum TextSource<'a> {
+    Meaning(&'a PairsVectors),
+    /// Keywords, with the reason in Russian.
+    Keywords(String),
+}
+
+/// The texts to embed: each vacancy as a query, each resume as a passage, cut like the API cuts
+/// profile texts.
+pub fn texts(input: &PairsInput) -> (Vec<String>, Vec<String>) {
+    let cut = |t: &str| semantic::posting_text(t, "");
+    (
+        input.vacancies.iter().map(|v| cut(&v.text)).collect(),
+        input
+            .candidates
+            .iter()
+            .map(|c| cut(&c.resume_text))
+            .collect(),
+    )
+}
 
 /// Experience filter of the keyword baseline (shared with `validate`): what a job board does
 /// with "опыт 1–3 года" when the vacancy names a grade.
@@ -232,6 +264,7 @@ fn read_candidates(input: &[CandidateInput], now: i64) -> (Hot, Vec<Facts>) {
                 last_activity_unix: 0,
                 industries: parsed.industries,
                 text_relevance: 0.0,
+                text_by_meaning: false,
             });
         }
         facts.push(Facts {
@@ -409,8 +442,15 @@ fn plan(v: &VacancyInput) -> Plan {
 }
 
 /// Production normalizes `ts_rank` by the best candidate of the loaded pool; the same here
-/// over the candidates of the need's specialization.
-fn set_text_relevance(hot: &mut Hot, need: &Need, query: &[u32], overlap: &mut Vec<u16>) {
+/// over the candidates of the need's specialization. With vectors of both sides the closeness is
+/// by meaning instead, candidate by candidate, as in the API.
+fn set_text_relevance(
+    hot: &mut Hot,
+    need: &Need,
+    query: &[u32],
+    meaning: Option<(&Embeddings, &Query, Calibration)>,
+    overlap: &mut Vec<u16>,
+) {
     overlap.clear();
     let mut max = 0u16;
     for (i, &c) in hot.pool_to_candidate.iter().enumerate() {
@@ -427,12 +467,19 @@ fn set_text_relevance(hot: &mut Hot, need: &Need, query: &[u32], overlap: &mut V
         overlap.push(o);
     }
     for (i, &o) in overlap.iter().enumerate() {
-        let v = if max > 0 {
-            f32::from(o) / f32::from(max)
-        } else {
-            0.0
-        };
-        hot.pool.set_text_relevance(i, v);
+        let by_meaning = meaning.and_then(|(table, q, cal)| {
+            table
+                .cosine(i, q)
+                .map(|cos| TextCloseness::meaning(cal.closeness(cos)))
+        });
+        let text = by_meaning.unwrap_or_else(|| {
+            TextCloseness::keywords(if max > 0 {
+                f32::from(o) / f32::from(max)
+            } else {
+                0.0
+            })
+        });
+        hot.pool.set_text_closeness(i, text);
     }
 }
 
@@ -592,6 +639,73 @@ fn without_test_claims(mut b: ScoreBreakdown) -> ScoreBreakdown {
     b
 }
 
+type MeaningTables = (Embeddings, Vec<Option<Query>>, Calibration);
+
+/// Profile vectors in pool order and one query per vacancy, when the vectors are usable: the model
+/// is calibrated and the lists line up with the input.
+fn meaning_tables(
+    hot: &Hot,
+    input: &PairsInput,
+    text: TextSource<'_>,
+) -> (Option<MeaningTables>, TextMethod) {
+    let keywords = |reason: String| TextMethod {
+        by_meaning: false,
+        model: None,
+        fallback: Some(reason),
+    };
+    let vectors = match text {
+        TextSource::Keywords(reason) => return (None, keywords(reason)),
+        TextSource::Meaning(v) => v,
+    };
+    let Some(cal) = semantic::calibration(&vectors.model) else {
+        return (
+            None,
+            keywords(format!(
+                "модель {} не откалибрована для подбора",
+                vectors.model
+            )),
+        );
+    };
+    if vectors.vacancies.len() != input.vacancies.len()
+        || vectors.candidates.len() != input.candidates.len()
+    {
+        return (
+            None,
+            keywords("векторы не совпадают с входными данными".to_owned()),
+        );
+    }
+    let dim = vectors
+        .vacancies
+        .iter()
+        .chain(&vectors.candidates)
+        .flatten()
+        .map(Vec::len)
+        .next()
+        .unwrap_or(0);
+    let mut table = Embeddings::with_capacity(dim, hot.pool_to_candidate.len());
+    for &c in &hot.pool_to_candidate {
+        table.push(
+            vectors
+                .candidates
+                .get(c as usize)
+                .and_then(Option::as_deref),
+        );
+    }
+    let queries = vectors
+        .vacancies
+        .iter()
+        .map(|v| v.as_deref().and_then(Query::new))
+        .collect();
+    (
+        Some((table, queries, cal)),
+        TextMethod {
+            by_meaning: true,
+            model: Some(vectors.model.clone()),
+            fallback: None,
+        },
+    )
+}
+
 /// `YYYY-MM-DD` → unix seconds at midnight UTC.
 pub fn parse_day(s: &str) -> Option<i64> {
     let mut parts = s.trim().splitn(3, '-');
@@ -612,7 +726,11 @@ fn format_day(unix: i64) -> String {
 
 /// Runs the evaluation. `now_unix` is used when the input has no `now`; either is truncated to
 /// the day, so the report's date fully determines the result.
-pub fn evaluate(input: &PairsInput, now_unix: i64) -> Result<PairsReport, PairsError> {
+pub fn evaluate(
+    input: &PairsInput,
+    now_unix: i64,
+    text: TextSource<'_>,
+) -> Result<PairsReport, PairsError> {
     input.check()?;
     let now = match &input.now {
         Some(s) => parse_day(s).ok_or_else(|| PairsError::Invalid {
@@ -629,6 +747,7 @@ pub fn evaluate(input: &PairsInput, now_unix: i64) -> Result<PairsReport, PairsE
     let (mut hot, facts) = read_candidates(&input.candidates, now);
     let plans: Vec<Plan> = input.vacancies.iter().map(plan).collect();
     let weights = Weights::default();
+    let (meaning, method) = meaning_tables(&hot, input, text);
 
     let mut overlap = Vec::with_capacity(hot.pool.len());
     let mut evaluated_ours = Vec::new();
@@ -638,7 +757,13 @@ pub fn evaluate(input: &PairsInput, now_unix: i64) -> Result<PairsReport, PairsE
     for (vi, (v, plan)) in input.vacancies.iter().zip(&plans).enumerate() {
         let ranked = match &plan.need {
             Some(need) => {
-                set_text_relevance(&mut hot, need, &plan.query, &mut overlap);
+                let by_meaning = meaning.as_ref().and_then(|(table, queries, cal)| {
+                    queries
+                        .get(vi)
+                        .and_then(Option::as_ref)
+                        .map(|q| (table, q, *cal))
+                });
+                set_text_relevance(&mut hot, need, &plan.query, by_meaning, &mut overlap);
                 rank(need, &hot.pool, &weights, now, k)
             }
             None => Vec::new(),
@@ -793,6 +918,7 @@ pub fn evaluate(input: &PairsInput, now_unix: i64) -> Result<PairsReport, PairsE
         k,
         relevant_from: RELEVANT,
         neutral_test_strength: NEUTRAL_TEST_STRENGTH,
+        text: method,
         coverage,
         metrics: (!evaluated_ours.is_empty()).then(|| MetricsSummary {
             vacancies: evaluated_ours.len(),
@@ -809,6 +935,10 @@ mod tests {
     use catalog::Specialization;
 
     use super::*;
+
+    fn evaluate(input: &PairsInput, now: i64) -> Result<PairsReport, PairsError> {
+        super::evaluate(input, now, TextSource::Keywords("без модели".into()))
+    }
 
     const NOW: i64 = 1_790_812_800; // 2026-10-01
 
@@ -1045,5 +1175,75 @@ mod tests {
         assert_eq!(format_day(NOW + 3_600), "2026-10-01");
         assert_eq!(parse_day("2026-02-30"), None);
         assert_eq!(parse_day("вчера"), None);
+    }
+
+    fn unit(v: &[f32]) -> Vec<f32> {
+        let n = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+        v.iter().map(|x| x / n).collect()
+    }
+
+    #[test]
+    fn vectors_switch_the_text_feature_to_meaning_per_candidate() {
+        let mut far = go_resume("far");
+        far.resume_text.push_str("\nМного лет в разработке.");
+        let pool = vec![go_resume("near"), far, go_resume("none")];
+        let input = input(pool, vec![]);
+        let base = unit(&[1.0, 0.2, 0.0, 0.0]);
+        let vectors = PairsVectors {
+            model: "multilingual-e5-small@614241f".into(),
+            vacancies: vec![Some(base.clone())],
+            candidates: vec![Some(base), Some(unit(&[0.0, 0.0, 1.0, 0.3])), None],
+        };
+        let r = super::evaluate(&input, NOW, TextSource::Meaning(&vectors)).unwrap();
+        assert_eq!(
+            r.text,
+            TextMethod {
+                by_meaning: true,
+                model: Some("multilingual-e5-small@614241f".into()),
+                fallback: None,
+            }
+        );
+        let text_of = |id: &str| {
+            r.vacancies[0]
+                .top
+                .iter()
+                .find(|p| p.candidate_id == id)
+                .unwrap()
+                .breakdown
+                .features
+                .iter()
+                .find(|f| f.key == FeatureKey::Text)
+                .unwrap()
+                .explanation_ru
+                .clone()
+        };
+        assert_eq!(text_of("near"), "Близость описаний по смыслу: 100 %");
+        assert_eq!(text_of("far"), "Близость описаний по смыслу: 0 %");
+        assert!(text_of("none").starts_with("Близость описаний по ключевым словам"));
+        assert_eq!(r.vacancies[0].top[0].candidate_id, "near");
+
+        let unknown = PairsVectors {
+            model: "bge-m3@1".into(),
+            ..vectors.clone()
+        };
+        let r = super::evaluate(&input, NOW, TextSource::Meaning(&unknown)).unwrap();
+        assert!(!r.text.by_meaning);
+        assert!(r.text.fallback.unwrap().contains("не откалибрована"));
+        let short = PairsVectors {
+            candidates: vec![None],
+            ..vectors
+        };
+        let r = super::evaluate(&input, NOW, TextSource::Meaning(&short)).unwrap();
+        assert!(!r.text.by_meaning);
+        let r = evaluate(&input, NOW).unwrap();
+        assert_eq!(r.text.fallback.as_deref(), Some("без модели"));
+    }
+
+    #[test]
+    fn texts_to_embed_follow_the_input_order() {
+        let (v, c) = texts(&input(vec![go_resume("a"), go_resume("b")], vec![]));
+        assert_eq!(v.len(), 1);
+        assert!(v[0].starts_with("Go-разработчик (Middle)"));
+        assert_eq!(c.len(), 2);
     }
 }

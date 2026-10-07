@@ -14,6 +14,7 @@ use crate::{
     auth::EmployerUser,
     cards::{self, CandidateCard},
     dto::Page,
+    embeddings,
     error::{ApiError, ApiResult, Problem},
     extract::{Json, Path, Query},
     pool::{self, PoolFilter},
@@ -97,9 +98,12 @@ async fn search(
 
     let company = company_id(&state, user.id).await?;
     let now = Utc::now().timestamp();
-    let need = match q.need_id {
-        Some(id) => Some(super::needs::effective_need(&state.pool, company, id).await?),
-        None => None,
+    let (need, meaning) = match q.need_id {
+        Some(id) => (
+            Some(super::needs::effective_need(&state.pool, company, id).await?),
+            embeddings::need_vector(&state, id).await?,
+        ),
+        None => (None, None),
     };
     let text_for_rank = need.as_ref().map(|n| n.description.as_str()).or(text);
     let loaded = pool::load(
@@ -113,6 +117,7 @@ async fn search(
             required_skills: &required,
             adults_only: q.adults_only,
             only: None,
+            meaning: meaning.as_deref(),
         },
     )
     .await?;
@@ -213,12 +218,14 @@ async fn profile(
     let breakdown = match (q.need_id, candidate.category) {
         (Some(need_id), Some(category)) => {
             let need = super::needs::effective_need(&state.pool, company, need_id).await?;
+            let meaning = embeddings::need_vector(&state, need_id).await?;
             let loaded = pool::load(
                 &state,
                 category.specialization,
                 &PoolFilter {
                     text: Some(&need.description),
                     only: Some(id),
+                    meaning: meaning.as_deref(),
                     ..PoolFilter::default()
                 },
             )

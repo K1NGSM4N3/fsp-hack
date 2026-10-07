@@ -6,6 +6,7 @@ pub mod candidates;
 pub mod companies;
 pub mod consents;
 pub mod contacts;
+pub mod embeddings;
 pub mod fsp;
 pub mod grades;
 pub mod guardians;

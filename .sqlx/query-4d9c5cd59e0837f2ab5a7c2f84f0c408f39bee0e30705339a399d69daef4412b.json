@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE embedding_jobs SET claimed_until = now() + make_interval(secs => $3)\n         WHERE kind = $1 AND entity_id = ANY($2)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "embedding_kind",
+            "kind": {
+              "Enum": [
+                "candidate",
+                "need",
+                "vacancy"
+              ]
+            }
+          }
+        },
+        "UuidArray",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4d9c5cd59e0837f2ab5a7c2f84f0c408f39bee0e30705339a399d69daef4412b"
+}

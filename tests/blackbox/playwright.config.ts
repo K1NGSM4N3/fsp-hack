@@ -31,5 +31,7 @@ export default defineConfig({
   projects: [
     { name: "setup", testMatch: /setup\/.*\.setup\.ts/ },
     { name: "blackbox", testMatch: /specs\/.*\.spec\.ts/, dependencies: ["setup"] },
+    // `make blackbox-degraded` only: the Makefile stops the embedder first.
+    ...(process.env.BLACKBOX_DEGRADED === "1" ? [{ name: "degraded", testMatch: /degraded\/.*\.spec\.ts/, dependencies: ["setup"] }] : []),
   ],
 });

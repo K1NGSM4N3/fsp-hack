@@ -1881,7 +1881,7 @@ export async function findSimilarVacancies(body: T.SimilarInput): Promise<T.Simi
 
 function vacancyDto(v: MockVacancy): T.Vacancy {
   const { company_id: _company, ...rest } = v;
-  return { ...clone(rest), applications: getDb().applications.filter((a) => a.vacancy_id === v.id && a.status !== "withdrawn").length };
+  return { ...clone(rest), applications: getDb().applications.filter((a) => a.vacancy_id === v.id && a.status !== "withdrawn").length, warnings: [] };
 }
 
 function validateVacancy(body: T.VacancyInput) {
@@ -2117,6 +2117,20 @@ export async function getVacancy(id: T.Uuid): Promise<T.PublicVacancy> {
   const v = getDb().vacancies.find((x) => x.id === id && x.status === "published");
   if (!v) fail(404, "not_found", "Вакансия не найдена или снята с публикации");
   return publicDto(v, true);
+}
+
+/** Mocks have no embeddings: the same specialization, most shared skills first, as the API without the embedder. */
+export async function getSimilarVacancies(id: T.Uuid, limit = 4): Promise<T.RelatedVacancies> {
+  await delay();
+  const db = getDb();
+  const v = db.vacancies.find((x) => x.id === id && x.status === "published");
+  if (!v) fail(404, "not_found", "Вакансия не найдена или снята с публикации");
+  const items = db.vacancies
+    .filter((x) => x.status === "published" && x.id !== v.id && x.specialization === v.specialization)
+    .map((x) => ({ vacancy: publicDto(x), similarity: x.skills.filter((s) => v.skills.includes(s)).length / Math.max(v.skills.length, 1) }))
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, limit);
+  return { method: "skills", items };
 }
 
 export async function applyToVacancy(id: T.Uuid, body: T.ApplyInput): Promise<T.MyApplication> {

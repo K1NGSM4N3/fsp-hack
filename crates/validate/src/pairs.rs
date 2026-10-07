@@ -7,17 +7,25 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use catalog::WorkFormat;
-use matching::pairs::{
-    CandidateSummary, Mean, MeanMetrics, Metrics, Origin, PairsError, PairsInput, PairsReport,
-    VacancyReport,
+use embedder::TextKind;
+use matching::{
+    pairs::{
+        CandidateSummary, Mean, MeanMetrics, Metrics, Origin, PairsError, PairsInput, PairsReport,
+        PairsVectors, TextSource, VacancyReport,
+    },
+    semantic,
 };
+use serde::{Deserialize, Serialize};
 
-use crate::csv::{self, CsvError};
+use crate::{
+    csv::{self, CsvError},
+    model::Choice,
+};
 
 #[derive(Debug, thiserror::Error)]
 pub enum PairsCliError {
     #[error(
-        "usage: validate pairs --input FILE.json|DIR [--k N] [--now YYYY-MM-DD] [--out REPORT.md]\n\
+        "usage: validate pairs --input FILE.json|DIR [--k N] [--now YYYY-MM-DD] [--out REPORT.md] [--model NAME|none] [--models DIR]\n\
          DIR — каталог с vacancies.csv, candidates.csv и необязательным labels.csv"
     )]
     Usage,
@@ -49,10 +57,12 @@ struct Args {
     k: Option<usize>,
     now: Option<String>,
     out: Option<PathBuf>,
+    model: Choice,
 }
 
 fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, PairsCliError> {
     let (mut input, mut k, mut now, mut out) = (None, None, None, None);
+    let mut model = Choice::default();
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or(PairsCliError::Usage);
         match arg.as_str() {
@@ -60,6 +70,8 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, PairsCliEr
             "--k" => k = Some(value()?.parse().map_err(|_| PairsCliError::Usage)?),
             "--now" => now = Some(value()?),
             "--out" => out = Some(PathBuf::from(value()?)),
+            "--model" => model.name = value()?,
+            "--models" => model.dir = PathBuf::from(value()?),
             _ => return Err(PairsCliError::Usage),
         }
     }
@@ -68,6 +80,79 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Args, PairsCliEr
         k,
         now,
         out,
+        model,
+    })
+}
+
+/// The vectors a report was computed with, as `i8` codes: what the ranking used exactly, so the
+/// report can be checked again without the model. Written next to the report.
+#[derive(Serialize, Deserialize)]
+pub struct StoredVectors {
+    pub model: String,
+    pub vacancies: Vec<Option<StoredVector>>,
+    pub candidates: Vec<Option<StoredVector>>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct StoredVector {
+    pub max: f32,
+    pub codes: Vec<i8>,
+}
+
+impl StoredVectors {
+    fn of(v: &PairsVectors) -> Self {
+        let store = |list: &[Option<Vec<f32>>]| -> Vec<Option<StoredVector>> {
+            list.iter()
+                .map(|x| {
+                    x.as_deref()
+                        .and_then(semantic::to_codes)
+                        .map(|(codes, max)| StoredVector { max, codes })
+                })
+                .collect()
+        };
+        StoredVectors {
+            model: v.model.clone(),
+            vacancies: store(&v.vacancies),
+            candidates: store(&v.candidates),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn vectors(&self) -> PairsVectors {
+        let load = |list: &[Option<StoredVector>]| -> Vec<Option<Vec<f32>>> {
+            list.iter()
+                .map(|x| x.as_ref().map(|s| semantic::from_codes(&s.codes, s.max)))
+                .collect()
+        };
+        PairsVectors {
+            model: self.model.clone(),
+            vacancies: load(&self.vacancies),
+            candidates: load(&self.candidates),
+        }
+    }
+}
+
+/// Embeds the input with the local model; `Err` carries the reason for the report.
+fn embed(input: &PairsInput, choice: &Choice) -> Result<PairsVectors, String> {
+    let model = choice.load().ok_or_else(|| {
+        format!(
+            "модель {} не найдена в {}",
+            choice.name,
+            choice.dir.display()
+        )
+    })?;
+    let (vacancies, candidates) = matching::pairs::texts(input);
+    let run = |texts: &[String], kind| -> Result<Vec<Option<Vec<f32>>>, String> {
+        let refs: Vec<&str> = texts.iter().map(String::as_str).collect();
+        model
+            .embed(&refs, kind)
+            .map(|v| v.into_iter().map(Some).collect())
+            .map_err(|e| format!("эмбеддинги не посчитаны: {e}"))
+    };
+    Ok(PairsVectors {
+        model: model.id().to_owned(),
+        vacancies: run(&vacancies, TextKind::Query)?,
+        candidates: run(&candidates, TextKind::Passage)?,
     })
 }
 
@@ -125,12 +210,42 @@ pub fn run(args: impl Iterator<Item = String>) -> Result<(), PairsCliError> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs() as i64);
-    let report = matching::pairs::evaluate(&input, now)?;
+    input.check()?;
+    let vectors = if args.model.name == "none" {
+        Err("эмбеддинги выключены (--model none)".to_owned())
+    } else {
+        embed(&input, &args.model)
+    };
+    let source = match &vectors {
+        Ok(v) => TextSource::Meaning(v),
+        Err(reason) => TextSource::Keywords(reason.clone()),
+    };
+    let report = matching::pairs::evaluate(&input, now, source)?;
     let md = markdown(&report);
     match args.out {
         Some(out) => {
             let json_path = out.with_extension("json");
+            let vectors_path = out.with_extension("vectors.json");
             write(&out, &md)?;
+            match &vectors {
+                Ok(v) => {
+                    let stored =
+                        serde_json::to_string(&StoredVectors::of(v)).map_err(|source| {
+                            PairsCliError::Json {
+                                path: vectors_path.display().to_string(),
+                                source,
+                            }
+                        })?;
+                    write(&vectors_path, &(stored + "\n"))?;
+                }
+                Err(_) if vectors_path.exists() => {
+                    std::fs::remove_file(&vectors_path).map_err(|source| PairsCliError::Write {
+                        path: vectors_path.display().to_string(),
+                        source,
+                    })?;
+                }
+                Err(_) => {}
+            }
             let json =
                 serde_json::to_string_pretty(&report).map_err(|source| PairsCliError::Json {
                     path: json_path.display().to_string(),
@@ -213,6 +328,17 @@ pub fn summary(r: &PairsReport) -> String {
          Релевантный кандидат — оценка ≥ {}; неразмеченные пары считаются нерелевантными.\n",
         r.now, c.vacancies, c.candidates, c.labels, c.labeled_vacancies, r.relevant_from
     );
+    let _ = match (&r.text.model, &r.text.fallback) {
+        (Some(model), _) => writeln!(
+            s,
+            "Близость описаний — по смыслу: эмбеддинги `{model}`, посчитанные локально (векторы — в `*.vectors.json` рядом с отчётом).\n"
+        ),
+        (None, Some(reason)) => writeln!(
+            s,
+            "Близость описаний — по ключевым словам: {reason}. С моделью (`make model`) она считается по смыслу.\n"
+        ),
+        (None, None) => writeln!(s, "Близость описаний — по ключевым словам.\n"),
+    };
     let _ = writeln!(s, "## Наш подбор и поиск по ключевым словам\n");
     match &r.metrics {
         Some(m) => {
@@ -504,9 +630,26 @@ mod tests {
         }
     }
 
+    /// The committed report was computed with embeddings when its vectors are committed next to
+    /// it; the check then uses them, so it needs no model.
+    fn example_source() -> Option<PairsVectors> {
+        let path = example_dir().join("report.vectors.json");
+        let text = std::fs::read_to_string(path).ok()?;
+        Some(
+            serde_json::from_str::<StoredVectors>(&text)
+                .unwrap()
+                .vectors(),
+        )
+    }
+
     #[test]
     fn example_reproduces_committed_report() {
-        let report = matching::pairs::evaluate(&example(), 0).unwrap();
+        let vectors = example_source();
+        let source = match &vectors {
+            Some(v) => TextSource::Meaning(v),
+            None => TextSource::Keywords("эмбеддинги выключены (--model none)".into()),
+        };
+        let report = matching::pairs::evaluate(&example(), 0, source).unwrap();
         let got = serde_json::to_value(&report).unwrap();
         let committed = std::fs::read_to_string(example_dir().join("report.json")).unwrap();
         assert_close(&got, &serde_json::from_str(&committed).unwrap(), "$");
@@ -528,12 +671,15 @@ mod tests {
     #[test]
     fn args() {
         let a = parse_args(
-            ["--input", "x.json", "--k", "5", "--out", "r.md"]
-                .into_iter()
-                .map(String::from),
+            [
+                "--input", "x.json", "--k", "5", "--out", "r.md", "--model", "none",
+            ]
+            .into_iter()
+            .map(String::from),
         )
         .unwrap();
         assert_eq!((a.k, a.out.as_deref()), (Some(5), Some(Path::new("r.md"))));
+        assert_eq!(a.model.name, "none");
         assert!(parse_args(["--k", "5"].into_iter().map(String::from)).is_err());
         assert!(parse_args(["--input"].into_iter().map(String::from)).is_err());
     }

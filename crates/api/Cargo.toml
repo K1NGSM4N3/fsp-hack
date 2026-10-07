@@ -11,6 +11,7 @@ catalog = { workspace = true, features = ["openapi"] }
 matching = { workspace = true, features = ["openapi"] }
 assessment = { workspace = true, features = ["openapi"] }
 db.workspace = true
+embedder.workspace = true
 
 thiserror.workspace = true
 time.workspace = true

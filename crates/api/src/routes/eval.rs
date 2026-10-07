@@ -9,11 +9,13 @@ use axum::{
     http::{HeaderMap, StatusCode},
 };
 use chrono::Utc;
-use matching::pairs::{PairsInput, PairsReport};
+use embedder::TextKind;
+use matching::pairs::{PairsInput, PairsReport, PairsVectors, TextSource};
 use utoipa_axum::{router::OpenApiRouter, routes};
 
 use crate::{
     auth::client_ip,
+    embeddings::EmbedderClient,
     error::{ApiError, ApiResult, Problem},
     extract::Json,
     state::AppState,
@@ -22,6 +24,46 @@ use crate::{
 pub const BODY_LIMIT: usize = 8 * 1024 * 1024;
 const RATE_LIMIT: u64 = 10;
 const RATE_WINDOW: Duration = Duration::from_secs(600);
+/// Texts (vacancies + resumes) a request embeds; a larger set is ranked by keywords here and by
+/// meaning in the CLI, so one request does not hold the embedder for minutes.
+pub const MEANING_TEXTS: usize = 300;
+const MEANING_DEADLINE: Duration = Duration::from_secs(60);
+
+/// Why a set is ranked by keywords, or `None` when it may be embedded.
+pub fn keyword_reason(embeddings_on: bool, texts: usize) -> Option<String> {
+    if !embeddings_on {
+        return Some("эмбеддинги выключены (EMBEDDINGS=off)".to_owned());
+    }
+    (texts > MEANING_TEXTS).then(|| {
+        format!(
+            "в наборе {texts} текстов, по смыслу API считает до {MEANING_TEXTS}; весь набор — через CLI `validate pairs`"
+        )
+    })
+}
+
+async fn embed_pairs(client: &EmbedderClient, input: &PairsInput) -> Result<PairsVectors, String> {
+    let (vacancies, candidates) = matching::pairs::texts(input);
+    let run = async {
+        let v = client.embed(&vacancies, TextKind::Query).await?;
+        let c = client.embed(&candidates, TextKind::Passage).await?;
+        Ok::<_, crate::embeddings::EmbedError>((v, c))
+    };
+    match tokio::time::timeout(MEANING_DEADLINE, run).await {
+        Ok(Ok((v, c))) if v.model == c.model || vacancies.is_empty() || candidates.is_empty() => {
+            Ok(PairsVectors {
+                model: if v.model.is_empty() { c.model } else { v.model },
+                vacancies: v.vectors.into_iter().map(Some).collect(),
+                candidates: c.vectors.into_iter().map(Some).collect(),
+            })
+        }
+        Ok(Ok(_)) => Err("эмбеддер сменил модель посреди запроса".to_owned()),
+        Ok(Err(e)) => Err(format!("эмбеддер недоступен: {e}")),
+        Err(_) => Err(format!(
+            "эмбеддер не ответил за {} с",
+            MEANING_DEADLINE.as_secs()
+        )),
+    }
+}
 
 pub fn router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
@@ -106,6 +148,8 @@ fn example() -> serde_json::Value {
         Категория, распознанная из резюме, помечается «не подтверждена тестом»; без результата теста берётся нейтральное значение — \
         середина диапазона грейда, об этом сказано в объяснении. С разметкой (`labels`, релевантность 0–3, релевантен ≥ 2) \
         считаются Precision@5, Precision@k, nDCG@k, MAP и MRR по каждой вакансии и в среднем — для нашего ранжирования и для базовой линии. \
+        Близость описаний — по смыслу (эмбеддинги, посчитанные локальной моделью), если набор не больше 300 текстов \
+        и эмбеддер доступен; иначе по ключевым словам, и поле `text` отчёта говорит почему. \
         Лимиты: тело до 8 МиБ, до 200 вакансий, 5 000 кандидатов и 100 000 оценок, тексты до 20 000 символов, \
         10 запросов за 10 минут с одного IP. Данные не сохраняются. Большие наборы — CLI `validate pairs` (см. docs/solution.md §6.4).",
     request_body(content = PairsInput, example = example),
@@ -130,14 +174,39 @@ async fn eval_pairs(
     let Json(input) = body.map_err(rejected)?;
     input.check()?;
     let now = Utc::now().timestamp();
-    let report =
-        tokio::task::spawn_blocking(move || matching::pairs::evaluate(&input, now)).await??;
+    let texts = input.vacancies.len() + input.candidates.len();
+    let vectors = match (
+        &state.embedder,
+        keyword_reason(state.embedder.is_some(), texts),
+    ) {
+        (Some(client), None) => embed_pairs(client, &input).await,
+        (_, Some(reason)) => Err(reason),
+        (None, None) => Err("эмбеддинги выключены (EMBEDDINGS=off)".to_owned()),
+    };
+    let report = tokio::task::spawn_blocking(move || {
+        let source = match &vectors {
+            Ok(v) => TextSource::Meaning(v),
+            Err(reason) => TextSource::Keywords(reason.clone()),
+        };
+        matching::pairs::evaluate(&input, now, source)
+    })
+    .await??;
     Ok(Json(report))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn small_sets_are_embedded_and_the_rest_says_why_not() {
+        assert_eq!(keyword_reason(true, 65), None);
+        assert_eq!(keyword_reason(true, MEANING_TEXTS), None);
+        assert!(
+            keyword_reason(true, MEANING_TEXTS + 1).is_some_and(|r| r.contains("validate pairs"))
+        );
+        assert!(keyword_reason(false, 5).is_some_and(|r| r.contains("EMBEDDINGS=off")));
+    }
 
     #[test]
     fn an_oversized_set_is_sent_to_the_cli_and_other_errors_pass_through() {

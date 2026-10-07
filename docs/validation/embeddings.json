@@ -1,0 +1,47 @@
+{
+  "rows": [
+    {
+      "model": "rubert-tiny2@e8ed3b0",
+      "dim": 312,
+      "load_ms": 39.828208,
+      "embed_ms_per_text": 5.889686900378788,
+      "meaning_signal": -0.07871728849706802,
+      "keywords_signal": 0.29295143669592416,
+      "meaning_only": [
+        0.16749999999999995,
+        0.1521236403370855,
+        0.21092831695132344
+      ],
+      "full": [
+        0.9425000000000003,
+        0.8354573642181076,
+        0.6205781416239132
+      ],
+      "paraphrase_auc": 0.9484649122807017,
+      "paraphrase_recall": 0.25,
+      "paraphrase_threshold": 0.918435
+    },
+    {
+      "model": "multilingual-e5-small@614241f",
+      "dim": 384,
+      "load_ms": 45.009833,
+      "embed_ms_per_text": 60.21207727272727,
+      "meaning_signal": 0.30260752336064106,
+      "keywords_signal": 0.29295143669592416,
+      "meaning_only": [
+        0.28333333333333344,
+        0.23893900194888362,
+        0.2631613376757186
+      ],
+      "full": [
+        0.9408333333333335,
+        0.8382665614183401,
+        0.6235505265484351
+      ],
+      "paraphrase_auc": 0.9780701754385965,
+      "paraphrase_recall": 0.5,
+      "paraphrase_threshold": 0.95338476
+    }
+  ],
+  "missing": []
+}

@@ -121,6 +121,15 @@ export function EmployerVacancyView({ id }: { id: string }) {
           Её можно править, но не опубликовать снова, пока модератор не вернёт её. Отклики сохранились.
         </Alert>
       )}
+      {v.warnings.length > 0 && (
+        <Alert tone="warning" title="Что заметили проверки" className="mb-6">
+          <ul className="list-disc space-y-1 pl-5">
+            {v.warnings.map((w) => (
+              <li key={w.kind}>{w.text}</li>
+            ))}
+          </ul>
+        </Alert>
+      )}
       <Tabs<View>
         idPrefix="vacancy"
         ariaLabel="Раздел вакансии"

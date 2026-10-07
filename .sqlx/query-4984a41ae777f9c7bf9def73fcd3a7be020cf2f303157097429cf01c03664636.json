@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM candidate_embeddings WHERE candidate_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4984a41ae777f9c7bf9def73fcd3a7be020cf2f303157097429cf01c03664636"
+}

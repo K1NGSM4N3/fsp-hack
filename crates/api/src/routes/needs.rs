@@ -19,6 +19,7 @@ use crate::{
     auth::EmployerUser,
     cards::{self, CandidateCard},
     dto::{SalaryRange, parse_slugs, slugs},
+    embeddings,
     error::{ApiError, ApiResult, Problem, Validator},
     extract::{Created, Json, Path},
     pool::{self, PoolFilter},
@@ -564,6 +565,7 @@ async fn build_shortlist(
     let need = load_need(&state.pool, company, id).await?;
     let now = Utc::now().timestamp();
     let effective = need.to_need(&filters);
+    let meaning = embeddings::need_vector(&state, id).await?;
     let loaded = pool::load(
         &state,
         need.specialization,
@@ -572,6 +574,7 @@ async fn build_shortlist(
             fsp_only: filters.fsp_only,
             max_expectation: filters.max_expectation,
             adults_only: filters.adults_only,
+            meaning: meaning.as_deref(),
             ..PoolFilter::default()
         },
     )

@@ -10,6 +10,7 @@ publish.workspace = true
 catalog.workspace = true
 matching.workspace = true
 assessment.workspace = true
+embedder = { workspace = true, features = ["model"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

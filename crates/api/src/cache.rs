@@ -3,6 +3,8 @@
 //! stats of each category (architecture.md §12.2), plus the company of each employer account,
 //! read by every employer request.
 //!
+//! The stored vector of each need (embeddings) is remembered the same way.
+//!
 //! They are invalidated by a generation. A write that changes what employers can find or see on a
 //! card calls [`CandidateCache::invalidate`] after its commit: the local epoch makes the next
 //! request on this replica reload, and with Valkey an `INCR` reaches the other replicas within
@@ -28,7 +30,7 @@ use sqlx::PgPool;
 use tokio::sync::{Notify, futures::Notified};
 use uuid::Uuid;
 
-use crate::{error::ApiResult, kv::Kv, pool::SpecPool};
+use crate::{embeddings::NeedVector, error::ApiResult, kv::Kv, pool::SpecPool};
 
 pub const HARD_TTL: Duration = Duration::from_secs(30);
 /// How long past [`HARD_TTL`] an entry of the current generation keeps serving while one request
@@ -41,6 +43,8 @@ const SPECS: usize = Specialization::ALL.len();
 const CATEGORIES: usize = SPECS * Grade::ALL.len();
 /// Employer accounts whose company is remembered; a power of two, direct-mapped.
 const COMPANY_SLOTS: usize = 1024;
+/// Needs whose vector is remembered; a power of two, direct-mapped.
+const NEED_SLOTS: usize = 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Stamp {
@@ -276,18 +280,36 @@ impl CompanyOf {
     }
 }
 
+struct NeedVectorOf {
+    need: Uuid,
+    /// `None`: the need has no usable vector yet, remembered too.
+    vector: Option<Arc<NeedVector>>,
+    stamp: Stamp,
+    born: Instant,
+}
+
+impl NeedVectorOf {
+    fn serves(&self, need: Uuid, stamp: Stamp, now: Instant) -> bool {
+        self.need == need && self.stamp == stamp && now.duration_since(self.born) < HARD_TTL
+    }
+}
+
 pub struct CandidateCache {
     generation: Generation,
     pools: [Slot<SpecPool>; SPECS],
     overview: Slot<Vec<db::market::CategoryOverview>>,
     demand: [Slot<db::market::CategoryDemand>; CATEGORIES],
     companies: Box<[ArcSwapOption<CompanyOf>]>,
+    need_vectors: Box<[ArcSwapOption<NeedVectorOf>]>,
     hasher: std::hash::RandomState,
     pool_lookups: Lookups,
     stats_lookups: Lookups,
     company_lookups: Lookups,
+    need_vector_lookups: Lookups,
     /// Employer cards, counted per card by `cards::load`.
     pub card_lookups: Lookups,
+    /// Snapshots carry profile vectors (embeddings on).
+    vectors: bool,
 }
 
 /// The current snapshot of each specialization, if loaded; see [`CandidateCache::current_pools`].
@@ -302,12 +324,21 @@ impl CandidateCache {
             overview: Slot::default(),
             demand: std::array::from_fn(|_| Slot::default()),
             companies: (0..COMPANY_SLOTS).map(|_| ArcSwapOption::empty()).collect(),
+            need_vectors: (0..NEED_SLOTS).map(|_| ArcSwapOption::empty()).collect(),
             hasher: std::hash::RandomState::new(),
             pool_lookups: Lookups::new("pool"),
             stats_lookups: Lookups::new("category_stats"),
             company_lookups: Lookups::new("company"),
+            need_vector_lookups: Lookups::new("need_vector"),
             card_lookups: Lookups::new("card"),
+            vectors: false,
         }
+    }
+
+    /// Load profile vectors into the snapshots: on when the embedder is configured.
+    pub fn with_vectors(mut self, on: bool) -> Self {
+        self.vectors = on;
+        self
     }
 
     /// The company an employer account owns. It is created with the account, never changes
@@ -350,6 +381,56 @@ impl CandidateCache {
         })));
     }
 
+    /// The stored vector of a need, read once per generation: every request ranked by a need wants
+    /// it, and only the embedding worker writes it — and bumps the generation after it, as for
+    /// profile vectors. A need without a vector is remembered as such until that bump.
+    pub async fn need_vector(&self, pg: &PgPool, need: Uuid) -> ApiResult<Option<Arc<NeedVector>>> {
+        let stamp = self.generation.stamp().await;
+        if let Some(vector) = self.remembered_need(need, stamp, Instant::now()) {
+            self.need_vector_lookups.record(1, 0);
+            return Ok(vector);
+        }
+        self.need_vector_lookups.record(0, 1);
+        let vector = db::embeddings::need_vector(pg, need)
+            .await?
+            .and_then(|v| NeedVector::new(v.model, v.embedding.as_slice()))
+            .map(Arc::new);
+        self.remember_need(need, vector.clone(), stamp, Instant::now());
+        Ok(vector)
+    }
+
+    fn need_slot(&self, need: Uuid) -> &ArcSwapOption<NeedVectorOf> {
+        &self.need_vectors[self.hasher.hash_one(need) as usize & (NEED_SLOTS - 1)]
+    }
+
+    fn remembered_need(
+        &self,
+        need: Uuid,
+        stamp: Stamp,
+        now: Instant,
+    ) -> Option<Option<Arc<NeedVector>>> {
+        self.need_slot(need)
+            .load()
+            .as_ref()
+            .filter(|e| e.serves(need, stamp, now))
+            .map(|e| e.vector.clone())
+    }
+
+    fn remember_need(
+        &self,
+        need: Uuid,
+        vector: Option<Arc<NeedVector>>,
+        stamp: Stamp,
+        born: Instant,
+    ) {
+        self.need_slot(need).store(Some(Arc::new(NeedVectorOf {
+            need,
+            vector,
+            stamp,
+            born,
+        })));
+    }
+
     /// After the commit of any write to what the pool or a card is built from: profile, skills,
     /// category, privacy and search status, consents, FSP data, task submissions and reviews,
     /// proctoring uploads after the test, account deletion.
@@ -360,7 +441,7 @@ impl CandidateCache {
     pub async fn pool(&self, pg: &PgPool, spec: Specialization) -> ApiResult<Arc<Entry<SpecPool>>> {
         self.pools[spec as usize]
             .get(&self.generation, &self.pool_lookups, || {
-                SpecPool::load(pg, spec)
+                SpecPool::load(pg, spec, self.vectors)
             })
             .await
     }
@@ -618,6 +699,38 @@ mod tests {
             Some(Uuid::from_u128(20))
         );
         assert_eq!(cache.remembered_company(a, STAMP, born), None);
+    }
+
+    #[test]
+    fn a_need_vector_and_its_absence_serve_one_generation() {
+        let cache = cache();
+        let need = Uuid::from_u128(7);
+        let born = Instant::now();
+        assert_eq!(cache.remembered_need(need, STAMP, born), None);
+        cache.remember_need(need, None, STAMP, born);
+        assert_eq!(
+            cache.remembered_need(need, STAMP, born),
+            Some(None),
+            "no vector yet is remembered"
+        );
+        let vector =
+            NeedVector::new("multilingual-e5-small@614241f".into(), &[0.6, 0.8]).map(Arc::new);
+        let bumped = Stamp {
+            remote: 0,
+            local: 1,
+        };
+        assert_eq!(
+            cache.remembered_need(need, bumped, born),
+            None,
+            "the worker's bump rereads it"
+        );
+        cache.remember_need(need, vector.clone(), bumped, born);
+        assert_eq!(cache.remembered_need(need, bumped, born), Some(vector));
+        assert_eq!(
+            cache.remembered_need(Uuid::from_u128(8), bumped, born),
+            None
+        );
+        assert_eq!(cache.remembered_need(need, bumped, born + HARD_TTL), None);
     }
 
     #[test]

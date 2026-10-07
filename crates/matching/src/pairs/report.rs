@@ -193,6 +193,19 @@ pub struct CandidateSummary {
     pub has_fsp: bool,
 }
 
+/// What the «Близость описаний» feature was computed from in this run.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
+#[cfg_attr(feature = "openapi", schema(as = PairsTextMethod))]
+pub struct TextMethod {
+    /// Cosine of embeddings (`true`) or shared word stems (`false`).
+    pub by_meaning: bool,
+    /// `name@revision` of the embedding model.
+    pub model: Option<String>,
+    /// Why keywords were used, in Russian.
+    pub fallback: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct PairsReport {
@@ -203,6 +216,7 @@ pub struct PairsReport {
     pub relevant_from: u8,
     /// Neutral 0..1 test strength used for candidates without a test result.
     pub neutral_test_strength: f32,
+    pub text: TextMethod,
     pub coverage: Coverage,
     /// Present when at least one vacancy has a relevant label.
     pub metrics: Option<MetricsSummary>,

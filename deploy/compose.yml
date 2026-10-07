@@ -70,6 +70,9 @@ services:
       API_BIND: 0.0.0.0:8000
       # Encrypted proctoring video chunks; Postgres keeps only their metadata.
       PROCTORING_DIR: /var/lib/fsp/proctoring
+      # Sentence embeddings. EMBEDDINGS=off in .env (or the embedder stopped) falls back to
+      # keyword closeness and similar vacancies by skills; nothing else changes.
+      EMBEDDER_URL: http://embedder:8093
     volumes:
       - proctoring-data:/var/lib/fsp/proctoring
     depends_on:
@@ -92,6 +95,42 @@ services:
       timeout: 5s
       retries: 6
       start_period: 20s
+    mem_limit: 384m
+    logging: *logging
+
+  # Sentence embeddings (multilingual-e5-small) on the CPU, weights baked in at build time. Only the
+  # api calls it, inside the compose network: texts never leave the host.
+  embedder:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+      target: embedder
+      args:
+        EMBEDDER_FETCH: ${EMBEDDER_FETCH:-1}
+    image: fsp-hack/embedder:local
+    restart: unless-stopped
+    environment:
+      LOG_FORMAT: json
+      # One forward pass at a time over two threads: a cheap VPS has few cores, and the api's
+      # worker sends batches, so more parallelism only adds memory.
+      EMBEDDER_CONCURRENCY: "1"
+      RAYON_NUM_THREADS: "2"
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8093 &&
+          printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          IFS= read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    # Up to ~250 MB resident under load, ~180 MB of it its own: encoder layers, the compact vocabulary
+    # and the passes. The token embedding matrix stays
+    # in the mapped weights file, and its pages are clean cache the kernel drops under this limit.
     mem_limit: 384m
     logging: *logging
 

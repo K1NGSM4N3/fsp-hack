@@ -234,7 +234,7 @@ export const FEATURE_LABEL: Record<FeatureKey, string> = {
   nice: "Желательные навыки",
   salary: "Зарплата",
   fresh: "Актуальность",
-  text: "Описание",
+  text: "Близость описаний",
 };
 
 export const TOPIC_LABEL: Record<AssessmentTopic, string> = {

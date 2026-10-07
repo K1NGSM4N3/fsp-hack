@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO embedding_jobs (kind, entity_id)\n         SELECT 'candidate'::embedding_kind, candidate_id FROM candidate_embeddings WHERE model <> $1\n         UNION ALL\n         SELECT 'need'::embedding_kind, need_id FROM need_embeddings WHERE model <> $1\n         UNION ALL\n         SELECT 'vacancy'::embedding_kind, vacancy_id FROM vacancy_embeddings WHERE model <> $1\n         ON CONFLICT (kind, entity_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cc8a0c43804e2d4821fb727e1d1ad09a5fe9a48134f64a991a8d1740538a34f0"
+}

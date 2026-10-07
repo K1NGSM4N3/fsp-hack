@@ -30,6 +30,8 @@ pub struct Config {
     pub proctoring: ProctoringConfig,
     pub integrations: IntegrationsConfig,
     pub notifications: NotifyConfig,
+    /// The embedder service; `None` with `EMBEDDINGS=off` or without `EMBEDDER_URL`.
+    pub embeddings: Option<EmbeddingsConfig>,
     pub seed_demo: bool,
     /// Candidates per specialization in the demo seed; raised only for load tests.
     pub seed_per_spec: usize,
@@ -107,6 +109,17 @@ impl Default for NotifyConfig {
             interval: std::time::Duration::from_secs(5),
         }
     }
+}
+
+/// Sentence embeddings (architecture.md §6.4): where the embedder listens and how the worker paces.
+#[derive(Clone, Debug)]
+pub struct EmbeddingsConfig {
+    /// `EMBEDDER_URL`, e.g. `http://embedder:8090`.
+    pub url: String,
+    /// Per request to the embedder (`EMBEDDER_TIMEOUT_MS`).
+    pub timeout: std::time::Duration,
+    /// How often the idle worker looks at the queue (`EMBEDDINGS_INTERVAL_MS`).
+    pub interval: std::time::Duration,
 }
 
 /// Connects the demo company to the ATS mock at startup: the key and the secret come from
@@ -263,6 +276,18 @@ impl Config {
             }),
         };
 
+        let embeddings = match (flag("EMBEDDINGS", true), var("EMBEDDER_URL")) {
+            (true, Some(url)) => Some(EmbeddingsConfig {
+                url: url.trim_end_matches('/').to_owned(),
+                timeout: std::time::Duration::from_millis(parsed("EMBEDDER_TIMEOUT_MS", 15_000)?),
+                interval: std::time::Duration::from_millis(parsed(
+                    "EMBEDDINGS_INTERVAL_MS",
+                    1_000,
+                )?),
+            }),
+            _ => None,
+        };
+
         let defaults = NotifyConfig::default();
         let notifications = NotifyConfig {
             hold: std::time::Duration::from_secs(parsed(
@@ -301,6 +326,7 @@ impl Config {
             proctoring,
             integrations,
             notifications,
+            embeddings,
             seed_demo: flag("SEED_DEMO", false),
             seed_per_spec: parsed("SEED_CANDIDATES_PER_SPEC", crate::seed::CANDIDATES_PER_SPEC)?,
             database_pool_size: parsed("DATABASE_POOL_SIZE", crate::db::POOL_SIZE)?,

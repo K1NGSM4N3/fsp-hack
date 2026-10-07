@@ -5,7 +5,8 @@ use sqlx::PgPool;
 
 use crate::{
     auth::jwt::JwtKeys, cache::CandidateCache, config::Config, crypto::Crypto,
-    integrations::webhook::WebhookSender, kv::Kv, mail::Mailer, proctoring::RecordingStore,
+    embeddings::EmbedderClient, integrations::webhook::WebhookSender, kv::Kv, mail::Mailer,
+    proctoring::RecordingStore,
 };
 
 /// Handle to [`Services`]. axum clones the state several times per request (every `from_fn`
@@ -42,4 +43,6 @@ pub struct Services {
     pub webhooks: WebhookSender,
     /// Search pools and category stats; writes that change them call `invalidate`.
     pub candidates: Arc<CandidateCache>,
+    /// The embedder service; `None` with `EMBEDDINGS=off` (everything ranks by keywords).
+    pub embedder: Option<Arc<EmbedderClient>>,
 }

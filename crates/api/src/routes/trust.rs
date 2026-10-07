@@ -48,6 +48,7 @@ pub enum WarningKind {
     SalaryWideRange,
     DuplicateOwn,
     CopyOfOther,
+    ParaphraseOfOther,
 }
 
 impl From<&TrustFlag> for WarningKind {
@@ -57,6 +58,7 @@ impl From<&TrustFlag> for WarningKind {
             TrustFlag::SalaryWideRange { .. } => WarningKind::SalaryWideRange,
             TrustFlag::DuplicateOwn { .. } => WarningKind::DuplicateOwn,
             TrustFlag::CopyOfOther { .. } => WarningKind::CopyOfOther,
+            TrustFlag::ParaphraseOfOther { .. } => WarningKind::ParaphraseOfOther,
         }
     }
 }

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT n.id, n.company_id, n.title, n.description, false AS \"published!\",\n                  e.model AS \"model?\", e.text_hash AS \"text_hash?\"\n           FROM hiring_needs n\n           LEFT JOIN need_embeddings e ON e.need_id = n.id\n           WHERE n.id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "published!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "model?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "text_hash?",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "e063a400718898f56d846dcd0b29c8786f420c5a52db21769bbca2b16a60c9f6"
+}

@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE embedding_jobs j\n           SET claimed_until = now() + make_interval(secs => $2), attempts = j.attempts + 1\n           FROM (SELECT kind, entity_id FROM embedding_jobs\n                 WHERE claimed_until IS NULL OR claimed_until < now()\n                 ORDER BY enqueued_at\n                 LIMIT $1\n                 FOR UPDATE SKIP LOCKED) due\n           WHERE j.kind = due.kind AND j.entity_id = due.entity_id\n           RETURNING j.kind AS \"kind: EmbeddingKind\", j.entity_id, j.enqueued_at, j.attempts",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind: EmbeddingKind",
+        "type_info": {
+          "Custom": {
+            "name": "embedding_kind",
+            "kind": {
+              "Enum": [
+                "candidate",
+                "need",
+                "vacancy"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "entity_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "enqueued_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "attempts",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Float8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "447d6210bffe90715a18266ddbc27bdc841d7b805e3579fc355b7c2e15276947"
+}

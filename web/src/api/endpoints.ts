@@ -480,6 +480,11 @@ export async function getVacancy(id: T.Uuid): Promise<T.PublicVacancy> {
   return http("GET", `/vacancies/${id}`);
 }
 
+export async function getSimilarVacancies(id: T.Uuid, limit = 4): Promise<T.RelatedVacancies> {
+  if (USE_MOCKS) return (await mocks()).getSimilarVacancies(id, limit);
+  return http("GET", `/vacancies/${id}/similar`, { query: { limit } });
+}
+
 export async function applyToVacancy(id: T.Uuid, body: T.ApplyInput): Promise<T.MyApplication> {
   if (USE_MOCKS) return (await mocks()).applyToVacancy(id, body);
   return http("POST", `/vacancies/${id}/applications`, { body });

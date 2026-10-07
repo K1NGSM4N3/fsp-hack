@@ -46,6 +46,8 @@ pub struct CompanyVacancy {
     pub applications: i64,
     /// Taken down by a moderator: publishing is refused until restored.
     pub unpublished_at: Option<DateTime<Utc>>,
+    /// `matching::trust::TrustFlag[]`
+    pub trust_flags: serde_json::Value,
 }
 
 #[derive(Debug, Clone)]
@@ -211,7 +213,7 @@ pub async fn company_vacancies(
                   v.published_at, v.created_at, v.updated_at,
                   (SELECT count(*) FROM applications a
                     WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS "applications!",
-                  v.unpublished_at
+                  v.unpublished_at, v.trust_flags
            FROM vacancies v
            WHERE v.company_id = $1
            ORDER BY v.created_at DESC"#,
@@ -233,7 +235,7 @@ pub async fn company_vacancy(
                   v.published_at, v.created_at, v.updated_at,
                   (SELECT count(*) FROM applications a
                     WHERE a.vacancy_id = v.id AND a.status <> 'withdrawn') AS "applications!",
-                  v.unpublished_at
+                  v.unpublished_at, v.trust_flags
            FROM vacancies v
            WHERE v.company_id = $1 AND v.id = $2"#,
         company_id,
@@ -270,6 +272,26 @@ pub async fn published_vacancies(
         f.q,
         f.limit,
         f.offset,
+    )
+    .fetch_all(db)
+    .await
+}
+
+/// Published vacancies by id, in no particular order.
+pub async fn published_by_ids(
+    db: impl PgExecutor<'_>,
+    ids: &[Uuid],
+) -> Result<Vec<PublishedVacancy>, sqlx::Error> {
+    sqlx::query_as!(
+        PublishedVacancy,
+        "SELECT v.id, v.company_id, co.name AS company_name, co.city AS company_city,
+                co.verified_domain AS company_verified_domain,
+                co.description AS company_description, v.title, v.description, v.specialization,
+                v.grade, v.skills, v.salary_min, v.salary_max, v.work_format, v.city, v.published_at
+         FROM vacancies v
+         JOIN companies co ON co.id = v.company_id
+         WHERE v.id = ANY($1) AND v.status = 'published'",
+        ids,
     )
     .fetch_all(db)
     .await

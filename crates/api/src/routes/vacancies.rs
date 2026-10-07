@@ -8,7 +8,7 @@ use axum::{
 };
 use catalog::{Category, Grade, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
-use matching::trust::display_domain;
+use matching::trust::{TrustFlag, display_domain};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use utoipa::{IntoParams, ToSchema};
@@ -27,6 +27,7 @@ use crate::{
     },
     notify::Notifier,
     page::{self, CursorPage, PageQuery},
+    routes::trust::TrustWarning,
     skills,
     state::AppState,
     trust,
@@ -37,6 +38,7 @@ pub fn public_router() -> OpenApiRouter<AppState> {
     OpenApiRouter::new()
         .routes(routes!(list_published))
         .routes(routes!(get_published))
+        .routes(routes!(similar_published))
 }
 
 pub fn apply_router() -> OpenApiRouter<AppState> {
@@ -90,6 +92,10 @@ pub struct Vacancy {
     /// Taken down by a moderator: publishing again is refused (409 `vacancy_unpublished`); the
     /// reason is on the «Доверие и квота» page.
     pub unpublished_by_moderator_at: Option<DateTime<Utc>>,
+    /// What the anti-fake checks noticed about this vacancy, softly worded; nothing is blocked.
+    /// The paraphrase check runs a few seconds after publishing, once the text's embedding is
+    /// computed.
+    pub warnings: Vec<TrustWarning>,
 }
 
 macro_rules! vacancy_from_row {
@@ -114,8 +120,20 @@ macro_rules! vacancy_from_row {
             updated_at: r.updated_at,
             applications: r.applications,
             unpublished_by_moderator_at: r.unpublished_at,
+            warnings: warnings(&r.trust_flags),
         }
     }};
+}
+
+fn warnings(flags: &serde_json::Value) -> Vec<TrustWarning> {
+    serde_json::from_value::<Vec<TrustFlag>>(flags.clone())
+        .unwrap_or_default()
+        .iter()
+        .map(|f| TrustWarning {
+            kind: f.into(),
+            text: f.employer_text(),
+        })
+        .collect()
 }
 
 fn validate(v: &VacancyInput) -> ApiResult<()> {
@@ -568,6 +586,137 @@ async fn get_published(
     }))
 }
 
+/// How «Похожие вакансии» were found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum RelatedMethod {
+    /// Nearest texts by the cosine of their embeddings.
+    Meaning,
+    /// Embeddings off or not computed yet: the same specialization, most shared skills first.
+    Skills,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RelatedVacancy {
+    pub vacancy: PublicVacancy,
+    /// Meaning: cosine of the texts' embeddings; skills: share of this vacancy's skills it has.
+    pub similarity: f32,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RelatedVacancies {
+    pub method: RelatedMethod,
+    pub items: Vec<RelatedVacancy>,
+}
+
+#[derive(Deserialize, IntoParams)]
+pub struct SimilarQuery {
+    /// 1–12, 4 by default.
+    #[param(minimum = 1, maximum = 12, default = 4)]
+    pub limit: Option<i64>,
+}
+
+fn public_vacancy(r: db::vacancies::PublishedVacancy) -> ApiResult<PublicVacancy> {
+    Ok(PublicVacancy {
+        id: r.id,
+        company_id: r.company_id,
+        company_name: r.company_name,
+        company_city: r.company_city,
+        company_verified_domain: r.company_verified_domain.as_deref().map(display_domain),
+        company_description: None,
+        title: r.title,
+        description: r.description,
+        specialization: r.specialization.parse()?,
+        grade: r.grade.parse()?,
+        skills: r.skills,
+        salary: SalaryRange {
+            min: r.salary_min,
+            max: r.salary_max,
+        },
+        work_format: r.work_format.parse()?,
+        city: r.city,
+        published_at: r.published_at,
+    })
+}
+
+/// Published vacancies close to this one: by meaning of the texts when their embeddings are
+/// computed, otherwise by shared skills within the specialization
+#[utoipa::path(get, path = "/vacancies/{id}/similar", tag = "vacancies",
+    params(("id" = Uuid, Path), SimilarQuery),
+    responses((status = 200, body = RelatedVacancies), (status = 404, description = "No published vacancy with this id", body = Problem)))]
+async fn similar_published(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    Query(q): Query<SimilarQuery>,
+) -> ApiResult<Json<RelatedVacancies>> {
+    let limit = q.limit.unwrap_or(4).clamp(1, 12);
+    let source = db::vacancies::published_vacancy(&state.pool, id)
+        .await?
+        .ok_or_else(ApiError::not_found)?;
+    let stored = match state.embedder {
+        Some(_) => db::embeddings::vacancy_vector(&state.pool, id).await?,
+        None => None,
+    };
+    let (method, ranked): (RelatedMethod, Vec<(Uuid, f64)>) = match stored {
+        Some(v) => {
+            let mut tx = state.pool.begin().await?;
+            db::embeddings::relaxed_scan(&mut *tx).await?;
+            let near = db::embeddings::nearest_published(
+                &mut *tx,
+                &v.embedding,
+                &v.model,
+                id,
+                None,
+                None,
+                limit * NEIGHBOUR_POOL,
+            )
+            .await?;
+            tx.commit().await?;
+            let near: Vec<(Uuid, bool, f64)> = near
+                .into_iter()
+                .map(|n| {
+                    (
+                        n.id,
+                        n.specialization == source.specialization,
+                        n.similarity,
+                    )
+                })
+                .collect();
+            (RelatedMethod::Meaning, rank_neighbours(near, limit))
+        }
+        None => (
+            RelatedMethod::Skills,
+            db::embeddings::similar_by_skills(&state.pool, id, limit).await?,
+        ),
+    };
+    let ids: Vec<Uuid> = ranked.iter().map(|(id, _)| *id).collect();
+    let mut rows = db::vacancies::published_by_ids(&state.pool, &ids).await?;
+    let mut items = Vec::with_capacity(ranked.len());
+    for (vid, similarity) in ranked {
+        if let Some(pos) = rows.iter().position(|r| r.id == vid) {
+            items.push(RelatedVacancy {
+                vacancy: public_vacancy(rows.swap_remove(pos))?,
+                similarity: similarity as f32,
+            });
+        }
+    }
+    Ok(Json(RelatedVacancies { method, items }))
+}
+
+/// Nearest neighbours fetched per shown one: the same specialization is preferred among them.
+const NEIGHBOUR_POOL: i64 = 3;
+
+/// Neighbours of the same specialization first, closest first within each group: a Go vacancy is
+/// more useful next to other backend vacancies than next to a slightly closer text of another
+/// trade. An index scan in relaxed order may return them slightly out of order, hence the sort.
+fn rank_neighbours(mut near: Vec<(Uuid, bool, f64)>, limit: i64) -> Vec<(Uuid, f64)> {
+    near.sort_by(|a, b| b.1.cmp(&a.1).then(b.2.total_cmp(&a.2)).then(a.0.cmp(&b.0)));
+    near.into_iter()
+        .take(usize::try_from(limit).unwrap_or(0))
+        .map(|(id, _, similarity)| (id, similarity))
+        .collect()
+}
+
 #[derive(Deserialize, ToSchema)]
 #[schema(example = json!({"cover_letter": "Здравствуйте! Три года пишу на Go сервисы платежей (PostgreSQL, Kafka), на платформе подтверждён Middle. Готов выйти через две недели."}))]
 pub struct ApplyInput {
@@ -738,6 +887,40 @@ mod tests {
             serde_json::to_value(&errors).unwrap(),
             serde_json::json!({ "idempotency_key": ["Idempotency-Key — от 1 до 100 символов"] })
         );
+    }
+
+    #[test]
+    fn neighbours_of_the_same_specialization_come_first_then_by_closeness() {
+        let id = Uuid::from_u128;
+        let near = vec![
+            (id(1), false, 0.96),
+            (id(2), true, 0.91),
+            (id(3), true, 0.93),
+            (id(4), false, 0.99),
+            (id(5), true, 0.91),
+        ];
+        assert_eq!(
+            rank_neighbours(near.clone(), 4),
+            [(id(3), 0.93), (id(2), 0.91), (id(5), 0.91), (id(4), 0.99)]
+        );
+        assert_eq!(rank_neighbours(near, 0), []);
+    }
+
+    #[test]
+    fn stored_flags_become_soft_warnings_and_junk_is_ignored() {
+        let flags = serde_json::json!([
+            {"kind": "salary_wide_range", "min": 100000, "max": 500000},
+            {"kind": "paraphrase_of_other", "vacancy_id": "x", "company": "Северный Код", "title": "Go", "cosine": 0.96, "threshold": 0.953},
+        ]);
+        let w = warnings(&flags);
+        assert_eq!(w.len(), 2);
+        assert_eq!(
+            w[1].kind,
+            crate::routes::trust::WarningKind::ParaphraseOfOther
+        );
+        assert!(!w[1].text.contains("Северный Код"));
+        assert!(warnings(&serde_json::json!([{"kind": "unknown"}])).is_empty());
+        assert!(warnings(&serde_json::json!({})).is_empty());
     }
 
     #[test]

@@ -40,6 +40,8 @@ const CONSENT_VIDEO: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_0000000000
 const PROCTORING_SEED: u64 = 4242;
 /// Same for the 14–17-year-olds: their birth dates and representatives come from their own stream.
 const MINORS_SEED: u64 = 1417;
+/// Job descriptions of seeded candidates (`job_description`).
+const TEXTS_SEED: u64 = 7357;
 const CONSENT_GUARDIAN: Uuid = Uuid::from_u128(0x0191f000_0000_7000_8000_000000000a01);
 pub const DEMO_MINOR_EMAIL: &str = "minor@demo.fsp";
 
@@ -136,6 +138,25 @@ fn salary_base(spec: Specialization, grade: Grade) -> i64 {
         _ => 1.0,
     };
     (base as f64 * k) as i64
+}
+
+/// What a seeded candidate did at one of `jobs` places: work phrases of every `jobs`-th of their
+/// skills (`matching::corpus`), so the profile text has something for the embeddings to compare.
+/// Drawn from its own stream: the main seed and everything after it stay as they were.
+fn job_description(rng: &mut ChaCha8Rng, skills: &[&str], job: usize, jobs: usize) -> String {
+    let parts: Vec<&str> = skills
+        .iter()
+        .skip(job)
+        .step_by(jobs.max(1))
+        .filter_map(|s| matching::corpus::phrases(s))
+        .filter_map(|t| t.work.choose(rng).copied())
+        .take(3)
+        .collect();
+    if parts.is_empty() {
+        String::new()
+    } else {
+        format!("{}.", parts.join(". "))
+    }
 }
 
 fn role_name(spec: Specialization) -> &'static str {
@@ -549,6 +570,7 @@ pub async fn seed_sized(
     let mut rng = ChaCha8Rng::seed_from_u64(42);
     let mut proctoring_rng = ChaCha8Rng::seed_from_u64(PROCTORING_SEED);
     let mut minors_rng = ChaCha8Rng::seed_from_u64(MINORS_SEED);
+    let mut texts_rng = ChaCha8Rng::seed_from_u64(TEXTS_SEED);
     let mut moderation_rng = ChaCha8Rng::seed_from_u64(moderation::MODERATION_SEED);
     let mut juniors: Vec<Junior> = Vec::new();
     let mut reviewables: Vec<moderation::Reviewable> = Vec::new();
@@ -774,7 +796,12 @@ pub async fn seed_sized(
                         position: role_name(spec).to_owned(),
                         start: format!("{}-{:02}", start_year.min(2026), rng.random_range(1..=12)),
                         end: None,
-                        description: String::new(),
+                        description: job_description(
+                            &mut texts_rng,
+                            &typical[..take],
+                            j as usize,
+                            jobs as usize,
+                        ),
                     }
                 })
                 .collect();

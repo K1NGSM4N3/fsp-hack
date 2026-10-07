@@ -7,6 +7,7 @@ pub mod contacts;
 pub mod crypto;
 pub mod db;
 pub mod dto;
+pub mod embeddings;
 pub mod error;
 pub mod extract;
 pub mod fsp_client;
@@ -524,7 +525,8 @@ mod tests {
                     Policy::Listing,
                     vec![
                         "get /vacancies".to_owned(),
-                        "get /vacancies/{id}".to_owned()
+                        "get /vacancies/{id}".to_owned(),
+                        "get /vacancies/{id}/similar".to_owned()
                     ]
                 ),
                 (

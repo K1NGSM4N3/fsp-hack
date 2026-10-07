@@ -5,6 +5,9 @@
 # Rust
 /target/
 
+# Embedding model weights (`make model`; the embedder image fetches its own)
+/models/
+
 # Local proctoring chunks (PROCTORING_DIR default for `make api`)
 /data/
 

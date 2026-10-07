@@ -67,6 +67,7 @@ export const qk = {
 
   vacancies: (p: VacancyQuery) => ["vacancies", p] as const,
   vacancy: (id: string) => ["vacancies", "one", id] as const,
+  similarVacancies: (id: string) => ["vacancies", "similar", id] as const,
 };
 
 /**

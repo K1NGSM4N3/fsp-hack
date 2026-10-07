@@ -26,6 +26,11 @@ export function useVacancy(id: string, seed?: Seed<PublicVacancy> | null) {
   return useQuery({ queryKey: qk.vacancy(id), queryFn: () => api.getVacancy(id), initialData: seed?.data, initialDataUpdatedAt: seed?.at, ...fresh.detail });
 }
 
+/** «Похожие вакансии»: by meaning when the texts' embeddings are ready, otherwise by shared skills. */
+export function useSimilarPublished(id: string) {
+  return useQuery({ queryKey: qk.similarVacancies(id), queryFn: () => api.getSimilarVacancies(id, 4), ...fresh.detail });
+}
+
 export function useApply() {
   const qc = useQueryClient();
   return useMutation({

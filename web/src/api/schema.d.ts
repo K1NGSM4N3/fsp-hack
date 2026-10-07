@@ -1013,7 +1013,6 @@ export interface paths {
         /** Company API keys, active first */
         get: operations["list_api_keys"];
         put?: never;
-        /** Create an API key with the chosen scopes; the key is returned once */
         post: operations["create_api_key"];
         delete?: never;
         options?: never;
@@ -1481,7 +1480,7 @@ export interface paths {
         put?: never;
         /**
          * Evaluate the matching on your own vacancies, candidates and labels
-         * @description Прогоняет ваш набор «вакансия – кандидат» через тот же разбор текстов и тот же скоринг, что работают в подборе, и через базовую линию «ключевые слова резюме + заявленный стаж». Структурные поля необязательны: специализация, грейд, навыки, вилка, формат и город распознаются из текстов. Категория, распознанная из резюме, помечается «не подтверждена тестом»; без результата теста берётся нейтральное значение — середина диапазона грейда, об этом сказано в объяснении. С разметкой (`labels`, релевантность 0–3, релевантен ≥ 2) считаются Precision@5, Precision@k, nDCG@k, MAP и MRR по каждой вакансии и в среднем — для нашего ранжирования и для базовой линии. Лимиты: тело до 8 МиБ, до 200 вакансий, 5 000 кандидатов и 100 000 оценок, тексты до 20 000 символов, 10 запросов за 10 минут с одного IP. Данные не сохраняются. Большие наборы — CLI `validate pairs` (см. docs/solution.md §6.4).
+         * @description Прогоняет ваш набор «вакансия – кандидат» через тот же разбор текстов и тот же скоринг, что работают в подборе, и через базовую линию «ключевые слова резюме + заявленный стаж». Структурные поля необязательны: специализация, грейд, навыки, вилка, формат и город распознаются из текстов. Категория, распознанная из резюме, помечается «не подтверждена тестом»; без результата теста берётся нейтральное значение — середина диапазона грейда, об этом сказано в объяснении. С разметкой (`labels`, релевантность 0–3, релевантен ≥ 2) считаются Precision@5, Precision@k, nDCG@k, MAP и MRR по каждой вакансии и в среднем — для нашего ранжирования и для базовой линии. Близость описаний — по смыслу (эмбеддинги, посчитанные локальной моделью), если набор не больше 300 текстов и эмбеддер доступен; иначе по ключевым словам, и поле `text` отчёта говорит почему. Лимиты: тело до 8 МиБ, до 200 вакансий, 5 000 кандидатов и 100 000 оценок, тексты до 20 000 символов, 10 запросов за 10 минут с одного IP. Данные не сохраняются. Большие наборы — CLI `validate pairs` (см. docs/solution.md §6.4).
          */
         post: operations["eval_pairs"];
         delete?: never;
@@ -2004,6 +2003,26 @@ export interface paths {
          *     representative's consent first
          */
         post: operations["apply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/vacancies/{id}/similar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Published vacancies close to this one: by meaning of the texts when their embeddings are
+         *     computed, otherwise by shared skills within the specialization
+         */
+        get: operations["similar_published"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3934,10 +3953,20 @@ export interface components {
              * @description Neutral 0..1 test strength used for candidates without a test result.
              */
             neutral_test_strength: number;
+            text: components["schemas"]["PairsTextMethod"];
             coverage: components["schemas"]["PairsCoverage"];
             metrics?: components["schemas"]["PairsMetricsSummary"] | null;
             vacancies: components["schemas"]["PairsVacancyReport"][];
             candidates: components["schemas"]["PairsCandidateSummary"][];
+        };
+        /** @description What the «Близость описаний» feature was computed from in this run. */
+        PairsTextMethod: {
+            /** @description Cosine of embeddings (`true`) or shared word stems (`false`). */
+            by_meaning: boolean;
+            /** @description `name@revision` of the embedding model. */
+            model?: string | null;
+            /** @description Why keywords were used, in Russian. */
+            fallback?: string | null;
         };
         PairsVacancy: {
             id: string;
@@ -4342,6 +4371,23 @@ export interface components {
             fsp_id: string;
             /** Format: date-time */
             occurred_at: string;
+        };
+        /**
+         * @description How «Похожие вакансии» were found.
+         * @enum {string}
+         */
+        RelatedMethod: "meaning" | "skills";
+        RelatedVacancies: {
+            method: components["schemas"]["RelatedMethod"];
+            items: components["schemas"]["RelatedVacancy"][];
+        };
+        RelatedVacancy: {
+            vacancy: components["schemas"]["PublicVacancy"];
+            /**
+             * Format: float
+             * @description Meaning: cosine of the texts' embeddings; skills: share of this vacancy's skills it has.
+             */
+            similarity: number;
         };
         Relation: {
             invitation_status?: components["schemas"]["InvitationStatus"] | null;
@@ -5101,6 +5147,12 @@ export interface components {
              *     reason is on the «Доверие и квота» page.
              */
             unpublished_by_moderator_at?: string | null;
+            /**
+             * @description What the anti-fake checks noticed about this vacancy, softly worded; nothing is blocked.
+             *     The paraphrase check runs a few seconds after publishing, once the text's embedding is
+             *     computed.
+             */
+            warnings: components["schemas"]["TrustWarning"][];
         };
         VacancyInput: {
             title: string;
@@ -5124,7 +5176,7 @@ export interface components {
          */
         VideoState: "off" | "declined" | "kept" | "purged";
         /** @enum {string} */
-        WarningKind: "salary_above_market" | "salary_wide_range" | "duplicate_own" | "copy_of_other";
+        WarningKind: "salary_above_market" | "salary_wide_range" | "duplicate_own" | "copy_of_other" | "paraphrase_of_other";
         /**
          * @description Body of every webhook delivery. `id` repeats the `FSP-Event-Id` header: deliveries are
          *     at-least-once, so the receiver deduplicates by it.
@@ -13276,6 +13328,48 @@ export interface operations {
             };
             /** @description `validation_failed`: `cover_letter`; `invalid_json`: the body does not match the schema (unknown enum value, wrong type, missing field) */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    similar_published: {
+        parameters: {
+            query?: {
+                /** @description 1–12, 4 by default. */
+                limit?: number | null;
+            };
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RelatedVacancies"];
+                };
+            };
+            /** @description `invalid_path`: a path parameter does not parse (e.g. not a UUID); `invalid_query`: a query parameter is missing or does not parse */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description No published vacancy with this id */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

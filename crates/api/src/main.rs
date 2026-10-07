@@ -6,6 +6,7 @@ use api::{
     config::{Config, ConfigError},
     crypto::{Crypto, CryptoError},
     db::DbSetupError,
+    embeddings::EmbedderClient,
     integrations::{dispatcher::Dispatcher, webhook::WebhookSender},
     kv::{Kv, KvError},
     mail::{MailError, Mailer},
@@ -128,11 +129,24 @@ async fn main() -> Result<(), StartupError> {
     .spawn();
 
     let kv = Kv::connect(config.valkey_url.as_deref()).await?;
+    let embedder = match &config.embeddings {
+        Some(e) => {
+            tracing::info!(url = %e.url, "embeddings on");
+            Some(Arc::new(EmbedderClient::new(&e.url, e.timeout)?))
+        }
+        None => {
+            tracing::info!(
+                "embeddings off: text closeness by keywords, similar vacancies by skills"
+            );
+            None
+        }
+    };
     let state = AppState::from(Services {
         crypto,
         jwt: Arc::new(JwtKeys::new(config.jwt_seed)?),
         mailer: Arc::new(Mailer::new(&config.mail)?),
-        candidates: Arc::new(CandidateCache::new(kv.clone())),
+        candidates: Arc::new(CandidateCache::new(kv.clone()).with_vectors(embedder.is_some())),
+        embedder,
         kv,
         http: reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(10))
@@ -157,6 +171,7 @@ async fn main() -> Result<(), StartupError> {
     }
 
     EmailDispatcher::new(&state).spawn();
+    api::embeddings::worker::spawn(&state);
     api::notify::sweep::spawn(&state);
 
     let listener = tokio::net::TcpListener::bind(state.config.bind).await?;

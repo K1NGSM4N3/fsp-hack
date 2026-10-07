@@ -299,26 +299,81 @@ pub async fn company_signatures(
     .await
 }
 
-/// Replaces the flags; `flagged_at` keeps the first flagging time until the flags clear. Flags
-/// that changed since a moderator dismissed them go back to the queue.
+/// Replaces the flags of the publish check (salary, MinHash duplicates) and keeps the paraphrase
+/// flags the embedding worker wrote ([`set_paraphrase_flags`]). `flagged_at` keeps the first
+/// flagging time until the flags clear; flags that changed since a moderator dismissed them go back
+/// to the queue. The merge reads the row's current flags under its lock, so a concurrent write of
+/// the other half is not lost.
 pub async fn set_vacancy_flags(
     db: impl PgExecutor<'_>,
     id: Uuid,
     flags: &Value,
 ) -> Result<u64, sqlx::Error> {
     sqlx::query!(
-        "UPDATE vacancies
-         SET trust_flags = $2,
-             flagged_at = CASE WHEN $2 = '[]'::jsonb THEN NULL ELSE coalesce(flagged_at, now()) END,
-             trust_review = CASE WHEN trust_flags = $2 THEN trust_review END,
-             trust_reviewed_at = CASE WHEN trust_flags = $2 THEN trust_reviewed_at END
-         WHERE id = $1",
+        "UPDATE vacancies v
+         SET trust_flags = $2 || coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f
+                                           WHERE f->>'kind' = 'paraphrase_of_other'), '[]'),
+             flagged_at = CASE
+                 WHEN $2 || coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f
+                                      WHERE f->>'kind' = 'paraphrase_of_other'), '[]') = '[]'::jsonb
+                 THEN NULL ELSE coalesce(v.flagged_at, now()) END,
+             trust_review = CASE
+                 WHEN v.trust_flags = $2 || coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f
+                                                      WHERE f->>'kind' = 'paraphrase_of_other'), '[]')
+                 THEN v.trust_review END,
+             trust_reviewed_at = CASE
+                 WHEN v.trust_flags = $2 || coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f
+                                                      WHERE f->>'kind' = 'paraphrase_of_other'), '[]')
+                 THEN v.trust_reviewed_at END
+         WHERE v.id = $1",
         id,
         flags,
     )
     .execute(db)
     .await
     .map(|r| r.rows_affected())
+}
+
+/// Replaces only the paraphrase flags, keeping the publish check's ones; otherwise as
+/// [`set_vacancy_flags`].
+pub async fn set_paraphrase_flags(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+    flags: &Value,
+) -> Result<u64, sqlx::Error> {
+    sqlx::query!(
+        "UPDATE vacancies v
+         SET trust_flags = coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f
+                                     WHERE f->>'kind' <> 'paraphrase_of_other'), '[]') || $2,
+             flagged_at = CASE
+                 WHEN coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f
+                                WHERE f->>'kind' <> 'paraphrase_of_other'), '[]') || $2 = '[]'::jsonb
+                 THEN NULL ELSE coalesce(v.flagged_at, now()) END,
+             trust_review = CASE
+                 WHEN v.trust_flags = coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f
+                                                WHERE f->>'kind' <> 'paraphrase_of_other'), '[]') || $2
+                 THEN v.trust_review END,
+             trust_reviewed_at = CASE
+                 WHEN v.trust_flags = coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f
+                                                WHERE f->>'kind' <> 'paraphrase_of_other'), '[]') || $2
+                 THEN v.trust_reviewed_at END
+         WHERE v.id = $1",
+        id,
+        flags,
+    )
+    .execute(db)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+/// The flags stored on a vacancy, `None` for a vacancy that does not exist.
+pub async fn vacancy_flags(
+    db: impl PgExecutor<'_>,
+    id: Uuid,
+) -> Result<Option<Value>, sqlx::Error> {
+    sqlx::query_scalar!("SELECT trust_flags FROM vacancies WHERE id = $1", id)
+        .fetch_optional(db)
+        .await
 }
 
 pub async fn set_invitation_flags(

@@ -2,6 +2,7 @@
 //! for free-text needs and resumes, offline evaluation on external pairs. Pure logic: no IO,
 //! no clock — time comes in as `now_unix`.
 
+pub mod corpus;
 mod extract;
 pub mod fsp;
 mod lexicon;
@@ -12,6 +13,7 @@ pub mod profile;
 pub mod resume;
 mod ru;
 pub mod scoring;
+pub mod semantic;
 pub mod skills;
 mod text;
 pub mod trust;
@@ -32,6 +34,7 @@ pub use scoring::{
     SkillMatch, StrengthRank, Weights, category_stats, explain_at, hard_filter, profile_strength,
     rank, rank_by_strength, rank_snapshots, score, test_strength, theta_for_strength,
 };
+pub use semantic::TextCloseness;
 pub use skills::{
     SkillDef, SkillGroup, SkillId, SkillView, extract_skills, lookup, normalize, search,
     similarity, typical_skills,

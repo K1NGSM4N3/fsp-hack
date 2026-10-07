@@ -1,7 +1,11 @@
 mod assessment_eval;
 mod csv;
 mod matching_eval;
+mod model;
+mod models;
 mod pairs;
+mod paraphrase;
+mod texts;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -15,7 +19,7 @@ enum ValidateError {
     #[error(transparent)]
     Pairs(#[from] pairs::PairsCliError),
     #[error(
-        "usage: validate [--out DIR] [--seed N] [all|matching|assessment]\n       validate pairs --input FILE.json|DIR [--k N] [--now YYYY-MM-DD] [--out REPORT.md]"
+        "usage: validate [--out DIR] [--seed N] [--model NAME|none] [--models DIR] [all|matching|assessment|models]\n       validate pairs --input FILE.json|DIR [--k N] [--now YYYY-MM-DD] [--out REPORT.md] [--model NAME|none] [--models DIR]"
     )]
     Usage,
 }
@@ -38,10 +42,13 @@ fn run() -> Result<(), ValidateError> {
     }
     let mut out = PathBuf::from("docs/validation");
     let mut seed = 2026u64;
-    let (mut matching, mut assessment) = (true, true);
+    let mut choice = model::Choice::default();
+    let (mut matching, mut assessment, mut compare) = (true, true, false);
     while let Some(arg) = args.next() {
         match arg.as_str() {
             "--out" => out = args.next().ok_or(ValidateError::Usage)?.into(),
+            "--model" => choice.name = args.next().ok_or(ValidateError::Usage)?,
+            "--models" => choice.dir = args.next().ok_or(ValidateError::Usage)?.into(),
             "--seed" => {
                 seed = args
                     .next()
@@ -51,11 +58,24 @@ fn run() -> Result<(), ValidateError> {
             "all" => {}
             "matching" => assessment = false,
             "assessment" => matching = false,
+            "models" => {
+                (matching, assessment, compare) = (false, false, true);
+            }
             _ => return Err(ValidateError::Usage),
         }
     }
     std::fs::create_dir_all(&out)?;
 
+    if compare {
+        let report = models::run(seed, &choice.dir);
+        let md = models::markdown(&report);
+        std::fs::write(out.join("embeddings.md"), &md)?;
+        std::fs::write(
+            out.join("embeddings.json"),
+            serde_json::to_string_pretty(&report)?,
+        )?;
+        println!("{md}");
+    }
     if assessment {
         let report = assessment_eval::run(seed);
         let md = assessment_eval::markdown(&report);
@@ -67,7 +87,8 @@ fn run() -> Result<(), ValidateError> {
         println!("{md}");
     }
     if matching {
-        let report = matching_eval::run(seed);
+        let loaded = choice.load();
+        let report = matching_eval::run(seed, loaded.as_ref());
         let md = matching_eval::markdown(&report);
         std::fs::write(out.join("matching.md"), &md)?;
         std::fs::write(
@@ -75,6 +96,15 @@ fn run() -> Result<(), ValidateError> {
             serde_json::to_string_pretty(&report)?,
         )?;
         println!("{md}");
+        if let Some(report) = loaded.as_ref().and_then(paraphrase::run) {
+            let md = paraphrase::markdown(&report);
+            std::fs::write(out.join("paraphrase.md"), &md)?;
+            std::fs::write(
+                out.join("paraphrase.json"),
+                serde_json::to_string_pretty(&report)?,
+            )?;
+            println!("{md}");
+        }
     }
     Ok(())
 }

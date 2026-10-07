@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fsp::{FspScore, NO_FSP_DATA_RU};
 use crate::lexicon;
+use crate::semantic::TextCloseness;
 use crate::skills::SkillId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -118,10 +119,13 @@ pub struct CandidateSnapshot {
     pub last_activity_unix: i64,
     #[serde(default)]
     pub industries: Vec<Industry>,
-    /// 0..1 similarity of the need description and the candidate's "about", computed by
-    /// the DB layer (`ts_rank` / embeddings); 0 when unavailable.
+    /// 0..1 closeness of the need description and the candidate's profile text, computed outside
+    /// (embeddings, or `ts_rank` normalized by the best candidate); 0 when unavailable.
     #[serde(default)]
     pub text_relevance: f64,
+    /// `text_relevance` is a closeness by meaning (embeddings), not by keywords.
+    #[serde(default)]
+    pub text_by_meaning: bool,
 }
 
 pub(crate) trait Flag: Copy {
@@ -200,6 +204,7 @@ pub struct CandidateProfile {
     pub(crate) category: Category,
     pub(crate) relocation: bool,
     pub(crate) has_fsp: bool,
+    pub(crate) text_by_meaning: bool,
 }
 
 impl CandidateProfile {
@@ -226,6 +231,13 @@ impl CandidateProfile {
 
     pub fn text_relevance(&self) -> f32 {
         self.text_relevance
+    }
+
+    pub fn text_closeness(&self) -> TextCloseness {
+        TextCloseness {
+            value: self.text_relevance,
+            by_meaning: self.text_by_meaning,
+        }
     }
 
     pub fn salary_expectation(&self) -> Option<u32> {
@@ -310,6 +322,7 @@ impl CandidatePool {
             category: s.category,
             relocation: s.relocation,
             has_fsp: s.fsp.has_history,
+            text_by_meaning: s.text_by_meaning,
         });
         cold.push(CandidateCold {
             id: s.id.clone(),
@@ -318,15 +331,16 @@ impl CandidatePool {
         self.profiles.len() - 1
     }
 
-    /// A pool of the picked candidates, `(index in self, text relevance)` each, in pick order.
-    /// Hot records are copied with the given text relevance; skills and cold records are
+    /// A pool of the picked candidates, `(index in self, text closeness)` each, in pick order.
+    /// Hot records are copied with the given text closeness; skills and cold records are
     /// shared, so a filtered per-request view of a cached pool costs one allocation.
-    pub fn subset(&self, picks: impl IntoIterator<Item = (usize, f32)>) -> CandidatePool {
+    pub fn subset(&self, picks: impl IntoIterator<Item = (usize, TextCloseness)>) -> CandidatePool {
         let profiles = picks
             .into_iter()
             .filter_map(|(i, text)| {
                 self.profiles.get(i).map(|p| CandidateProfile {
-                    text_relevance: text.clamp(0.0, 1.0),
+                    text_relevance: text.value.clamp(0.0, 1.0),
+                    text_by_meaning: text.by_meaning,
                     ..*p
                 })
             })
@@ -378,9 +392,10 @@ impl CandidatePool {
     }
 
     /// Per-need text closeness computed outside the database (offline evaluation).
-    pub(crate) fn set_text_relevance(&mut self, index: usize, value: f32) {
+    pub fn set_text_closeness(&mut self, index: usize, text: TextCloseness) {
         if let Some(p) = self.profiles.get_mut(index) {
-            p.text_relevance = value.clamp(0.0, 1.0);
+            p.text_relevance = text.value.clamp(0.0, 1.0);
+            p.text_by_meaning = text.by_meaning;
         }
     }
 
@@ -429,6 +444,7 @@ mod tests {
             last_activity_unix: 0,
             industries: vec![Industry::Fintech],
             text_relevance: 3.0,
+            text_by_meaning: false,
         };
         let pool = CandidatePool::from_snapshots(&[s]);
         let p = pool.profile(0).unwrap();
@@ -463,6 +479,7 @@ mod tests {
             last_activity_unix: 0,
             industries: Vec::new(),
             text_relevance: 0.0,
+            text_by_meaning: false,
         }
     }
 
@@ -473,7 +490,10 @@ mod tests {
             snapshot("b", "go", "ФСП b"),
             snapshot("c", "kafka", "ФСП c"),
         ]);
-        let view = pool.subset([(2, 0.25), (0, 7.0)]);
+        let view = pool.subset([
+            (2, TextCloseness::keywords(0.25)),
+            (0, TextCloseness::meaning(7.0)),
+        ]);
         assert_eq!(view.len(), 2);
         assert_eq!(view.id(0), Some("c"));
         assert_eq!(view.id(1), Some("a"));
@@ -481,12 +501,18 @@ mod tests {
         assert!(view.has_skill(0, SkillId::intern("kafka")));
         assert!(!view.has_skill(0, SkillId::intern("rust")));
         assert!(view.has_skill(1, SkillId::intern("rust")));
-        assert_eq!(view.profile(0).unwrap().text_relevance(), 0.25);
-        assert_eq!(view.profile(1).unwrap().text_relevance(), 1.0);
+        assert_eq!(
+            view.profile(0).unwrap().text_closeness(),
+            TextCloseness::keywords(0.25)
+        );
+        assert_eq!(
+            view.profile(1).unwrap().text_closeness(),
+            TextCloseness::meaning(1.0)
+        );
         assert_eq!(view.profile(1).unwrap().salary_expectation(), Some(250_000));
         assert!(Arc::ptr_eq(&view.skills, &pool.skills));
 
-        let nested = view.subset([(1, 0.0)]);
+        let nested = view.subset([(1, TextCloseness::default())]);
         assert_eq!(nested.id(0), Some("a"));
         assert_eq!(nested.id(1), None);
         assert_eq!(pool.profile(0).unwrap().text_relevance(), 0.0);

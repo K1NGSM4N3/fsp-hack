@@ -4,10 +4,14 @@
 
 use catalog::Category;
 use chrono::Utc;
-use matching::trust::{
-    DomainCheck, MarketBand, Signature, TrustAssessment, TrustFlag, TrustSignals, assess,
-    check_domain, salary_flags,
-    similarity::{closest, rank_similar, vacancy_text},
+use db::embeddings::{NearVacancy, Vector};
+use matching::{
+    semantic,
+    trust::{
+        DomainCheck, MarketBand, Signature, TrustAssessment, TrustFlag, TrustSignals, assess,
+        check_domain, salary_flags,
+        similarity::{closest, rank_similar, vacancy_text},
+    },
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -16,6 +20,11 @@ use crate::{crypto::Crypto, error::ApiResult};
 
 /// Recent published vacancies a new one is compared with; a day of a large job board.
 const RECENT_LIMIT: i64 = 2000;
+/// Other companies' vacancies a copy is looked for among: published within these days, as for
+/// verbatim copies (`db::trust::recent_published_signatures`).
+const COPY_WINDOW_DAYS: i32 = 90;
+/// Nearest vacancies fetched for the paraphrase check; the closest one decides.
+const PARAPHRASE_NEIGHBOURS: i64 = 5;
 const BACKFILL_BATCH: i64 = 500;
 
 fn count(v: i64) -> u16 {
@@ -167,6 +176,69 @@ fn text_flags(
         });
     }
     flags
+}
+
+/// The closest other company's vacancy at or above the paraphrase threshold, unless the vacancy
+/// is already flagged as a verbatim copy: the same finding twice adds nothing for the moderator.
+pub fn paraphrase_flag(
+    current: &[TrustFlag],
+    near: &[NearVacancy],
+    threshold: f32,
+) -> Option<TrustFlag> {
+    if current
+        .iter()
+        .any(|f| matches!(f, TrustFlag::CopyOfOther { .. }))
+    {
+        return None;
+    }
+    near.iter()
+        .filter(|n| n.similarity as f32 >= threshold)
+        .max_by(|a, b| a.similarity.total_cmp(&b.similarity))
+        .map(|n| TrustFlag::ParaphraseOfOther {
+            vacancy_id: n.id.to_string(),
+            company: n.company_name.clone(),
+            title: n.title.clone(),
+            cosine: n.similarity as f32,
+            threshold,
+        })
+}
+
+/// Re-checks a published vacancy for a retold copy of another company's vacancy once its vector
+/// is stored (the embedding worker) and keeps the result among its flags.
+pub async fn check_paraphrase(
+    pool: &PgPool,
+    id: Uuid,
+    company: Uuid,
+    embedding: &Vector,
+    model: &str,
+) -> ApiResult<Option<TrustFlag>> {
+    let Some(calibration) = semantic::calibration(model) else {
+        return Ok(None);
+    };
+    let mut tx = pool.begin().await?;
+    db::embeddings::relaxed_scan(&mut *tx).await?;
+    let near = db::embeddings::nearest_published(
+        &mut *tx,
+        embedding,
+        model,
+        id,
+        Some(company),
+        Some(COPY_WINDOW_DAYS),
+        PARAPHRASE_NEIGHBOURS,
+    )
+    .await?;
+    tx.commit().await?;
+    let current: Vec<TrustFlag> = db::trust::vacancy_flags(pool, id)
+        .await?
+        .and_then(|v| serde_json::from_value(v).ok())
+        .unwrap_or_default();
+    let flag = paraphrase_flag(&current, &near, calibration.paraphrase);
+    let stored: Vec<&TrustFlag> = current.iter().filter(|f| f.is_paraphrase()).collect();
+    if stored.len() != usize::from(flag.is_some()) || stored.first().copied() != flag.as_ref() {
+        let list: Vec<&TrustFlag> = flag.iter().collect();
+        db::trust::set_paraphrase_flags(pool, id, &serde_json::to_value(&list)?).await?;
+    }
+    Ok(flag)
 }
 
 /// Salary flags of an invitation against the invited candidate's category.
@@ -339,6 +411,50 @@ mod tests {
             matches!(&flags[..], [TrustFlag::DuplicateOwn { title, similarity, .. }] if title == "Оригинал" && *similarity == 1.0),
             "{flags:?}"
         );
+    }
+
+    fn near(id: u128, similarity: f64) -> NearVacancy {
+        NearVacancy {
+            id: Uuid::from_u128(id),
+            company_id: RIVAL,
+            company_name: "Северный Код".into(),
+            title: format!("Вакансия {id}"),
+            specialization: "backend".into(),
+            similarity,
+        }
+    }
+
+    #[test]
+    fn the_closest_vacancy_over_the_threshold_is_the_paraphrase() {
+        let found = paraphrase_flag(&[], &[near(1, 0.95), near(2, 0.97), near(3, 0.99)], 0.96);
+        assert_eq!(
+            found,
+            Some(TrustFlag::ParaphraseOfOther {
+                vacancy_id: Uuid::from_u128(3).to_string(),
+                company: "Северный Код".into(),
+                title: "Вакансия 3".into(),
+                cosine: 0.99,
+                threshold: 0.96,
+            })
+        );
+        assert_eq!(paraphrase_flag(&[], &[near(1, 0.95)], 0.96), None);
+        assert_eq!(paraphrase_flag(&[], &[], 0.96), None);
+    }
+
+    #[test]
+    fn a_verbatim_copy_is_not_reported_twice() {
+        let copy = TrustFlag::CopyOfOther {
+            vacancy_id: "x".into(),
+            company: "Северный Код".into(),
+            title: "Go".into(),
+            similarity: 0.9,
+        };
+        assert_eq!(paraphrase_flag(&[copy], &[near(1, 0.99)], 0.96), None);
+        let salary = TrustFlag::SalaryWideRange {
+            min: 100_000,
+            max: 400_000,
+        };
+        assert!(paraphrase_flag(&[salary], &[near(1, 0.99)], 0.96).is_some());
     }
 
     #[test]

@@ -9,6 +9,7 @@ members = [
     "crates/fsp-mock",
     "crates/ats-mock",
     "crates/validate",
+    "crates/embedder",
 ]
 
 [workspace.package]
@@ -22,6 +23,7 @@ catalog = { path = "crates/catalog" }
 assessment = { path = "crates/assessment" }
 matching = { path = "crates/matching" }
 db = { path = "crates/db" }
+embedder = { path = "crates/embedder", default-features = false }
 
 thiserror = "2"
 serde = { version = "1", features = ["derive"] }

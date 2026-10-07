@@ -33,6 +33,7 @@ docker compose -f deploy/compose.yml --profile full up -d --build   # то же 
 | `caddy` | 8080 | ядро | Единый вход: `/api/*`, `/healthz`, `/readyz` → api, остальное → web; `/metrics` наружу закрыт |
 | `web` | — (3000 в сети compose) | ядро | Next.js: публичный сайт и кабинеты |
 | `api` | — (8000) | ядро | Rust API; миграции и демо-данные при старте |
+| `embedder` | — (8093) | ядро | Эмбеддинги текстов: модель `multilingual-e5-small` (MIT) на CPU, веса — в образе. Нужен близости описаний в подборе, отметке «пересказ чужой вакансии» и «Похожим вакансиям»; без него всё работает на ключевых словах |
 | `postgres` | — (5432) | ядро | PostgreSQL 17 (образ `pgvector/pgvector`) |
 | `valkey` | — (6379) | ядро | Лимиты запросов, отозванные токены, поколение кеша кандидатов |
 | `mailpit` | 8025, SMTP — `127.0.0.1:1025` | ядро | Почта для демо |
@@ -47,6 +48,14 @@ docker compose -f deploy/compose.yml --profile full up -d --build   # то же 
 доставок как ошибки. Демо-компания `employer@demo.fsp` сразу подключена к демо-ATS: события
 о приглашениях приходят туда с подписью, а кнопки «Собеседование», «Оффер», «Нанят», «Отказ»
 возвращают этап кандидату.
+
+### Эмбеддинги: память и выключатель
+
+Сервис `embedder` занимает до ~250 МБ под нагрузкой (своя память — ~180 МБ, остальное — страницы файла весов; лимит контейнера — 384 МБ) и считает профиль за 50–90 мс на двух потоках; запросы API его не ждут — векторы считает фоновый воркер после записи текста, демо-данные — за минуту-две после первого старта. Тексты кандидатов и компаний не покидают сервер: модель работает внутри сети compose.
+
+- `EMBEDDINGS=off` в `.env` — без эмбеддингов: близость описаний по ключевым словам, похожие вакансии по навыкам, пересказы не ищутся. Сервис тогда можно не поднимать: `docker compose -f deploy/compose.yml --profile full up -d --build --scale embedder=0`.
+- Остановленный эмбеддер ничего не ломает: посчитанные векторы продолжают работать, новые тексты ждут в очереди и считаются, когда сервис вернётся.
+- **Эмбеддер без сети.** Образ скачивает веса с Hugging Face при сборке (ревизия закреплена, sha256 проверяется). Без доступа к Hugging Face: скачайте веса на машине с сетью (`make model` → `models/multilingual-e5-small`, три файла и `REVISION`) и перенесите каталог, соберите образ с `EMBEDDER_FETCH=0` (`EMBEDDER_FETCH=0 make up`) и смонтируйте каталог в сервис: `volumes: ["../models:/models:ro"]` у `embedder` в `deploy/compose.yml` (путь внутри — `EMBEDDER_MODEL_DIR=/models/multilingual-e5-small`, он задан в образе).
 
 ### Демо-аккаунты
 
@@ -83,13 +92,14 @@ curl -X POST -H 'Authorization: Bearer dev-registry-token' \
 Valkey, sqlx-cli, pandoc, typst, Colima и Docker.
 
 ```sh
-make db                  # создать базу fsp_hack
+make db                  # создать базу fsp_hack (нужен PostgreSQL с расширением pgvector)
+make embedder            # эмбеддер на :8093; веса скачает `make model` (~490 МБ, sha256 проверяется)
 SEED_DEMO=true make api  # API на :8000: миграции при старте, демо-данные на пустой базе
 make web                 # фронтенд на :3000, /api/* проксируется на :8000
 make test                # модульные тесты: без базы и сети
 ```
 
-`make api` не читает `.env`: без `VALKEY_URL` лимиты и отозванные токены живут в памяти процесса,
+`make api` не читает `.env`: он ищет эмбеддер на `http://localhost:8093` (`EMBEDDINGS=off make api` — без него), без `VALKEY_URL` лимиты и отозванные токены живут в памяти процесса,
 без `MAIL_MODE=smtp` ссылки из писем печатаются в лог API, а `FSP_DEV_LINK=true` разрешает привязать
 ФСП ID вводом номера, без Keycloak. Реестр ФСП локально — `make fsp-mock` (:8090) и
 `FSP_REGISTRY_URL=http://localhost:8090`; демо-ATS — `make ats-mock` (:8082). Фронтенд без бэкенда —
@@ -106,10 +116,11 @@ make test                # модульные тесты: без базы и с�
 Два вида, оба без доступа к внутренностям друг друга:
 
 ```sh
-make test       # модульные: cargo test --workspace (514 тестов) и проверка типов web; Postgres не нужен
+make test       # модульные: cargo test --workspace (554 теста) и проверка типов web; Postgres не нужен
 make blackbox   # black-box: свежий стек в Docker + Playwright по публичным портам
 make blackbox DOWN=1                       # то же, стек после прогона удаляется
 make blackbox ARGS="specs/minors.spec.ts"  # один файл; любые аргументы playwright test
+make blackbox-degraded                     # после make blackbox: эмбеддер остановлен, приложение работает на ключевых словах
 make blackbox-down                         # удалить стек black-box тестов
 ```
 
@@ -135,10 +146,10 @@ Docker; браузер Chromium ставит сам Playwright. Тесты хо�
 - `api.md` — соглашения API и список эндпоинтов; актуальная спецификация — `/api/v1/openapi.json`
 - `specs.md` — требования организаторов и статус их выполнения
 - `web/README.md` — фронтенд: страницы, устройство, анимации, переменные окружения
-- `docs/validation/` — отчёты валидации тестирования (`assessment.md`) и подбора (`matching.md`), `make validate`
+- `docs/validation/` — отчёты валидации тестирования (`assessment.md`), подбора (`matching.md`) и пересказов вакансий (`paraphrase.md`), `make validate`; сравнение моделей эмбеддингов (`embeddings.md`) — `cargo run -p validate --release -- models` (нужны обе модели: `make model MODEL=rubert-tiny2`)
 - `docs/validation/pairs-example/` — проверка подбора на своих данных: пример входа и отчёта; запуск — `cargo run -p validate --release -- pairs --input data.json --out report.md` или `POST /api/v1/eval/pairs` в Swagger (`docs/solution.md` §6.4)
 - `AGENTS.md` — структура репозитория, команды, правила кода
 
 ## Лицензия
 
-MIT — см. `LICENSE`. Все зависимости — под открытыми лицензиями (MIT, Apache-2.0, BSD, ISC, MPL, OFL); исключение — GSAP (бесплатная Standard License), подробности в `docs/solution.md` §11.
+MIT — см. `LICENSE`. Все зависимости — под открытыми лицензиями (MIT, Apache-2.0, BSD, ISC, MPL, OFL), веса модели эмбеддингов `intfloat/multilingual-e5-small` — MIT; исключение — GSAP (бесплатная Standard License), подробности в `docs/solution.md` §11.

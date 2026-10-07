@@ -172,6 +172,9 @@ export type VacancyStatus = S["VacancyStatus"];
 export type VacancyInput = S["VacancyInput"];
 export type Vacancy = S["Vacancy"];
 export type PublicVacancy = S["PublicVacancy"];
+export type RelatedVacancies = S["RelatedVacancies"];
+export type RelatedVacancy = S["RelatedVacancy"];
+export type RelatedMethod = S["RelatedMethod"];
 
 export type TrustLevel = S["TrustLevel"];
 export type TrustReason = S["TrustReason"];

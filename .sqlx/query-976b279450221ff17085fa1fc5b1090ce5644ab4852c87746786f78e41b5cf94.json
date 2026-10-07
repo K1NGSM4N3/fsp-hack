@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.id,\n                  (SELECT count(*) FROM unnest(v.skills) s WHERE s = ANY(q.skills))::float8\n                    / greatest(cardinality(q.skills), 1) AS \"similarity!\"\n           FROM vacancies q\n           JOIN vacancies v ON v.specialization = q.specialization AND v.id <> q.id\n                            AND v.status = 'published'\n           WHERE q.id = $1\n           ORDER BY 2 DESC, v.published_at DESC\n           LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "similarity!",
+        "type_info": "Float8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "976b279450221ff17085fa1fc5b1090ce5644ab4852c87746786f78e41b5cf94"
+}

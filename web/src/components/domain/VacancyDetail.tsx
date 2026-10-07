@@ -15,6 +15,7 @@ import { GRADE_LABEL, SPEC_LONG_LABEL, WORK_FORMAT_LABEL } from "@/lib/labels";
 import { skillName } from "@/lib/skills";
 import { CategoryBadge, SalaryRange } from "./Category";
 import { DomainBadge } from "./DomainBadge";
+import { SimilarVacancies } from "./SimilarVacancies";
 import { ApplicationStatusBadge } from "./StatusBadges";
 
 function ApplyBox({ vacancyId, loginNext }: { vacancyId: string; loginNext: string }) {
@@ -176,6 +177,7 @@ export function VacancyDetail({ id, backHref, backLabel, seed }: { id: string; b
               <p className="text-sm leading-relaxed text-ink-muted">{v.company_description}</p>
             </Card>
           )}
+          <SimilarVacancies id={v.id} hrefBase={backHref} />
         </div>
         <div className="space-y-4">
           <ApplyBox vacancyId={v.id} loginNext={`/vacancies/${v.id}`} />

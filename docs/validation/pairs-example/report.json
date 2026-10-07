@@ -3,6 +3,11 @@
   "k": 10,
   "relevant_from": 2,
   "neutral_test_strength": 0.5,
+  "text": {
+    "by_meaning": true,
+    "model": "multilingual-e5-small@614241f",
+    "fallback": null
+  },
   "coverage": {
     "vacancies": 5,
     "vacancy_specialization": {
@@ -42,24 +47,24 @@
     "vacancies": 5,
     "ours": {
       "precision_at_5": {
-        "mean": 0.76,
-        "ci95": 0.07840000000000003
+        "mean": 0.72,
+        "ci95": 0.09601999791710061
       },
       "precision_at_k": {
         "mean": 0.41999999999999993,
         "ci95": 0.09601999791710059
       },
       "ndcg_at_k": {
-        "mean": 0.9580868623844825,
-        "ci95": 0.03182033933640579
+        "mean": 0.9207422727251512,
+        "ci95": 0.09180802544519014
       },
       "average_precision": {
-        "mean": 0.9263095238095239,
-        "ci95": 0.07429239530396095
+        "mean": 0.8885317460317459,
+        "ci95": 0.12247520736766722
       },
       "reciprocal_rank": {
-        "mean": 1.0,
-        "ci95": 0.0
+        "mean": 0.9,
+        "ci95": 0.196
       },
       "judged_at_k": {
         "mean": 1.0,
@@ -130,10 +135,10 @@
       "labels": 19,
       "relevant_labels": 6,
       "ours": {
-        "precision_at_5": 0.8,
+        "precision_at_5": 0.6,
         "precision_at_k": 0.6,
-        "ndcg_at_k": 0.9859645001557901,
-        "average_precision": 0.8773809523809524,
+        "ndcg_at_k": 0.9617107354867953,
+        "average_precision": 0.8134920634920634,
         "reciprocal_rank": 1.0,
         "judged_at_k": 1.0
       },
@@ -149,7 +154,7 @@
         {
           "rank": 1,
           "candidate_id": "c01",
-          "score": 65.3,
+          "score": 65.29215,
           "relevance": 3,
           "category": {
             "specialization": "backend",
@@ -160,7 +165,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 65.3,
+            "total": 65.29215,
             "features": [
               {
                 "key": "must",
@@ -220,11 +225,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 1.0,
+                "label_ru": "Близость описаний",
+                "value": 0.99803877,
                 "weight": 0.04,
-                "contribution": 4.0,
-                "explanation_ru": "Близость описания опыта к задачам: 100 %; Опыт в отрасли: Финтех и банки"
+                "contribution": 3.992155,
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Опыт в отрасли: Финтех и банки"
               }
             ],
             "skills": [
@@ -294,7 +299,7 @@
         {
           "rank": 2,
           "candidate_id": "c09",
-          "score": 63.083332,
+          "score": 62.633335,
           "relevance": 3,
           "category": {
             "specialization": "backend",
@@ -302,7 +307,7 @@
           },
           "notes": [],
           "breakdown": {
-            "total": 63.083332,
+            "total": 62.633335,
             "features": [
               {
                 "key": "must",
@@ -362,11 +367,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.112500004,
+                "label_ru": "Близость описаний",
+                "value": 0.0,
                 "weight": 0.04,
-                "contribution": 0.45000002,
-                "explanation_ru": "Близость описания опыта к задачам: 19 %; Нет опыта в отраслях запроса"
+                "contribution": 0.0,
+                "explanation_ru": "Близость описаний по смыслу: 0 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -436,153 +441,8 @@
         },
         {
           "rank": 3,
-          "candidate_id": "c08",
-          "score": 61.783337,
-          "relevance": 3,
-          "category": {
-            "specialization": "backend",
-            "grade": "middle"
-          },
-          "notes": [
-            "Категория «Бэкенд-разработка · Middle» — из резюме, не подтверждена тестом",
-            "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
-          ],
-          "breakdown": {
-            "total": 61.783337,
-            "features": [
-              {
-                "key": "must",
-                "label_ru": "Обязательные навыки",
-                "value": 0.7,
-                "weight": 0.41,
-                "contribution": 28.699999,
-                "explanation_ru": "Обязательные навыки: 3 из 3"
-              },
-              {
-                "key": "test",
-                "label_ru": "Результат теста",
-                "value": 0.5,
-                "weight": 0.1,
-                "contribution": 5.0,
-                "explanation_ru": "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
-              },
-              {
-                "key": "grade",
-                "label_ru": "Грейд",
-                "value": 1.0,
-                "weight": 0.15,
-                "contribution": 15.000001,
-                "explanation_ru": "Грейд Middle — как в запросе"
-              },
-              {
-                "key": "fsp",
-                "label_ru": "Достижения ФСП",
-                "value": 0.0,
-                "weight": 0.1,
-                "contribution": 0.0,
-                "explanation_ru": "Нет данных ФСП"
-              },
-              {
-                "key": "nice",
-                "label_ru": "Желательные навыки",
-                "value": 0.46666667,
-                "weight": 0.08,
-                "contribution": 3.7333333,
-                "explanation_ru": "Желательные навыки: 2 из 3 — Kubernetes, gRPC"
-              },
-              {
-                "key": "salary",
-                "label_ru": "Зарплатные ожидания",
-                "value": 1.0,
-                "weight": 0.07,
-                "contribution": 7.0,
-                "explanation_ru": "Ожидания 260 000 ₽ — в пределах вилки"
-              },
-              {
-                "key": "fresh",
-                "label_ru": "Актуальность профиля",
-                "value": 0.0,
-                "weight": 0.05,
-                "contribution": 0.0,
-                "explanation_ru": "Нет данных об активности"
-              },
-              {
-                "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.5875,
-                "weight": 0.04,
-                "contribution": 2.35,
-                "explanation_ru": "Близость описания опыта к задачам: 31 %; Опыт в отрасли: Финтех и банки"
-              }
-            ],
-            "skills": [
-              {
-                "skill": "Go",
-                "slug": "go",
-                "required": true,
-                "matched_by": "Go",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "PostgreSQL",
-                "slug": "postgresql",
-                "required": true,
-                "matched_by": "PostgreSQL",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Apache Kafka",
-                "slug": "kafka",
-                "required": true,
-                "matched_by": "Apache Kafka",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Kubernetes",
-                "slug": "kubernetes",
-                "required": false,
-                "matched_by": "Kubernetes",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Redis",
-                "slug": "redis",
-                "required": false,
-                "matched_by": null,
-                "source": null,
-                "similarity": 0.0,
-                "credit": 0.0
-              },
-              {
-                "skill": "gRPC",
-                "slug": "grpc",
-                "required": false,
-                "matched_by": "gRPC",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              }
-            ],
-            "reasons": [
-              "Все обязательные навыки: Go, PostgreSQL, Apache Kafka",
-              "Ожидания 260 000 ₽ — в пределах вилки",
-              "Грейд Middle — как в запросе"
-            ],
-            "gaps": []
-          }
-        },
-        {
-          "rank": 4,
           "candidate_id": "c05",
-          "score": 61.750008,
+          "score": 62.48814,
           "relevance": 1,
           "category": {
             "specialization": "backend",
@@ -593,7 +453,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 61.750008,
+            "total": 62.48814,
             "features": [
               {
                 "key": "must",
@@ -653,11 +513,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.8125,
+                "label_ru": "Близость описаний",
+                "value": 0.9970336,
                 "weight": 0.04,
-                "contribution": 3.25,
-                "explanation_ru": "Близость описания опыта к задачам: 69 %; Опыт в отрасли: Финтех и банки"
+                "contribution": 3.9881344,
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Опыт в отрасли: Финтех и банки"
               }
             ],
             "skills": [
@@ -725,17 +585,20 @@
           }
         },
         {
-          "rank": 5,
-          "candidate_id": "c10",
-          "score": 57.9,
-          "relevance": 2,
+          "rank": 4,
+          "candidate_id": "c08",
+          "score": 61.033333,
+          "relevance": 3,
           "category": {
             "specialization": "backend",
             "grade": "middle"
           },
-          "notes": [],
+          "notes": [
+            "Категория «Бэкенд-разработка · Middle» — из резюме, не подтверждена тестом",
+            "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
+          ],
           "breakdown": {
-            "total": 57.9,
+            "total": 61.033333,
             "features": [
               {
                 "key": "must",
@@ -748,10 +611,10 @@
               {
                 "key": "test",
                 "label_ru": "Результат теста",
-                "value": 0.35,
+                "value": 0.5,
                 "weight": 0.1,
-                "contribution": 3.5,
-                "explanation_ru": "Результат теста выше 35 % диапазона грейда Middle"
+                "contribution": 5.0,
+                "explanation_ru": "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
               },
               {
                 "key": "grade",
@@ -772,10 +635,10 @@
               {
                 "key": "nice",
                 "label_ru": "Желательные навыки",
-                "value": 0.35,
+                "value": 0.46666667,
                 "weight": 0.08,
-                "contribution": 2.8,
-                "explanation_ru": "Желательные навыки: 1 из 3 — gRPC"
+                "contribution": 3.7333333,
+                "explanation_ru": "Желательные навыки: 2 из 3 — Kubernetes, gRPC"
               },
               {
                 "key": "salary",
@@ -783,7 +646,7 @@
                 "value": 1.0,
                 "weight": 0.07,
                 "contribution": 7.0,
-                "explanation_ru": "Ожидания 240 000 ₽ — ниже вилки"
+                "explanation_ru": "Ожидания 260 000 ₽ — в пределах вилки"
               },
               {
                 "key": "fresh",
@@ -795,11 +658,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.22500001,
+                "label_ru": "Близость описаний",
+                "value": 0.4,
                 "weight": 0.04,
-                "contribution": 0.90000004,
-                "explanation_ru": "Близость описания опыта к задачам: 38 %; Нет опыта в отраслях запроса"
+                "contribution": 1.6,
+                "explanation_ru": "Близость описаний по смыслу: 0 %; Опыт в отрасли: Финтех и банки"
               }
             ],
             "skills": [
@@ -834,10 +697,10 @@
                 "skill": "Kubernetes",
                 "slug": "kubernetes",
                 "required": false,
-                "matched_by": "Docker",
+                "matched_by": "Kubernetes",
                 "source": "resume",
-                "similarity": 0.5,
-                "credit": 0.35
+                "similarity": 1.0,
+                "credit": 0.7
               },
               {
                 "skill": "Redis",
@@ -860,17 +723,16 @@
             ],
             "reasons": [
               "Все обязательные навыки: Go, PostgreSQL, Apache Kafka",
-              "Ожидания 240 000 ₽ — ниже вилки",
-              "Грейд Middle — как в запросе",
-              "Желательные навыки: gRPC"
+              "Ожидания 260 000 ₽ — в пределах вилки",
+              "Грейд Middle — как в запросе"
             ],
             "gaps": []
           }
         },
         {
-          "rank": 6,
+          "rank": 5,
           "candidate_id": "c13",
-          "score": 57.85051,
+          "score": 57.668568,
           "relevance": 1,
           "category": {
             "specialization": "backend",
@@ -881,7 +743,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 57.85051,
+            "total": 57.668568,
             "features": [
               {
                 "key": "must",
@@ -941,11 +803,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.375,
+                "label_ru": "Близость описаний",
+                "value": 0.32951373,
                 "weight": 0.04,
-                "contribution": 1.5,
-                "explanation_ru": "Близость описания опыта к задачам: 62 %; Нет опыта в отраслях запроса"
+                "contribution": 1.3180549,
+                "explanation_ru": "Близость описаний по смыслу: 55 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -1015,9 +877,152 @@
           }
         },
         {
+          "rank": 6,
+          "candidate_id": "c10",
+          "score": 57.26136,
+          "relevance": 2,
+          "category": {
+            "specialization": "backend",
+            "grade": "middle"
+          },
+          "notes": [],
+          "breakdown": {
+            "total": 57.26136,
+            "features": [
+              {
+                "key": "must",
+                "label_ru": "Обязательные навыки",
+                "value": 0.7,
+                "weight": 0.41,
+                "contribution": 28.699999,
+                "explanation_ru": "Обязательные навыки: 3 из 3"
+              },
+              {
+                "key": "test",
+                "label_ru": "Результат теста",
+                "value": 0.35,
+                "weight": 0.1,
+                "contribution": 3.5,
+                "explanation_ru": "Результат теста выше 35 % диапазона грейда Middle"
+              },
+              {
+                "key": "grade",
+                "label_ru": "Грейд",
+                "value": 1.0,
+                "weight": 0.15,
+                "contribution": 15.000001,
+                "explanation_ru": "Грейд Middle — как в запросе"
+              },
+              {
+                "key": "fsp",
+                "label_ru": "Достижения ФСП",
+                "value": 0.0,
+                "weight": 0.1,
+                "contribution": 0.0,
+                "explanation_ru": "Нет данных ФСП"
+              },
+              {
+                "key": "nice",
+                "label_ru": "Желательные навыки",
+                "value": 0.35,
+                "weight": 0.08,
+                "contribution": 2.8,
+                "explanation_ru": "Желательные навыки: 1 из 3 — gRPC"
+              },
+              {
+                "key": "salary",
+                "label_ru": "Зарплатные ожидания",
+                "value": 1.0,
+                "weight": 0.07,
+                "contribution": 7.0,
+                "explanation_ru": "Ожидания 240 000 ₽ — ниже вилки"
+              },
+              {
+                "key": "fresh",
+                "label_ru": "Актуальность профиля",
+                "value": 0.0,
+                "weight": 0.05,
+                "contribution": 0.0,
+                "explanation_ru": "Нет данных об активности"
+              },
+              {
+                "key": "text",
+                "label_ru": "Близость описаний",
+                "value": 0.06533957,
+                "weight": 0.04,
+                "contribution": 0.2613583,
+                "explanation_ru": "Близость описаний по смыслу: 11 %; Нет опыта в отраслях запроса"
+              }
+            ],
+            "skills": [
+              {
+                "skill": "Go",
+                "slug": "go",
+                "required": true,
+                "matched_by": "Go",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "PostgreSQL",
+                "slug": "postgresql",
+                "required": true,
+                "matched_by": "PostgreSQL",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Apache Kafka",
+                "slug": "kafka",
+                "required": true,
+                "matched_by": "Apache Kafka",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Kubernetes",
+                "slug": "kubernetes",
+                "required": false,
+                "matched_by": "Docker",
+                "source": "resume",
+                "similarity": 0.5,
+                "credit": 0.35
+              },
+              {
+                "skill": "Redis",
+                "slug": "redis",
+                "required": false,
+                "matched_by": null,
+                "source": null,
+                "similarity": 0.0,
+                "credit": 0.0
+              },
+              {
+                "skill": "gRPC",
+                "slug": "grpc",
+                "required": false,
+                "matched_by": "gRPC",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              }
+            ],
+            "reasons": [
+              "Все обязательные навыки: Go, PostgreSQL, Apache Kafka",
+              "Ожидания 240 000 ₽ — ниже вилки",
+              "Грейд Middle — как в запросе",
+              "Желательные навыки: gRPC"
+            ],
+            "gaps": []
+          }
+        },
+        {
           "rank": 7,
           "candidate_id": "c02",
-          "score": 54.766666,
+          "score": 54.711575,
           "relevance": 2,
           "category": {
             "specialization": "backend",
@@ -1028,7 +1033,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 54.766666,
+            "total": 54.711575,
             "features": [
               {
                 "key": "must",
@@ -1088,11 +1093,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.26250002,
+                "label_ru": "Близость описаний",
+                "value": 0.24872746,
                 "weight": 0.04,
-                "contribution": 1.0500001,
-                "explanation_ru": "Близость описания опыта к задачам: 44 %; Нет опыта в отраслях запроса"
+                "contribution": 0.9949098,
+                "explanation_ru": "Близость описаний по смыслу: 41 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -1164,7 +1169,7 @@
         {
           "rank": 8,
           "candidate_id": "c31",
-          "score": 51.066666,
+          "score": 51.63321,
           "relevance": 2,
           "category": {
             "specialization": "backend",
@@ -1175,7 +1180,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 51.066666,
+            "total": 51.63321,
             "features": [
               {
                 "key": "must",
@@ -1235,11 +1240,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.3,
+                "label_ru": "Близость описаний",
+                "value": 0.4416348,
                 "weight": 0.04,
-                "contribution": 1.2,
-                "explanation_ru": "Близость описания опыта к задачам: 50 %; Нет опыта в отраслях запроса"
+                "contribution": 1.7665392,
+                "explanation_ru": "Близость описаний по смыслу: 74 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -1311,7 +1316,7 @@
         {
           "rank": 9,
           "candidate_id": "c03",
-          "score": 48.05448,
+          "score": 48.047012,
           "relevance": 1,
           "category": {
             "specialization": "backend",
@@ -1322,7 +1327,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 48.05448,
+            "total": 48.047012,
             "features": [
               {
                 "key": "must",
@@ -1382,11 +1387,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.8125,
+                "label_ru": "Близость описаний",
+                "value": 0.8106332,
                 "weight": 0.04,
-                "contribution": 3.25,
-                "explanation_ru": "Близость описания опыта к задачам: 69 %; Опыт в отрасли: Финтех и банки"
+                "contribution": 3.2425327,
+                "explanation_ru": "Близость описаний по смыслу: 68 %; Опыт в отрасли: Финтех и банки"
               }
             ],
             "skills": [
@@ -1447,7 +1452,7 @@
             ],
             "reasons": [
               "Все обязательные навыки: Go, PostgreSQL, Apache Kafka",
-              "Опыт близок к задачам команды",
+              "Опыт близок к задаче по смыслу",
               "Опыт в отрасли: Финтех и банки"
             ],
             "gaps": [
@@ -1459,7 +1464,7 @@
         {
           "rank": 10,
           "candidate_id": "c06",
-          "score": 45.1,
+          "score": 43.6,
           "relevance": 1,
           "category": {
             "specialization": "backend",
@@ -1470,7 +1475,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 45.1,
+            "total": 43.6,
             "features": [
               {
                 "key": "must",
@@ -1530,11 +1535,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.775,
+                "label_ru": "Близость описаний",
+                "value": 0.4,
                 "weight": 0.04,
-                "contribution": 3.1,
-                "explanation_ru": "Близость описания опыта к задачам: 62 %; Опыт в отрасли: Финтех и банки"
+                "contribution": 1.6,
+                "explanation_ru": "Близость описаний по смыслу: 0 %; Опыт в отрасли: Финтех и банки"
               }
             ],
             "skills": [
@@ -1596,7 +1601,7 @@
             "reasons": [
               "2 из 3 обязательных навыков",
               "Ожидания 320 000 ₽ — в пределах вилки",
-              "Опыт близок к задачам команды"
+              "Желательные навыки: Kubernetes"
             ],
             "gaps": [
               "Нет обязательного навыка: Go",
@@ -1785,7 +1790,7 @@
         {
           "rank": 1,
           "candidate_id": "c21",
-          "score": 70.936104,
+          "score": 70.13502,
           "relevance": 3,
           "category": {
             "specialization": "frontend",
@@ -1793,7 +1798,7 @@
           },
           "notes": [],
           "breakdown": {
-            "total": 70.936104,
+            "total": 70.13502,
             "features": [
               {
                 "key": "must",
@@ -1853,11 +1858,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.41250002,
+                "label_ru": "Близость описаний",
+                "value": 0.21222775,
                 "weight": 0.04,
-                "contribution": 1.6500001,
-                "explanation_ru": "Близость описания опыта к задачам: 69 %; Нет опыта в отраслях запроса"
+                "contribution": 0.848911,
+                "explanation_ru": "Близость описаний по смыслу: 35 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -1990,11 +1995,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
+                "label_ru": "Близость описаний",
                 "value": 0.6,
                 "weight": 0.04,
                 "contribution": 2.4,
-                "explanation_ru": "Близость описания опыта к задачам: 100 %; Нет опыта в отраслях запроса"
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -2055,7 +2060,7 @@
         {
           "rank": 3,
           "candidate_id": "c24",
-          "score": 60.83334,
+          "score": 59.63334,
           "relevance": 2,
           "category": {
             "specialization": "frontend",
@@ -2066,7 +2071,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 60.83334,
+            "total": 59.63334,
             "features": [
               {
                 "key": "must",
@@ -2126,11 +2131,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.3,
+                "label_ru": "Близость описаний",
+                "value": 0.0,
                 "weight": 0.04,
-                "contribution": 1.2,
-                "explanation_ru": "Близость описания опыта к задачам: 50 %; Нет опыта в отраслях запроса"
+                "contribution": 0.0,
+                "explanation_ru": "Близость описаний по смыслу: 0 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -2193,7 +2198,7 @@
         {
           "rank": 4,
           "candidate_id": "c12",
-          "score": 58.860004,
+          "score": 58.49193,
           "relevance": 1,
           "category": {
             "specialization": "frontend",
@@ -2204,7 +2209,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 58.860004,
+            "total": 58.49193,
             "features": [
               {
                 "key": "must",
@@ -2264,11 +2269,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.3,
+                "label_ru": "Близость описаний",
+                "value": 0.2079814,
                 "weight": 0.04,
-                "contribution": 1.2,
-                "explanation_ru": "Близость описания опыта к задачам: 50 %; Нет опыта в отраслях запроса"
+                "contribution": 0.8319256,
+                "explanation_ru": "Близость описаний по смыслу: 35 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -2329,7 +2334,7 @@
         {
           "rank": 5,
           "candidate_id": "c15",
-          "score": 55.783337,
+          "score": 55.558884,
           "relevance": 3,
           "category": {
             "specialization": "frontend",
@@ -2340,7 +2345,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 55.783337,
+            "total": 55.558884,
             "features": [
               {
                 "key": "must",
@@ -2400,11 +2405,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.4875,
+                "label_ru": "Близость описаний",
+                "value": 0.4313869,
                 "weight": 0.04,
-                "contribution": 1.95,
-                "explanation_ru": "Близость описания опыта к задачам: 81 %; Нет опыта в отраслях запроса"
+                "contribution": 1.7255476,
+                "explanation_ru": "Близость описаний по смыслу: 72 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -2467,7 +2472,7 @@
         {
           "rank": 6,
           "candidate_id": "c23",
-          "score": 54.88334,
+          "score": 55.107056,
           "relevance": 1,
           "category": {
             "specialization": "frontend",
@@ -2478,7 +2483,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 54.88334,
+            "total": 55.107056,
             "features": [
               {
                 "key": "must",
@@ -2538,11 +2543,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.26250002,
+                "label_ru": "Близость описаний",
+                "value": 0.31843007,
                 "weight": 0.04,
-                "contribution": 1.0500001,
-                "explanation_ru": "Близость описания опыта к задачам: 44 %; Нет опыта в отраслях запроса"
+                "contribution": 1.2737203,
+                "explanation_ru": "Близость описаний по смыслу: 53 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -2605,7 +2610,7 @@
         {
           "rank": 7,
           "candidate_id": "c16",
-          "score": 51.360004,
+          "score": 51.339508,
           "relevance": 1,
           "category": {
             "specialization": "frontend",
@@ -2616,7 +2621,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 51.360004,
+            "total": 51.339508,
             "features": [
               {
                 "key": "must",
@@ -2676,11 +2681,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.3,
+                "label_ru": "Близость описаний",
+                "value": 0.2948756,
                 "weight": 0.04,
-                "contribution": 1.2,
-                "explanation_ru": "Близость описания опыта к задачам: 50 %; Нет опыта в отраслях запроса"
+                "contribution": 1.1795024,
+                "explanation_ru": "Близость описаний по смыслу: 49 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -2732,8 +2737,7 @@
             ],
             "reasons": [
               "Все обязательные навыки: React, TypeScript, Redux",
-              "Ожидания 250 000 ₽ — ниже вилки",
-              "Опыт близок к задачам команды"
+              "Ожидания 250 000 ₽ — ниже вилки"
             ],
             "gaps": [
               "Грейд Middle — ниже запрошенного"
@@ -2743,7 +2747,7 @@
         {
           "rank": 8,
           "candidate_id": "c17",
-          "score": 41.593334,
+          "score": 41.083775,
           "relevance": 1,
           "category": {
             "specialization": "frontend",
@@ -2754,7 +2758,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 41.593334,
+            "total": 41.083775,
             "features": [
               {
                 "key": "must",
@@ -2814,11 +2818,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.3,
+                "label_ru": "Близость описаний",
+                "value": 0.1726101,
                 "weight": 0.04,
-                "contribution": 1.2,
-                "explanation_ru": "Близость описания опыта к задачам: 50 %; Нет опыта в отраслях запроса"
+                "contribution": 0.6904404,
+                "explanation_ru": "Близость описаний по смыслу: 29 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -2870,8 +2874,7 @@
             ],
             "reasons": [
               "Ожидания 360 000 ₽ — в пределах вилки",
-              "Грейд Senior — как в запросе",
-              "Опыт близок к задачам команды"
+              "Грейд Senior — как в запросе"
             ],
             "gaps": [
               "Вместо React — близкий навык Vue.js",
@@ -2882,7 +2885,7 @@
         {
           "rank": 9,
           "candidate_id": "c20",
-          "score": 40.486668,
+          "score": 40.02708,
           "relevance": 1,
           "category": {
             "specialization": "frontend",
@@ -2893,7 +2896,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 40.486668,
+            "total": 40.02708,
             "features": [
               {
                 "key": "must",
@@ -2953,11 +2956,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.26250002,
+                "label_ru": "Близость описаний",
+                "value": 0.14760438,
                 "weight": 0.04,
-                "contribution": 1.0500001,
-                "explanation_ru": "Близость описания опыта к задачам: 44 %; Нет опыта в отраслях запроса"
+                "contribution": 0.5904175,
+                "explanation_ru": "Близость описаний по смыслу: 25 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -3020,7 +3023,7 @@
         {
           "rank": 10,
           "candidate_id": "c22",
-          "score": 37.36667,
+          "score": 37.025898,
           "relevance": 0,
           "category": {
             "specialization": "frontend",
@@ -3031,7 +3034,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 37.36667,
+            "total": 37.025898,
             "features": [
               {
                 "key": "must",
@@ -3091,11 +3094,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.15,
+                "label_ru": "Близость описаний",
+                "value": 0.06480784,
                 "weight": 0.04,
-                "contribution": 0.6,
-                "explanation_ru": "Близость описания опыта к задачам: 25 %; Нет опыта в отраслях запроса"
+                "contribution": 0.25923136,
+                "explanation_ru": "Близость описаний по смыслу: 11 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -3399,11 +3402,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
+                "label_ru": "Близость описаний",
                 "value": 1.0,
                 "weight": 0.04,
                 "contribution": 4.0,
-                "explanation_ru": "Близость описания опыта к задачам: 100 %; Опыт в отрасли: E-commerce и ритейл"
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Опыт в отрасли: E-commerce и ритейл"
               }
             ],
             "skills": [
@@ -3500,7 +3503,7 @@
         {
           "rank": 2,
           "candidate_id": "c30",
-          "score": 61.966663,
+          "score": 61.017506,
           "relevance": 3,
           "category": {
             "specialization": "devops",
@@ -3508,7 +3511,7 @@
           },
           "notes": [],
           "breakdown": {
-            "total": 61.966663,
+            "total": 61.017506,
             "features": [
               {
                 "key": "must",
@@ -3568,11 +3571,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.36666667,
+                "label_ru": "Близость описаний",
+                "value": 0.12937853,
                 "weight": 0.04,
-                "contribution": 1.4666667,
-                "explanation_ru": "Близость описания опыта к задачам: 61 %; Нет опыта в отраслях запроса"
+                "contribution": 0.5175141,
+                "explanation_ru": "Близость описаний по смыслу: 22 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -3670,7 +3673,7 @@
         {
           "rank": 3,
           "candidate_id": "c34",
-          "score": 58.72667,
+          "score": 59.26,
           "relevance": 2,
           "category": {
             "specialization": "devops",
@@ -3681,7 +3684,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 58.72667,
+            "total": 59.26,
             "features": [
               {
                 "key": "must",
@@ -3741,11 +3744,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.4666667,
+                "label_ru": "Близость описаний",
+                "value": 0.6,
                 "weight": 0.04,
-                "contribution": 1.8666668,
-                "explanation_ru": "Близость описания опыта к задачам: 78 %; Нет опыта в отраслях запроса"
+                "contribution": 2.4,
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -3845,7 +3848,7 @@
         {
           "rank": 4,
           "candidate_id": "c32",
-          "score": 58.699997,
+          "score": 57.220608,
           "relevance": 2,
           "category": {
             "specialization": "devops",
@@ -3856,7 +3859,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 58.699997,
+            "total": 57.220608,
             "features": [
               {
                 "key": "must",
@@ -3916,11 +3919,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.40000004,
+                "label_ru": "Близость описаний",
+                "value": 0.030151805,
                 "weight": 0.04,
-                "contribution": 1.6000001,
-                "explanation_ru": "Близость описания опыта к задачам: 67 %; Нет опыта в отраслях запроса"
+                "contribution": 0.12060722,
+                "explanation_ru": "Близость описаний по смыслу: 5 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -4017,7 +4020,7 @@
         {
           "rank": 5,
           "candidate_id": "c29",
-          "score": 41.36,
+          "score": 42.16,
           "relevance": 1,
           "category": {
             "specialization": "devops",
@@ -4028,7 +4031,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 41.36,
+            "total": 42.16,
             "features": [
               {
                 "key": "must",
@@ -4088,11 +4091,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.40000004,
+                "label_ru": "Близость описаний",
+                "value": 0.6,
                 "weight": 0.04,
-                "contribution": 1.6000001,
-                "explanation_ru": "Близость описания опыта к задачам: 67 %; Нет опыта в отраслях запроса"
+                "contribution": 2.4,
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -4181,7 +4184,7 @@
             "reasons": [
               "4 из 7 обязательных навыков",
               "Ожидания 120 000 ₽ — в пределах вилки",
-              "Опыт близок к задачам команды"
+              "Опыт близок к задаче по смыслу"
             ],
             "gaps": [
               "Вместо Helm — близкий навык Kubernetes",
@@ -4194,7 +4197,7 @@
         {
           "rank": 6,
           "candidate_id": "c27",
-          "score": 38.79333,
+          "score": 37.059998,
           "relevance": 1,
           "category": {
             "specialization": "devops",
@@ -4205,7 +4208,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 38.79333,
+            "total": 37.059998,
             "features": [
               {
                 "key": "must",
@@ -4265,11 +4268,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.43333334,
+                "label_ru": "Близость описаний",
+                "value": 0.0,
                 "weight": 0.04,
-                "contribution": 1.7333333,
-                "explanation_ru": "Близость описания опыта к задачам: 72 %; Нет опыта в отраслях запроса"
+                "contribution": 0.0,
+                "explanation_ru": "Близость описаний по смыслу: 0 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -4357,8 +4360,7 @@
             ],
             "reasons": [
               "4 из 7 обязательных навыков",
-              "Желательные навыки: Python",
-              "Опыт близок к задачам команды"
+              "Желательные навыки: Python"
             ],
             "gaps": [
               "Вместо Helm — близкий навык Kubernetes",
@@ -4372,7 +4374,7 @@
         {
           "rank": 7,
           "candidate_id": "c28",
-          "score": 33.956665,
+          "score": 33.188103,
           "relevance": 1,
           "category": {
             "specialization": "devops",
@@ -4383,7 +4385,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 33.956665,
+            "total": 33.188103,
             "features": [
               {
                 "key": "must",
@@ -4443,11 +4445,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.26666668,
+                "label_ru": "Близость описаний",
+                "value": 0.07452591,
                 "weight": 0.04,
-                "contribution": 1.0666667,
-                "explanation_ru": "Близость описания опыта к задачам: 44 %; Нет опыта в отраслях запроса"
+                "contribution": 0.29810363,
+                "explanation_ru": "Близость описаний по смыслу: 12 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -4716,9 +4718,9 @@
       "ours": {
         "precision_at_5": 0.8,
         "precision_at_k": 0.4,
-        "ndcg_at_k": 0.8966883444854608,
-        "average_precision": 0.8041666666666667,
-        "reciprocal_rank": 1.0,
+        "ndcg_at_k": 0.7342191608577989,
+        "average_precision": 0.6791666666666667,
+        "reciprocal_rank": 0.5,
         "judged_at_k": 1.0
       },
       "baseline": {
@@ -4732,8 +4734,336 @@
       "top": [
         {
           "rank": 1,
+          "candidate_id": "c42",
+          "score": 62.686134,
+          "relevance": 0,
+          "category": {
+            "specialization": "qa",
+            "grade": "junior"
+          },
+          "notes": [
+            "Категория «Тестирование (QA) · Junior» — из резюме, не подтверждена тестом",
+            "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
+          ],
+          "breakdown": {
+            "total": 62.686134,
+            "features": [
+              {
+                "key": "must",
+                "label_ru": "Обязательные навыки",
+                "value": 0.7,
+                "weight": 0.41,
+                "contribution": 28.699999,
+                "explanation_ru": "Обязательные навыки: 5 из 5"
+              },
+              {
+                "key": "test",
+                "label_ru": "Результат теста",
+                "value": 0.5,
+                "weight": 0.1,
+                "contribution": 5.0,
+                "explanation_ru": "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
+              },
+              {
+                "key": "grade",
+                "label_ru": "Грейд",
+                "value": 1.0,
+                "weight": 0.15,
+                "contribution": 15.000001,
+                "explanation_ru": "Грейд Junior — как в запросе"
+              },
+              {
+                "key": "fsp",
+                "label_ru": "Достижения ФСП",
+                "value": 0.0,
+                "weight": 0.1,
+                "contribution": 0.0,
+                "explanation_ru": "Нет данных ФСП"
+              },
+              {
+                "key": "nice",
+                "label_ru": "Желательные навыки",
+                "value": 0.7,
+                "weight": 0.08,
+                "contribution": 5.6,
+                "explanation_ru": "Желательные навыки: 3 из 3 — Playwright, Selenium, Нагрузочное тестирование"
+              },
+              {
+                "key": "salary",
+                "label_ru": "Зарплатные ожидания",
+                "value": 1.0,
+                "weight": 0.07,
+                "contribution": 7.0,
+                "explanation_ru": "Ожидания 70 000 ₽ — ниже вилки"
+              },
+              {
+                "key": "fresh",
+                "label_ru": "Актуальность профиля",
+                "value": 0.0,
+                "weight": 0.05,
+                "contribution": 0.0,
+                "explanation_ru": "Нет данных об активности"
+              },
+              {
+                "key": "text",
+                "label_ru": "Близость описаний",
+                "value": 0.34653306,
+                "weight": 0.04,
+                "contribution": 1.3861322,
+                "explanation_ru": "Близость описаний по смыслу: 58 %; Нет опыта в отраслях запроса"
+              }
+            ],
+            "skills": [
+              {
+                "skill": "Python",
+                "slug": "python",
+                "required": true,
+                "matched_by": "Python",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "pytest",
+                "slug": "pytest",
+                "required": true,
+                "matched_by": "pytest",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Тестирование API",
+                "slug": "api_testing",
+                "required": true,
+                "matched_by": "Тестирование API",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Postman",
+                "slug": "postman",
+                "required": true,
+                "matched_by": "Postman",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "SQL",
+                "slug": "sql",
+                "required": true,
+                "matched_by": "SQL",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Playwright",
+                "slug": "playwright",
+                "required": false,
+                "matched_by": "Playwright",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Selenium",
+                "slug": "selenium",
+                "required": false,
+                "matched_by": "Selenium",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Нагрузочное тестирование",
+                "slug": "load_testing",
+                "required": false,
+                "matched_by": "Нагрузочное тестирование",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              }
+            ],
+            "reasons": [
+              "Все 5 обязательных навыков",
+              "Ожидания 70 000 ₽ — ниже вилки",
+              "Желательные навыки: Playwright, Selenium, Нагрузочное тестирование"
+            ],
+            "gaps": []
+          }
+        },
+        {
+          "rank": 2,
+          "candidate_id": "c35",
+          "score": 62.574547,
+          "relevance": 3,
+          "category": {
+            "specialization": "qa",
+            "grade": "middle"
+          },
+          "notes": [
+            "Категория «Тестирование (QA) · Middle» — из резюме, не подтверждена тестом",
+            "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
+          ],
+          "breakdown": {
+            "total": 62.574547,
+            "features": [
+              {
+                "key": "must",
+                "label_ru": "Обязательные навыки",
+                "value": 0.658,
+                "weight": 0.41,
+                "contribution": 26.978,
+                "explanation_ru": "Обязательные навыки: 4 из 5, ещё 1 — близкими навыками"
+              },
+              {
+                "key": "test",
+                "label_ru": "Результат теста",
+                "value": 0.5,
+                "weight": 0.1,
+                "contribution": 5.0,
+                "explanation_ru": "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
+              },
+              {
+                "key": "grade",
+                "label_ru": "Грейд",
+                "value": 1.0,
+                "weight": 0.15,
+                "contribution": 15.000001,
+                "explanation_ru": "Грейд Middle — как в запросе"
+              },
+              {
+                "key": "fsp",
+                "label_ru": "Достижения ФСП",
+                "value": 0.14232135,
+                "weight": 0.1,
+                "contribution": 1.4232135,
+                "explanation_ru": "Финалист всероссийских соревнований по продуктовому программированию, 2025"
+              },
+              {
+                "key": "nice",
+                "label_ru": "Желательные навыки",
+                "value": 0.39666665,
+                "weight": 0.08,
+                "contribution": 3.1733332,
+                "explanation_ru": "Желательные навыки: 1 из 3 — Playwright"
+              },
+              {
+                "key": "salary",
+                "label_ru": "Зарплатные ожидания",
+                "value": 1.0,
+                "weight": 0.07,
+                "contribution": 7.0,
+                "explanation_ru": "Ожидания 180 000 ₽ — в пределах вилки"
+              },
+              {
+                "key": "fresh",
+                "label_ru": "Актуальность профиля",
+                "value": 0.0,
+                "weight": 0.05,
+                "contribution": 0.0,
+                "explanation_ru": "Нет данных об активности"
+              },
+              {
+                "key": "text",
+                "label_ru": "Близость описаний",
+                "value": 1.0,
+                "weight": 0.04,
+                "contribution": 4.0,
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Опыт в отрасли: Финтех и банки"
+              }
+            ],
+            "skills": [
+              {
+                "skill": "Python",
+                "slug": "python",
+                "required": true,
+                "matched_by": "Python",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "pytest",
+                "slug": "pytest",
+                "required": true,
+                "matched_by": "pytest",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Тестирование API",
+                "slug": "api_testing",
+                "required": true,
+                "matched_by": "Postman",
+                "source": "resume",
+                "similarity": 0.7,
+                "credit": 0.48999998
+              },
+              {
+                "skill": "Postman",
+                "slug": "postman",
+                "required": true,
+                "matched_by": "Postman",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "SQL",
+                "slug": "sql",
+                "required": true,
+                "matched_by": "SQL",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Playwright",
+                "slug": "playwright",
+                "required": false,
+                "matched_by": "Playwright",
+                "source": "resume",
+                "similarity": 1.0,
+                "credit": 0.7
+              },
+              {
+                "skill": "Selenium",
+                "slug": "selenium",
+                "required": false,
+                "matched_by": "Playwright",
+                "source": "resume",
+                "similarity": 0.7,
+                "credit": 0.48999998
+              },
+              {
+                "skill": "Нагрузочное тестирование",
+                "slug": "load_testing",
+                "required": false,
+                "matched_by": null,
+                "source": null,
+                "similarity": 0.0,
+                "credit": 0.0
+              }
+            ],
+            "reasons": [
+              "4 из 5 обязательных навыков",
+              "Ожидания 180 000 ₽ — в пределах вилки",
+              "Грейд Middle — как в запросе"
+            ],
+            "gaps": [
+              "Вместо Тестирование API — близкий навык Postman"
+            ]
+          }
+        },
+        {
+          "rank": 3,
           "candidate_id": "c41",
-          "score": 63.751335,
+          "score": 62.559353,
           "relevance": 3,
           "category": {
             "specialization": "qa",
@@ -4741,7 +5071,7 @@
           },
           "notes": [],
           "breakdown": {
-            "total": 63.751335,
+            "total": 62.559353,
             "features": [
               {
                 "key": "must",
@@ -4801,11 +5131,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.53333336,
+                "label_ru": "Близость описаний",
+                "value": 0.235339,
                 "weight": 0.04,
-                "contribution": 2.1333334,
-                "explanation_ru": "Близость описания опыта к задачам: 89 %; Нет опыта в отраслях запроса"
+                "contribution": 0.941356,
+                "explanation_ru": "Близость описаний по смыслу: 39 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -4894,337 +5224,9 @@
           }
         },
         {
-          "rank": 2,
-          "candidate_id": "c42",
-          "score": 63.7,
-          "relevance": 0,
-          "category": {
-            "specialization": "qa",
-            "grade": "junior"
-          },
-          "notes": [
-            "Категория «Тестирование (QA) · Junior» — из резюме, не подтверждена тестом",
-            "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
-          ],
-          "breakdown": {
-            "total": 63.7,
-            "features": [
-              {
-                "key": "must",
-                "label_ru": "Обязательные навыки",
-                "value": 0.7,
-                "weight": 0.41,
-                "contribution": 28.699999,
-                "explanation_ru": "Обязательные навыки: 5 из 5"
-              },
-              {
-                "key": "test",
-                "label_ru": "Результат теста",
-                "value": 0.5,
-                "weight": 0.1,
-                "contribution": 5.0,
-                "explanation_ru": "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
-              },
-              {
-                "key": "grade",
-                "label_ru": "Грейд",
-                "value": 1.0,
-                "weight": 0.15,
-                "contribution": 15.000001,
-                "explanation_ru": "Грейд Junior — как в запросе"
-              },
-              {
-                "key": "fsp",
-                "label_ru": "Достижения ФСП",
-                "value": 0.0,
-                "weight": 0.1,
-                "contribution": 0.0,
-                "explanation_ru": "Нет данных ФСП"
-              },
-              {
-                "key": "nice",
-                "label_ru": "Желательные навыки",
-                "value": 0.7,
-                "weight": 0.08,
-                "contribution": 5.6,
-                "explanation_ru": "Желательные навыки: 3 из 3 — Playwright, Selenium, Нагрузочное тестирование"
-              },
-              {
-                "key": "salary",
-                "label_ru": "Зарплатные ожидания",
-                "value": 1.0,
-                "weight": 0.07,
-                "contribution": 7.0,
-                "explanation_ru": "Ожидания 70 000 ₽ — ниже вилки"
-              },
-              {
-                "key": "fresh",
-                "label_ru": "Актуальность профиля",
-                "value": 0.0,
-                "weight": 0.05,
-                "contribution": 0.0,
-                "explanation_ru": "Нет данных об активности"
-              },
-              {
-                "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.6,
-                "weight": 0.04,
-                "contribution": 2.4,
-                "explanation_ru": "Близость описания опыта к задачам: 100 %; Нет опыта в отраслях запроса"
-              }
-            ],
-            "skills": [
-              {
-                "skill": "Python",
-                "slug": "python",
-                "required": true,
-                "matched_by": "Python",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "pytest",
-                "slug": "pytest",
-                "required": true,
-                "matched_by": "pytest",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Тестирование API",
-                "slug": "api_testing",
-                "required": true,
-                "matched_by": "Тестирование API",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Postman",
-                "slug": "postman",
-                "required": true,
-                "matched_by": "Postman",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "SQL",
-                "slug": "sql",
-                "required": true,
-                "matched_by": "SQL",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Playwright",
-                "slug": "playwright",
-                "required": false,
-                "matched_by": "Playwright",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Selenium",
-                "slug": "selenium",
-                "required": false,
-                "matched_by": "Selenium",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Нагрузочное тестирование",
-                "slug": "load_testing",
-                "required": false,
-                "matched_by": "Нагрузочное тестирование",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              }
-            ],
-            "reasons": [
-              "Все 5 обязательных навыков",
-              "Ожидания 70 000 ₽ — ниже вилки",
-              "Желательные навыки: Playwright, Selenium, Нагрузочное тестирование"
-            ],
-            "gaps": []
-          }
-        },
-        {
-          "rank": 3,
-          "candidate_id": "c35",
-          "score": 62.574547,
-          "relevance": 3,
-          "category": {
-            "specialization": "qa",
-            "grade": "middle"
-          },
-          "notes": [
-            "Категория «Тестирование (QA) · Middle» — из резюме, не подтверждена тестом",
-            "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
-          ],
-          "breakdown": {
-            "total": 62.574547,
-            "features": [
-              {
-                "key": "must",
-                "label_ru": "Обязательные навыки",
-                "value": 0.658,
-                "weight": 0.41,
-                "contribution": 26.978,
-                "explanation_ru": "Обязательные навыки: 4 из 5, ещё 1 — близкими навыками"
-              },
-              {
-                "key": "test",
-                "label_ru": "Результат теста",
-                "value": 0.5,
-                "weight": 0.1,
-                "contribution": 5.0,
-                "explanation_ru": "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
-              },
-              {
-                "key": "grade",
-                "label_ru": "Грейд",
-                "value": 1.0,
-                "weight": 0.15,
-                "contribution": 15.000001,
-                "explanation_ru": "Грейд Middle — как в запросе"
-              },
-              {
-                "key": "fsp",
-                "label_ru": "Достижения ФСП",
-                "value": 0.14232135,
-                "weight": 0.1,
-                "contribution": 1.4232135,
-                "explanation_ru": "Финалист всероссийских соревнований по продуктовому программированию, 2025"
-              },
-              {
-                "key": "nice",
-                "label_ru": "Желательные навыки",
-                "value": 0.39666665,
-                "weight": 0.08,
-                "contribution": 3.1733332,
-                "explanation_ru": "Желательные навыки: 1 из 3 — Playwright"
-              },
-              {
-                "key": "salary",
-                "label_ru": "Зарплатные ожидания",
-                "value": 1.0,
-                "weight": 0.07,
-                "contribution": 7.0,
-                "explanation_ru": "Ожидания 180 000 ₽ — в пределах вилки"
-              },
-              {
-                "key": "fresh",
-                "label_ru": "Актуальность профиля",
-                "value": 0.0,
-                "weight": 0.05,
-                "contribution": 0.0,
-                "explanation_ru": "Нет данных об активности"
-              },
-              {
-                "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 1.0,
-                "weight": 0.04,
-                "contribution": 4.0,
-                "explanation_ru": "Близость описания опыта к задачам: 100 %; Опыт в отрасли: Финтех и банки"
-              }
-            ],
-            "skills": [
-              {
-                "skill": "Python",
-                "slug": "python",
-                "required": true,
-                "matched_by": "Python",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "pytest",
-                "slug": "pytest",
-                "required": true,
-                "matched_by": "pytest",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Тестирование API",
-                "slug": "api_testing",
-                "required": true,
-                "matched_by": "Postman",
-                "source": "resume",
-                "similarity": 0.7,
-                "credit": 0.48999998
-              },
-              {
-                "skill": "Postman",
-                "slug": "postman",
-                "required": true,
-                "matched_by": "Postman",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "SQL",
-                "slug": "sql",
-                "required": true,
-                "matched_by": "SQL",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Playwright",
-                "slug": "playwright",
-                "required": false,
-                "matched_by": "Playwright",
-                "source": "resume",
-                "similarity": 1.0,
-                "credit": 0.7
-              },
-              {
-                "skill": "Selenium",
-                "slug": "selenium",
-                "required": false,
-                "matched_by": "Playwright",
-                "source": "resume",
-                "similarity": 0.7,
-                "credit": 0.48999998
-              },
-              {
-                "skill": "Нагрузочное тестирование",
-                "slug": "load_testing",
-                "required": false,
-                "matched_by": null,
-                "source": null,
-                "similarity": 0.0,
-                "credit": 0.0
-              }
-            ],
-            "reasons": [
-              "4 из 5 обязательных навыков",
-              "Ожидания 180 000 ₽ — в пределах вилки",
-              "Грейд Middle — как в запросе"
-            ],
-            "gaps": [
-              "Вместо Тестирование API — близкий навык Postman"
-            ]
-          }
-        },
-        {
           "rank": 4,
           "candidate_id": "c38",
-          "score": 57.444668,
+          "score": 57.978004,
           "relevance": 2,
           "category": {
             "specialization": "qa",
@@ -5235,7 +5237,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 57.444668,
+            "total": 57.978004,
             "features": [
               {
                 "key": "must",
@@ -5295,11 +5297,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.8666667,
+                "label_ru": "Близость описаний",
+                "value": 1.0,
                 "weight": 0.04,
-                "contribution": 3.4666667,
-                "explanation_ru": "Близость описания опыта к задачам: 78 %; Опыт в отрасли: Финтех и банки"
+                "contribution": 4.0,
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Опыт в отрасли: Финтех и банки"
               }
             ],
             "skills": [
@@ -5389,7 +5391,7 @@
         {
           "rank": 5,
           "candidate_id": "c44",
-          "score": 56.544666,
+          "score": 56.303024,
           "relevance": 2,
           "category": {
             "specialization": "qa",
@@ -5400,7 +5402,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 56.544666,
+            "total": 56.303024,
             "features": [
               {
                 "key": "must",
@@ -5460,11 +5462,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.9333334,
+                "label_ru": "Близость описаний",
+                "value": 0.87292254,
                 "weight": 0.04,
-                "contribution": 3.7333336,
-                "explanation_ru": "Близость описания опыта к задачам: 89 %; Опыт в отрасли: Финтех и банки"
+                "contribution": 3.4916902,
+                "explanation_ru": "Близость описаний по смыслу: 79 %; Опыт в отрасли: Финтех и банки"
               }
             ],
             "skills": [
@@ -5544,7 +5546,7 @@
             "reasons": [
               "4 из 5 обязательных навыков",
               "Грейд Middle — как в запросе",
-              "Опыт близок к задачам команды"
+              "Опыт близок к задаче по смыслу"
             ],
             "gaps": [
               "Вместо Тестирование API — близкий навык Postman",
@@ -5555,7 +5557,7 @@
         {
           "rank": 6,
           "candidate_id": "c37",
-          "score": 50.208664,
+          "score": 50.253494,
           "relevance": 1,
           "category": {
             "specialization": "qa",
@@ -5566,7 +5568,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 50.208664,
+            "total": 50.253494,
             "features": [
               {
                 "key": "must",
@@ -5626,11 +5628,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.13333334,
+                "label_ru": "Близость описаний",
+                "value": 0.14454101,
                 "weight": 0.04,
-                "contribution": 0.53333336,
-                "explanation_ru": "Близость описания опыта к задачам: 22 %; Нет опыта в отраслях запроса"
+                "contribution": 0.57816404,
+                "explanation_ru": "Близость описаний по смыслу: 24 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -5722,7 +5724,7 @@
         {
           "rank": 7,
           "candidate_id": "c43",
-          "score": 49.43533,
+          "score": 50.16363,
           "relevance": 1,
           "category": {
             "specialization": "qa",
@@ -5733,7 +5735,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 49.43533,
+            "total": 50.16363,
             "features": [
               {
                 "key": "must",
@@ -5793,11 +5795,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.26666668,
+                "label_ru": "Близость описаний",
+                "value": 0.4487422,
                 "weight": 0.04,
-                "contribution": 1.0666667,
-                "explanation_ru": "Близость описания опыта к задачам: 44 %; Нет опыта в отраслях запроса"
+                "contribution": 1.7949688,
+                "explanation_ru": "Близость описаний по смыслу: 75 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -5876,7 +5878,8 @@
             ],
             "reasons": [
               "Ожидания 200 000 ₽ — в пределах вилки",
-              "Грейд Middle — как в запросе"
+              "Грейд Middle — как в запросе",
+              "Опыт близок к задаче по смыслу"
             ],
             "gaps": [
               "Нет обязательного навыка: Python",
@@ -5888,7 +5891,7 @@
         {
           "rank": 8,
           "candidate_id": "c07",
-          "score": 46.18,
+          "score": 45.813454,
           "relevance": 1,
           "category": {
             "specialization": "qa",
@@ -5899,7 +5902,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 46.18,
+            "total": 45.813454,
             "features": [
               {
                 "key": "must",
@@ -5959,11 +5962,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.9333334,
+                "label_ru": "Близость описаний",
+                "value": 0.841697,
                 "weight": 0.04,
-                "contribution": 3.7333336,
-                "explanation_ru": "Близость описания опыта к задачам: 89 %; Опыт в отрасли: Финтех и банки"
+                "contribution": 3.366788,
+                "explanation_ru": "Близость описаний по смыслу: 74 %; Опыт в отрасли: Финтех и банки"
               }
             ],
             "skills": [
@@ -6043,7 +6046,7 @@
             "reasons": [
               "3 из 5 обязательных навыков",
               "Грейд Middle — как в запросе",
-              "Опыт близок к задачам команды"
+              "Опыт близок к задаче по смыслу"
             ],
             "gaps": [
               "Нет обязательного навыка: Python",
@@ -6055,7 +6058,7 @@
         {
           "rank": 9,
           "candidate_id": "c36",
-          "score": 43.83133,
+          "score": 42.707542,
           "relevance": 1,
           "category": {
             "specialization": "qa",
@@ -6066,7 +6069,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 43.83133,
+            "total": 42.707542,
             "features": [
               {
                 "key": "must",
@@ -6126,11 +6129,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.33333337,
+                "label_ru": "Близость описаний",
+                "value": 0.052385915,
                 "weight": 0.04,
-                "contribution": 1.3333335,
-                "explanation_ru": "Близость описания опыта к задачам: 56 %; Нет опыта в отраслях запроса"
+                "contribution": 0.20954366,
+                "explanation_ru": "Близость описаний по смыслу: 9 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -6209,8 +6212,7 @@
             ],
             "reasons": [
               "Ожидания 150 000 ₽ — в пределах вилки",
-              "Грейд Middle — как в запросе",
-              "Опыт близок к задачам команды"
+              "Грейд Middle — как в запросе"
             ],
             "gaps": [
               "Нет обязательного навыка: Python",
@@ -6400,7 +6402,7 @@
         {
           "rank": 1,
           "candidate_id": "c51",
-          "score": 64.57057,
+          "score": 63.57057,
           "relevance": 3,
           "category": {
             "specialization": "ml",
@@ -6408,7 +6410,7 @@
           },
           "notes": [],
           "breakdown": {
-            "total": 64.57057,
+            "total": 63.57057,
             "features": [
               {
                 "key": "must",
@@ -6468,11 +6470,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.25,
+                "label_ru": "Близость описаний",
+                "value": 0.0,
                 "weight": 0.04,
-                "contribution": 1.0,
-                "explanation_ru": "Близость описания опыта к задачам: 42 %; Нет опыта в отраслях запроса"
+                "contribution": 0.0,
+                "explanation_ru": "Близость описаний по смыслу: 0 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -6564,7 +6566,7 @@
         {
           "rank": 2,
           "candidate_id": "c45",
-          "score": 61.11,
+          "score": 61.21286,
           "relevance": 3,
           "category": {
             "specialization": "ml",
@@ -6575,7 +6577,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 61.11,
+            "total": 61.21286,
             "features": [
               {
                 "key": "must",
@@ -6635,11 +6637,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.95000005,
+                "label_ru": "Близость описаний",
+                "value": 0.9757143,
                 "weight": 0.04,
-                "contribution": 3.8000002,
-                "explanation_ru": "Близость описания опыта к задачам: 92 %; Опыт в отрасли: Телеком"
+                "contribution": 3.9028573,
+                "explanation_ru": "Близость описаний по смыслу: 96 %; Опыт в отрасли: Телеком"
               }
             ],
             "skills": [
@@ -6800,11 +6802,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
+                "label_ru": "Близость описаний",
                 "value": 0.6,
                 "weight": 0.04,
                 "contribution": 2.4,
-                "explanation_ru": "Близость описания опыта к задачам: 100 %; Нет опыта в отраслях запроса"
+                "explanation_ru": "Близость описаний по смыслу: 100 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -6894,7 +6896,7 @@
         {
           "rank": 4,
           "candidate_id": "c46",
-          "score": 41.95,
+          "score": 41.350002,
           "relevance": 1,
           "category": {
             "specialization": "ml",
@@ -6905,7 +6907,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 41.95,
+            "total": 41.350002,
             "features": [
               {
                 "key": "must",
@@ -6965,11 +6967,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.15,
+                "label_ru": "Близость описаний",
+                "value": 0.0,
                 "weight": 0.04,
-                "contribution": 0.6,
-                "explanation_ru": "Близость описания опыта к задачам: 25 %; Нет опыта в отраслях запроса"
+                "contribution": 0.0,
+                "explanation_ru": "Близость описаний по смыслу: 0 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -7061,7 +7063,7 @@
         {
           "rank": 5,
           "candidate_id": "c52",
-          "score": 41.671665,
+          "score": 41.0539,
           "relevance": 0,
           "category": {
             "specialization": "ml",
@@ -7072,7 +7074,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 41.671665,
+            "total": 41.0539,
             "features": [
               {
                 "key": "must",
@@ -7132,11 +7134,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.20000002,
+                "label_ru": "Близость описаний",
+                "value": 0.045558043,
                 "weight": 0.04,
-                "contribution": 0.8000001,
-                "explanation_ru": "Близость описания опыта к задачам: 33 %; Нет опыта в отраслях запроса"
+                "contribution": 0.18223217,
+                "explanation_ru": "Близость описаний по смыслу: 8 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -7228,7 +7230,7 @@
         {
           "rank": 6,
           "candidate_id": "c59",
-          "score": 41.671665,
+          "score": 40.871666,
           "relevance": 0,
           "category": {
             "specialization": "ml",
@@ -7239,7 +7241,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 41.671665,
+            "total": 40.871666,
             "features": [
               {
                 "key": "must",
@@ -7299,11 +7301,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.20000002,
+                "label_ru": "Близость описаний",
+                "value": 0.0,
                 "weight": 0.04,
-                "contribution": 0.8000001,
-                "explanation_ru": "Близость описания опыта к задачам: 33 %; Нет опыта в отраслях запроса"
+                "contribution": 0.0,
+                "explanation_ru": "Близость описаний по смыслу: 0 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -7395,7 +7397,7 @@
         {
           "rank": 7,
           "candidate_id": "c49",
-          "score": 37.48666,
+          "score": 37.034256,
           "relevance": 1,
           "category": {
             "specialization": "ml",
@@ -7406,7 +7408,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 37.48666,
+            "total": 37.034256,
             "features": [
               {
                 "key": "must",
@@ -7466,11 +7468,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.25,
+                "label_ru": "Близость описаний",
+                "value": 0.13689812,
                 "weight": 0.04,
-                "contribution": 1.0,
-                "explanation_ru": "Близость описания опыта к задачам: 42 %; Нет опыта в отраслях запроса"
+                "contribution": 0.54759246,
+                "explanation_ru": "Близость описаний по смыслу: 23 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -7562,7 +7564,7 @@
         {
           "rank": 8,
           "candidate_id": "c47",
-          "score": 35.38333,
+          "score": 34.636543,
           "relevance": 1,
           "category": {
             "specialization": "ml",
@@ -7573,7 +7575,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 35.38333,
+            "total": 34.636543,
             "features": [
               {
                 "key": "must",
@@ -7633,11 +7635,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.20000002,
+                "label_ru": "Близость описаний",
+                "value": 0.013302821,
                 "weight": 0.04,
-                "contribution": 0.8000001,
-                "explanation_ru": "Близость описания опыта к задачам: 33 %; Нет опыта в отраслях запроса"
+                "contribution": 0.053211283,
+                "explanation_ru": "Близость описаний по смыслу: 2 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -7731,7 +7733,7 @@
         {
           "rank": 9,
           "candidate_id": "c50",
-          "score": 27.766668,
+          "score": 28.125483,
           "relevance": 1,
           "category": {
             "specialization": "ml",
@@ -7742,7 +7744,7 @@
             "Результата теста нет: взято нейтральное значение — середина диапазона грейда"
           ],
           "breakdown": {
-            "total": 27.766668,
+            "total": 28.125483,
             "features": [
               {
                 "key": "must",
@@ -7802,11 +7804,11 @@
               },
               {
                 "key": "text",
-                "label_ru": "Близость опыта",
-                "value": 0.35,
+                "label_ru": "Близость описаний",
+                "value": 0.4397036,
                 "weight": 0.04,
-                "contribution": 1.4,
-                "explanation_ru": "Близость описания опыта к задачам: 58 %; Нет опыта в отраслях запроса"
+                "contribution": 1.7588145,
+                "explanation_ru": "Близость описаний по смыслу: 73 %; Нет опыта в отраслях запроса"
               }
             ],
             "skills": [
@@ -7885,7 +7887,7 @@
             ],
             "reasons": [
               "Желательные навыки: LLM",
-              "Опыт близок к задачам команды"
+              "Опыт близок к задаче по смыслу"
             ],
             "gaps": [
               "Нет обязательного навыка: Машинное обучение",
