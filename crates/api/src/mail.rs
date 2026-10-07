@@ -10,8 +10,6 @@ use crate::config::MailConfig;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MailError {
-    #[error("SMTP_URL must look like smtp://host:port")]
-    InvalidUrl,
     #[error(transparent)]
     Address(#[from] lettre::address::AddressError),
     #[error(transparent)]
@@ -35,7 +33,7 @@ pub struct Email<'a> {
 pub enum Mailer {
     Log,
     Smtp {
-        transport: AsyncSmtpTransport<Tokio1Executor>,
+        transport: Box<AsyncSmtpTransport<Tokio1Executor>>,
         from: String,
     },
 }
@@ -44,16 +42,11 @@ impl Mailer {
     pub fn new(config: &MailConfig) -> Result<Self, MailError> {
         Ok(match config {
             MailConfig::Log => Mailer::Log,
+            // `smtp://host:port` is plain SMTP (Mailpit in compose); a real mail service is
+            // `smtps://user:password@host:465` or `smtp://user:password@host:587?tls=required`.
             MailConfig::Smtp { url, from } => {
-                let rest = url
-                    .strip_prefix("smtp://")
-                    .ok_or(MailError::InvalidUrl)?
-                    .trim_end_matches('/');
-                let (host, port) = rest.split_once(':').unwrap_or((rest, "25"));
-                let port = port.parse().map_err(|_| MailError::InvalidUrl)?;
-                let transport = AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(host)
-                    .port(port)
-                    .build();
+                let transport =
+                    Box::new(AsyncSmtpTransport::<Tokio1Executor>::from_url(url)?.build());
                 Mailer::Smtp {
                     transport,
                     from: from.clone(),
@@ -119,5 +112,34 @@ impl Mailer {
                 Ok(())
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn smtp(url: &str) -> Result<Mailer, MailError> {
+        Mailer::new(&MailConfig::Smtp {
+            url: url.to_owned(),
+            from: "ФСП Таланты <no-reply@example.com>".to_owned(),
+        })
+    }
+
+    #[test]
+    fn accepts_plain_starttls_and_implicit_tls_urls() {
+        for url in [
+            "smtp://mailpit:1025",
+            "smtp://user:p%40ss@smtp.example.com:587?tls=required",
+            "smtps://user:secret@smtp.example.com:465",
+        ] {
+            assert!(smtp(url).is_ok(), "{url}");
+        }
+    }
+
+    #[test]
+    fn rejects_other_schemes() {
+        assert!(smtp("http://mailpit:1025").is_err());
+        assert!(smtp("mailpit:1025").is_err());
     }
 }
