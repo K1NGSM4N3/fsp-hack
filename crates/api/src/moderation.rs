@@ -3,6 +3,7 @@
 //! test recording lands in. Each write goes into the same transaction as its log row: an action
 //! that was not logged did not happen.
 
+use assessment::proctoring::{EventCounts, needs_confirmation};
 use catalog::Category;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -156,7 +157,7 @@ pub enum TrustAction {
     Restore,
 }
 
-pub use crate::page::{decode as decode_cursor, encode as encode_cursor};
+pub use crate::page::decode as decode_cursor;
 
 pub fn page_limit(limit: Option<i64>) -> i64 {
     crate::page::limit(limit, PAGE_DEFAULT, PAGE_MAX)
@@ -178,6 +179,82 @@ fn already_decided() -> ApiError {
     ApiError::conflict("already_decided", "По этому тесту уже есть решение")
 }
 
+/// «Требует подтверждения» before any decision. Sessions without proctoring data have no
+/// events to pair the answer pattern with, so the person-fit flag stands alone.
+pub fn flagged(aberrant: bool, counts: Option<&EventCounts>) -> bool {
+    match counts {
+        Some(c) => needs_confirmation(aberrant, c),
+        None => aberrant,
+    }
+}
+
+/// What a decision on a session depends on.
+#[derive(Debug, Clone, Copy)]
+pub struct DecisionFacts {
+    pub finished: bool,
+    pub decided: bool,
+    /// The test assigned a grade and nobody voided it.
+    pub in_force: bool,
+    /// That assignment is the candidate's category now: no later one replaced it.
+    pub assignment_current: bool,
+    pub proctoring: ProctoringMode,
+}
+
+impl DecisionFacts {
+    pub fn of(s: &db::moderation::ReviewSession, proctoring: ProctoringMode) -> Self {
+        Self {
+            finished: matches!(
+                s.status,
+                db::types::AssessmentStatus::Passed | db::types::AssessmentStatus::Failed
+            ),
+            decided: s.decision.is_some(),
+            in_force: s.assigned_at.is_some() && s.annulled_at.is_none(),
+            assignment_current: s.assignment_current,
+            proctoring,
+        }
+    }
+}
+
+pub fn check_decision(f: &DecisionFacts, decision: ReviewDecision) -> ApiResult<()> {
+    if !f.finished {
+        return Err(ApiError::conflict(
+            "session_not_finished",
+            "Решение принимается по завершённому тесту",
+        ));
+    }
+    if f.decided {
+        return Err(already_decided());
+    }
+    match decision {
+        ReviewDecision::Confirm => Ok(()),
+        ReviewDecision::Annul if !f.in_force => Err(ApiError::conflict(
+            "nothing_to_annul",
+            "Этот тест не присвоил грейд — аннулировать нечего",
+        )),
+        ReviewDecision::Retest if !f.assignment_current => Err(ApiError::conflict(
+            "retest_not_applicable",
+            "Пересдача назначается по тесту, который дал текущую категорию",
+        )),
+        ReviewDecision::Retest if f.proctoring == ProctoringMode::Off => Err(ApiError::conflict(
+            "proctoring_off",
+            "Видеозапись отключена — пересдачу с камерой назначить нельзя",
+        )),
+        ReviewDecision::Annul | ReviewDecision::Retest => Ok(()),
+    }
+}
+
+/// The decisions [`check_decision`] would accept, in the order the cabinet shows them.
+pub fn allowed_decisions(f: &DecisionFacts) -> Vec<ReviewDecision> {
+    [
+        ReviewDecision::Confirm,
+        ReviewDecision::Annul,
+        ReviewDecision::Retest,
+    ]
+    .into_iter()
+    .filter(|d| check_decision(f, *d).is_ok())
+    .collect()
+}
+
 /// Records a decision and applies it. `annul` and `retest` void the grade assignment of the
 /// session: the category falls back to the latest assignment still in force (or none), and the
 /// skills only this test confirmed are dropped. Returns whether the category changed.
@@ -190,47 +267,14 @@ pub async fn decide(
 ) -> ApiResult<bool> {
     let now = Utc::now();
     let mut tx = state.pool.begin().await?;
-    let locked = db::moderation::lock_session(&mut *tx, session_id)
+    db::moderation::lock_session(&mut *tx, session_id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    if !matches!(
-        locked.status,
-        db::types::AssessmentStatus::Passed | db::types::AssessmentStatus::Failed
-    ) {
-        return Err(ApiError::conflict(
-            "session_not_finished",
-            "Решение принимается по завершённому тесту",
-        ));
-    }
     let s = db::moderation::review_session(&mut *tx, session_id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    if s.decision.is_some() {
-        return Err(already_decided());
-    }
-    let in_force = s.assigned_at.is_some() && s.annulled_at.is_none();
-    match decision {
-        ReviewDecision::Confirm => {}
-        ReviewDecision::Annul if !in_force => {
-            return Err(ApiError::conflict(
-                "nothing_to_annul",
-                "Этот тест не присвоил грейд — аннулировать нечего",
-            ));
-        }
-        ReviewDecision::Retest if !s.assignment_current => {
-            return Err(ApiError::conflict(
-                "retest_not_applicable",
-                "Пересдача назначается по тесту, который дал текущую категорию",
-            ));
-        }
-        ReviewDecision::Retest if state.config.proctoring.mode == ProctoringMode::Off => {
-            return Err(ApiError::conflict(
-                "proctoring_off",
-                "Видеозапись отключена — пересдачу с камерой назначить нельзя",
-            ));
-        }
-        ReviewDecision::Annul | ReviewDecision::Retest => {}
-    }
+    let facts = DecisionFacts::of(&s, state.config.proctoring.mode);
+    check_decision(&facts, decision)?;
     let inserted = db::moderation::insert_review(
         &mut *tx,
         session_id,
@@ -285,7 +329,7 @@ pub async fn decide(
         category: Category::new(s.specialization.parse()?, s.claimed_grade.parse()?),
         comment: comment.to_owned(),
         category_now,
-        badge: decision == ReviewDecision::Confirm && in_force && s.assignment_current,
+        badge: decision == ReviewDecision::Confirm && facts.in_force && s.assignment_current,
     };
     let event = match decision {
         ReviewDecision::Confirm => Event::ResultConfirmed(note),
@@ -702,9 +746,7 @@ pub async fn act(
             });
         }
         (TrustAction::Freeze, _) => {
-            let days = days
-                .filter(|d| (1..=FREEZE_MAX_DAYS).contains(d))
-                .ok_or_else(|| ApiError::field("days", "Срок приостановки — от 1 до 90 дней"))?;
+            let days = freeze_days(days)?;
             let company = match kind {
                 TrustItemKind::Company => id,
                 TrustItemKind::Vacancy => {
@@ -846,6 +888,11 @@ pub async fn act(
     Ok(out)
 }
 
+fn freeze_days(days: Option<u16>) -> ApiResult<u16> {
+    days.filter(|d| (1..=FREEZE_MAX_DAYS).contains(d))
+        .ok_or_else(|| ApiError::field("days", "Срок приостановки — от 1 до 90 дней"))
+}
+
 fn kind_slug(k: TrustItemKind) -> &'static str {
     match k {
         TrustItemKind::Company => "company",
@@ -923,6 +970,8 @@ pub fn category_name(key: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use assessment::IntegrityEvent;
+
     use super::*;
 
     #[test]
@@ -931,5 +980,202 @@ mod tests {
         assert_eq!(comment("  Запись чистая  ").unwrap(), "Запись чистая");
         assert!(comment(&"я".repeat(2001)).is_err());
         assert!(comment(&"я".repeat(2000)).is_ok());
+    }
+
+    fn counts(events: &[(IntegrityEvent, u16)]) -> EventCounts {
+        events.iter().copied().collect()
+    }
+
+    #[test]
+    fn without_proctoring_the_answer_pattern_alone_flags_the_result() {
+        assert!(flagged(true, None));
+        assert!(!flagged(false, None));
+    }
+
+    #[test]
+    fn with_proctoring_an_aberrant_pattern_needs_leaving_the_test_or_pasting() {
+        assert!(!flagged(true, Some(&counts(&[]))));
+        assert!(
+            !flagged(
+                true,
+                Some(&counts(&[
+                    (IntegrityEvent::CameraLost, 2),
+                    (IntegrityEvent::RecordingFailed, 1)
+                ]))
+            ),
+            "a failing camera is not behaviour"
+        );
+        for behaviour in [
+            IntegrityEvent::TabHidden,
+            IntegrityEvent::WindowBlur,
+            IntegrityEvent::FullscreenExit,
+            IntegrityEvent::Paste,
+        ] {
+            assert!(
+                flagged(true, Some(&counts(&[(behaviour, 1)]))),
+                "{behaviour:?}"
+            );
+        }
+        assert!(
+            !flagged(
+                false,
+                Some(&counts(&[
+                    (IntegrityEvent::TabHidden, 9),
+                    (IntegrityEvent::Paste, 4)
+                ]))
+            ),
+            "events alone are not evidence"
+        );
+    }
+
+    fn facts() -> DecisionFacts {
+        DecisionFacts {
+            finished: true,
+            decided: false,
+            in_force: true,
+            assignment_current: true,
+            proctoring: ProctoringMode::Optional,
+        }
+    }
+
+    const ALL_DECISIONS: [ReviewDecision; 3] = [
+        ReviewDecision::Confirm,
+        ReviewDecision::Annul,
+        ReviewDecision::Retest,
+    ];
+
+    fn refusal(f: DecisionFacts, decision: ReviewDecision) -> (u16, &'static str, String) {
+        let err = check_decision(&f, decision).expect_err("refused");
+        let (status, code, _) = err.summary();
+        (status, code, err.to_string())
+    }
+
+    #[test]
+    fn a_passed_current_undecided_result_allows_every_decision() {
+        assert_eq!(allowed_decisions(&facts()), ALL_DECISIONS);
+        for d in ALL_DECISIONS {
+            assert!(check_decision(&facts(), d).is_ok(), "{d:?}");
+        }
+    }
+
+    #[test]
+    fn a_running_test_cannot_be_decided() {
+        let f = DecisionFacts {
+            finished: false,
+            ..facts()
+        };
+        assert!(allowed_decisions(&f).is_empty());
+        for d in ALL_DECISIONS {
+            assert_eq!(
+                refusal(f, d),
+                (
+                    409,
+                    "session_not_finished",
+                    "Решение принимается по завершённому тесту".to_owned()
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn a_decision_is_taken_once() {
+        let f = DecisionFacts {
+            decided: true,
+            ..facts()
+        };
+        assert!(allowed_decisions(&f).is_empty());
+        for d in ALL_DECISIONS {
+            assert_eq!(
+                refusal(f, d),
+                (
+                    409,
+                    "already_decided",
+                    "По этому тесту уже есть решение".to_owned()
+                )
+            );
+        }
+    }
+
+    #[test]
+    fn a_test_that_assigned_nothing_can_only_be_confirmed() {
+        let f = DecisionFacts {
+            in_force: false,
+            assignment_current: false,
+            ..facts()
+        };
+        assert_eq!(allowed_decisions(&f), [ReviewDecision::Confirm]);
+        assert_eq!(
+            refusal(f, ReviewDecision::Annul),
+            (
+                409,
+                "nothing_to_annul",
+                "Этот тест не присвоил грейд — аннулировать нечего".to_owned()
+            )
+        );
+        assert_eq!(
+            refusal(f, ReviewDecision::Retest).1,
+            "retest_not_applicable"
+        );
+    }
+
+    #[test]
+    fn a_replaced_result_can_be_annulled_but_not_retested() {
+        let f = DecisionFacts {
+            assignment_current: false,
+            ..facts()
+        };
+        assert_eq!(
+            allowed_decisions(&f),
+            [ReviewDecision::Confirm, ReviewDecision::Annul]
+        );
+        assert_eq!(
+            refusal(f, ReviewDecision::Retest),
+            (
+                409,
+                "retest_not_applicable",
+                "Пересдача назначается по тесту, который дал текущую категорию".to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn no_retest_with_the_camera_while_proctoring_is_off() {
+        let f = DecisionFacts {
+            proctoring: ProctoringMode::Off,
+            ..facts()
+        };
+        assert_eq!(
+            allowed_decisions(&f),
+            [ReviewDecision::Confirm, ReviewDecision::Annul]
+        );
+        assert_eq!(
+            refusal(f, ReviewDecision::Retest),
+            (
+                409,
+                "proctoring_off",
+                "Видеозапись отключена — пересдачу с камерой назначить нельзя".to_owned()
+            )
+        );
+    }
+
+    #[test]
+    fn freeze_lasts_one_to_ninety_days() {
+        assert_eq!(freeze_days(Some(1)).unwrap(), 1);
+        assert_eq!(freeze_days(Some(90)).unwrap(), 90);
+        for bad in [None, Some(0), Some(91)] {
+            let err = freeze_days(bad).expect_err("out of range");
+            assert_eq!(
+                err.summary(),
+                (422, "validation_failed", vec!["days"]),
+                "{bad:?}"
+            );
+            let ApiError::Validation(errors) = err else {
+                unreachable!()
+            };
+            assert_eq!(
+                serde_json::to_value(&errors).unwrap(),
+                json!({ "days": ["Срок приостановки — от 1 до 90 дней"] })
+            );
+        }
     }
 }

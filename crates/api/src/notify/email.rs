@@ -58,6 +58,67 @@ pub fn slot(rule: RateRule, now: DateTime<Utc>, history: &db::notifications::Ema
     if at <= now { Slot::Now } else { Slot::Wait(at) }
 }
 
+/// What a pass does with one recipient's queue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Plan {
+    NotDue,
+    Letter,
+    /// Everything queued moves to `until`; the kinds that skip the gap keep their own time unless
+    /// the daily cap pushes them to `urgent_until`.
+    Defer {
+        until: DateTime<Utc>,
+        urgent_until: Option<DateTime<Utc>>,
+    },
+}
+
+pub(crate) fn plan(
+    rule: RateRule,
+    now: DateTime<Utc>,
+    queued: &db::notifications::Queued,
+    history: &db::notifications::EmailHistory,
+) -> Plan {
+    if queued.due.is_none_or(|d| d > now) {
+        return Plan::NotDue;
+    }
+    let cap_only = RateRule {
+        min_gap: Duration::zero(),
+        ..rule
+    };
+    let urgent_due = queued.urgent_due.is_some_and(|d| d <= now);
+    let rule = if urgent_due { cap_only } else { rule };
+    match slot(rule, now, history) {
+        Slot::Now => Plan::Letter,
+        Slot::Wait(until) => Plan::Defer {
+            until,
+            urgent_until: match slot(cap_only, now, history) {
+                Slot::Now => None,
+                Slot::Wait(cap) => Some(cap),
+            },
+        },
+    }
+}
+
+/// What a letter still carries when it is sent: the recipient's own kinds whose email is on, and
+/// what its unsubscribe link turns off — that one kind, or every email when kinds are mixed.
+/// `None`: nothing left to send.
+pub(crate) fn letter_items(
+    events: impl IntoIterator<Item = Event>,
+    mask: EmailMask,
+    audience: Audience,
+) -> Option<(Vec<Event>, Scope)> {
+    let items: Vec<Event> = events
+        .into_iter()
+        .filter(|e| mask.allows(e.kind()) && e.kind().audience() == audience)
+        .collect();
+    let first = items.first()?.kind();
+    let scope = if items.iter().all(|e| e.kind() == first) {
+        Scope::Kind(first)
+    } else {
+        Scope::All
+    };
+    Some((items, scope))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Assembled {
     Letter(Uuid),
@@ -76,7 +137,6 @@ pub struct Outgoing {
     pub message_id: String,
     /// API endpoint for the one-click POST.
     pub list_unsubscribe: String,
-    pub kinds: Vec<NotificationKind>,
 }
 
 #[derive(Debug, Clone)]
@@ -159,27 +219,19 @@ impl EmailDispatcher {
             return Ok(Assembled::Busy);
         }
         let queued = db::notifications::queued(&mut *tx, user, &URGENT).await?;
-        if queued.due.is_none_or(|d| d > now) {
-            return Ok(Assembled::NotDue);
-        }
         let history =
             db::notifications::email_history(&mut *tx, user, now - Duration::hours(24)).await?;
-        let cap_only = RateRule {
-            min_gap: Duration::zero(),
-            ..self.rule
-        };
-        let urgent_due = queued.urgent_due.is_some_and(|d| d <= now);
-        let rule = if urgent_due { cap_only } else { self.rule };
-        let out = match slot(rule, now, &history) {
-            Slot::Wait(at) => {
-                let urgent_until = match slot(cap_only, now, &history) {
-                    Slot::Now => None,
-                    Slot::Wait(cap) => Some(cap),
-                };
-                db::notifications::defer_queued(&mut *tx, user, at, &URGENT, urgent_until).await?;
-                Assembled::Deferred(at)
+        let out = match plan(self.rule, now, &queued, &history) {
+            Plan::NotDue => return Ok(Assembled::NotDue),
+            Plan::Defer {
+                until,
+                urgent_until,
+            } => {
+                db::notifications::defer_queued(&mut *tx, user, until, &URGENT, urgent_until)
+                    .await?;
+                Assembled::Deferred(until)
             }
-            Slot::Now => {
+            Plan::Letter => {
                 let id = Uuid::now_v7();
                 db::notifications::insert_email(&mut *tx, id, user).await?;
                 db::notifications::attach_queued(&mut *tx, user, id).await?;
@@ -204,27 +256,10 @@ impl EmailDispatcher {
             Role::Employer => Audience::Employer,
             Role::Admin => return Ok(Composed::Skip("Администратору письма не отправляются")),
         };
-        let mask = EmailMask(r.email_off);
-        let items: Vec<Event> = db::notifications::email_items(pool, email_id)
-            .await?
-            .iter()
-            .filter_map(|row| Event::parse(&row.payload))
-            .filter(|e| mask.allows(e.kind()) && e.kind().audience() == audience)
-            .collect();
-        let Some(first) = items.first() else {
+        let rows = db::notifications::email_items(pool, email_id).await?;
+        let events = rows.iter().filter_map(|row| Event::parse(&row.payload));
+        let Some((items, scope)) = letter_items(events, EmailMask(r.email_off), audience) else {
             return Ok(Composed::Skip("Письма этого типа отключены"));
-        };
-        let mut kinds: Vec<NotificationKind> = items.iter().map(Event::kind).collect();
-        kinds.sort_unstable_by_key(|k| k.index());
-        kinds.dedup();
-        let scope = if items.iter().all(|e| e.kind() == first.kind()) {
-            Scope::Kind(first.kind())
-        } else {
-            Scope::All
-        };
-        let label = match scope {
-            Scope::Kind(k) => k.title(),
-            Scope::All => "все письма",
         };
         let key = self.state.crypto.derive_key(token::KEY_PURPOSE);
         let public_url = &self.state.config.public_url;
@@ -235,7 +270,7 @@ impl EmailDispatcher {
                 public_url,
                 audience,
                 unsubscribe_url: &page,
-                unsubscribe_label: label,
+                unsubscribe_label: scope.label(),
             },
         );
         Ok(Composed::Ready(Box::new(Outgoing {
@@ -243,7 +278,6 @@ impl EmailDispatcher {
             letter,
             message_id: format!("<{email_id}@{}>", host(public_url)),
             list_unsubscribe: endpoint,
-            kinds,
         })))
     }
 
@@ -336,6 +370,7 @@ pub enum ComposeError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::notify::{AcceptedNote, InvitationNote};
 
     fn at(min: i64) -> DateTime<Utc> {
         DateTime::from_timestamp(1_790_000_000, 0).unwrap() + Duration::minutes(min)
@@ -395,5 +430,221 @@ mod tests {
         assert_eq!(host("http://localhost:3000"), "localhost");
         assert_eq!(host("https://x.ru/base"), "x.ru");
         assert_eq!(host(""), "localhost");
+    }
+
+    fn queued(due: Option<i64>, urgent: Option<i64>) -> db::notifications::Queued {
+        db::notifications::Queued {
+            due: due.map(at),
+            urgent_due: urgent.map(at),
+        }
+    }
+
+    #[test]
+    fn nothing_goes_while_every_item_is_in_its_hold() {
+        let empty = history(0, None, None);
+        assert_eq!(
+            plan(RULE, at(0), &queued(Some(2), Some(2)), &empty),
+            Plan::NotDue
+        );
+        assert_eq!(plan(RULE, at(0), &queued(None, None), &empty), Plan::NotDue);
+    }
+
+    #[test]
+    fn first_due_item_makes_a_letter_at_once() {
+        let empty = history(0, None, None);
+        assert_eq!(
+            plan(RULE, at(2), &queued(Some(2), None), &empty),
+            Plan::Letter
+        );
+    }
+
+    #[test]
+    fn within_the_gap_the_queue_waits_for_it_and_urgent_items_keep_their_time() {
+        let h = history(1, Some(0), Some(0));
+        assert_eq!(
+            plan(RULE, at(5), &queued(Some(5), None), &h),
+            Plan::Defer {
+                until: at(10),
+                urgent_until: None
+            }
+        );
+    }
+
+    #[test]
+    fn a_due_invitation_skips_the_gap_under_the_cap() {
+        let h = history(1, Some(0), Some(0));
+        assert_eq!(
+            plan(RULE, at(5), &queued(Some(3), Some(5)), &h),
+            Plan::Letter
+        );
+    }
+
+    #[test]
+    fn an_invitation_still_in_its_hold_does_not_lift_the_gap() {
+        let h = history(1, Some(0), Some(0));
+        assert_eq!(
+            plan(RULE, at(5), &queued(Some(3), Some(8)), &h),
+            Plan::Defer {
+                until: at(10),
+                urgent_until: None
+            }
+        );
+    }
+
+    #[test]
+    fn daily_cap_holds_back_invitations_too_until_the_oldest_letter_leaves_the_window() {
+        let h = history(3, Some(100), Some(20));
+        let window_ends = at(20 + 24 * 60);
+        assert_eq!(
+            plan(RULE, at(200), &queued(Some(200), Some(200)), &h),
+            Plan::Defer {
+                until: window_ends,
+                urgent_until: Some(window_ends)
+            }
+        );
+        assert_eq!(
+            plan(RULE, at(200), &queued(Some(200), None), &h),
+            Plan::Defer {
+                until: window_ends,
+                urgent_until: Some(window_ends)
+            }
+        );
+    }
+
+    #[test]
+    fn with_both_gap_and_cap_the_queue_waits_for_the_later_one() {
+        let window_ends = at(20 + 24 * 60);
+        let cap_later = history(3, Some(100), Some(20));
+        assert_eq!(
+            plan(RULE, at(105), &queued(Some(105), None), &cap_later),
+            Plan::Defer {
+                until: window_ends,
+                urgent_until: Some(window_ends)
+            }
+        );
+        let gap_later = history(3, Some(20 + 24 * 60 - 5), Some(20));
+        assert_eq!(
+            plan(
+                RULE,
+                at(20 + 24 * 60 - 4),
+                &queued(Some(0), None),
+                &gap_later
+            ),
+            Plan::Defer {
+                until: at(20 + 24 * 60 + 5),
+                urgent_until: Some(window_ends)
+            }
+        );
+    }
+
+    fn invitation(kind: NotificationKind) -> Event {
+        let note = InvitationNote {
+            invitation_id: Uuid::nil(),
+            company_name: "Рога и копыта".into(),
+            title: "Backend".into(),
+            salary_min: 200_000,
+            salary_max: 250_000,
+            work_format: None,
+            expires_at: at(0),
+        };
+        match kind {
+            NotificationKind::InvitationReceived => Event::InvitationReceived(note),
+            NotificationKind::InvitationExpiring => Event::InvitationExpiring(note),
+            _ => Event::InvitationWithdrawn(note),
+        }
+    }
+
+    fn accepted() -> Event {
+        Event::InvitationAccepted(AcceptedNote {
+            invitation_id: Uuid::nil(),
+            candidate_id: Uuid::nil(),
+            candidate_code: "K-7F3A2C".into(),
+            title: "Backend".into(),
+        })
+    }
+
+    fn kinds(items: &[Event]) -> Vec<NotificationKind> {
+        items.iter().map(Event::kind).collect()
+    }
+
+    #[test]
+    fn a_letter_of_one_kind_unsubscribes_from_that_kind() {
+        let (items, scope) = letter_items(
+            [
+                invitation(NotificationKind::InvitationReceived),
+                invitation(NotificationKind::InvitationReceived),
+            ],
+            EmailMask::default(),
+            Audience::Candidate,
+        )
+        .unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(scope, Scope::Kind(NotificationKind::InvitationReceived));
+        assert_eq!(scope.label(), "Новые приглашения");
+    }
+
+    #[test]
+    fn a_mixed_letter_unsubscribes_from_every_email() {
+        let (items, scope) = letter_items(
+            [
+                invitation(NotificationKind::InvitationReceived),
+                invitation(NotificationKind::InvitationWithdrawn),
+            ],
+            EmailMask::default(),
+            Audience::Candidate,
+        )
+        .unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(scope, Scope::All);
+        assert_eq!(scope.label(), "все письма");
+    }
+
+    #[test]
+    fn kinds_turned_off_after_queueing_and_other_roles_items_are_dropped() {
+        let (items, scope) = letter_items(
+            [
+                invitation(NotificationKind::InvitationWithdrawn),
+                accepted(),
+                invitation(NotificationKind::InvitationExpiring),
+            ],
+            EmailMask(NotificationKind::InvitationWithdrawn.bit()),
+            Audience::Candidate,
+        )
+        .unwrap();
+        assert_eq!(kinds(&items), [NotificationKind::InvitationExpiring]);
+        assert_eq!(scope, Scope::Kind(NotificationKind::InvitationExpiring));
+    }
+
+    #[test]
+    fn a_letter_with_every_kind_turned_off_is_skipped() {
+        let events = [
+            invitation(NotificationKind::InvitationReceived),
+            invitation(NotificationKind::InvitationWithdrawn),
+        ];
+        assert_eq!(
+            letter_items(
+                events.clone(),
+                EmailMask(EmailMask::all_of(Audience::Candidate)),
+                Audience::Candidate
+            ),
+            None
+        );
+        assert_eq!(
+            letter_items(events, EmailMask::default(), Audience::Employer),
+            None
+        );
+    }
+
+    #[test]
+    fn unsubscribe_links_lead_to_the_page_and_to_the_one_click_endpoint() {
+        let (page, endpoint) = unsubscribe_links("https://talents.example", "T0k-en_");
+        assert_eq!(
+            page,
+            "https://talents.example/notifications/unsubscribe?token=T0k-en_"
+        );
+        assert_eq!(
+            endpoint,
+            "https://talents.example/api/v1/notifications/unsubscribe?token=T0k-en_"
+        );
     }
 }

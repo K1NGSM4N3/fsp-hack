@@ -7,7 +7,7 @@
 use std::time::Duration as StdDuration;
 
 use chrono::{DateTime, Duration, Utc};
-use matching::trust::{TrustLevel, assess};
+use matching::trust::{TrustAssessment, TrustLevel, assess};
 use sqlx::PgPool;
 
 use super::{NotificationKind, Notifier, TrustNote};
@@ -37,6 +37,34 @@ fn parse_level(s: &str) -> Option<TrustLevel> {
     ]
     .into_iter()
     .find(|l| level_slug(*l) == s)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum TrustStep {
+    /// Nothing to compare with — the first look, or a level this build does not know: the current
+    /// assessment is recorded silently.
+    Baseline,
+    Same,
+    Announce(TrustNote),
+}
+
+/// `seen`: the level slug and quota the company was last told about.
+pub(crate) fn trust_step(seen: Option<(&str, i16)>, current: &TrustAssessment) -> TrustStep {
+    let Some((level, quota)) = seen else {
+        return TrustStep::Baseline;
+    };
+    if level == level_slug(current.level) && quota == current.quota {
+        return TrustStep::Same;
+    }
+    match parse_level(level) {
+        Some(before) => TrustStep::Announce(TrustNote {
+            level_before: before,
+            level: current.level,
+            quota_before: quota,
+            quota: current.quota,
+        }),
+        None => TrustStep::Baseline,
+    }
 }
 
 /// Writes the missing reminders; returns how many this call wrote. Two sweepers racing over the
@@ -77,25 +105,15 @@ pub async fn check_trust(
         let level = level_slug(current.level);
         let mut tx = pool.begin().await?;
         let seen = db::notifications::trust_seen_for_update(&mut *tx, row.company_id).await?;
-        if let Some(seen) = &seen {
-            if seen.level == level && seen.quota == current.quota {
-                continue;
-            }
-            if let Some(before) = parse_level(&seen.level) {
+        match trust_step(seen.as_ref().map(|s| (s.level.as_str(), s.quota)), &current) {
+            TrustStep::Same => continue,
+            TrustStep::Announce(note) => {
                 notifier
-                    .trust_changed(
-                        &mut *tx,
-                        row.company_id,
-                        TrustNote {
-                            level_before: before,
-                            level: current.level,
-                            quota_before: seen.quota,
-                            quota: current.quota,
-                        },
-                    )
+                    .trust_changed(&mut *tx, row.company_id, note)
                     .await?;
                 changed += 1;
             }
+            TrustStep::Baseline => {}
         }
         db::notifications::upsert_trust_seen(&mut *tx, row.company_id, level, current.quota)
             .await?;
@@ -141,5 +159,63 @@ mod tests {
             assert_eq!(serde_json::to_value(l).unwrap(), level_slug(l));
             assert_eq!(parse_level(level_slug(l)), Some(l));
         }
+    }
+
+    fn assessed(level: TrustLevel, quota: i16) -> TrustAssessment {
+        TrustAssessment {
+            level,
+            quota,
+            base: 10,
+            bonus: 0,
+            penalty: 0,
+            reasons: Vec::new(),
+            advice: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn first_look_records_the_baseline_without_announcing() {
+        assert_eq!(
+            trust_step(None, &assessed(TrustLevel::New, 10)),
+            TrustStep::Baseline
+        );
+    }
+
+    #[test]
+    fn unchanged_level_and_quota_announce_nothing() {
+        assert_eq!(
+            trust_step(Some(("new", 10)), &assessed(TrustLevel::New, 10)),
+            TrustStep::Same
+        );
+    }
+
+    #[test]
+    fn a_quota_change_is_announced_from_what_the_company_was_told() {
+        assert_eq!(
+            trust_step(Some(("new", 10)), &assessed(TrustLevel::New, 15)),
+            TrustStep::Announce(TrustNote {
+                level_before: TrustLevel::New,
+                level: TrustLevel::New,
+                quota_before: 10,
+                quota: 15,
+            })
+        );
+        assert_eq!(
+            trust_step(Some(("standard", 20)), &assessed(TrustLevel::Low, 20)),
+            TrustStep::Announce(TrustNote {
+                level_before: TrustLevel::Standard,
+                level: TrustLevel::Low,
+                quota_before: 20,
+                quota: 20,
+            })
+        );
+    }
+
+    #[test]
+    fn an_unknown_stored_level_is_replaced_silently() {
+        assert_eq!(
+            trust_step(Some(("legacy", 10)), &assessed(TrustLevel::New, 15)),
+            TrustStep::Baseline
+        );
     }
 }

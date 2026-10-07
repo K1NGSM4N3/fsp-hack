@@ -55,7 +55,13 @@ pub struct WebhookView {
 
 impl From<db::integrations::Webhook> for WebhookView {
     fn from(w: db::integrations::Webhook) -> Self {
-        let now = Utc::now();
+        Self::at(w, Utc::now())
+    }
+}
+
+impl WebhookView {
+    /// The previous secret is shown only while it still signs deliveries.
+    fn at(w: db::integrations::Webhook, now: DateTime<Utc>) -> Self {
         Self {
             url: w.url,
             secret_hint: w.secret_hint,
@@ -502,21 +508,9 @@ pub struct ApiKeyCreated {
 }
 
 /// Create an API key with the chosen scopes; the key is returned once
-#[utoipa::path(post, path = "/integrations/keys", tag = "integrations",
-    request_body = ApiKeyInput,
-    responses(
-        (status = 201, body = ApiKeyCreated),
-        (status = 409, description = "`api_key_limit` — не больше 10 действующих ключей, `company_profile_required`", body = Problem),
-        (status = 422, body = Problem),
-    ),
-    security(("cookie" = []), ("bearer" = [])))]
-async fn create_api_key(
-    State(state): State<AppState>,
-    user: EmployerUser,
-    Json(input): Json<ApiKeyInput>,
-) -> ApiResult<(StatusCode, Json<ApiKeyCreated>)> {
-    let name = input.name.trim();
-    let scopes = Scopes::of(&input.scopes);
+/// A key needs a name the company will recognize it by and at least one right.
+fn check_key_input(name: &str, scopes: Scopes) -> ApiResult<&str> {
+    let name = name.trim();
     let mut v = Validator::default();
     v.check(
         !name.is_empty(),
@@ -530,6 +524,24 @@ async fn create_api_key(
     )
     .check(!scopes.is_empty(), "scopes", "Выберите хотя бы одно право");
     v.finish()?;
+    Ok(name)
+}
+
+#[utoipa::path(post, path = "/integrations/keys", tag = "integrations",
+    request_body = ApiKeyInput,
+    responses(
+        (status = 201, body = ApiKeyCreated),
+        (status = 409, description = "`api_key_limit` — не больше 10 действующих ключей, `company_profile_required`", body = Problem),
+        (status = 422, body = Problem),
+    ),
+    security(("cookie" = []), ("bearer" = [])))]
+async fn create_api_key(
+    State(state): State<AppState>,
+    user: EmployerUser,
+    Json(input): Json<ApiKeyInput>,
+) -> ApiResult<(StatusCode, Json<ApiKeyCreated>)> {
+    let scopes = Scopes::of(&input.scopes);
+    let name = check_key_input(&input.name, scopes)?;
     let company = company_id(&state, user.id).await?;
     if db::integrations::active_api_keys(&state.pool, company).await? >= MAX_ACTIVE_KEYS {
         return Err(ApiError::conflict(
@@ -582,4 +594,57 @@ async fn revoke_api_key(
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::integrations::keys::Scope;
+
+    #[test]
+    fn a_key_needs_a_name_and_a_right() {
+        let one = Scopes::of(&[Scope::InvitationsRead]);
+        assert_eq!(check_key_input("  Huntflow ", one).ok(), Some("Huntflow"));
+        let both = check_key_input("  ", Scopes::of(&[]))
+            .unwrap_err()
+            .summary()
+            .2;
+        assert_eq!(both, ["name", "scopes"]);
+        assert_eq!(
+            check_key_input(&"я".repeat(101), one)
+                .unwrap_err()
+                .summary()
+                .2,
+            ["name"]
+        );
+        assert!(check_key_input(&"я".repeat(100), one).is_ok());
+    }
+
+    #[test]
+    fn the_previous_secret_is_shown_while_it_still_signs() {
+        let now = Utc::now();
+        let webhook =
+            |prev: Option<Vec<u8>>, until: Option<DateTime<Utc>>| db::integrations::Webhook {
+                url: "https://ats.example/hook".into(),
+                secret_enc: vec![1],
+                secret_hint: "whsec_abcd…".into(),
+                prev_secret_enc: prev,
+                prev_expires_at: until,
+                created_at: now,
+                updated_at: now,
+                secret_rotated_at: now,
+            };
+        let later = now + Duration::hours(24);
+        let view = WebhookView::at(webhook(Some(vec![2]), Some(later)), now);
+        assert_eq!(view.previous_secret_valid_until, Some(later));
+        let view = WebhookView::at(webhook(Some(vec![2]), Some(later)), later);
+        assert_eq!(view.previous_secret_valid_until, None, "expired");
+        let view = WebhookView::at(webhook(None, Some(later)), now);
+        assert_eq!(view.previous_secret_valid_until, None, "no previous secret");
+        let shown = serde_json::to_string(&view).unwrap();
+        assert!(
+            !shown.contains("secret_enc") && shown.contains("whsec_abcd…"),
+            "only the hint"
+        );
+    }
 }

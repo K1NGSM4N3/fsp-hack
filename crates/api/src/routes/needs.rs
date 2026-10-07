@@ -1,6 +1,8 @@
 //! Employer needs → recommended categories → persisted shortlist with explanations (§6.1).
 //! Refining filters re-ranks but keeps pinned and dismissed candidates (M-4).
 
+use std::cmp::Reverse;
+
 use axum::{extract::State, http::StatusCode};
 use catalog::{Grade, Industry, Specialization, WorkFormat};
 use chrono::{DateTime, Utc};
@@ -470,7 +472,7 @@ async fn shortlist_view(state: &AppState, company: Uuid, need: HiringNeed) -> Ap
     let mut cards = cards::load(state, company, &ids, Utc::now().timestamp()).await?;
     cards.retain(|c| c.searchable || c.related());
     let generated = need.shortlist_generated_at;
-    let had_previous = generated.is_some_and(|g| visible.iter().any(|r| r.first_seen_at < g));
+    let had_previous = has_earlier_build(generated, visible.iter().map(|r| r.first_seen_at));
     let mut items = Vec::with_capacity(visible.len());
     for r in visible {
         let Some(pos) = cards.iter().position(|c| c.card.id == r.candidate_id) else {
@@ -484,17 +486,38 @@ async fn shortlist_view(state: &AppState, company: Uuid, need: HiringNeed) -> Ap
             in_current: r.in_current,
             pinned: r.pinned,
             dismissed: r.dismissed,
-            is_new: had_previous && generated.is_some_and(|g| r.first_seen_at >= g),
+            is_new: is_new(generated, had_previous, r.first_seen_at),
             first_seen_at: r.first_seen_at,
         });
     }
-    items.sort_by(|a, b| {
-        b.pinned
-            .cmp(&a.pinned)
-            .then(b.in_current.cmp(&a.in_current))
-            .then(a.rank.cmp(&b.rank))
-    });
+    items.sort_by_key(|i| shortlist_order(i.pinned, i.in_current, i.rank));
     Ok(Shortlist { need, items })
+}
+
+/// Whether the shortlist was built before the latest rebuild: on the first build every candidate
+/// would otherwise be «new».
+fn has_earlier_build(
+    generated: Option<DateTime<Utc>>,
+    mut first_seen: impl Iterator<Item = DateTime<Utc>>,
+) -> bool {
+    generated.is_some_and(|g| first_seen.any(|at| at < g))
+}
+
+fn is_new(
+    generated: Option<DateTime<Utc>>,
+    had_previous: bool,
+    first_seen_at: DateTime<Utc>,
+) -> bool {
+    had_previous && generated.is_some_and(|g| first_seen_at >= g)
+}
+
+/// Pinned first, then those matching the current filters, then by rank.
+fn shortlist_order(
+    pinned: bool,
+    in_current: bool,
+    rank: i32,
+) -> (Reverse<bool>, Reverse<bool>, i32) {
+    (Reverse(pinned), Reverse(in_current), rank)
 }
 
 /// Current shortlist with explanations
@@ -611,4 +634,54 @@ async fn patch_shortlist_item(
         return Err(ApiError::not_found());
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at(s: &str) -> DateTime<Utc> {
+        s.parse().unwrap()
+    }
+
+    #[test]
+    fn shortlist_lists_pinned_then_matching_then_by_rank() {
+        let mut items = [
+            ("c", false, true, 1),
+            ("e", false, false, 1),
+            ("b", true, false, 3),
+            ("d", false, true, 2),
+            ("a", true, true, 5),
+        ];
+        items.sort_by_key(|&(_, pinned, in_current, rank)| {
+            shortlist_order(pinned, in_current, rank)
+        });
+        let order: Vec<&str> = items.iter().map(|i| i.0).collect();
+        assert_eq!(order, ["a", "b", "c", "d", "e"]);
+    }
+
+    #[test]
+    fn first_build_flags_nobody_as_new() {
+        let built = at("2026-10-07T12:00:00Z");
+        let first_seen = [built, built];
+        assert!(!has_earlier_build(Some(built), first_seen.into_iter()));
+        assert!(!has_earlier_build(None, first_seen.into_iter()));
+        assert!(!is_new(Some(built), false, built));
+    }
+
+    #[test]
+    fn rebuild_flags_candidates_seen_first_in_it() {
+        let earlier = at("2026-10-01T12:00:00Z");
+        let rebuilt = at("2026-10-07T12:00:00Z");
+        let had_previous = has_earlier_build(Some(rebuilt), [earlier, rebuilt].into_iter());
+        assert!(had_previous);
+        assert!(is_new(Some(rebuilt), had_previous, rebuilt));
+        assert!(is_new(
+            Some(rebuilt),
+            had_previous,
+            at("2026-10-07T12:00:01Z")
+        ));
+        assert!(!is_new(Some(rebuilt), had_previous, earlier));
+        assert!(!is_new(None, true, rebuilt), "never built, nothing is new");
+    }
 }

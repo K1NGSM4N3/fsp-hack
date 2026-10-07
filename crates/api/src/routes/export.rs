@@ -31,6 +31,7 @@ use crate::{
     age::{self, AgeBracket},
     auth::{AuthUser, CandidateUser, Role},
     contacts::ContactAccessEntry,
+    crypto::Crypto,
     dto::AssessmentStatus,
     error::{ApiError, ApiResult, Problem},
     guardian::{self, GuardianState},
@@ -84,6 +85,23 @@ pub struct ConsentRecord {
     pub age_bracket: Option<AgeBracket>,
 }
 
+impl From<db::consents::UserConsent> for ConsentRecord {
+    fn from(r: db::consents::UserConsent) -> Self {
+        Self {
+            id: r.id,
+            document_id: r.document_id,
+            kind: r.kind,
+            version: r.version,
+            title: r.title,
+            granted_at: r.granted_at,
+            revoked_at: r.revoked_at,
+            ip: r.ip,
+            user_agent: r.user_agent,
+            age_bracket: r.age_bracket.map(AgeBracket::from),
+        }
+    }
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct CandidateData {
     pub age: AgeRecord,
@@ -134,23 +152,21 @@ async fn age_record(state: &AppState, candidate: Uuid) -> ApiResult<AgeRecord> {
         .await?
         .ok_or(sqlx::Error::RowNotFound)?;
     let now = Utc::now();
-    let decrypt = |b: Option<Vec<u8>>| b.map(|b| state.crypto.decrypt_str(&b)).transpose();
-    let mut guardian_requests = Vec::new();
-    for r in db::guardians::requests(&state.pool, candidate).await? {
-        guardian_requests.push(GuardianRecord {
-            state: guardian::request_state(&r, now),
-            full_name: decrypt(r.full_name_enc)?,
-            email: decrypt(r.email_enc)?,
-            requested_at: r.created_at,
-            last_letter_at: r.sent_at,
-            answered_at: r.answered_at,
-            consent_id: r.consent_id,
-            granted_at: r.granted_at,
-            revoked_at: r.revoked_at,
-            erased_at: r.erased_at,
-        });
-    }
-    Ok(AgeRecord {
+    let guardian_requests = db::guardians::requests(&state.pool, candidate)
+        .await?
+        .into_iter()
+        .map(|r| guardian_record(r, &state.crypto, now))
+        .collect::<ApiResult<_>>()?;
+    Ok(age_record_of(age, guardian_requests))
+}
+
+/// Unlike the cabinet, the export shows the 18th birthday as long as the birth date is on record,
+/// also once it has passed.
+fn age_record_of(
+    age: db::guardians::CandidateAge,
+    guardian_requests: Vec<GuardianRecord>,
+) -> AgeRecord {
+    AgeRecord {
         bracket: if age.minor {
             AgeBracket::Minor
         } else {
@@ -159,6 +175,26 @@ async fn age_record(state: &AppState, candidate: Uuid) -> ApiResult<AgeRecord> {
         birth_date: age.birth_date,
         adult_from: age.birth_date.map(age::adult_from),
         guardian_requests,
+    }
+}
+
+fn guardian_record(
+    r: db::guardians::GuardianRequest,
+    crypto: &Crypto,
+    now: DateTime<Utc>,
+) -> ApiResult<GuardianRecord> {
+    let decrypt = |b: Option<Vec<u8>>| b.map(|b| crypto.decrypt_str(&b)).transpose();
+    Ok(GuardianRecord {
+        state: guardian::request_state(&r, now),
+        full_name: decrypt(r.full_name_enc)?,
+        email: decrypt(r.email_enc)?,
+        requested_at: r.created_at,
+        last_letter_at: r.sent_at,
+        answered_at: r.answered_at,
+        consent_id: r.consent_id,
+        granted_at: r.granted_at,
+        revoked_at: r.revoked_at,
+        erased_at: r.erased_at,
     })
 }
 
@@ -317,18 +353,7 @@ pub async fn build(state: &AppState, user: AuthUser, now: DateTime<Utc>) -> ApiR
     let consents = db::consents::user_consents(&state.pool, user.id)
         .await?
         .into_iter()
-        .map(|r| ConsentRecord {
-            id: r.id,
-            document_id: r.document_id,
-            kind: r.kind,
-            version: r.version,
-            title: r.title,
-            granted_at: r.granted_at,
-            revoked_at: r.revoked_at,
-            ip: r.ip,
-            user_agent: r.user_agent,
-            age_bracket: r.age_bracket.map(AgeBracket::from),
-        })
+        .map(ConsentRecord::from)
         .collect();
     let notifications = super::notifications::export(state, user).await?;
     let (candidate, employer) = match user.role {
@@ -370,10 +395,7 @@ async fn export(State(state): State<AppState>, user: AuthUser) -> ApiResult<Resp
     let now = Utc::now();
     let data = build(&state, user, now).await?;
     let body = serde_json::to_vec_pretty(&data)?;
-    let disposition = format!(
-        "attachment; filename=\"fsp-talents-{}.json\"",
-        now.format("%Y-%m-%d")
-    );
+    let disposition = attachment(now);
     Ok((
         [
             (
@@ -393,4 +415,203 @@ async fn export(State(state): State<AppState>, user: AuthUser) -> ApiResult<Resp
         body,
     )
         .into_response())
+}
+
+fn attachment(now: DateTime<Utc>) -> String {
+    format!(
+        "attachment; filename=\"fsp-talents-{}.json\"",
+        now.format("%Y-%m-%d")
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{error::Validator, guardian::GuardianContact};
+
+    fn at(s: &str) -> DateTime<Utc> {
+        s.parse().unwrap()
+    }
+
+    fn keys(value: &impl Serialize) -> Vec<String> {
+        let mut keys: Vec<String> = serde_json::to_value(value)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        keys.sort_unstable();
+        keys
+    }
+
+    #[test]
+    fn consent_record_keeps_the_trail_of_the_grant() {
+        let record = ConsentRecord::from(db::consents::UserConsent {
+            id: Uuid::from_u128(1),
+            document_id: Uuid::from_u128(2),
+            kind: "guardian_consent".into(),
+            version: 3,
+            title: "Согласие законного представителя".into(),
+            granted_at: at("2026-09-01T10:00:00Z"),
+            revoked_at: Some(at("2026-09-20T10:00:00Z")),
+            ip: Some("203.0.113.7".into()),
+            user_agent: Some("Mozilla/5.0".into()),
+            age_bracket: Some(db::types::AgeBracket::Minor),
+        });
+        let json = serde_json::to_value(&record).unwrap();
+        assert_eq!(json["ip"], "203.0.113.7");
+        assert_eq!(json["user_agent"], "Mozilla/5.0");
+        assert_eq!(json["age_bracket"], "minor");
+        assert_eq!(json["version"], 3);
+        assert_eq!(json["revoked_at"], "2026-09-20T10:00:00Z");
+    }
+
+    fn request(crypto: &Crypto, email: Option<&str>) -> db::guardians::GuardianRequest {
+        db::guardians::GuardianRequest {
+            id: Uuid::from_u128(3),
+            full_name_enc: email.map(|_| crypto.encrypt_str("Петрова Ольга Викторовна").unwrap()),
+            email_enc: email.map(|e| crypto.encrypt_str(e).unwrap()),
+            email_bidx: email.map(|e| crypto.blind_index(e)),
+            sent_at: Some(at("2026-09-01T10:00:00Z")),
+            confirm_expires_at: Some(at("2026-09-08T10:00:00Z")),
+            decision: Some(db::types::GuardianDecision::Granted),
+            answered_at: Some(at("2026-09-02T10:00:00Z")),
+            consent_id: Some(Uuid::from_u128(4)),
+            granted_at: Some(at("2026-09-02T10:00:00Z")),
+            revoked_at: None,
+            erased_at: None,
+            created_at: at("2026-09-01T09:00:00Z"),
+        }
+    }
+
+    #[test]
+    fn guardian_record_shows_the_address_as_registered_in_lowercase() {
+        let crypto = Crypto::new(&[1; 32], &[2; 32]);
+        let mut v = Validator::default();
+        let contact = guardian::clean_contact(
+            &crypto,
+            &GuardianContact {
+                full_name: "Петрова Ольга Викторовна".into(),
+                email: " O.Petrova@Example.RU ".into(),
+            },
+            "misha.petrov@example.ru",
+            &mut v,
+            ("full_name", "email"),
+        );
+        assert!(v.finish().is_ok());
+        let now = at("2026-10-07T12:00:00Z");
+        let r = guardian_record(request(&crypto, Some(&contact.email)), &crypto, now).unwrap();
+        assert_eq!(r.email.as_deref(), Some("o.petrova@example.ru"));
+        assert_eq!(r.full_name.as_deref(), Some("Петрова Ольга Викторовна"));
+        assert_eq!(r.state, GuardianState::Granted);
+        assert_eq!(r.requested_at, at("2026-09-01T09:00:00Z"));
+        assert_eq!(r.last_letter_at, Some(at("2026-09-01T10:00:00Z")));
+        assert_eq!(r.consent_id, Some(Uuid::from_u128(4)));
+    }
+
+    #[test]
+    fn erased_guardian_request_keeps_only_dates_and_the_answer() {
+        let crypto = Crypto::new(&[1; 32], &[2; 32]);
+        let erased = db::guardians::GuardianRequest {
+            erased_at: Some(at("2026-10-01T00:00:00Z")),
+            ..request(&crypto, None)
+        };
+        let r = guardian_record(erased, &crypto, at("2026-10-07T12:00:00Z")).unwrap();
+        assert_eq!((r.full_name, r.email), (None, None));
+        assert_eq!(r.erased_at, Some(at("2026-10-01T00:00:00Z")));
+        assert_eq!(r.state, GuardianState::Granted);
+    }
+
+    #[test]
+    fn age_record_shows_the_18th_birthday_while_a_birth_date_is_on_record() {
+        let birth = NaiveDate::from_ymd_opt(2010, 3, 14).unwrap();
+        let minor = age_record_of(
+            db::guardians::CandidateAge {
+                birth_date: Some(birth),
+                minor: true,
+            },
+            Vec::new(),
+        );
+        assert_eq!(minor.bracket, AgeBracket::Minor);
+        assert_eq!(minor.birth_date, Some(birth));
+        assert_eq!(minor.adult_from, Some(age::adult_from(birth)));
+
+        let turned_18 = age_record_of(
+            db::guardians::CandidateAge {
+                birth_date: Some(birth),
+                minor: false,
+            },
+            Vec::new(),
+        );
+        assert_eq!(turned_18.bracket, AgeBracket::Adult);
+        assert_eq!(turned_18.adult_from, Some(age::adult_from(birth)));
+
+        let adult = age_record_of(
+            db::guardians::CandidateAge {
+                birth_date: None,
+                minor: false,
+            },
+            Vec::new(),
+        );
+        assert_eq!(adult.bracket, AgeBracket::Adult);
+        assert_eq!((adult.birth_date, adult.adult_from), (None, None));
+    }
+
+    #[test]
+    fn export_file_is_named_by_its_date() {
+        assert_eq!(
+            attachment(at("2026-10-07T23:59:59Z")),
+            r#"attachment; filename="fsp-talents-2026-10-07.json""#
+        );
+    }
+
+    #[test]
+    fn assessment_record_leaves_the_test_internals_out() {
+        let record = AssessmentRecord {
+            id: Uuid::from_u128(5),
+            specialization: Specialization::Backend,
+            claimed_grade: Grade::Middle,
+            attempt_kind: AttemptKind::Placement,
+            status: AssessmentStatus::Passed,
+            theta: Some(0.4),
+            se: Some(0.3),
+            measured_grade: Some(Grade::Middle),
+            items_count: 18,
+            assigned: true,
+            person_fit_lz: Some(-0.5),
+            aberrant: Some(false),
+            started_at: at("2026-09-01T10:00:00Z"),
+            finished_at: Some(at("2026-09-01T10:40:00Z")),
+            proctoring: None,
+            review: None,
+            recording_views: Vec::new(),
+        };
+        let keys = keys(&record);
+        assert_eq!(
+            keys,
+            [
+                "aberrant",
+                "assigned",
+                "attempt_kind",
+                "claimed_grade",
+                "finished_at",
+                "id",
+                "items_count",
+                "measured_grade",
+                "person_fit_lz",
+                "proctoring",
+                "recording_views",
+                "review",
+                "se",
+                "specialization",
+                "started_at",
+                "status",
+                "theta",
+            ]
+        );
+        for internal in ["state", "template_id", "seed", "current_item"] {
+            assert!(!keys.iter().any(|k| k == internal), "{internal}");
+        }
+    }
 }

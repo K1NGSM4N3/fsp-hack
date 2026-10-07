@@ -336,18 +336,6 @@ pub async fn set_invitation_flags(
     .map(|r| r.rows_affected())
 }
 
-pub async fn vacancy_flags(db: impl PgExecutor<'_>, id: Uuid) -> Result<Value, sqlx::Error> {
-    sqlx::query_scalar!("SELECT trust_flags FROM vacancies WHERE id = $1", id)
-        .fetch_one(db)
-        .await
-}
-
-pub async fn invitation_flags(db: impl PgExecutor<'_>, id: Uuid) -> Result<Value, sqlx::Error> {
-    sqlx::query_scalar!("SELECT trust_flags FROM invitations WHERE id = $1", id)
-        .fetch_one(db)
-        .await
-}
-
 pub async fn flagged_vacancies(
     db: impl PgExecutor<'_>,
     limit: i64,

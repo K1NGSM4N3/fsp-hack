@@ -6,7 +6,7 @@
 //! was taken alone needs the answers, the events and the video, not the person's identity, so
 //! the moderator works with the anonymous code like an employer does (152-ФЗ, ст. 5 ч. 5).
 
-use assessment::{AttemptKind, IntegrityEvent, Topic, proctoring::needs_confirmation};
+use assessment::{AttemptKind, IntegrityEvent, Topic};
 use axum::{extract::State, http::Method, response::Response};
 use catalog::{Category, Grade};
 use chrono::{DateTime, Duration, Utc};
@@ -26,10 +26,11 @@ use crate::{
     error::{ApiError, ApiResult, Problem},
     extract::{Json, Path, Query},
     moderation::{
-        self, ModerationAction, ModerationTarget, ReviewDecision, TrustAction, TrustItemKind,
-        encode_cursor,
+        self, DecisionFacts, ModerationAction, ModerationTarget, ReviewDecision, TrustAction,
+        TrustItemKind,
     },
-    proctoring::{self as proctoring_svc, ProctoringMode, ProctoringSummary},
+    page,
+    proctoring::{self as proctoring_svc, ProctoringSummary},
     public_code,
     state::AppState,
     trust,
@@ -161,6 +162,11 @@ fn video_state(camera: Option<bool>, purged: bool) -> VideoState {
     }
 }
 
+/// [`moderation::flagged`] from the queue row's sums: `camera` is `None` when proctoring was off.
+fn queue_flag(decided: bool, aberrant: bool, camera: Option<bool>, behavioral: i64) -> bool {
+    !decided && aberrant && (camera.is_none() || behavioral > 0)
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct Remarks {
     pub left_test: i64,
@@ -220,15 +226,8 @@ async fn proctoring_queue(
         QueueFilter::Remarks => "remarks",
         QueueFilter::Video => "video",
     };
-    let mut rows = db::moderation::proctoring_queue(&state.pool, filter, after, limit + 1).await?;
-    let more = rows.len() as i64 > limit;
-    rows.truncate(limit as usize);
-    let next_cursor = more
-        .then(|| {
-            rows.last()
-                .map(|r| encode_cursor(r.finished_at, r.session_id))
-        })
-        .flatten();
+    let rows = db::moderation::proctoring_queue(&state.pool, filter, after, limit + 1).await?;
+    let (rows, next_cursor) = page::split(rows, limit, |r| (r.finished_at, r.session_id));
     let mut items = Vec::with_capacity(rows.len());
     for r in rows {
         let category = Category::new(r.specialization.parse()?, r.claimed_grade.parse()?);
@@ -245,9 +244,7 @@ async fn proctoring_queue(
             finished_at: r.finished_at,
             person_fit_lz: r.person_fit_lz,
             aberrant,
-            needs_review: r.decision.is_none()
-                && aberrant
-                && (r.camera.is_none() || behavioral > 0),
+            needs_review: queue_flag(r.decision.is_some(), aberrant, r.camera, behavioral),
             video: video_state(r.camera, r.purged.unwrap_or(false)),
             remarks: Remarks {
                 left_test: r.left_test,
@@ -435,6 +432,21 @@ fn ru_num(v: f64) -> String {
     format!("{v:.2}").replace('-', "−").replace('.', ",")
 }
 
+/// The item on screen when an event happened: as the browser reported it, otherwise the one
+/// shown at that moment.
+fn item_on_screen(
+    reported: Option<i16>,
+    at: DateTime<Utc>,
+    answers: &[ReviewAnswer],
+) -> Option<u16> {
+    reported.and_then(|v| u16::try_from(v).ok()).or_else(|| {
+        answers
+            .iter()
+            .find(|a| a.shown_at <= at && at <= a.answered_at)
+            .map(|a| a.seq)
+    })
+}
+
 async fn load_review(state: &AppState, session_id: Uuid) -> ApiResult<SessionReview> {
     let s = db::moderation::review_session(&state.pool, session_id)
         .await?
@@ -488,43 +500,24 @@ async fn load_review(state: &AppState, session_id: Uuid) -> ApiResult<SessionRev
     let mut events = Vec::new();
     if summary.is_some() {
         for e in db::proctoring::events(&state.pool, session_id).await? {
-            let item_seq = e.item_seq.and_then(|v| u16::try_from(v).ok()).or_else(|| {
-                answers
-                    .iter()
-                    .find(|a| a.shown_at <= e.occurred_at && e.occurred_at <= a.answered_at)
-                    .map(|a| a.seq)
-            });
             events.push(ReviewEvent {
                 kind: proctoring_svc::from_db(e.kind),
                 offset_ms: (e.occurred_at - s.started_at).num_milliseconds().max(0),
                 at: e.occurred_at,
                 duration_ms: e.duration_ms,
-                item_seq,
+                item_seq: item_on_screen(e.item_seq, e.occurred_at, &answers),
             });
         }
     }
     let aberrant = s.aberrant.unwrap_or(false);
-    let flagged = match &counts {
-        Some(c) => needs_confirmation(aberrant, c),
-        None => aberrant,
-    };
+    let flagged = moderation::flagged(aberrant, counts.as_ref());
     let views = db::moderation::recording_views(&state.pool, session_id)
         .await?
         .into_iter()
         .map(|at| RecordingView { at })
         .collect();
-    let in_force = s.assigned_at.is_some() && s.annulled_at.is_none();
-    let finished = matches!(status, AssessmentStatus::Passed | AssessmentStatus::Failed);
-    let mut allowed = Vec::new();
-    if s.decision.is_none() && finished {
-        allowed.push(ReviewDecision::Confirm);
-        if in_force {
-            allowed.push(ReviewDecision::Annul);
-        }
-        if s.assignment_current && state.config.proctoring.mode == ProctoringMode::Optional {
-            allowed.push(ReviewDecision::Retest);
-        }
-    }
+    let allowed =
+        moderation::allowed_decisions(&DecisionFacts::of(&s, state.config.proctoring.mode));
     let current_category = match (
         s.current_specialization.as_deref(),
         s.current_grade.as_deref(),
@@ -826,6 +819,26 @@ fn wanted(filter: Option<TrustItemKind>, kind: TrustItemKind) -> bool {
     filter.is_none_or(|k| k == kind)
 }
 
+fn flagged_vacancy_actions(published: bool) -> Vec<TrustAction> {
+    let mut actions = vec![TrustAction::Dismiss];
+    if published {
+        actions.push(TrustAction::Unpublish);
+    }
+    actions.push(TrustAction::Freeze);
+    actions
+}
+
+fn complaint_actions(target: TrustItemKind, has_company: bool) -> Vec<TrustAction> {
+    let mut actions = vec![TrustAction::Dismiss];
+    if target == TrustItemKind::Vacancy {
+        actions.push(TrustAction::Unpublish);
+    }
+    if has_company {
+        actions.push(TrustAction::Freeze);
+    }
+    actions
+}
+
 /// Anti-fake queue: flagged companies, vacancies and invitations with open complaints, oldest first
 #[utoipa::path(get, path = "/antifake", tag = "Модерация",
     params(TrustQuery),
@@ -878,12 +891,8 @@ async fn trust_queue(
             }
             if wanted(q.kind, TrustItemKind::Vacancy) {
                 for v in db::moderation::pending_vacancies(&state.pool, after, fetch).await? {
-                    let published = v.status == db::types::VacancyStatus::Published;
-                    let mut actions = vec![TrustAction::Dismiss];
-                    if published {
-                        actions.push(TrustAction::Unpublish);
-                    }
-                    actions.push(TrustAction::Freeze);
+                    let actions =
+                        flagged_vacancy_actions(v.status == db::types::VacancyStatus::Published);
                     items.push(TrustItem {
                         kind: TrustItemKind::Vacancy,
                         id: v.id,
@@ -927,13 +936,7 @@ async fn trust_queue(
             if wanted(q.kind, TrustItemKind::Complaint) {
                 for r in db::moderation::open_complaints(&state.pool, after, fetch).await? {
                     let target = item_kind(&r.target_kind);
-                    let mut actions = vec![TrustAction::Dismiss];
-                    if target == TrustItemKind::Vacancy {
-                        actions.push(TrustAction::Unpublish);
-                    }
-                    if r.company_id.is_some() {
-                        actions.push(TrustAction::Freeze);
-                    }
+                    let actions = complaint_actions(target, r.company_id.is_some());
                     let reason_ru = report_reason_ru(&r.reason);
                     items.push(TrustItem {
                         kind: TrustItemKind::Complaint,
@@ -1008,11 +1011,7 @@ async fn trust_queue(
         }
     }
     items.sort_by_key(|i| (i.at, i.id));
-    let more = items.len() as i64 > limit;
-    items.truncate(limit as usize);
-    let next_cursor = more
-        .then(|| items.last().map(|i| encode_cursor(i.at, i.id)))
-        .flatten();
+    let (items, next_cursor) = page::split(items, limit, |i| (i.at, i.id));
     Ok(Json(TrustPage { items, next_cursor }))
 }
 
@@ -1145,6 +1144,29 @@ fn audit_details(action: ModerationAction, d: &serde_json::Value) -> Vec<String>
     out
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum Subject {
+    Id(Uuid),
+    /// A candidate's anonymous code, normalized to «K-XXXXXX».
+    Code(String),
+}
+
+fn parse_subject(raw: Option<&str>) -> ApiResult<Option<Subject>> {
+    let Some(raw) = raw.map(str::trim).filter(|s| !s.is_empty()) else {
+        return Ok(None);
+    };
+    if let Ok(id) = raw.parse::<Uuid>() {
+        return Ok(Some(Subject::Id(id)));
+    }
+    match public_code::normalize(raw) {
+        Some(code) => Ok(Some(Subject::Code(code))),
+        None => Err(
+            ApiError::bad_request("invalid_query", "Некорректные параметры запроса")
+                .with_detail("subject: нужен id объекта или код кандидата вида K-7Q3M2X"),
+        ),
+    }
+}
+
 /// Audit log of moderation, newest first: decisions, anti-fake actions and recording views
 #[utoipa::path(get, path = "/log", tag = "Модерация",
     params(LogQuery),
@@ -1161,36 +1183,22 @@ async fn audit_log(
 ) -> ApiResult<Json<AuditPage>> {
     let before = moderation::decode_cursor(q.cursor.as_deref())?;
     let limit = moderation::page_limit(q.limit);
-    let subject = match q
-        .subject
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-    {
+    let subject = match parse_subject(q.subject.as_deref())? {
         None => None,
-        Some(raw) => match (raw.parse::<Uuid>(), public_code::normalize(raw)) {
-            (Ok(id), _) => Some(id),
-            (Err(_), Some(code)) => {
-                match db::moderation::candidate_by_code(&state.pool, &code).await? {
-                    Some(id) => Some(id),
-                    None => {
-                        return Ok(Json(AuditPage {
-                            items: Vec::new(),
-                            next_cursor: None,
-                        }));
-                    }
+        Some(Subject::Id(id)) => Some(id),
+        Some(Subject::Code(code)) => {
+            match db::moderation::candidate_by_code(&state.pool, &code).await? {
+                Some(id) => Some(id),
+                None => {
+                    return Ok(Json(AuditPage {
+                        items: Vec::new(),
+                        next_cursor: None,
+                    }));
                 }
             }
-            (Err(_), None) => {
-                return Err(ApiError::bad_request(
-                    "invalid_query",
-                    "Некорректные параметры запроса",
-                )
-                .with_detail("subject: нужен id объекта или код кандидата вида K-7Q3M2X"));
-            }
-        },
+        }
     };
-    let mut rows = db::moderation::actions(
+    let rows = db::moderation::actions(
         &state.pool,
         db::moderation::ActionFilter {
             action: q.action.map(Into::into),
@@ -1202,11 +1210,7 @@ async fn audit_log(
         limit + 1,
     )
     .await?;
-    let more = rows.len() as i64 > limit;
-    rows.truncate(limit as usize);
-    let next_cursor = more
-        .then(|| rows.last().map(|r| encode_cursor(r.at, r.id)))
-        .flatten();
+    let (rows, next_cursor) = page::split(rows, limit, |r| (r.at, r.id));
     let mut items = Vec::with_capacity(rows.len());
     for r in rows {
         let action = ModerationAction::from(r.action);
@@ -1260,6 +1264,196 @@ mod tests {
         assert_eq!(
             audit_details(ModerationAction::AnnulResult, &d),
             ["Категория снята"]
+        );
+    }
+
+    #[test]
+    fn a_voided_result_names_the_category_left_in_words() {
+        let d = serde_json::json!({ "category": "backend:middle", "restored_category": "backend:junior" });
+        for action in [ModerationAction::AnnulResult, ModerationAction::OrderRetest] {
+            assert_eq!(
+                audit_details(action, &d),
+                ["Категория теперь: Бэкенд-разработка · Junior"]
+            );
+        }
+        assert!(audit_details(ModerationAction::ConfirmResult, &d).is_empty());
+        let d = serde_json::json!({ "restored_category": "legacy:key" });
+        assert_eq!(
+            audit_details(ModerationAction::AnnulResult, &d),
+            ["Категория теперь: legacy:key"]
+        );
+    }
+
+    #[test]
+    fn the_queue_flags_undecided_aberrant_sessions_with_behaviour_or_without_proctoring() {
+        assert!(queue_flag(false, true, None, 0), "proctoring off");
+        assert!(queue_flag(false, true, Some(true), 1), "left the test");
+        assert!(!queue_flag(false, true, Some(false), 0), "no behaviour");
+        assert!(!queue_flag(false, false, None, 5), "pattern is fine");
+        assert!(!queue_flag(true, true, None, 5), "already decided");
+    }
+
+    fn at(secs: i64) -> DateTime<Utc> {
+        DateTime::from_timestamp(1_790_000_000 + secs, 0).unwrap()
+    }
+
+    fn answer(seq: u16, difficulty: Option<f32>, correct: bool) -> ReviewAnswer {
+        let shown = 60 * i64::from(seq);
+        ReviewAnswer {
+            seq,
+            title: format!("Задание {seq}"),
+            topic: None,
+            topic_ru: None,
+            level: 1,
+            difficulty,
+            correct,
+            timed_out: false,
+            elapsed_ms: 50_000,
+            shown_at: at(shown),
+            answered_at: at(shown + 50),
+            theta_after: 0.0,
+        }
+    }
+
+    #[test]
+    fn person_fit_explains_an_aberrant_pattern() {
+        let answers = [
+            answer(0, Some(1.0), true),
+            answer(1, Some(1.5), true),
+            answer(2, Some(2.0), false),
+            answer(3, Some(0.5), false),
+            answer(4, Some(-0.5), false),
+            answer(5, Some(-1.0), true),
+            answer(6, None, false),
+        ];
+        let fit = person_fit(Some(0.5), Some(-2.7), true, &answers);
+        assert_eq!(
+            (
+                fit.harder_correct,
+                fit.harder_total,
+                fit.easier_wrong,
+                fit.easier_total
+            ),
+            (2, 3, 2, 3),
+            "b equal to θ counts as easier, items without b are left out"
+        );
+        assert_eq!(fit.threshold, -2.0);
+        assert_eq!(
+            fit.summary,
+            "l_z = −2,70 ниже порога −2,00: так согласуются ответы примерно у 2 % честных кандидатов. \
+             Задания сложнее уровня кандидата: верно 2 из 3. Задания легче: неверно 2 из 3. \
+             Обычно бывает наоборот: трудные чаще не решены, лёгкие — решены."
+        );
+    }
+
+    #[test]
+    fn person_fit_of_an_ordinary_pattern() {
+        let fit = person_fit(Some(0.0), Some(0.1), false, &[answer(0, Some(1.0), false)]);
+        assert_eq!(
+            fit.summary,
+            "l_z = 0,10: картина ответов обычная для этого уровня. \
+             Задания сложнее уровня кандидата: верно 0 из 1. Задания легче: неверно 0 из 0."
+        );
+    }
+
+    #[test]
+    fn person_fit_without_a_finished_test() {
+        let fit = person_fit(None, None, false, &[answer(0, Some(1.0), true)]);
+        assert_eq!(fit.summary, "Тест не завершён — статистики нет");
+        assert_eq!(
+            (fit.harder_total, fit.easier_total),
+            (0, 0),
+            "no θ, nothing to compare with"
+        );
+    }
+
+    #[test]
+    fn an_event_lands_on_the_item_on_screen() {
+        let answers = [answer(0, None, true), answer(1, None, true)];
+        assert_eq!(
+            item_on_screen(Some(1), at(10), &answers),
+            Some(1),
+            "the browser's report wins"
+        );
+        assert_eq!(item_on_screen(None, at(10), &answers), Some(0));
+        assert_eq!(item_on_screen(None, at(60), &answers), Some(1));
+        assert_eq!(item_on_screen(None, at(110), &answers), Some(1));
+        assert_eq!(
+            item_on_screen(Some(-1), at(65), &answers),
+            Some(1),
+            "a nonsense report falls back to the time"
+        );
+        assert_eq!(
+            item_on_screen(None, at(55), &answers),
+            None,
+            "between items"
+        );
+        assert_eq!(
+            item_on_screen(None, at(500), &answers),
+            None,
+            "after the test"
+        );
+    }
+
+    #[test]
+    fn the_log_subject_is_an_id_or_a_candidate_code() {
+        assert_eq!(
+            parse_subject(Some(" k-7q3m2x ")).unwrap(),
+            Some(Subject::Code("K-7Q3M2X".into()))
+        );
+        let id = Uuid::now_v7();
+        assert_eq!(
+            parse_subject(Some(&id.to_string())).unwrap(),
+            Some(Subject::Id(id))
+        );
+        for empty in [None, Some(""), Some("   ")] {
+            assert_eq!(parse_subject(empty).unwrap(), None, "{empty:?}");
+        }
+        let err = parse_subject(Some("nobody")).expect_err("neither");
+        assert_eq!(err.summary(), (400, "invalid_query", Vec::new()));
+        let ApiError::Status { detail, .. } = err else {
+            unreachable!()
+        };
+        assert_eq!(
+            detail.as_deref(),
+            Some("subject: нужен id объекта или код кандидата вида K-7Q3M2X")
+        );
+    }
+
+    #[test]
+    fn a_flagged_vacancy_can_be_taken_down_only_while_published() {
+        assert_eq!(
+            flagged_vacancy_actions(true),
+            [
+                TrustAction::Dismiss,
+                TrustAction::Unpublish,
+                TrustAction::Freeze
+            ]
+        );
+        assert_eq!(
+            flagged_vacancy_actions(false),
+            [TrustAction::Dismiss, TrustAction::Freeze]
+        );
+    }
+
+    #[test]
+    fn complaint_actions_follow_its_target() {
+        assert_eq!(
+            complaint_actions(TrustItemKind::Vacancy, true),
+            [
+                TrustAction::Dismiss,
+                TrustAction::Unpublish,
+                TrustAction::Freeze
+            ]
+        );
+        assert_eq!(
+            complaint_actions(TrustItemKind::Invitation, true),
+            [TrustAction::Dismiss, TrustAction::Freeze]
+        );
+        assert_eq!(
+            complaint_actions(TrustItemKind::Company, false),
+            [TrustAction::Dismiss],
+            "no company left to freeze"
         );
     }
 }

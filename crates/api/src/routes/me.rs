@@ -56,6 +56,27 @@ pub struct AgeSummary {
     pub guardian: Option<GuardianState>,
 }
 
+/// `latest` is the state of the newest request to the representative; a minor without one has
+/// not had a letter sent yet.
+fn age_summary(
+    minor: bool,
+    birth_date: Option<NaiveDate>,
+    latest: Option<GuardianState>,
+) -> AgeSummary {
+    if !minor {
+        return AgeSummary {
+            bracket: AgeBracket::Adult,
+            adult_from: None,
+            guardian: None,
+        };
+    }
+    AgeSummary {
+        bracket: AgeBracket::Minor,
+        adult_from: birth_date.map(age::adult_from),
+        guardian: Some(latest.unwrap_or(GuardianState::NotSent)),
+    }
+}
+
 #[derive(Serialize, ToSchema)]
 pub struct CompanySummary {
     pub id: Uuid,
@@ -104,14 +125,10 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> ApiResult<Json<MeR
                 } else {
                     OnboardingStep::Done
                 };
-                let guardian = if c.minor {
-                    Some(
-                        db::guardians::latest_request(&state.pool, user.id)
-                            .await?
-                            .map_or(GuardianState::NotSent, |r| {
-                                guardian::request_state(&r, Utc::now())
-                            }),
-                    )
+                let latest = if c.minor {
+                    db::guardians::latest_request(&state.pool, user.id)
+                        .await?
+                        .map(|r| guardian::request_state(&r, Utc::now()))
                 } else {
                     None
                 };
@@ -120,15 +137,7 @@ async fn me(State(state): State<AppState>, user: AuthUser) -> ApiResult<Json<MeR
                     onboarding_step,
                     category,
                     active_session_id: c.active_session_id,
-                    age: AgeSummary {
-                        bracket: if c.minor {
-                            AgeBracket::Minor
-                        } else {
-                            AgeBracket::Adult
-                        },
-                        adult_from: c.birth_date.filter(|_| c.minor).map(age::adult_from),
-                        guardian,
-                    },
+                    age: age_summary(c.minor, c.birth_date, latest),
                 });
             }
         }
@@ -223,6 +232,20 @@ pub struct GrantConsent {
     pub document_id: Uuid,
 }
 
+/// Only the current version of a document of the caller's role, and never the representative's.
+fn grantable(doc: &db::consents::DocumentVersion, role: Role) -> Result<(), &'static str> {
+    if !doc.current {
+        return Err("Это не действующая редакция документа — обновите страницу");
+    }
+    if !doc.applies_to.contains(&role.into()) {
+        return Err("Этот документ не относится к вашему аккаунту");
+    }
+    if doc.kind == db::guardians::KIND {
+        return Err("Это согласие даёт законный представитель — по ссылке из письма");
+    }
+    Ok(())
+}
+
 /// Give a consent: the current version of a document that applies to your role. Recorded with
 /// time, IP and User-Agent like at registration; a document already in force is not granted twice
 #[utoipa::path(post, path = "/consents", tag = "account",
@@ -243,24 +266,7 @@ async fn grant_consent(
     let doc = db::consents::document_version(&state.pool, req.document_id)
         .await?
         .ok_or_else(|| ApiError::field("document_id", "Такого документа нет"))?;
-    if !doc.current {
-        return Err(ApiError::field(
-            "document_id",
-            "Это не действующая редакция документа — обновите страницу",
-        ));
-    }
-    if !doc.applies_to.contains(&user.role.into()) {
-        return Err(ApiError::field(
-            "document_id",
-            "Этот документ не относится к вашему аккаунту",
-        ));
-    }
-    if doc.kind == db::guardians::KIND {
-        return Err(ApiError::field(
-            "document_id",
-            "Это согласие даёт законный представитель — по ссылке из письма",
-        ));
-    }
+    grantable(&doc, user.role).map_err(|message| ApiError::field("document_id", message))?;
     let grant = db::consents::grant(
         &state.pool,
         Uuid::now_v7(),
@@ -290,6 +296,11 @@ async fn grant_consent(
     ))
 }
 
+/// Without either 152-ФЗ consent the profile leaves search at once, not on the next privacy save.
+fn hides_profile(role: Role, kind: &str) -> bool {
+    role == Role::Candidate && matches!(kind, "pd_publication" | "pd_processing")
+}
+
 /// Revoke a consent. Revoking publication or processing hides the candidate from search;
 /// revoking the video consent deletes the candidate's recordings right away. `guardian_consent`
 /// belongs to the legal representative and is revoked only by the link from their letter (404).
@@ -305,7 +316,7 @@ async fn revoke_consent(
     let kind = db::consents::revoke_user_consent(&state.pool, id, user.id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    if user.role == Role::Candidate && matches!(kind.as_str(), "pd_publication" | "pd_processing") {
+    if hides_profile(user.role, &kind) {
         db::me::hide_candidate(&state.pool, user.id).await?;
     }
     state.candidates.invalidate().await;
@@ -314,4 +325,91 @@ async fn revoke_consent(
         proctoring::purge(&state.pool, &state.recordings, &recordings).await?;
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use db::types::UserRole;
+
+    use super::*;
+
+    fn version(
+        kind: &str,
+        current: bool,
+        applies_to: &[UserRole],
+    ) -> db::consents::DocumentVersion {
+        db::consents::DocumentVersion {
+            id: Uuid::now_v7(),
+            kind: kind.into(),
+            version: 2,
+            title: "Документ".into(),
+            applies_to: applies_to.to_vec(),
+            current,
+        }
+    }
+
+    #[test]
+    fn only_the_current_version_for_the_role_is_grantable() {
+        let both = [UserRole::Candidate, UserRole::Employer];
+        assert_eq!(
+            grantable(&version("pd_publication", true, &both), Role::Candidate),
+            Ok(())
+        );
+        assert_eq!(
+            grantable(&version("pd_publication", false, &both), Role::Candidate),
+            Err("Это не действующая редакция документа — обновите страницу")
+        );
+        assert_eq!(
+            grantable(
+                &version("pd_publication", true, &[UserRole::Candidate]),
+                Role::Employer
+            ),
+            Err("Этот документ не относится к вашему аккаунту")
+        );
+        assert_eq!(
+            grantable(&version(db::guardians::KIND, true, &both), Role::Candidate),
+            Err("Это согласие даёт законный представитель — по ссылке из письма")
+        );
+    }
+
+    #[test]
+    fn a_superseded_version_is_refused_before_the_role_and_kind_checks() {
+        assert_eq!(
+            grantable(&version(db::guardians::KIND, false, &[]), Role::Employer),
+            Err("Это не действующая редакция документа — обновите страницу")
+        );
+        assert_eq!(
+            grantable(&version(db::guardians::KIND, true, &[]), Role::Candidate),
+            Err("Этот документ не относится к вашему аккаунту")
+        );
+    }
+
+    #[test]
+    fn revoking_a_152_fz_consent_hides_the_candidate() {
+        assert!(hides_profile(Role::Candidate, "pd_publication"));
+        assert!(hides_profile(Role::Candidate, "pd_processing"));
+        assert!(!hides_profile(Role::Candidate, proctoring::CONSENT_KIND));
+        assert!(!hides_profile(Role::Candidate, "terms"));
+        assert!(!hides_profile(Role::Employer, "pd_processing"));
+    }
+
+    #[test]
+    fn minor_without_a_request_waits_for_the_first_letter() {
+        let birth = NaiveDate::from_ymd_opt(2010, 3, 14).unwrap();
+        let a = age_summary(true, Some(birth), None);
+        assert_eq!(a.bracket, AgeBracket::Minor);
+        assert_eq!(a.adult_from, Some(age::adult_from(birth)));
+        assert_eq!(a.guardian, Some(GuardianState::NotSent));
+        let a = age_summary(true, Some(birth), Some(GuardianState::Granted));
+        assert_eq!(a.guardian, Some(GuardianState::Granted));
+    }
+
+    #[test]
+    fn adult_summary_has_no_birthday_and_no_guardian() {
+        let birth = NaiveDate::from_ymd_opt(2008, 3, 14).unwrap();
+        let a = age_summary(false, Some(birth), Some(GuardianState::Granted));
+        assert_eq!(a.bracket, AgeBracket::Adult);
+        assert_eq!(a.adult_from, None);
+        assert_eq!(a.guardian, None);
+    }
 }

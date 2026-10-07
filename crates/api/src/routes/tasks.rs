@@ -345,13 +345,20 @@ pub struct MyTask {
     pub reviewed_at: Option<DateTime<Utc>>,
 }
 
+/// One task at a time, at most one a week: `last` is when the previous one was handed out.
+fn due_for_assignment(open: bool, last: Option<DateTime<Utc>>, now: DateTime<Utc>) -> bool {
+    !open && last.is_none_or(|at| at <= now - Duration::days(ASSIGN_EVERY_DAYS))
+}
+
 async fn assign_if_due(pool: &PgPool, candidate: Uuid) -> ApiResult<()> {
     db::tasks::expire_assignments(pool, candidate).await?;
-    if db::tasks::has_open_assignment(pool, candidate).await? > 0 {
-        return Ok(());
-    }
-    let last = db::tasks::last_assignment_at(pool, candidate).await?;
-    if last.is_some_and(|at| at > Utc::now() - Duration::days(ASSIGN_EVERY_DAYS)) {
+    let open = db::tasks::has_open_assignment(pool, candidate).await? > 0;
+    let last = if open {
+        None
+    } else {
+        db::tasks::last_assignment_at(pool, candidate).await?
+    };
+    if !due_for_assignment(open, last, Utc::now()) {
         return Ok(());
     }
     if let Some(task) = db::tasks::pick_task_for(pool, candidate).await? {
@@ -461,4 +468,45 @@ async fn skip(
         return Err(ApiError::conflict("task_closed", "Задание уже закрыто"));
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn now() -> DateTime<Utc> {
+        "2026-10-07T12:00:00Z".parse().unwrap()
+    }
+
+    #[test]
+    fn first_task_is_handed_out_at_once() {
+        assert!(due_for_assignment(false, None, now()));
+    }
+
+    #[test]
+    fn next_task_comes_a_week_after_the_previous_one() {
+        let week = Duration::days(ASSIGN_EVERY_DAYS);
+        assert!(due_for_assignment(false, Some(now() - week), now()));
+        assert!(due_for_assignment(
+            false,
+            Some(now() - Duration::days(30)),
+            now()
+        ));
+        assert!(!due_for_assignment(
+            false,
+            Some(now() - week + Duration::seconds(1)),
+            now()
+        ));
+        assert!(!due_for_assignment(false, Some(now()), now()));
+    }
+
+    #[test]
+    fn open_task_blocks_the_next_one() {
+        assert!(!due_for_assignment(true, None, now()));
+        assert!(!due_for_assignment(
+            true,
+            Some(now() - Duration::days(30)),
+            now()
+        ));
+    }
 }

@@ -86,7 +86,7 @@ Valkey, sqlx-cli, pandoc, typst, Colima и Docker.
 make db                  # создать базу fsp_hack
 SEED_DEMO=true make api  # API на :8000: миграции при старте, демо-данные на пустой базе
 make web                 # фронтенд на :3000, /api/* проксируется на :8000
-make test                # тесты; тесты БД создают временные базы на сервере из TEST_DATABASE_URL
+make test                # модульные тесты: без базы и сети
 ```
 
 `make api` не читает `.env`: без `VALKEY_URL` лимиты и отозванные токены живут в памяти процесса,
@@ -100,6 +100,32 @@ make test                # тесты; тесты БД создают време
 и закоммитьте `.sqlx/` вместе с кодом. Изменили DTO — `make gen-api`.
 
 Остальные команды и правила разработки — в `AGENTS.md`.
+
+## Тесты
+
+Два вида, оба без доступа к внутренностям друг друга:
+
+```sh
+make test       # модульные: cargo test --workspace (514 тестов) и проверка типов web; Postgres не нужен
+make blackbox   # black-box: свежий стек в Docker + Playwright по публичным портам
+make blackbox DOWN=1                       # то же, стек после прогона удаляется
+make blackbox ARGS="specs/minors.spec.ts"  # один файл; любые аргументы playwright test
+make blackbox-down                         # удалить стек black-box тестов
+```
+
+`make blackbox` останавливает стек `make up` (его данные остаются), поднимает отдельный compose-проект
+`fsp-hack-blackbox` с чистыми томами на тех же портах — :8080, :8025, :8082, :8091 — и демо-сидом,
+собирает образы из текущего кода, ждёт готовности и запускает `tests/blackbox`. Отличие от демо-стека
+одно — `deploy/compose.blackbox.yml`: письма-уведомления ждут 3 секунды вместо 2 и 10 минут, без
+Keycloak и наблюдаемости. Нужен `.env` (копируется из `.env.example`, если его нет), Node.js ≥ 20.9 и
+Docker; браузер Chromium ставит сам Playwright. Тесты ходят только туда, куда ходит пользователь или
+внешняя система: веб и API, почтовый ящик Mailpit, демо-ATS, админка реестра ФСП. После прогона стек
+остаётся поднятым, отчёт — `tests/blackbox/playwright-report/index.html` (`npx playwright show-report`
+в `tests/blackbox`). Вернуться к демо-стеку: `make blackbox-down && make up`.
+
+Против уже поднятого стека тесты запускаются и без пересборки: `cd tests/blackbox && npm ci && npx playwright test`.
+Повторный прогон на том же стеке заденет уже потраченные демо-данные (очередь модерации, согласие
+представителя у `minor@demo.fsp`) — для чистого результата нужен `make blackbox`.
 
 ## Документация
 

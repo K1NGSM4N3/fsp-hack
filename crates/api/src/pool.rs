@@ -67,9 +67,20 @@ struct TextRanks {
 impl SpecPool {
     pub async fn load(pg: &PgPool, spec: Specialization) -> ApiResult<Self> {
         let started = std::time::Instant::now();
-        let mut rows = db::pool::searchable_pool(pg, spec.slug()).await?;
+        let rows = db::pool::searchable_pool(pg, spec.slug()).await?;
+        let pool = Self::from_rows(spec, rows, Utc::now().timestamp());
+        tracing::debug!(
+            specialization = spec.slug(),
+            candidates = pool.ids.len(),
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "candidate pool loaded"
+        );
+        Ok(pool)
+    }
+
+    /// Rows with a grade this build does not know are left out.
+    fn from_rows(spec: Specialization, mut rows: Vec<db::pool::PoolCandidate>, now: i64) -> Self {
         rows.sort_unstable_by_key(|r| r.user_id);
-        let now = Utc::now().timestamp();
         let mut snapshots = Vec::with_capacity(rows.len());
         let mut ids = Vec::with_capacity(rows.len());
         let mut minors = vec![0u64; rows.len().div_ceil(64)];
@@ -110,13 +121,7 @@ impl SpecPool {
                 text_relevance: 0.0,
             });
         }
-        tracing::debug!(
-            specialization = spec.slug(),
-            candidates = ids.len(),
-            elapsed_ms = started.elapsed().as_millis() as u64,
-            "candidate pool loaded"
-        );
-        Ok(Self {
+        Self {
             pool: CandidatePool::from_snapshots(&snapshots),
             cards: ids.iter().map(|_| ArcSwapOption::empty()).collect(),
             ids,
@@ -124,7 +129,7 @@ impl SpecPool {
             texts: Default::default(),
             text_flights: Default::default(),
             hasher: std::hash::RandomState::new(),
-        })
+        }
     }
 
     pub fn card(&self, id: Uuid) -> Option<Arc<CachedCard>> {
@@ -145,6 +150,48 @@ impl SpecPool {
         self.minors
             .get(index / 64)
             .is_some_and(|w| w & (1 << (index % 64)) != 0)
+    }
+
+    fn filtered(&self, filter: &PoolFilter<'_>, ranks: Option<&TextRanks>) -> LoadedPool {
+        let required: Vec<SkillId> = filter
+            .required_skills
+            .iter()
+            .map(|s| SkillId::intern(s))
+            .collect();
+        let mut picks: Vec<(usize, f32)> = Vec::with_capacity(self.ids.len());
+        let mut max_rank = 0f32;
+        for i in 0..self.pool.len() {
+            let Some(p) = self.pool.profile(i) else {
+                continue;
+            };
+            if filter.grade.is_some_and(|g| p.category().grade != g)
+                || (filter.adults_only && self.is_minor(i))
+            {
+                continue;
+            }
+            let rank = ranks.and_then(|r| r.ranks.get(i).copied()).unwrap_or(0.0);
+            max_rank = max_rank.max(rank);
+            if filter.fsp_only && !p.has_fsp() {
+                continue;
+            }
+            if let (Some(max), Some(expect)) = (filter.max_expectation, p.salary_expectation())
+                && i64::from(expect) > max
+            {
+                continue;
+            }
+            if !required.iter().all(|&s| self.pool.has_skill(i, s))
+                || filter.only.is_some_and(|id| self.ids[i] != id)
+            {
+                continue;
+            }
+            picks.push((i, rank));
+        }
+        let ids = picks.iter().map(|&(i, _)| self.ids[i]).collect();
+        let pool = self.pool.subset(picks.into_iter().map(|(i, rank)| {
+            let relevance = if max_rank > 0.0 { rank / max_rank } else { 0.0 };
+            (i, relevance)
+        }));
+        LoadedPool { pool, ids }
     }
 
     /// Ranks of one need text, computed once per snapshot: `ts_rank_cd` over a long OR-query
@@ -240,53 +287,220 @@ pub async fn load(
         Some(query) => Some(snap.text_ranks(&state.pool, spec, query).await?),
         None => None,
     };
-    let required: Vec<SkillId> = filter
-        .required_skills
-        .iter()
-        .map(|s| SkillId::intern(s))
-        .collect();
-    let mut picks: Vec<(usize, f32)> = Vec::with_capacity(snap.ids.len());
-    let mut max_rank = 0f32;
-    for i in 0..snap.pool.len() {
-        let Some(p) = snap.pool.profile(i) else {
-            continue;
-        };
-        if filter.grade.is_some_and(|g| p.category().grade != g)
-            || (filter.adults_only && snap.is_minor(i))
-        {
-            continue;
-        }
-        let rank = ranks
-            .as_ref()
-            .and_then(|r| r.ranks.get(i).copied())
-            .unwrap_or(0.0);
-        max_rank = max_rank.max(rank);
-        if filter.fsp_only && !p.has_fsp() {
-            continue;
-        }
-        if let (Some(max), Some(expect)) = (filter.max_expectation, p.salary_expectation())
-            && i64::from(expect) > max
-        {
-            continue;
-        }
-        if !required.iter().all(|&s| snap.pool.has_skill(i, s))
-            || filter.only.is_some_and(|id| snap.ids[i] != id)
-        {
-            continue;
-        }
-        picks.push((i, rank));
-    }
-    let ids = picks.iter().map(|&(i, _)| snap.ids[i]).collect();
-    let pool = snap.pool.subset(picks.into_iter().map(|(i, rank)| {
-        let relevance = if max_rank > 0.0 { rank / max_rank } else { 0.0 };
-        (i, relevance)
-    }));
-    Ok(LoadedPool { pool, ids })
+    Ok(snap.filtered(filter, ranks.as_deref()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const NOW: i64 = 1_791_374_400;
+
+    fn id(n: u128) -> Uuid {
+        Uuid::from_u128(n)
+    }
+
+    fn row(n: u128) -> db::pool::PoolCandidate {
+        db::pool::PoolCandidate {
+            user_id: id(n),
+            grade: "middle".into(),
+            theta: None,
+            salary_expectation_min: None,
+            work_formats: Vec::new(),
+            city: None,
+            relocation: false,
+            last_activity_at: "2026-10-01T10:00:00Z".parse().unwrap(),
+            industries: Vec::new(),
+            show_fsp: false,
+            achievements: None,
+            skills: vec!["go".into()],
+            skill_sources: vec!["test".into()],
+            minor: false,
+        }
+    }
+
+    fn snapshot(rows: Vec<db::pool::PoolCandidate>) -> SpecPool {
+        SpecPool::from_rows(Specialization::Backend, rows, NOW)
+    }
+
+    fn ranks(ranks: &[f32]) -> TextRanks {
+        TextRanks {
+            query: "go".into(),
+            ranks: ranks.into(),
+        }
+    }
+
+    #[test]
+    fn snapshot_is_ordered_by_id_and_skips_unknown_grades() {
+        let rows = vec![
+            row(3),
+            db::pool::PoolCandidate {
+                grade: "guru".into(),
+                ..row(2)
+            },
+            row(1),
+        ];
+        let snap = snapshot(rows);
+        assert_eq!(snap.ids, [id(1), id(3)]);
+        assert_eq!(snap.pool.id(1), Some(id(3).to_string().as_str()));
+        let all = snap.filtered(&PoolFilter::default(), None);
+        assert_eq!(all.ids, [id(1), id(3)]);
+    }
+
+    #[test]
+    fn adults_only_drops_minors_across_bitset_words() {
+        let minors = [2, 64, 65, 129];
+        let rows: Vec<_> = (0..130u128)
+            .rev()
+            .map(|n| db::pool::PoolCandidate {
+                minor: minors.contains(&n),
+                ..row(n)
+            })
+            .collect();
+        let snap = snapshot(rows);
+        assert_eq!(
+            snap.filtered(&PoolFilter::default(), None).ids.len(),
+            130,
+            "minors with the representative's consent are in the pool"
+        );
+        let adults = snap.filtered(
+            &PoolFilter {
+                adults_only: true,
+                ..PoolFilter::default()
+            },
+            None,
+        );
+        assert_eq!(adults.ids.len(), 126);
+        for n in minors {
+            assert!(!adults.ids.contains(&id(n)), "{n}");
+        }
+        assert!(adults.ids.contains(&id(63)) && adults.ids.contains(&id(66)));
+    }
+
+    #[test]
+    fn minor_bit_follows_the_kept_rows_after_a_skipped_one() {
+        let rows = vec![
+            db::pool::PoolCandidate {
+                grade: "guru".into(),
+                ..row(1)
+            },
+            db::pool::PoolCandidate {
+                minor: true,
+                ..row(2)
+            },
+            row(3),
+        ];
+        let adults = snapshot(rows).filtered(
+            &PoolFilter {
+                adults_only: true,
+                ..PoolFilter::default()
+            },
+            None,
+        );
+        assert_eq!(adults.ids, [id(3)]);
+    }
+
+    #[test]
+    fn grade_skills_expectation_and_only_filter_the_snapshot() {
+        let rows = vec![
+            db::pool::PoolCandidate {
+                grade: "junior".into(),
+                ..row(1)
+            },
+            db::pool::PoolCandidate {
+                skills: vec!["go".into(), "postgresql".into()],
+                skill_sources: vec!["test".into(), "declared".into()],
+                salary_expectation_min: Some(150_000),
+                ..row(2)
+            },
+            db::pool::PoolCandidate {
+                salary_expectation_min: Some(250_000),
+                ..row(3)
+            },
+            row(4),
+        ];
+        let snap = snapshot(rows);
+        let pick = |filter: PoolFilter<'_>| snap.filtered(&filter, None).ids;
+        assert_eq!(
+            pick(PoolFilter {
+                grade: Some(Grade::Middle),
+                ..PoolFilter::default()
+            }),
+            [id(2), id(3), id(4)]
+        );
+        let required = ["postgresql".to_owned()];
+        assert_eq!(
+            pick(PoolFilter {
+                required_skills: &required,
+                ..PoolFilter::default()
+            }),
+            [id(2)]
+        );
+        assert_eq!(
+            pick(PoolFilter {
+                max_expectation: Some(150_000),
+                ..PoolFilter::default()
+            }),
+            [id(1), id(2), id(4)],
+            "above the budget is dropped, at it or unstated is kept"
+        );
+        assert_eq!(
+            pick(PoolFilter {
+                only: Some(id(3)),
+                ..PoolFilter::default()
+            }),
+            [id(3)]
+        );
+        assert!(
+            pick(PoolFilter {
+                fsp_only: true,
+                ..PoolFilter::default()
+            })
+            .is_empty(),
+            "nobody here has FSP history"
+        );
+    }
+
+    #[test]
+    fn relevance_is_rank_over_the_best_rank_before_the_other_filters() {
+        let rows = vec![
+            row(1),
+            db::pool::PoolCandidate {
+                salary_expectation_min: Some(500_000),
+                ..row(2)
+            },
+            row(3),
+            db::pool::PoolCandidate {
+                grade: "senior".into(),
+                ..row(4)
+            },
+        ];
+        let snap = snapshot(rows);
+        let text = ranks(&[0.25, 1.0, 0.0, 2.0]);
+        let relevance = |loaded: &LoadedPool| -> Vec<f32> {
+            (0..loaded.pool.len())
+                .map(|i| loaded.pool.profile(i).unwrap().text_relevance())
+                .collect()
+        };
+        let all = snap.filtered(&PoolFilter::default(), Some(&text));
+        assert_eq!(relevance(&all), [0.125, 0.5, 0.0, 1.0]);
+        let middle_on_budget = snap.filtered(
+            &PoolFilter {
+                grade: Some(Grade::Middle),
+                max_expectation: Some(200_000),
+                ..PoolFilter::default()
+            },
+            Some(&text),
+        );
+        assert_eq!(middle_on_budget.ids, [id(1), id(3)]);
+        assert_eq!(
+            relevance(&middle_on_budget),
+            [0.25, 0.0],
+            "normalized by the best middle, even though the budget then drops them"
+        );
+        let unranked = snap.filtered(&PoolFilter::default(), None);
+        assert!(relevance(&unranked).iter().all(|r| *r == 0.0));
+    }
 
     #[test]
     fn tsquery_is_sanitized() {

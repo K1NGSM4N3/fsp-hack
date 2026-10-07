@@ -176,6 +176,22 @@ mod tests {
             Err(SignatureError::Stale),
             "a replay after the window fails"
         );
+        assert_eq!(
+            verify(
+                b"new",
+                &header,
+                BODY,
+                T - TOLERANCE_SECS - 1,
+                TOLERANCE_SECS
+            ),
+            Err(SignatureError::Stale),
+            "a timestamp from the future fails too"
+        );
+        assert_eq!(
+            verify(b"new", &header, BODY, T - TOLERANCE_SECS, TOLERANCE_SECS),
+            Ok(()),
+            "the window is inclusive"
+        );
         let shifted = header.replacen("t=1700000000", "t=1700000100", 1);
         assert_eq!(
             verify(b"new", &shifted, BODY, T + 100, TOLERANCE_SECS),

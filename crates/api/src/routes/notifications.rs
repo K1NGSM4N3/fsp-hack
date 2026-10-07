@@ -22,6 +22,7 @@ use crate::{
         render::{self, Channel},
         token::{self, Scope},
     },
+    page,
     state::AppState,
 };
 
@@ -176,6 +177,21 @@ pub(crate) fn settings_view(role: Role, email_off: i32) -> NotificationSettings 
     }
 }
 
+/// `rows` were fetched with `limit + 1`: keeps `limit` of them and, when there was one more, the
+/// id to continue after.
+fn feed_page(
+    mut rows: Vec<db::notifications::FeedRow>,
+    limit: i64,
+) -> (Vec<db::notifications::FeedRow>, Option<Uuid>) {
+    let keep = usize::try_from(limit).unwrap_or(usize::MAX);
+    if rows.len() <= keep {
+        return (rows, None);
+    }
+    rows.truncate(keep);
+    let next = rows.last().map(|r| r.id);
+    (rows, next)
+}
+
 /// Your notifications, newest first. Keyset pagination: pass `next_cursor` as `cursor`
 #[utoipa::path(get, path = "/notifications", tag = TAG, operation_id = "list_notifications",
     params(FeedQuery),
@@ -186,8 +202,8 @@ async fn feed(
     user: AuthUser,
     Query(q): Query<FeedQuery>,
 ) -> ApiResult<Json<NotificationPage>> {
-    let limit = q.limit.unwrap_or(PAGE).clamp(1, MAX_PAGE);
-    let mut rows = db::notifications::feed(
+    let limit = page::limit(q.limit, PAGE, MAX_PAGE);
+    let rows = db::notifications::feed(
         &state.pool,
         user.id,
         q.unread.unwrap_or(false),
@@ -195,13 +211,30 @@ async fn feed(
         limit + 1,
     )
     .await?;
-    let more = rows.len() as i64 > limit;
-    rows.truncate(limit as usize);
-    let next_cursor = more.then(|| rows.last().map(|r| r.id)).flatten();
+    let (rows, next_cursor) = feed_page(rows, limit);
     Ok(Json(NotificationPage {
         items: rows.into_iter().filter_map(view).collect(),
         next_cursor,
     }))
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ReadTarget<'a> {
+    All,
+    Ids(&'a [Uuid]),
+}
+
+fn read_target(req: &MarkRead) -> ApiResult<ReadTarget<'_>> {
+    if req.ids.len() > MAX_IDS {
+        return Err(ApiError::field("ids", "Не больше 100 за раз"));
+    }
+    if req.all {
+        Ok(ReadTarget::All)
+    } else if req.ids.is_empty() {
+        Err(ApiError::field("ids", "Укажите уведомления или all: true"))
+    } else {
+        Ok(ReadTarget::Ids(&req.ids))
+    }
 }
 
 /// Mark items read: the listed `ids` or `all`. Returns the new unread count
@@ -218,15 +251,13 @@ async fn mark_read(
     user: AuthUser,
     Json(req): Json<MarkRead>,
 ) -> ApiResult<Json<UnreadCount>> {
-    if req.ids.len() > MAX_IDS {
-        return Err(ApiError::field("ids", "Не больше 100 за раз"));
-    }
-    if req.all {
-        db::notifications::mark_all_read(&state.pool, user.id).await?;
-    } else if req.ids.is_empty() {
-        return Err(ApiError::field("ids", "Укажите уведомления или all: true"));
-    } else {
-        db::notifications::mark_read(&state.pool, user.id, &req.ids).await?;
+    match read_target(&req)? {
+        ReadTarget::All => {
+            db::notifications::mark_all_read(&state.pool, user.id).await?;
+        }
+        ReadTarget::Ids(ids) => {
+            db::notifications::mark_read(&state.pool, user.id, ids).await?;
+        }
     }
     let count = db::notifications::unread_count(&state.pool, user.id, UNREAD_CAP).await?;
     Ok(Json(UnreadCount { count }))
@@ -256,6 +287,26 @@ async fn settings(
     Ok(Json(settings_view(user.role, off)))
 }
 
+/// The bits to turn off and on: kinds of the caller's role only, each at most once.
+fn email_toggles(audience: Audience, toggles: &[EmailToggle]) -> ApiResult<(i32, i32)> {
+    let (mut off, mut on, mut seen) = (0i32, 0i32, 0i32);
+    for t in toggles {
+        if t.kind.audience() != audience {
+            return Err(ApiError::field("email", "Это уведомление другой роли"));
+        }
+        if seen & t.kind.bit() != 0 {
+            return Err(ApiError::field("email", "Каждый вид — один раз"));
+        }
+        seen |= t.kind.bit();
+        if t.enabled {
+            on |= t.kind.bit();
+        } else {
+            off |= t.kind.bit();
+        }
+    }
+    Ok((off, on))
+}
+
 /// Turn email on or off per kind; kinds not listed keep their setting. A letter already queued
 /// leaves out the kinds turned off before it is sent
 #[utoipa::path(put, path = "/notification-settings", tag = TAG, operation_id = "update_notification_settings",
@@ -274,30 +325,24 @@ async fn update_settings(
     let Some(audience) = audience(user.role) else {
         return Err(ApiError::field("email", "Для этой роли писем нет"));
     };
-    let (mut off, mut on, mut seen) = (0i32, 0i32, 0i32);
-    for t in &req.email {
-        if t.kind.audience() != audience {
-            return Err(ApiError::field("email", "Это уведомление другой роли"));
-        }
-        if seen & t.kind.bit() != 0 {
-            return Err(ApiError::field("email", "Каждый вид — один раз"));
-        }
-        seen |= t.kind.bit();
-        if t.enabled {
-            on |= t.kind.bit();
-        } else {
-            off |= t.kind.bit();
-        }
-    }
+    let (off, on) = email_toggles(audience, &req.email)?;
     let mask = db::notifications::update_email_off(&state.pool, user.id, off, on).await?;
     Ok(Json(settings_view(user.role, mask)))
 }
 
-fn scope_label(scope: Scope) -> (Option<NotificationKind>, String) {
-    match scope {
-        Scope::Kind(k) => (Some(k), k.title().to_owned()),
-        Scope::All => (None, "все письма".to_owned()),
-    }
+/// What a token turns off for an account of `audience` (for `Scope::Kind`, the kind's own
+/// audience): the bits and the answer.
+fn unsubscribe_effect(scope: Scope, audience: Audience) -> (i32, Unsubscribed) {
+    let (bits, kind, audience) = match scope {
+        Scope::Kind(k) => (k.bit(), Some(k), k.audience()),
+        Scope::All => (EmailMask::all_of(audience), None, audience),
+    };
+    let view = Unsubscribed {
+        kind,
+        title: scope.label().to_owned(),
+        settings_path: render::settings_path(audience),
+    };
+    (bits, view)
 }
 
 /// The letter's unsubscribe link opened in a browser: a GET never unsubscribes (RFC 8058 — mail
@@ -345,23 +390,17 @@ async fn unsubscribe(
 ) -> ApiResult<Json<Unsubscribed>> {
     let key = state.crypto.derive_key(token::KEY_PURPOSE);
     let (user, scope) = token::verify(&key, &q.token).ok_or_else(invalid_token)?;
-    let (bits, settings_path) = match scope {
-        Scope::Kind(k) => (k.bit(), render::settings_path(k.audience())),
-        Scope::All => {
-            let role = db::users::user_by_id(&state.pool, user)
-                .await?
-                .map(|u| Role::from(u.role));
-            let audience = role.and_then(audience).unwrap_or(Audience::Candidate);
-            (EmailMask::all_of(audience), render::settings_path(audience))
-        }
+    let account = match scope {
+        Scope::Kind(k) => k.audience(),
+        Scope::All => db::users::user_by_id(&state.pool, user)
+            .await?
+            .map(|u| Role::from(u.role))
+            .and_then(audience)
+            .unwrap_or(Audience::Candidate),
     };
+    let (bits, view) = unsubscribe_effect(scope, account);
     db::notifications::turn_email_off(&state.pool, user, bits).await?;
-    let (kind, title) = scope_label(scope);
-    Ok(Json(Unsubscribed {
-        kind,
-        title,
-        settings_path,
-    }))
+    Ok(Json(view))
 }
 
 #[derive(Serialize, ToSchema)]
@@ -401,4 +440,209 @@ pub(crate) async fn export(state: &AppState, user: AuthUser) -> ApiResult<Notifi
             })
             .collect(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn messages(e: &ApiError) -> serde_json::Value {
+        match e {
+            ApiError::Validation(errors) => serde_json::to_value(errors).unwrap(),
+            other => panic!("expected a validation error, got {other:?}"),
+        }
+    }
+
+    fn toggle(kind: NotificationKind, enabled: bool) -> EmailToggle {
+        EmailToggle { kind, enabled }
+    }
+
+    #[test]
+    fn settings_list_the_kinds_of_the_role_with_everything_on_by_default() {
+        let candidate = settings_view(Role::Candidate, 0);
+        assert_eq!(candidate.items.len(), 11);
+        assert!(candidate.items.iter().all(|i| i.email && i.in_app));
+        assert!(
+            candidate
+                .items
+                .iter()
+                .all(|i| i.kind.audience() == Audience::Candidate)
+        );
+        assert_eq!(
+            candidate.items[0].kind,
+            NotificationKind::InvitationReceived
+        );
+        assert_eq!(candidate.items[0].title, "Новые приглашения");
+        let employer = settings_view(Role::Employer, 0);
+        assert_eq!(employer.items.len(), 9);
+        assert!(
+            employer
+                .items
+                .iter()
+                .all(|i| i.kind.audience() == Audience::Employer && i.email)
+        );
+        assert!(settings_view(Role::Admin, 0).items.is_empty());
+    }
+
+    #[test]
+    fn a_kind_turned_off_loses_only_its_email() {
+        let view = settings_view(Role::Candidate, NotificationKind::InvitationReceived.bit());
+        let off: Vec<NotificationKind> = view
+            .items
+            .iter()
+            .filter(|i| !i.email)
+            .map(|i| i.kind)
+            .collect();
+        assert_eq!(off, [NotificationKind::InvitationReceived]);
+        assert!(view.items.iter().all(|i| i.in_app));
+    }
+
+    #[test]
+    fn email_toggles_become_bits_to_turn_off_and_on() {
+        let (off, on) = email_toggles(
+            Audience::Candidate,
+            &[
+                toggle(NotificationKind::InvitationExpiring, false),
+                toggle(NotificationKind::InvitationReceived, true),
+                toggle(NotificationKind::HiringStage, false),
+            ],
+        )
+        .unwrap();
+        assert_eq!(
+            off,
+            NotificationKind::InvitationExpiring.bit() | NotificationKind::HiringStage.bit()
+        );
+        assert_eq!(on, NotificationKind::InvitationReceived.bit());
+        assert_eq!(email_toggles(Audience::Employer, &[]).unwrap(), (0, 0));
+    }
+
+    #[test]
+    fn a_kind_of_the_other_role_is_rejected() {
+        let e = email_toggles(
+            Audience::Candidate,
+            &[toggle(NotificationKind::InvitationAccepted, false)],
+        )
+        .unwrap_err();
+        assert_eq!(e.summary(), (422, "validation_failed", vec!["email"]));
+        assert_eq!(
+            messages(&e),
+            json!({ "email": ["Это уведомление другой роли"] })
+        );
+    }
+
+    #[test]
+    fn the_same_kind_twice_is_rejected() {
+        let e = email_toggles(
+            Audience::Employer,
+            &[
+                toggle(NotificationKind::TrustChanged, false),
+                toggle(NotificationKind::TrustChanged, true),
+            ],
+        )
+        .unwrap_err();
+        assert_eq!(e.summary(), (422, "validation_failed", vec!["email"]));
+        assert_eq!(messages(&e), json!({ "email": ["Каждый вид — один раз"] }));
+    }
+
+    #[test]
+    fn unsubscribing_from_a_kind_turns_off_only_its_bit() {
+        let (bits, view) = unsubscribe_effect(
+            Scope::Kind(NotificationKind::InvitationExpiring),
+            Audience::Candidate,
+        );
+        assert_eq!(bits, NotificationKind::InvitationExpiring.bit());
+        assert_eq!(view.kind, Some(NotificationKind::InvitationExpiring));
+        assert_eq!(view.title, "Напоминание о сроке ответа");
+        assert_eq!(view.settings_path, "/candidate/settings#notifications");
+
+        let (bits, view) = unsubscribe_effect(
+            Scope::Kind(NotificationKind::TrustChanged),
+            Audience::Employer,
+        );
+        assert_eq!(bits, NotificationKind::TrustChanged.bit());
+        assert_eq!(view.title, "Уровень доверия и квота");
+        assert_eq!(view.settings_path, "/employer/company#notifications");
+    }
+
+    #[test]
+    fn unsubscribing_from_everything_turns_off_every_kind_of_the_account() {
+        let (bits, view) = unsubscribe_effect(Scope::All, Audience::Employer);
+        assert_eq!(bits, EmailMask::all_of(Audience::Employer));
+        assert_eq!(view.kind, None);
+        assert_eq!(view.title, "все письма");
+        assert_eq!(view.settings_path, "/employer/company#notifications");
+
+        let (bits, view) = unsubscribe_effect(Scope::All, Audience::Candidate);
+        assert_eq!(bits, EmailMask::all_of(Audience::Candidate));
+        assert_eq!(view.settings_path, "/candidate/settings#notifications");
+    }
+
+    fn mark(ids: u128, all: bool) -> MarkRead {
+        MarkRead {
+            ids: (0..ids).map(Uuid::from_u128).collect(),
+            all,
+        }
+    }
+
+    #[test]
+    fn mark_read_takes_the_listed_ids_or_everything() {
+        let some = mark(2, false);
+        assert_eq!(read_target(&some).unwrap(), ReadTarget::Ids(&some.ids));
+        assert_eq!(read_target(&mark(0, true)).unwrap(), ReadTarget::All);
+        assert_eq!(read_target(&mark(3, true)).unwrap(), ReadTarget::All);
+        let full = mark(100, false);
+        assert_eq!(read_target(&full).unwrap(), ReadTarget::Ids(&full.ids));
+    }
+
+    #[test]
+    fn mark_read_needs_ids_or_all() {
+        let e = read_target(&mark(0, false)).unwrap_err();
+        assert_eq!(e.summary(), (422, "validation_failed", vec!["ids"]));
+        assert_eq!(
+            messages(&e),
+            json!({ "ids": ["Укажите уведомления или all: true"] })
+        );
+    }
+
+    #[test]
+    fn mark_read_takes_at_most_100_ids_even_with_all() {
+        for all in [false, true] {
+            let e = read_target(&mark(101, all)).unwrap_err();
+            assert_eq!(messages(&e), json!({ "ids": ["Не больше 100 за раз"] }));
+        }
+    }
+
+    fn rows(n: u128) -> Vec<db::notifications::FeedRow> {
+        let at = DateTime::from_timestamp(1_790_000_000, 0).unwrap();
+        (1..=n)
+            .map(|i| db::notifications::FeedRow {
+                id: Uuid::from_u128(i),
+                kind: "invitation_received".into(),
+                payload: "{}".into(),
+                created_at: at,
+                read_at: None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn feed_page_keeps_the_limit_and_continues_after_its_last_item() {
+        let (page, next) = feed_page(rows(3), 2);
+        assert_eq!(page.len(), 2);
+        assert_eq!(next, Some(Uuid::from_u128(2)));
+        let (page, next) = feed_page(rows(2), 2);
+        assert_eq!((page.len(), next), (2, None));
+        let (page, next) = feed_page(Vec::new(), 20);
+        assert_eq!((page.len(), next), (0, None));
+    }
+
+    #[test]
+    fn feed_limit_is_20_by_default_and_kept_within_1_to_50() {
+        assert_eq!(page::limit(None, PAGE, MAX_PAGE), 20);
+        assert_eq!(page::limit(Some(0), PAGE, MAX_PAGE), 1);
+        assert_eq!(page::limit(Some(-5), PAGE, MAX_PAGE), 1);
+        assert_eq!(page::limit(Some(500), PAGE, MAX_PAGE), 50);
+    }
 }

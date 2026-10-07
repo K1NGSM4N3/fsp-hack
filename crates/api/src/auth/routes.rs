@@ -17,10 +17,10 @@ use super::{
 };
 use crate::{
     age::{self, AgeBracket},
-    crypto::{new_token, normalize_email, sha256},
+    crypto::{Crypto, new_token, normalize_email, sha256},
     error::{ApiError, ApiResult, Problem, Validator},
     extract::Json,
-    guardian::{self, GuardianContact, clean_contact},
+    guardian::{self, CleanContact, GuardianContact, clean_contact},
     state::AppState,
 };
 
@@ -158,51 +158,13 @@ async fn register(
             "company_name",
             "Укажите название компании",
         );
-    let age_bracket = match req.role {
-        Role::Candidate => req.age,
-        _ => Some(AgeBracket::Adult),
-    };
-    v.check(age_bracket.is_some(), "age", "Укажите, есть ли вам 18 лет");
-    let minor = match (age_bracket, &req.minor) {
-        (Some(AgeBracket::Minor), Some(m)) => {
-            if let Err(e) = age::check_minor_birth_date(m.birth_date, Utc::now().date_naive()) {
-                v.check(false, "minor.birth_date", e.message());
-            }
-            let contact = clean_contact(
-                &state.crypto,
-                &m.guardian,
-                &email,
-                &mut v,
-                ("minor.guardian.full_name", "minor.guardian.email"),
-            );
-            Some((m.birth_date, contact))
-        }
-        (Some(AgeBracket::Minor), None) => {
-            v.check(
-                false,
-                "minor",
-                "Укажите дату рождения и законного представителя",
-            );
-            None
-        }
-        _ => None,
-    };
+    let (age_bracket, minor) =
+        check_age(&state.crypto, &req, &email, Utc::now().date_naive(), &mut v);
     v.finish()?;
-    let age_bracket = age_bracket.unwrap_or(AgeBracket::Adult);
 
     let docs = db::consents::current_consent_documents(&state.pool).await?;
     let role_db: db::types::UserRole = req.role.into();
-    let missing: Vec<_> = docs
-        .iter()
-        .filter(|d| d.required_for.contains(&role_db) && !req.consents.contains(&d.id))
-        .map(|d| d.title.clone())
-        .collect();
-    if !missing.is_empty() {
-        return Err(ApiError::field(
-            "consents",
-            format!("Нужно согласие: {}", missing.join(", ")),
-        ));
-    }
+    require_consents(&docs, role_db, &req.consents)?;
 
     let bidx = state.crypto.blind_index(&email);
     if db::users::user_by_email_bidx(&state.pool, &bidx)
@@ -290,6 +252,69 @@ async fn register(
             user_id,
             verification_required: true,
         }),
+    ))
+}
+
+/// The declared age: employers are adults by the form's declaration, a candidate says it, and
+/// «Мне 14–17 лет» needs a birth date that really is 14–17 `today` and an adult's address that is
+/// not the candidate's own. The bracket falls back to adult only when `v` already holds an error.
+fn check_age(
+    crypto: &Crypto,
+    req: &RegisterRequest,
+    email: &str,
+    today: NaiveDate,
+    v: &mut Validator,
+) -> (AgeBracket, Option<(NaiveDate, CleanContact)>) {
+    let age_bracket = match req.role {
+        Role::Candidate => req.age,
+        _ => Some(AgeBracket::Adult),
+    };
+    v.check(age_bracket.is_some(), "age", "Укажите, есть ли вам 18 лет");
+    let minor = match (age_bracket, &req.minor) {
+        (Some(AgeBracket::Minor), Some(m)) => {
+            if let Err(e) = age::check_minor_birth_date(m.birth_date, today) {
+                v.check(false, "minor.birth_date", e.message());
+            }
+            let contact = clean_contact(
+                crypto,
+                &m.guardian,
+                email,
+                v,
+                ("minor.guardian.full_name", "minor.guardian.email"),
+            );
+            Some((m.birth_date, contact))
+        }
+        (Some(AgeBracket::Minor), None) => {
+            v.check(
+                false,
+                "minor",
+                "Укажите дату рождения и законного представителя",
+            );
+            None
+        }
+        _ => None,
+    };
+    (age_bracket.unwrap_or(AgeBracket::Adult), minor)
+}
+
+/// Every current document required for `role` is among `accepted`; otherwise 422 on `consents`
+/// listing the titles of the rest.
+fn require_consents(
+    docs: &[db::consents::ConsentDocument],
+    role: db::types::UserRole,
+    accepted: &[Uuid],
+) -> ApiResult<()> {
+    let missing: Vec<&str> = docs
+        .iter()
+        .filter(|d| d.required_for.contains(&role) && !accepted.contains(&d.id))
+        .map(|d| d.title.as_str())
+        .collect();
+    if missing.is_empty() {
+        return Ok(());
+    }
+    Err(ApiError::field(
+        "consents",
+        format!("Нужно согласие: {}", missing.join(", ")),
     ))
 }
 
@@ -572,5 +597,211 @@ mod tests {
         assert!(!valid_email("ivan@example"));
         assert!(!valid_email("ivan example@x.ru"));
         assert!(!valid_email("@x.ru"));
+    }
+
+    const OWN_EMAIL: &str = "misha.petrov@example.ru";
+
+    fn today() -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026, 10, 7).unwrap()
+    }
+
+    fn form(
+        role: Role,
+        age: Option<AgeBracket>,
+        minor: Option<(NaiveDate, &str)>,
+    ) -> RegisterRequest {
+        RegisterRequest {
+            email: OWN_EMAIL.into(),
+            password: "Shkola-57-2026".into(),
+            role,
+            company_name: None,
+            consents: Vec::new(),
+            age,
+            minor: minor.map(|(birth_date, guardian_email)| MinorRegistration {
+                birth_date,
+                guardian: GuardianContact {
+                    full_name: "Петрова Ольга Викторовна".into(),
+                    email: guardian_email.into(),
+                },
+            }),
+        }
+    }
+
+    /// The registration's age checks: the bracket, the minor's data, and the field errors as JSON.
+    fn age_of(
+        req: &RegisterRequest,
+    ) -> (
+        AgeBracket,
+        Option<(NaiveDate, CleanContact)>,
+        serde_json::Value,
+    ) {
+        let crypto = Crypto::new(&[1; 32], &[2; 32]);
+        let mut v = Validator::default();
+        let (bracket, minor) = check_age(&crypto, req, OWN_EMAIL, today(), &mut v);
+        let errors = match v.finish() {
+            Ok(()) => serde_json::Value::Null,
+            Err(ApiError::Validation(errors)) => serde_json::to_value(&errors).unwrap(),
+            Err(e) => panic!("unexpected {e}"),
+        };
+        (bracket, minor, errors)
+    }
+
+    fn years_ago(years: i32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(2026 - years, 10, 7).unwrap()
+    }
+
+    #[test]
+    fn candidate_must_declare_the_age() {
+        let (_, minor, errors) = age_of(&form(Role::Candidate, None, None));
+        assert!(minor.is_none());
+        assert_eq!(
+            errors,
+            serde_json::json!({"age": ["Укажите, есть ли вам 18 лет"]})
+        );
+    }
+
+    #[test]
+    fn employer_is_an_adult_whatever_the_form_says() {
+        let req = form(
+            Role::Employer,
+            Some(AgeBracket::Minor),
+            Some((years_ago(15), "o.petrova@example.ru")),
+        );
+        let (bracket, minor, errors) = age_of(&req);
+        assert_eq!(bracket, AgeBracket::Adult);
+        assert!(minor.is_none());
+        assert_eq!(errors, serde_json::Value::Null);
+        let (bracket, _, errors) = age_of(&form(Role::Employer, None, None));
+        assert_eq!(bracket, AgeBracket::Adult);
+        assert_eq!(errors, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn adult_candidate_gives_no_birth_date() {
+        let req = form(
+            Role::Candidate,
+            Some(AgeBracket::Adult),
+            Some((years_ago(15), "o.petrova@example.ru")),
+        );
+        let (bracket, minor, errors) = age_of(&req);
+        assert_eq!(bracket, AgeBracket::Adult);
+        assert!(minor.is_none(), "a minor block next to «18+» is ignored");
+        assert_eq!(errors, serde_json::Value::Null);
+    }
+
+    #[test]
+    fn minor_registration_is_open_from_14() {
+        let req = form(
+            Role::Candidate,
+            Some(AgeBracket::Minor),
+            Some((years_ago(13), "o.petrova@example.ru")),
+        );
+        assert_eq!(
+            age_of(&req).2,
+            serde_json::json!({"minor.birth_date": ["Регистрация открыта с 14 лет"]})
+        );
+    }
+
+    #[test]
+    fn minor_born_exactly_18_years_ago_is_sent_to_the_adult_form() {
+        let req = form(
+            Role::Candidate,
+            Some(AgeBracket::Minor),
+            Some((years_ago(18), "o.petrova@example.ru")),
+        );
+        assert_eq!(
+            age_of(&req).2,
+            serde_json::json!({"minor.birth_date": [
+                "По дате рождения вам уже есть 18 — выберите «Мне есть 18 лет»"
+            ]})
+        );
+    }
+
+    #[test]
+    fn guardian_address_must_not_be_the_minor_own() {
+        let req = form(
+            Role::Candidate,
+            Some(AgeBracket::Minor),
+            Some((years_ago(15), " Misha.Petrov@EXAMPLE.ru ")),
+        );
+        assert_eq!(
+            age_of(&req).2,
+            serde_json::json!({"minor.guardian.email": ["Нужна почта взрослого, а не ваша"]})
+        );
+    }
+
+    #[test]
+    fn minor_without_the_minor_block_is_refused() {
+        let (bracket, minor, errors) =
+            age_of(&form(Role::Candidate, Some(AgeBracket::Minor), None));
+        assert_eq!(bracket, AgeBracket::Minor);
+        assert!(minor.is_none());
+        assert_eq!(
+            errors,
+            serde_json::json!({"minor": ["Укажите дату рождения и законного представителя"]})
+        );
+    }
+
+    #[test]
+    fn valid_minor_keeps_the_birth_date_and_a_lowercase_guardian_address() {
+        let birth = NaiveDate::from_ymd_opt(2010, 3, 14).unwrap();
+        let req = form(
+            Role::Candidate,
+            Some(AgeBracket::Minor),
+            Some((birth, " O.Petrova@Example.RU ")),
+        );
+        let (bracket, minor, errors) = age_of(&req);
+        assert_eq!(errors, serde_json::Value::Null);
+        assert_eq!(bracket, AgeBracket::Minor);
+        let (birth_date, contact) = minor.unwrap();
+        assert_eq!(birth_date, birth);
+        assert_eq!(contact.email, "o.petrova@example.ru");
+        assert_eq!(contact.full_name, "Петрова Ольга Викторовна");
+        assert_eq!(
+            contact.bidx,
+            Crypto::new(&[1; 32], &[2; 32]).blind_index("o.petrova@example.ru")
+        );
+    }
+
+    fn document(
+        title: &str,
+        required_for: &[db::types::UserRole],
+    ) -> db::consents::ConsentDocument {
+        db::consents::ConsentDocument {
+            id: Uuid::now_v7(),
+            kind: title.to_lowercase(),
+            version: 1,
+            title: title.into(),
+            body: String::new(),
+            required_for: required_for.to_vec(),
+            applies_to: required_for.to_vec(),
+            published_at: "2026-01-01T00:00:00Z".parse().unwrap(),
+        }
+    }
+
+    #[test]
+    fn registration_lists_every_required_consent_not_accepted() {
+        use db::types::UserRole::{Candidate, Employer};
+        let docs = [
+            document("Правила платформы", &[Candidate, Employer]),
+            document("Обработка ПДн", &[Candidate]),
+            document("Публикация профиля", &[Candidate]),
+            document("Видеозапись теста", &[]),
+        ];
+        let err = require_consents(&docs, Candidate, &[docs[1].id]).unwrap_err();
+        assert_eq!(err.summary(), (422, "validation_failed", vec!["consents"]));
+        let ApiError::Validation(errors) = err else {
+            unreachable!()
+        };
+        assert_eq!(
+            serde_json::to_value(&errors).unwrap(),
+            serde_json::json!({"consents": ["Нужно согласие: Правила платформы, Публикация профиля"]})
+        );
+        assert!(require_consents(&docs, Candidate, &[docs[0].id, docs[1].id, docs[2].id]).is_ok());
+        assert!(
+            require_consents(&docs, Employer, &[docs[0].id]).is_ok(),
+            "an optional document is never required"
+        );
+        assert!(require_consents(&docs, Employer, &[docs[3].id]).is_err());
     }
 }

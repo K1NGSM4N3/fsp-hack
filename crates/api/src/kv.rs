@@ -277,34 +277,6 @@ mod tests {
         assert!(left <= first.retry_after.as_secs());
     }
 
-    /// `TEST_VALKEY_URL=redis://127.0.0.1:6379 cargo test -p api --lib kv -- --ignored`
-    #[tokio::test]
-    #[ignore = "needs TEST_VALKEY_URL"]
-    async fn valkey_hit_reports_the_key_ttl() {
-        let url = std::env::var("TEST_VALKEY_URL").expect("TEST_VALKEY_URL");
-        let kv = Kv::connect(Some(&url)).await.unwrap();
-        let key = format!("rl:test:{}", unix_now() ^ u64::from(std::process::id()));
-        let window = Duration::from_secs(600);
-        let first = kv.hit(&key, window).await.unwrap();
-        let second = kv.hit(&key, window).await.unwrap();
-        assert_eq!((first.count, second.count), (1, 2));
-        assert!(
-            (590..=600).contains(&second.retry_after.as_secs()),
-            "{second:?}"
-        );
-        // A key that lost its expiry gets one back on the next hit instead of living forever.
-        if let Kv::Valkey(conn) = &kv {
-            let mut conn = conn.clone();
-            let _: () = conn.persist(&key).await.unwrap();
-        }
-        let third = kv.hit(&key, window).await.unwrap();
-        assert_eq!(third.count, 3);
-        assert!(
-            (590..=600).contains(&third.retry_after.as_secs()),
-            "{third:?}"
-        );
-    }
-
     #[test]
     fn flags_expire() {
         let kv = MemoryKv::new(1024);

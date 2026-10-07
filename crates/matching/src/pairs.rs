@@ -966,6 +966,50 @@ mod tests {
         let mut i = input(pool(), vec![]);
         i.candidates[0].test_result = Some(101.0);
         assert_eq!(field(i), "candidates");
+        let mut i = input(pool(), vec![]);
+        i.candidates[0].resume_text = "я".repeat(MAX_TEXT_CHARS + 1);
+        assert_eq!(field(i), "candidates");
+        let mut i = input(pool(), vec![]);
+        i.vacancies[0].text = "я".repeat(MAX_TEXT_CHARS + 1);
+        assert_eq!(field(i), "vacancies");
+    }
+
+    #[test]
+    fn a_small_set_is_ranked_explained_and_scored() {
+        let input: PairsInput = serde_json::from_value(serde_json::json!({
+            "now": "2026-10-01",
+            "k": 3,
+            "vacancies": [{
+                "id": "go",
+                "text": "Go-разработчик (Middle)\nТребования: Go, PostgreSQL, Kafka.\nУдалённо, 250–330 тыс. ₽."
+            }],
+            "candidates": [
+                {"id": "c1", "resume_text": "Go-разработчик\nОпыт работы — 4 года\nGo, PostgreSQL, Kafka, Redis."},
+                {"id": "c2", "resume_text": "PHP-разработчик\nОпыт работы — 4 года\nLaravel, MySQL, Go.",
+                 "specialization": "backend", "grade": "middle", "test_result": 40},
+                {"id": "c3", "resume_text": "Бухгалтер, 1С"}
+            ],
+            "labels": [
+                {"vacancy_id": "go", "candidate_id": "c1", "relevance": 3},
+                {"vacancy_id": "go", "candidate_id": "c2", "relevance": 0}
+            ]
+        }))
+        .unwrap();
+        let r = serde_json::to_value(evaluate(&input, NOW).unwrap()).unwrap();
+        let top = &r["vacancies"][0]["top"][0];
+        assert_eq!(top["candidate_id"], "c1");
+        assert!(
+            top["notes"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|n| n.as_str().unwrap().contains("не подтверждена тестом")),
+            "{top}"
+        );
+        assert_eq!(r["metrics"]["vacancies"], 1);
+        assert_eq!(r["metrics"]["ours"]["reciprocal_rank"]["mean"], 1.0);
+        assert!(r["metrics"]["baseline"]["ndcg_at_k"]["mean"].is_number());
+        assert_eq!(r["coverage"]["candidates_with_test"], 1);
     }
 
     #[test]

@@ -25,6 +25,16 @@ pub enum Scope {
     All,
 }
 
+impl Scope {
+    /// What the link turns off, in words: the kind's title or «все письма».
+    pub fn label(self) -> &'static str {
+        match self {
+            Scope::Kind(k) => k.title(),
+            Scope::All => "все письма",
+        }
+    }
+}
+
 fn mac(key: &[u8; 32]) -> Hmac<Sha256> {
     <Hmac<Sha256> as Mac>::new_from_slice(key).expect("HMAC accepts any key size")
 }

@@ -563,6 +563,57 @@ mod tests {
         );
     }
 
+    fn kinds(a: &TrustAssessment) -> Vec<TrustReasonKind> {
+        a.reasons.iter().map(|r| r.kind).collect()
+    }
+
+    #[test]
+    fn a_new_company_with_a_flagged_range_and_an_own_copy_drops_to_the_floor() {
+        let mut s = company(0);
+        s.salary_flags = 1;
+        s.own_duplicates = 1;
+        let a = assess(&s, NOW);
+        assert_eq!((a.level, a.quota), (TrustLevel::Low, MIN_QUOTA));
+        assert_eq!(
+            kinds(&a),
+            [TrustReasonKind::SalaryFlags, TrustReasonKind::OwnDuplicates]
+        );
+        assert_eq!(a.penalty, -10);
+    }
+
+    #[test]
+    fn complaints_outweigh_a_verified_domain_down_to_the_floor() {
+        let mut s = company(0);
+        s.domain_verified = true;
+        s.complaints = 2;
+        let a = assess(&s, NOW);
+        assert_eq!((a.level, a.quota), (TrustLevel::Low, MIN_QUOTA));
+        assert_eq!((a.bonus, a.penalty), (10, -20));
+        assert_eq!(
+            kinds(&a),
+            [TrustReasonKind::Domain, TrustReasonKind::Complaints]
+        );
+    }
+
+    #[test]
+    fn the_first_accepted_invitation_gives_a_new_company_half_a_step() {
+        let mut s = company(0);
+        s.accepted = 1;
+        let a = assess(&s, NOW);
+        assert_eq!((a.level, a.quota), (TrustLevel::New, 15));
+        assert_eq!(a.reasons[0].points, 5);
+        assert_eq!(
+            a.reasons[0].text,
+            "Кандидаты приняли 1 приглашение за полгода"
+        );
+        assert!(
+            a.advice
+                .last()
+                .unwrap()
+                .starts_with("Когда кандидаты примут ещё 2 приглашения, квота вырастет на 5")
+        );
+    }
+
     #[test]
     fn rule_mentions_the_bounds() {
         let rule = quota_rule().join(" ");

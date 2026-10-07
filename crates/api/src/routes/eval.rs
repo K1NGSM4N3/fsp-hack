@@ -134,3 +134,46 @@ async fn eval_pairs(
         tokio::task::spawn_blocking(move || matching::pairs::evaluate(&input, now)).await??;
     Ok(Json(report))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_oversized_set_is_sent_to_the_cli_and_other_errors_pass_through() {
+        let big = rejected(ApiError::payload_too_large());
+        assert_eq!(big.summary().0, 413);
+        assert_eq!(big.summary().1, "payload_too_large");
+        let ApiError::Status { detail, .. } = big else {
+            panic!("a status problem")
+        };
+        assert!(detail.is_some_and(|d| d.contains("cargo run -p validate --release -- pairs")));
+        let field = rejected(ApiError::field("vacancies", "не больше 200"));
+        assert_eq!(
+            field.summary(),
+            (422, "validation_failed", vec!["vacancies"])
+        );
+    }
+
+    #[test]
+    fn pairs_limits_are_field_errors() {
+        let e = ApiError::from(matching::pairs::PairsError::TooMany {
+            list: "vacancies",
+            got: 201,
+            max: 200,
+        });
+        assert_eq!(e.summary(), (422, "validation_failed", vec!["vacancies"]));
+        let Err(json) = crate::extract::Json::<matching::pairs::PairsInput>::from_bytes(
+            br#"{"vacancies":[{"id":"v","text":"Go","grade":"middle"}],"candidates":[]}"#,
+        ) else {
+            panic!("an unknown field is refused")
+        };
+        assert_eq!(json.summary().1, "invalid_json");
+        assert_eq!(json.summary().0, 422);
+        let Err(syntax) = crate::extract::Json::<matching::pairs::PairsInput>::from_bytes(b"{")
+        else {
+            panic!("broken JSON is refused")
+        };
+        assert_eq!(syntax.summary().0, 400);
+    }
+}

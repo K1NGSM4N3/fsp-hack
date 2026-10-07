@@ -155,10 +155,13 @@ fn unauthorized(code: &'static str, title: &str) -> ApiError {
     ApiError::new(StatusCode::UNAUTHORIZED, code, title)
 }
 
-fn bearer(parts: &Parts) -> Option<&str> {
-    let value = parts.headers.get(header::AUTHORIZATION)?.to_str().ok()?;
-    let (scheme, token) = value.split_once(' ')?;
-    scheme.eq_ignore_ascii_case("bearer").then(|| token.trim())
+/// The company key from an `Authorization` header. A session JWT sent as Bearer is not a key:
+/// the integration tree answers it `api_key_required`, never with the user's rights.
+fn api_key_token(authorization: Option<&str>) -> Option<&str> {
+    let (scheme, token) = authorization?.split_once(' ')?;
+    let token = token.trim();
+    (scheme.eq_ignore_ascii_case("bearer") && token.starts_with(KEY_PREFIX) && token.len() <= 128)
+        .then_some(token)
 }
 
 impl FromRequestParts<AppState> for ApiClient {
@@ -171,14 +174,16 @@ impl FromRequestParts<AppState> for ApiClient {
         if let Some(client) = parts.extensions.get::<ApiClient>() {
             return Ok(*client);
         }
-        let token = bearer(parts)
-            .filter(|t| t.starts_with(KEY_PREFIX) && t.len() <= 128)
-            .ok_or_else(|| {
-                unauthorized(
-                    "api_key_required",
-                    "Нужен API-ключ компании: Authorization: Bearer fsp_live_…",
-                )
-            })?;
+        let authorization = parts
+            .headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok());
+        let token = api_key_token(authorization).ok_or_else(|| {
+            unauthorized(
+                "api_key_required",
+                "Нужен API-ключ компании: Authorization: Bearer fsp_live_…",
+            )
+        })?;
         let row = db::integrations::api_key_by_hash(&state.pool, &sha256(token.as_bytes()))
             .await?
             .ok_or_else(|| unauthorized("api_key_invalid", "Ключ не найден или отозван"))?;
@@ -232,6 +237,54 @@ mod tests {
                 serde_json::to_value(scope).unwrap(),
                 serde_json::Value::from(scope.as_str())
             );
+        }
+    }
+
+    #[test]
+    fn only_a_company_key_opens_the_integration_tree() {
+        let key = generate().key;
+        assert_eq!(
+            api_key_token(Some(&format!("Bearer {key}"))),
+            Some(key.as_str())
+        );
+        assert_eq!(
+            api_key_token(Some(&format!("bearer   {key} "))),
+            Some(key.as_str())
+        );
+        assert_eq!(
+            api_key_token(Some("Bearer eyJhbGciOiJFZERTQSJ9.e30.sig")),
+            None,
+            "a session JWT"
+        );
+        assert_eq!(api_key_token(Some(&format!("Basic {key}"))), None);
+        assert_eq!(api_key_token(Some(&key)), None, "no scheme");
+        assert_eq!(api_key_token(None), None);
+        let long = format!("{KEY_PREFIX}{}", "a".repeat(128 - KEY_PREFIX.len() + 1));
+        assert_eq!(
+            api_key_token(Some(&format!("Bearer {long}"))),
+            None,
+            "longer than any key we issue"
+        );
+    }
+
+    #[test]
+    fn a_key_acts_only_within_its_scopes() {
+        let client = ApiClient {
+            key_id: Uuid::now_v7(),
+            company_id: Uuid::now_v7(),
+            owner_user_id: Uuid::now_v7(),
+            scopes: Scopes::of(&[Scope::InvitationsRead]),
+        };
+        assert!(client.require(Scope::InvitationsRead).is_ok());
+        for scope in [
+            Scope::CandidatesRead,
+            Scope::OutcomesWrite,
+            Scope::NeedsWrite,
+        ] {
+            let refused = client.require(scope).unwrap_err();
+            assert_eq!(refused.summary().1, "insufficient_scope");
+            assert_eq!(refused.summary().0, 403);
+            assert!(refused.to_string().contains(scope.as_str()));
         }
     }
 }

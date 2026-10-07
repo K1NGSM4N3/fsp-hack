@@ -163,41 +163,33 @@ pub fn api_v1() -> OpenApiRouter<AppState> {
             "/admin",
             routes::moderation::router().merge(routes::trust::admin_router()),
         )
-        .merge(listing_routes().layer(middleware::from_fn_with_state(
-            Policy::Listing,
-            http_cache::public,
-        )))
         .merge(routes::vacancies::apply_router())
-        .merge(
-            routes::guardian::public_router().layer(middleware::from_fn_with_state(
-                Policy::NoStore,
-                http_cache::public,
-            )),
-        )
         .merge(routes::reports::router())
         .merge(routes::notifications::public_router())
-        .merge(static_routes().layer(middleware::from_fn_with_state(
-            Policy::Static,
-            http_cache::public,
-        )))
-        .merge(
-            routes::eval::router()
-                .merge(routes::assessment::catalog_router())
-                .layer(middleware::from_fn_with_state(
-                    Policy::NoStore,
-                    http_cache::public,
-                )),
-        )
+        .merge(public_routes())
 }
 
-/// Reference data, cached publicly for 5 minutes. Only handlers without credentials belong here.
-fn static_routes() -> OpenApiRouter<AppState> {
-    routes::catalog::router()
+/// The anonymous groups that set their own `Cache-Control` (the rest is `private, no-store`).
+/// Only handlers without credentials belong here.
+fn public_groups() -> [(Policy, OpenApiRouter<AppState>); 3] {
+    [
+        (Policy::Static, routes::catalog::router()),
+        (Policy::Listing, routes::vacancies::public_router()),
+        (
+            Policy::NoStore,
+            routes::guardian::public_router()
+                .merge(routes::eval::router())
+                .merge(routes::assessment::catalog_router()),
+        ),
+    ]
 }
 
-/// Published vacancies, cached publicly for 30 seconds. Only handlers without credentials.
-fn listing_routes() -> OpenApiRouter<AppState> {
-    routes::vacancies::public_router()
+fn public_routes() -> OpenApiRouter<AppState> {
+    public_groups()
+        .into_iter()
+        .fold(OpenApiRouter::new(), |routes, (policy, group)| {
+            routes.merge(group.layer(middleware::from_fn_with_state(policy, http_cache::public)))
+        })
 }
 
 pub fn openapi() -> utoipa::openapi::OpenApi {
@@ -493,15 +485,62 @@ mod tests {
     /// A handler that reads credentials must never sit behind a public `Cache-Control`.
     #[test]
     fn publicly_cached_routes_take_no_credentials() {
-        let ops: Vec<_> = operations(static_routes())
-            .into_iter()
-            .chain(operations(listing_routes()))
-            .collect();
-        assert!(ops.len() >= 5, "{ops:?}");
-        for (name, op) in ops {
-            assert!(name.starts_with("get "), "{name}: only reads are cached");
-            assert!(op.get("security").is_none(), "{name} requires credentials");
+        for (policy, group) in public_groups() {
+            for (name, op) in operations(group) {
+                assert!(op.get("security").is_none(), "{name} requires credentials");
+                assert!(
+                    policy == Policy::NoStore || name.starts_with("get "),
+                    "{name}: only reads are cached"
+                );
+            }
         }
+    }
+
+    #[test]
+    fn each_public_route_has_its_cache_policy() {
+        let groups: Vec<(Policy, Vec<String>)> = public_groups()
+            .into_iter()
+            .map(|(policy, group)| {
+                let mut names: Vec<String> = operations(group)
+                    .into_iter()
+                    .map(|(name, _)| name)
+                    .collect();
+                names.sort_unstable();
+                (policy, names)
+            })
+            .collect();
+        assert_eq!(
+            groups,
+            [
+                (
+                    Policy::Static,
+                    vec![
+                        "get /catalog".to_owned(),
+                        "get /catalog/skills".to_owned(),
+                        "get /consents/current".to_owned(),
+                    ]
+                ),
+                (
+                    Policy::Listing,
+                    vec![
+                        "get /vacancies".to_owned(),
+                        "get /vacancies/{id}".to_owned()
+                    ]
+                ),
+                (
+                    Policy::NoStore,
+                    vec![
+                        "get /catalog/test-plan".to_owned(),
+                        "get /guardian/consent".to_owned(),
+                        "post /eval/pairs".to_owned(),
+                        "post /guardian/consent".to_owned(),
+                    ]
+                ),
+            ]
+        );
+        assert!(http_cache::STATIC.contains("public, max-age=300"));
+        assert!(http_cache::LISTING.contains("public, max-age=30,"));
+        assert_eq!(http_cache::NO_STORE, "no-store");
     }
 
     #[test]

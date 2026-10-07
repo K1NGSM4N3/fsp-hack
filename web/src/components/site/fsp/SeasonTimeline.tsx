@@ -13,6 +13,9 @@ const SEASONS = [
 ];
 
 const AT = (i: number) => 12.5 + i * 25;
+/** The medal carries the fade; its caption stops at the dimmest opacity that still reads at 4.5:1 (WCAG AA). */
+const NAME_FLOOR = 0.74;
+const nameOpacity = (opacity: number) => Math.max(opacity, NAME_FLOOR);
 
 /**
  * The «now» cursor walks from the oldest season to this one while earlier medals shrink and fade.
@@ -67,7 +70,7 @@ export function SeasonTimeline() {
           }
           if (i < last) {
             tl.fromTo(medals[i], { scale: 1, opacity: 1 }, { scale: s.scale, opacity: s.opacity, duration: 1 - at, immediateRender: false }, at);
-            tl.fromTo(names[i], { opacity: 1 }, { opacity: s.opacity, duration: 1 - at, immediateRender: false }, at);
+            tl.fromTo(names[i], { opacity: 1 }, { opacity: nameOpacity(s.opacity), duration: 1 - at, immediateRender: false }, at);
           }
         });
         tl.fromTo(q("[data-fresh-glow]"), { scale: 0.4, autoAlpha: 0 }, { scale: 1, autoAlpha: 1, duration: pop, ease: "power2.out" }, 1 - pop / 2);
@@ -105,7 +108,7 @@ export function SeasonTimeline() {
                     <span data-season-medal className="relative origin-bottom" style={{ transform: `scale(${s.scale})`, opacity: s.opacity }}>
                       <Medal mark="1" metal="gold" size="xl" />
                     </span>
-                    <span data-season-name className="relative mt-3 text-sm font-semibold whitespace-nowrap text-ink" style={{ opacity: s.opacity }}>
+                    <span data-season-name className="relative mt-3 text-sm font-semibold whitespace-nowrap text-ink" style={{ opacity: nameOpacity(s.opacity) }}>
                       1 место
                     </span>
                   </div>

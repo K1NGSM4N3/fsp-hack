@@ -140,7 +140,7 @@ export function ScreenShortlist() {
             {SKILLS.map((s) => (
               <Chip key={s.name} tone={s.tone}>
                 {s.name}
-                <span className="font-normal opacity-70">· {s.src}</span>
+                <span className="font-normal">· {s.src}</span>
               </Chip>
             ))}
           </div>

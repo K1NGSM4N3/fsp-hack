@@ -50,7 +50,3 @@ metrics = "0.24"
 metrics-exporter-prometheus = { version = "0.18", default-features = false }
 krilla = "0.8"
 pdf-extract = "0.12"
-
-[dev-dependencies]
-ats-mock = { path = "../ats-mock" }
-fsp-mock = { path = "../fsp-mock" }

@@ -7,7 +7,7 @@ use chrono::Utc;
 use matching::trust::{
     DomainCheck, MarketBand, Signature, TrustAssessment, TrustFlag, TrustSignals, assess,
     check_domain, salary_flags,
-    similarity::{closest, vacancy_text},
+    similarity::{closest, rank_similar, vacancy_text},
 };
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -132,28 +132,41 @@ pub async fn flag_published_vacancy(
     if let Some(sig) = signature {
         let (sigs, meta) =
             split(db::trust::recent_published_signatures(pool, id, RECENT_LIMIT).await?);
-        let (own, other): (Vec<usize>, Vec<usize>) =
-            (0..meta.len()).partition(|&i| meta[i].company_id == company);
-        if let Some((i, similarity)) = closest(sig, own.iter().map(|&i| &sigs[i])) {
-            let m = &meta[own[i]];
-            flags.push(TrustFlag::DuplicateOwn {
-                vacancy_id: m.id.to_string(),
-                title: m.title.clone(),
-                similarity,
-            });
-        }
-        if let Some((i, similarity)) = closest(sig, other.iter().map(|&i| &sigs[i])) {
-            let m = &meta[other[i]];
-            flags.push(TrustFlag::CopyOfOther {
-                vacancy_id: m.id.to_string(),
-                company: m.company_name.clone(),
-                title: m.title.clone(),
-                similarity,
-            });
-        }
+        flags.extend(text_flags(company, sig, &sigs, &meta));
     }
     db::trust::set_vacancy_flags(pool, id, &serde_json::to_value(&flags)?).await?;
     Ok(flags)
+}
+
+/// The closest near-copy among the company's own vacancies and among other companies' ones;
+/// `sigs[i]` is the signature of `meta[i]`.
+fn text_flags(
+    company: Uuid,
+    sig: &Signature,
+    sigs: &[Signature],
+    meta: &[db::trust::SignedVacancy],
+) -> Vec<TrustFlag> {
+    let (own, other): (Vec<usize>, Vec<usize>) =
+        (0..meta.len()).partition(|&i| meta[i].company_id == company);
+    let mut flags = Vec::new();
+    if let Some((i, similarity)) = closest(sig, own.iter().map(|&i| &sigs[i])) {
+        let m = &meta[own[i]];
+        flags.push(TrustFlag::DuplicateOwn {
+            vacancy_id: m.id.to_string(),
+            title: m.title.clone(),
+            similarity,
+        });
+    }
+    if let Some((i, similarity)) = closest(sig, other.iter().map(|&i| &sigs[i])) {
+        let m = &meta[other[i]];
+        flags.push(TrustFlag::CopyOfOther {
+            vacancy_id: m.id.to_string(),
+            company: m.company_name.clone(),
+            title: m.title.clone(),
+            similarity,
+        });
+    }
+    flags
 }
 
 /// Salary flags of an invitation against the invited candidate's category.
@@ -190,20 +203,15 @@ pub async fn similar_own(
         return Ok(Vec::new());
     };
     let (sigs, meta) = split(db::trust::company_signatures(pool, company, exclude).await?);
-    let mut out: Vec<SimilarOwn> = sigs
-        .iter()
-        .zip(meta)
-        .map(|(s, m)| (sig.similarity(s), m))
-        .filter(|(s, _)| *s >= matching::trust::DUPLICATE_THRESHOLD)
-        .map(|(similarity, m)| SimilarOwn {
-            id: m.id,
-            title: m.title,
-            status: m.status,
+    Ok(rank_similar(&sig, &sigs)
+        .into_iter()
+        .map(|(i, similarity)| SimilarOwn {
+            id: meta[i].id,
+            title: meta[i].title.clone(),
+            status: meta[i].status,
             similarity,
         })
-        .collect();
-    out.sort_by(|a, b| b.similarity.total_cmp(&a.similarity));
-    Ok(out)
+        .collect())
 }
 
 /// Signs vacancies stored before signatures existed (and the demo seed). Idempotent.
@@ -218,5 +226,128 @@ pub async fn backfill_signatures(pool: &PgPool) -> ApiResult<usize> {
             sign_vacancy(pool, v.id, &v.title, &v.description).await?;
         }
         total += batch.len();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use db::types::VacancyStatus;
+
+    use super::*;
+
+    const GO: &str = "Go-разработчик в команду платежей. Ищем бэкенд-разработчика уровня Middle в команду \
+        процессинга. Стек: Go, PostgreSQL, Kafka, gRPC, Docker. Будет плюсом опыт с Kubernetes и ClickHouse. \
+        Задачи: идемпотентные платёжные API, outbox, шардирование. Зарплата 280–360 тыс. ₽, удалённо или \
+        гибрид в Москве.";
+    const GO_EDITED: &str = "Go-разработчик в команду платежей. Ищем бэкенд-разработчика уровня Middle в команду \
+        процессинга. Стек: Go, PostgreSQL, Kafka, gRPC, Docker. Будет плюсом опыт с Kubernetes и Redis. \
+        Задачи: идемпотентные платёжные API, outbox, шардирование. Зарплата 300–400 тыс. ₽, удалённо или \
+        гибрид в Москве.";
+    const JAVA: &str = "Senior Java-разработчик антифрода. Senior Backend: Java, Spring, PostgreSQL, Kafka, \
+        системный дизайн. Нагрузка десятки тысяч RPS, проектирование правил скоринга в реальном времени. \
+        От 5 лет опыта. 400 000 – 520 000 руб.";
+
+    const OURS: Uuid = Uuid::from_u128(1);
+    const RIVAL: Uuid = Uuid::from_u128(2);
+
+    fn sig(text: &str) -> Signature {
+        Signature::of_text(text).unwrap()
+    }
+
+    fn row(id: u128, company: Uuid, title: &str, text: &str) -> db::trust::SignedVacancy {
+        db::trust::SignedVacancy {
+            id: Uuid::from_u128(id),
+            company_id: company,
+            company_name: if company == OURS {
+                "Рога и копыта"
+            } else {
+                "Северный Код"
+            }
+            .into(),
+            title: title.into(),
+            status: VacancyStatus::Published,
+            text_signature: sig(text).to_bytes(),
+        }
+    }
+
+    #[test]
+    fn rows_with_an_unreadable_signature_drop_out_and_the_rest_stay_aligned() {
+        let mut broken = row(2, RIVAL, "Сломанная", GO);
+        broken.text_signature.truncate(7);
+        let (sigs, meta) = split(vec![
+            row(1, OURS, "Go", GO),
+            broken,
+            row(3, RIVAL, "Java", JAVA),
+        ]);
+        assert_eq!(sigs, [sig(GO), sig(JAVA)]);
+        let ids: Vec<Uuid> = meta.iter().map(|m| m.id).collect();
+        assert_eq!(ids, [Uuid::from_u128(1), Uuid::from_u128(3)]);
+    }
+
+    #[test]
+    fn own_near_copy_is_a_duplicate_and_another_companys_is_a_copy() {
+        let (sigs, meta) = split(vec![
+            row(1, OURS, "Java-разработчик", JAVA),
+            row(2, OURS, "Go-разработчик в платежи", GO_EDITED),
+            row(3, RIVAL, "Go-разработчик", GO),
+        ]);
+        let flags = text_flags(OURS, &sig(GO), &sigs, &meta);
+        let own = sig(GO).similarity(&sig(GO_EDITED));
+        assert_eq!(
+            flags,
+            [
+                TrustFlag::DuplicateOwn {
+                    vacancy_id: Uuid::from_u128(2).to_string(),
+                    title: "Go-разработчик в платежи".into(),
+                    similarity: own,
+                },
+                TrustFlag::CopyOfOther {
+                    vacancy_id: Uuid::from_u128(3).to_string(),
+                    company: "Северный Код".into(),
+                    title: "Go-разработчик".into(),
+                    similarity: 1.0,
+                },
+            ]
+        );
+        assert_eq!(
+            flags[1].moderator_text(),
+            "Почти дословно совпадает с вакансией «Go-разработчик» компании «Северный Код» (100 %)"
+        );
+    }
+
+    #[test]
+    fn the_rivals_view_of_the_same_rows_flips_own_and_other() {
+        let (sigs, meta) = split(vec![
+            row(2, OURS, "Go-разработчик в платежи", GO),
+            row(3, RIVAL, "Java-разработчик", JAVA),
+        ]);
+        let flags = text_flags(RIVAL, &sig(GO), &sigs, &meta);
+        assert_eq!(flags.len(), 1);
+        assert!(
+            matches!(&flags[0], TrustFlag::CopyOfOther { company, .. } if company == "Рога и копыта")
+        );
+    }
+
+    #[test]
+    fn the_closest_own_vacancy_is_the_one_named() {
+        let (sigs, meta) = split(vec![
+            row(1, OURS, "Правка", GO_EDITED),
+            row(2, OURS, "Оригинал", GO),
+        ]);
+        let flags = text_flags(OURS, &sig(GO), &sigs, &meta);
+        assert!(
+            matches!(&flags[..], [TrustFlag::DuplicateOwn { title, similarity, .. }] if title == "Оригинал" && *similarity == 1.0),
+            "{flags:?}"
+        );
+    }
+
+    #[test]
+    fn different_texts_raise_no_text_flags() {
+        let (sigs, meta) = split(vec![
+            row(1, OURS, "Java-разработчик", JAVA),
+            row(2, RIVAL, "Java-разработчик", JAVA),
+        ]);
+        assert!(text_flags(OURS, &sig(GO), &sigs, &meta).is_empty());
+        assert!(text_flags(OURS, &sig(GO), &[], &[]).is_empty());
     }
 }

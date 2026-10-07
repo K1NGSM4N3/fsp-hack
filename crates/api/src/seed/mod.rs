@@ -535,14 +535,6 @@ async fn seed_minors(
     Ok((confirmed, pending))
 }
 
-pub async fn seed(
-    pool: &PgPool,
-    crypto: &Crypto,
-    retention_days: i64,
-) -> ApiResult<Option<SeedReport>> {
-    seed_sized(pool, crypto, retention_days, CANDIDATES_PER_SPEC).await
-}
-
 /// A larger bank for load tests (`SEED_CANDIDATES_PER_SPEC`); the demo uses [`CANDIDATES_PER_SPEC`].
 pub async fn seed_sized(
     pool: &PgPool,
@@ -825,7 +817,7 @@ pub async fn seed_sized(
                 created_at: created,
             };
             let mut seeded = false;
-            for code in public_code::candidates(acc.id).take(public_code::ATTEMPTS) {
+            for code in public_code::attempts(acc.id) {
                 let row = db::seed::SeedCandidate {
                     public_code: &code,
                     ..candidate

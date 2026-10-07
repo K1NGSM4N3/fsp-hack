@@ -712,3 +712,68 @@ async fn withdraw_application(
     tx.commit().await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::http::HeaderValue;
+
+    use super::*;
+
+    fn key(value: &[u8]) -> ApiResult<Option<String>> {
+        let mut headers = HeaderMap::new();
+        headers.insert("idempotency-key", HeaderValue::from_bytes(value).unwrap());
+        idempotency_key(&headers)
+    }
+
+    fn rejected(result: ApiResult<Option<String>>) {
+        let e = result.unwrap_err();
+        assert_eq!(
+            e.summary(),
+            (422, "validation_failed", vec!["idempotency_key"])
+        );
+        let ApiError::Validation(errors) = e else {
+            unreachable!()
+        };
+        assert_eq!(
+            serde_json::to_value(&errors).unwrap(),
+            serde_json::json!({ "idempotency_key": ["Idempotency-Key — от 1 до 100 символов"] })
+        );
+    }
+
+    #[test]
+    fn idempotency_key_is_optional() {
+        assert_eq!(idempotency_key(&HeaderMap::new()).unwrap(), None);
+    }
+
+    #[test]
+    fn idempotency_key_is_trimmed() {
+        assert_eq!(key(b" k ").unwrap().as_deref(), Some("k"));
+        assert_eq!(
+            key(b"inv-2026-10-06-0001").unwrap().as_deref(),
+            Some("inv-2026-10-06-0001")
+        );
+    }
+
+    #[test]
+    fn empty_or_blank_idempotency_key_is_rejected() {
+        rejected(key(b""));
+        rejected(key(b"   "));
+    }
+
+    #[test]
+    fn idempotency_key_takes_up_to_100_characters_after_trimming() {
+        let hundred = "a".repeat(100);
+        assert_eq!(key(hundred.as_bytes()).unwrap(), Some(hundred.clone()));
+        assert_eq!(
+            key(format!("  {hundred}  ").as_bytes()).unwrap(),
+            Some(hundred)
+        );
+        rejected(key("a".repeat(101).as_bytes()));
+    }
+
+    #[test]
+    fn idempotency_key_outside_visible_ascii_is_rejected() {
+        rejected(key("ключ".as_bytes()));
+        rejected(key(b"k\xff"));
+    }
+}

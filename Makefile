@@ -1,11 +1,15 @@
 SHELL := /bin/bash
 DATABASE_URL ?= postgres://$(USER)@localhost:5432/fsp_hack
 PG_ADMIN_URL ?= postgres://postgres@localhost:5432
-# sqlx::test creates a throwaway database per test on this server; the role needs CREATEDB.
-TEST_DATABASE_URL ?= $(PG_ADMIN_URL)/postgres
-COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo 'docker compose' || echo docker-compose) -f deploy/compose.yml
+DOCKER_COMPOSE := $(shell docker compose version >/dev/null 2>&1 && echo 'docker compose' || echo docker-compose)
+COMPOSE := $(DOCKER_COMPOSE) -f deploy/compose.yml
+# The black-box stack: same images and ports as `make up`, its own project and volumes, a fresh seed
+# on every run. Keycloak and observability are left out: no test goes through them.
+# `--profile full` lets `down` reach the profiled mocks too; `up` starts only BLACKBOX_SERVICES.
+BLACKBOX := $(DOCKER_COMPOSE) -p fsp-hack-blackbox -f deploy/compose.yml -f deploy/compose.blackbox.yml --profile full
+BLACKBOX_SERVICES := caddy web api postgres valkey mailpit fsp-mock ats-mock
 
-.PHONY: db db-prepare api fsp-mock ats-mock gen-api web test lint validate docs up down logs
+.PHONY: db db-prepare api fsp-mock ats-mock gen-api web test blackbox blackbox-down lint validate docs up down logs
 
 db:
 	@psql "$(PG_ADMIN_URL)/postgres" -tAc "select 1 from pg_database where datname='fsp_hack'" | grep -q 1 \
@@ -35,8 +39,20 @@ web:
 	cd web && npm run dev
 
 test:
-	DATABASE_URL="$(TEST_DATABASE_URL)" cargo test --workspace
+	cargo test --workspace
 	cd web && npx tsc --noEmit
+
+blackbox:
+	test -f .env || cp .env.example .env
+	$(COMPOSE) --profile full stop
+	$(BLACKBOX) down -v --remove-orphans
+	$(BLACKBOX) up -d --build --wait $(BLACKBOX_SERVICES)
+	cd tests/blackbox && npm ci --no-audit --no-fund && npx playwright install chromium && npx tsc --noEmit
+	cd tests/blackbox && npx playwright test $(ARGS); status=$$?; \
+		if [ "$(DOWN)" = "1" ]; then cd ../.. && $(BLACKBOX) down -v --remove-orphans; fi; exit $$status
+
+blackbox-down:
+	$(BLACKBOX) down -v --remove-orphans
 
 lint:
 	cargo fmt --all --check

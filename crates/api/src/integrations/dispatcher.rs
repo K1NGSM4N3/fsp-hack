@@ -142,12 +142,8 @@ impl Dispatcher {
         let now = Utc::now();
         let prepared = (|| {
             let body = open_payload(&self.crypto, e.id, &e.payload_enc)?;
-            let mut secrets = vec![open_secret(&self.crypto, e.company_id, secret_enc)?];
-            if let (Some(prev), Some(until)) = (e.prev_secret_enc.as_deref(), e.prev_expires_at)
-                && until > now
-            {
-                secrets.push(open_secret(&self.crypto, e.company_id, prev)?);
-            }
+            let previous = e.prev_secret_enc.as_deref().zip(e.prev_expires_at);
+            let secrets = signing_secrets(&self.crypto, e.company_id, secret_enc, previous, now)?;
             Ok::<_, crate::crypto::CryptoError>((body, secrets))
         })();
         let (body, secrets) = match prepared {
@@ -241,6 +237,24 @@ fn delivered(result: &'static str) {
     metrics::counter!("webhook_deliveries_total", "result" => result).increment(1);
 }
 
+/// The current secret signs every delivery; for a day after a rotation the previous one signs
+/// too, so the receiver can switch over without rejecting events in between.
+fn signing_secrets(
+    crypto: &Crypto,
+    company_id: Uuid,
+    secret_enc: &[u8],
+    previous: Option<(&[u8], DateTime<Utc>)>,
+    now: DateTime<Utc>,
+) -> Result<Vec<Vec<u8>>, crate::crypto::CryptoError> {
+    let mut secrets = vec![open_secret(crypto, company_id, secret_enc)?];
+    if let Some((prev, until)) = previous
+        && until > now
+    {
+        secrets.push(open_secret(crypto, company_id, prev)?);
+    }
+    Ok(secrets)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -271,5 +285,40 @@ mod tests {
         );
         assert_eq!(attempts, 6, "six attempts in total, then failed");
         assert!(matches!(next_step(1, deadline, deadline), Next::GiveUp));
+    }
+
+    #[test]
+    fn the_previous_secret_signs_only_until_it_expires() {
+        let crypto = Crypto::new(&[1; 32], &[2; 32]);
+        let company = Uuid::now_v7();
+        let current = super::super::seal_secret(&crypto, company, "whsec_new").unwrap();
+        let previous = super::super::seal_secret(&crypto, company, "whsec_old").unwrap();
+        let now = Utc::now();
+        let until = now + Duration::hours(1);
+        let both =
+            signing_secrets(&crypto, company, &current, Some((&previous, until)), now).unwrap();
+        assert_eq!(both, [b"whsec_new".to_vec(), b"whsec_old".to_vec()]);
+        let refs: Vec<&[u8]> = both.iter().map(Vec::as_slice).collect();
+        let header = super::super::signature::header_value(now.timestamp(), &refs, b"{}");
+        for secret in [&b"whsec_new"[..], b"whsec_old"] {
+            assert_eq!(
+                super::super::signature::verify(secret, &header, b"{}", now.timestamp(), 300),
+                Ok(()),
+                "a receiver on either secret accepts the delivery"
+            );
+        }
+        let expired =
+            signing_secrets(&crypto, company, &current, Some((&previous, until)), until).unwrap();
+        assert_eq!(expired, [b"whsec_new".to_vec()]);
+        assert_eq!(
+            signing_secrets(&crypto, company, &current, None, now)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(
+            signing_secrets(&crypto, Uuid::now_v7(), &current, None, now).is_err(),
+            "a sealed secret opens only for its company"
+        );
     }
 }

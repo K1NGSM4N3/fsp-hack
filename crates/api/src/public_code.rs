@@ -37,10 +37,16 @@ pub fn candidates(id: Uuid) -> impl Iterator<Item = String> {
         }))
 }
 
+/// The codes registration tries, in order, before giving up: the id's two windows, then random
+/// ones, [`ATTEMPTS`] in all.
+pub fn attempts(id: Uuid) -> impl Iterator<Item = String> {
+    candidates(id).take(ATTEMPTS)
+}
+
 /// Creates the candidate row with the first free code. `ON CONFLICT DO NOTHING` keeps the
 /// surrounding registration transaction usable after a collision, so no savepoint is needed.
 pub async fn insert_candidate(tx: &mut PgConnection, user_id: Uuid) -> ApiResult<String> {
-    for code in candidates(user_id).take(ATTEMPTS) {
+    for code in attempts(user_id) {
         if db::candidates::insert_candidate(&mut *tx, user_id, &code).await? == 1 {
             return Ok(code);
         }
@@ -98,5 +104,27 @@ mod tests {
         assert_eq!(codes, ["K-000001", "K-000005"]);
         assert_eq!(candidates(id).next(), candidates(id).next());
         assert_eq!(encode((1 << BITS) - 1), "K-ZZZZZZ");
+    }
+
+    #[test]
+    fn a_taken_code_moves_to_the_next_attempt() {
+        let id = Uuid::now_v7();
+        let tried: Vec<String> = attempts(id).collect();
+        assert_eq!(tried.len(), ATTEMPTS);
+        assert_eq!(
+            tried[..2],
+            candidates(id).take(2).collect::<Vec<_>>()[..],
+            "the id's windows first"
+        );
+        assert!(
+            tried
+                .iter()
+                .all(|c| normalize(c).as_deref() == Some(c.as_str()))
+        );
+        let free = |taken: &[&str]| attempts(id).find(|c| !taken.contains(&c.as_str()));
+        assert_eq!(free(&[]).as_deref(), Some(tried[0].as_str()));
+        assert_eq!(free(&[&tried[0]]).as_deref(), Some(tried[1].as_str()));
+        let random = free(&[&tried[0], &tried[1]]).expect("then random codes");
+        assert!(random != tried[0] && random != tried[1]);
     }
 }

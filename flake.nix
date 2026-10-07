@@ -74,7 +74,8 @@
                 make api         API on :8000
                 make gen-api     OpenAPI -> web/openapi.json + TS types
                 make web         Next.js dev server on :3000
-                make test        cargo test incl. DB tests (Postgres) + web type check
+                make test        unit tests (no database) + web type check
+                make blackbox    fresh docker stack + Playwright black-box suite
                 make lint        fmt, clippy, eslint
                 make validate    validation report -> docs/validation/
                 make docs        docs/solution.md -> PDF and DOCX

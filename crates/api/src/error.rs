@@ -411,6 +411,27 @@ impl IntoResponse for ApiError {
     }
 }
 
+#[cfg(test)]
+impl ApiError {
+    /// What a client reads from the problem: status, `code`, and the fields of a `validation_failed`.
+    pub(crate) fn summary(&self) -> (u16, &'static str, Vec<&'static str>) {
+        match self {
+            ApiError::Status { status, code, .. } => (status.as_u16(), code, Vec::new()),
+            ApiError::Validation(errors) => (
+                422,
+                "validation_failed",
+                errors.0.iter().map(|(field, _)| *field).collect(),
+            ),
+            ApiError::ConsentRequired { .. } => (409, "consent_required", Vec::new()),
+            ApiError::GuardianConsentRequired { .. } => {
+                (409, "guardian_consent_required", Vec::new())
+            }
+            ApiError::RateLimited { .. } => (429, "rate_limited", Vec::new()),
+            ApiError::Internal(_) => (500, "internal", Vec::new()),
+        }
+    }
+}
+
 /// «через 40 с», «через 5 мин», «через 3 ч» — rounded up, so the client never comes back early.
 fn in_ru(secs: u64) -> String {
     match secs {
@@ -477,6 +498,26 @@ mod tests {
         assert_eq!(body["status"], 409);
         assert_eq!(body["document_id"], id.to_string());
         assert_eq!(body["document_kind"], "pd_publication");
+        assert!(body.get("errors").is_none());
+    }
+
+    #[tokio::test]
+    async fn guardian_consent_required_names_the_representative_document() {
+        let id = Uuid::now_v7();
+        let response = ApiError::GuardianConsentRequired { document_id: id }.into_response();
+        assert_eq!(response.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            response.headers()[header::CONTENT_TYPE],
+            "application/problem+json"
+        );
+        let bytes = axum::body::to_bytes(response.into_body(), 4096)
+            .await
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(body["code"], "guardian_consent_required");
+        assert_eq!(body["status"], 409);
+        assert_eq!(body["document_id"], id.to_string());
+        assert_eq!(body["document_kind"], "guardian_consent");
         assert!(body.get("errors").is_none());
     }
 

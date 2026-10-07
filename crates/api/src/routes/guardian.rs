@@ -13,7 +13,7 @@ use super::catalog::ConsentDocument;
 use crate::{
     age,
     auth::{CandidateUser, client_ip, user_agent},
-    crypto::sha256,
+    crypto::{Crypto, sha256},
     error::{ApiError, ApiResult, Problem, Validator},
     extract::{Json, Query},
     guardian::{self, GuardianContact, GuardianState, clean_contact},
@@ -298,6 +298,20 @@ pub(crate) async fn load_status(state: &AppState, candidate: Uuid) -> ApiResult<
     let age = db::guardians::candidate_age(&state.pool, candidate)
         .await?
         .ok_or_else(ApiError::not_found)?;
+    let request = if age.minor {
+        db::guardians::latest_request(&state.pool, candidate).await?
+    } else {
+        None
+    };
+    status_view(age, request.as_ref(), &state.crypto, Utc::now())
+}
+
+fn status_view(
+    age: db::guardians::CandidateAge,
+    request: Option<&db::guardians::GuardianRequest>,
+    crypto: &Crypto,
+    now: DateTime<Utc>,
+) -> ApiResult<GuardianStatus> {
     let mut out = GuardianStatus {
         required: age.minor,
         adult_from: age.birth_date.filter(|_| age.minor).map(age::adult_from),
@@ -312,13 +326,9 @@ pub(crate) async fn load_status(state: &AppState, candidate: Uuid) -> ApiResult<
     if !age.minor {
         return Ok(out);
     }
-    if let Some(r) = db::guardians::latest_request(&state.pool, candidate).await? {
-        let decrypt = |b: &Option<Vec<u8>>| {
-            b.as_deref()
-                .map(|b| state.crypto.decrypt_str(b))
-                .transpose()
-        };
-        out.state = Some(guardian::request_state(&r, Utc::now()));
+    if let Some(r) = request {
+        let decrypt = |b: &Option<Vec<u8>>| b.as_deref().map(|b| crypto.decrypt_str(b)).transpose();
+        out.state = Some(guardian::request_state(r, now));
         out.guardian_name = decrypt(&r.full_name_enc)?;
         out.guardian_email = decrypt(&r.email_enc)?;
         out.sent_at = r.sent_at;
@@ -489,5 +499,117 @@ mod tests {
             actions(Confirm, GuardianState::Pending, false).is_empty(),
             "nothing to do once the participant is 18"
         );
+    }
+
+    #[test]
+    fn refusal_names_why_a_link_cannot_do_it() {
+        use GuardianLink::{Confirm, Revoke};
+        use GuardianState::{Declined, Expired, Granted, NotSent, Pending, Revoked};
+        let code = |link, state, minor| refusal(link, state, minor).summary();
+        assert_eq!(code(Confirm, Expired, true), (400, "token_expired", vec![]));
+        for state in [Pending, Granted, Declined, Revoked, NotSent] {
+            assert_eq!(
+                code(Confirm, state, true),
+                (409, "token_used", vec![]),
+                "{state:?}"
+            );
+        }
+        for state in [Declined, Revoked] {
+            assert_eq!(
+                code(Revoke, state, true),
+                (409, "token_used", vec![]),
+                "{state:?}"
+            );
+        }
+        for state in [Pending, Expired, Granted, NotSent] {
+            assert_eq!(
+                code(Revoke, state, true),
+                (409, "action_unavailable", vec![]),
+                "{state:?}"
+            );
+        }
+        for link in [Confirm, Revoke] {
+            for state in [NotSent, Pending, Expired, Granted, Declined, Revoked] {
+                assert_eq!(
+                    code(link, state, false),
+                    (409, "guardian_not_needed", vec![]),
+                    "{link:?} {state:?}"
+                );
+            }
+        }
+    }
+
+    fn day(y: i32, m: u32, d: u32) -> NaiveDate {
+        NaiveDate::from_ymd_opt(y, m, d).unwrap()
+    }
+
+    fn noon() -> DateTime<Utc> {
+        "2026-10-07T12:00:00Z".parse().unwrap()
+    }
+
+    fn request(crypto: &Crypto, now: DateTime<Utc>) -> db::guardians::GuardianRequest {
+        db::guardians::GuardianRequest {
+            id: Uuid::now_v7(),
+            full_name_enc: Some(crypto.encrypt_str("Петрова Ольга Викторовна").unwrap()),
+            email_enc: Some(crypto.encrypt_str("o.petrova@example.ru").unwrap()),
+            email_bidx: Some(crypto.blind_index("o.petrova@example.ru")),
+            sent_at: Some(now - chrono::Duration::days(1)),
+            confirm_expires_at: Some(now + chrono::Duration::days(6)),
+            decision: None,
+            answered_at: None,
+            consent_id: None,
+            granted_at: None,
+            revoked_at: None,
+            erased_at: None,
+            created_at: now - chrono::Duration::days(1),
+        }
+    }
+
+    #[test]
+    fn status_shows_the_link_expiry_only_until_answered() {
+        let crypto = Crypto::new(&[1; 32], &[2; 32]);
+        let now = noon();
+        let birth = day(2010, 3, 14);
+        let minor = db::guardians::CandidateAge {
+            birth_date: Some(birth),
+            minor: true,
+        };
+        let pending = request(&crypto, now);
+        let s = status_view(minor, Some(&pending), &crypto, now).unwrap();
+        assert!(s.required);
+        assert_eq!(s.adult_from, Some(age::adult_from(birth)));
+        assert_eq!(s.state, Some(GuardianState::Pending));
+        assert_eq!(s.guardian_name.as_deref(), Some("Петрова Ольга Викторовна"));
+        assert_eq!(s.guardian_email.as_deref(), Some("o.petrova@example.ru"));
+        assert_eq!(s.link_expires_at, pending.confirm_expires_at);
+
+        let answered = db::guardians::GuardianRequest {
+            decision: Some(GuardianDecision::Granted),
+            answered_at: Some(now),
+            ..request(&crypto, now)
+        };
+        let s = status_view(minor, Some(&answered), &crypto, now).unwrap();
+        assert_eq!(s.state, Some(GuardianState::Granted));
+        assert_eq!(s.link_expires_at, None);
+        assert_eq!(s.answered_at, Some(now));
+
+        let s = status_view(minor, None, &crypto, now).unwrap();
+        assert!(s.required && s.state.is_none() && s.guardian_email.is_none());
+    }
+
+    #[test]
+    fn status_of_an_adult_requires_nothing() {
+        let crypto = Crypto::new(&[1; 32], &[2; 32]);
+        let now = noon();
+        let adult = db::guardians::CandidateAge {
+            birth_date: Some(day(2008, 1, 1)),
+            minor: false,
+        };
+        let s = status_view(adult, Some(&request(&crypto, now)), &crypto, now).unwrap();
+        assert!(!s.required);
+        assert_eq!(s.adult_from, None, "adult_from is shown only to minors");
+        assert_eq!(s.state, None);
+        assert_eq!(s.guardian_name, None);
+        assert_eq!(s.link_expires_at, None);
     }
 }

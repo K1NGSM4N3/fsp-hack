@@ -132,13 +132,7 @@ async fn ats_invitations(
     Query(q): Query<PollQuery>,
 ) -> ApiResult<Json<AtsInvitationPage>> {
     client.require(Scope::InvitationsRead)?;
-    let after = match page::decode(q.cursor.as_deref())? {
-        Some(c) => Some(c),
-        None => q.since.map(|at| db::types::Cursor {
-            at,
-            id: Uuid::max(),
-        }),
-    };
+    let after = poll_after(q.cursor.as_deref(), q.since)?;
     expire_invitations(&state).await?;
     let rows = db::integrations::polled_invitations(
         &state.pool,
@@ -154,32 +148,56 @@ async fn ats_invitations(
         db::integrations::subject_outcomes(&state.pool, client.company_id, &ids).await?,
     );
     let next_since = rows.last().map(|r| r.updated_at);
-    let next_cursor = match rows.last() {
-        Some(r) => Some(page::encode(r.updated_at, r.id)),
-        None => after.map(|c| page::encode(c.at, c.id)),
-    };
-    let items = rows
-        .into_iter()
-        .map(|r| {
-            let category = category_of(r.specialization.as_deref(), r.grade.as_deref());
-            let accepted = r.status == db::types::InvitationStatus::Accepted;
-            AtsInvitationItem {
-                invitation: invitation_from_snapshot(&r),
-                candidate: if accepted {
-                    AtsCandidate::accepted(r.public_code.clone(), category, r.candidate_id)
-                } else {
-                    AtsCandidate::anonymous(r.public_code.clone(), category)
-                },
-                contacts_available: accepted,
-                outcomes: outcomes.of(r.id),
-            }
-        })
-        .collect();
+    let next_cursor = next_cursor(rows.last().map(|r| (r.updated_at, r.id)), after);
+    let items = rows.iter().map(|r| poll_item(r, &outcomes)).collect();
     Ok(Json(AtsInvitationPage {
         items,
         next_cursor,
         next_since,
     }))
+}
+
+/// Where a poll starts: the cursor of the previous answer, else the deprecated `since` (every
+/// change at that very moment counts as seen), else the beginning of the feed.
+fn poll_after(
+    cursor: Option<&str>,
+    since: Option<DateTime<Utc>>,
+) -> ApiResult<Option<db::types::Cursor>> {
+    Ok(page::decode(cursor)?.or_else(|| {
+        since.map(|at| db::types::Cursor {
+            at,
+            id: Uuid::max(),
+        })
+    }))
+}
+
+/// An empty page hands the client its own cursor back, so polling never moves backwards.
+fn next_cursor(
+    last: Option<(DateTime<Utc>, Uuid)>,
+    after: Option<db::types::Cursor>,
+) -> Option<String> {
+    last.map(|(at, id)| page::encode(at, id))
+        .or_else(|| after.map(|c| page::encode(c.at, c.id)))
+}
+
+/// The candidate stays an anonymous code and category until they accept; then the ATS gets the
+/// id to fetch the profile with.
+fn poll_item(
+    r: &db::integrations::InvitationSnapshot,
+    outcomes: &OutcomeIndex,
+) -> AtsInvitationItem {
+    let category = category_of(r.specialization.as_deref(), r.grade.as_deref());
+    let accepted = r.status == db::types::InvitationStatus::Accepted;
+    AtsInvitationItem {
+        invitation: invitation_from_snapshot(r),
+        candidate: if accepted {
+            AtsCandidate::accepted(r.public_code.clone(), category, r.candidate_id)
+        } else {
+            AtsCandidate::anonymous(r.public_code.clone(), category)
+        },
+        contacts_available: accepted,
+        outcomes: outcomes.of(r.id),
+    }
 }
 
 #[derive(Serialize, ToSchema)]
@@ -338,33 +356,15 @@ pub struct OutcomeRecorded {
     pub at: DateTime<Utc>,
 }
 
-/// Report a hiring stage: interview, offer, hired or rejected. The candidate sees it in the
-/// invitation or application timeline; repeating the same stage updates it (safe to retry)
-#[utoipa::path(post, path = "/outcomes", tag = TAG,
-    request_body = OutcomeInput,
-    responses(
-        (status = 201, description = "Этап записан", body = OutcomeRecorded),
-        (status = 200, description = "Этап уже был — обновлены причина и время", body = OutcomeRecorded),
-        (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
-        (status = 403, description = "`insufficient_scope` — нужно `outcomes:write`", body = Problem),
-        (status = 404, description = "Приглашение или отклик не найдены у этой компании", body = Problem),
-        (status = 409, description = "`outcome_not_allowed` — кандидат не принял приглашение или отозвал отклик", body = Problem),
-        (status = 422, body = Problem),
-        (status = 429, body = Problem),
-    ),
-    security(("api_key" = [])))]
-async fn ats_outcome(
-    State(state): State<AppState>,
-    client: ApiClient,
-    Json(input): Json<OutcomeInput>,
-) -> ApiResult<(StatusCode, Json<OutcomeRecorded>)> {
-    client.require(Scope::OutcomesWrite)?;
+/// The reason as the candidate will read it, once the input is consistent: exactly one subject,
+/// a reason of at most 500 characters, and a moment within the last year (five minutes of clock
+/// skew allowed).
+fn check_outcome(input: &OutcomeInput, now: DateTime<Utc>) -> ApiResult<Option<&str>> {
     let reason = input
         .reason
         .as_deref()
         .map(str::trim)
         .filter(|r| !r.is_empty());
-    let now = Utc::now();
     let mut v = Validator::default();
     v.check(
         input.invitation_id.is_some() != input.application_id.is_some(),
@@ -387,6 +387,31 @@ async fn ats_outcome(
         "Этап старше года",
     );
     v.finish()?;
+    Ok(reason)
+}
+
+/// Report a hiring stage: interview, offer, hired or rejected. The candidate sees it in the
+/// invitation or application timeline; repeating the same stage updates it (safe to retry)
+#[utoipa::path(post, path = "/outcomes", tag = TAG,
+    request_body = OutcomeInput,
+    responses(
+        (status = 201, description = "Этап записан", body = OutcomeRecorded),
+        (status = 200, description = "Этап уже был — обновлены причина и время", body = OutcomeRecorded),
+        (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
+        (status = 403, description = "`insufficient_scope` — нужно `outcomes:write`", body = Problem),
+        (status = 404, description = "Приглашение или отклик не найдены у этой компании", body = Problem),
+        (status = 409, description = "`outcome_not_allowed` — кандидат не принял приглашение или отозвал отклик", body = Problem),
+        (status = 422, body = Problem),
+        (status = 429, body = Problem),
+    ),
+    security(("api_key" = [])))]
+async fn ats_outcome(
+    State(state): State<AppState>,
+    client: ApiClient,
+    Json(input): Json<OutcomeInput>,
+) -> ApiResult<(StatusCode, Json<OutcomeRecorded>)> {
+    client.require(Scope::OutcomesWrite)?;
+    let reason = check_outcome(&input, Utc::now())?;
 
     let subject = match (input.invitation_id, input.application_id) {
         (Some(id), _) => {
@@ -496,38 +521,28 @@ fn truncate(s: &str, max_chars: usize) -> &str {
     s.char_indices().nth(max_chars).map_or(s, |(i, _)| &s[..i])
 }
 
-/// Import a vacancy from the ATS: the text is parsed into a hiring need; the shortlist is built
-/// when the need is opened in the cabinet. With `external_id` the call is safe to retry
-#[utoipa::path(post, path = "/needs", tag = TAG,
-    request_body = NeedImport,
-    responses(
-        (status = 201, body = ImportedNeed, headers(("Location" = String, description = "`/api/v1/employer/needs/{id}`"))),
-        (status = 200, description = "Потребность с этим `external_id` уже импортирована — она и возвращается", body = ImportedNeed),
-        (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
-        (status = 403, description = "`insufficient_scope` — нужно `needs:write`", body = Problem),
-        (status = 422, description = "Нет текста, не распознана специализация или вилка; `external_id` длиннее 200 символов", body = Problem),
-        (status = 429, body = Problem),
-    ),
-    security(("api_key" = [])))]
-async fn ats_import_need(
-    State(state): State<AppState>,
-    client: ApiClient,
-    Json(input): Json<NeedImport>,
-) -> ApiResult<Response> {
-    client.require(Scope::NeedsWrite)?;
-    let external_id = input
-        .external_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|e| !e.is_empty());
-    if external_id.is_some_and(|e| e.chars().count() > 200) {
+/// The ATS's own vacancy id, trimmed; blank means none.
+fn external_id(raw: Option<&str>) -> ApiResult<Option<&str>> {
+    let id = raw.map(str::trim).filter(|e| !e.is_empty());
+    if id.is_some_and(|e| e.chars().count() > 200) {
         return Err(ApiError::field("external_id", "Не длиннее 200 символов"));
     }
-    if let Some(ext) = external_id
-        && let Some(existing) = imported(&state, client.company_id, ext).await?
-    {
-        return Ok((StatusCode::OK, Json(existing)).into_response());
-    }
+    Ok(id)
+}
+
+/// What an imported vacancy becomes before it is stored.
+struct ImportPlan {
+    title: String,
+    specialization: Specialization,
+    grades: Vec<Grade>,
+    salary: SalaryRange,
+    parsed: matching::ParsedNeed,
+    notes: Vec<String>,
+}
+
+/// Parses the vacancy text into a need. What the text does not say is assumed and listed in
+/// `notes`; a salary range is required, because invitations never go out without one.
+fn plan_import(input: &NeedImport) -> ApiResult<ImportPlan> {
     let text = input.text.trim();
     let title_in = input
         .title
@@ -582,12 +597,55 @@ async fn ats_import_need(
             "«До» не меньше «от»",
         );
     v.finish()?;
-
     let title = truncate(
         title_in.unwrap_or_else(|| text.lines().next().unwrap_or(text).trim()),
         200,
     )
     .to_owned();
+    Ok(ImportPlan {
+        title,
+        specialization,
+        grades,
+        salary,
+        parsed,
+        notes,
+    })
+}
+
+/// Import a vacancy from the ATS: the text is parsed into a hiring need; the shortlist is built
+/// when the need is opened in the cabinet. With `external_id` the call is safe to retry
+#[utoipa::path(post, path = "/needs", tag = TAG,
+    request_body = NeedImport,
+    responses(
+        (status = 201, body = ImportedNeed, headers(("Location" = String, description = "`/api/v1/employer/needs/{id}`"))),
+        (status = 200, description = "Потребность с этим `external_id` уже импортирована — она и возвращается", body = ImportedNeed),
+        (status = 401, description = "`api_key_required`, `api_key_invalid`", body = Problem),
+        (status = 403, description = "`insufficient_scope` — нужно `needs:write`", body = Problem),
+        (status = 422, description = "Нет текста, не распознана специализация или вилка; `external_id` длиннее 200 символов", body = Problem),
+        (status = 429, body = Problem),
+    ),
+    security(("api_key" = [])))]
+async fn ats_import_need(
+    State(state): State<AppState>,
+    client: ApiClient,
+    Json(input): Json<NeedImport>,
+) -> ApiResult<Response> {
+    client.require(Scope::NeedsWrite)?;
+    let external_id = external_id(input.external_id.as_deref())?;
+    if let Some(ext) = external_id
+        && let Some(existing) = imported(&state, client.company_id, ext).await?
+    {
+        return Ok((StatusCode::OK, Json(existing)).into_response());
+    }
+    let ImportPlan {
+        title,
+        specialization,
+        grades,
+        salary,
+        parsed,
+        notes,
+    } = plan_import(&input)?;
+    let text = input.text.trim();
     let description = truncate(text, 10_000);
     let grade_slugs = slugs(&grades);
     let formats = slugs(&parsed.work_formats);
@@ -631,7 +689,7 @@ async fn ats_import_need(
         ImportedNeed {
             need_id: id,
             external_id: external_id.map(str::to_owned),
-            shortlist_url: shortlist_url(&state, id),
+            shortlist_url: shortlist_url(&state.config.public_url, id),
             title,
             specialization,
             grades,
@@ -646,8 +704,8 @@ async fn ats_import_need(
     .into_response())
 }
 
-fn shortlist_url(state: &AppState, id: Uuid) -> String {
-    format!("{}/employer/needs/{id}", state.config.public_url)
+fn shortlist_url(public_url: &str, id: Uuid) -> String {
+    format!("{public_url}/employer/needs/{id}")
 }
 
 /// The need this company already imported under `external_id`, as it is stored now.
@@ -665,7 +723,7 @@ async fn imported(
     Ok(Some(ImportedNeed {
         need_id: n.id,
         external_id: Some(external_id.to_owned()),
-        shortlist_url: shortlist_url(state, n.id),
+        shortlist_url: shortlist_url(&state.config.public_url, n.id),
         title: n.title,
         specialization: n.specialization.parse()?,
         grades: parse_slugs(&n.grades),
@@ -679,4 +737,358 @@ async fn imported(
         city: n.city,
         notes: Vec::new(),
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+    use db::types::{HiringStage as DbStage, InvitationStatus as DbStatus};
+    use serde_json::json;
+
+    use super::*;
+
+    fn now() -> DateTime<Utc> {
+        Utc.with_ymd_and_hms(2026, 10, 6, 12, 0, 0).unwrap()
+    }
+
+    fn outcome(
+        invitation: bool,
+        application: bool,
+        reason: Option<&str>,
+        at: DateTime<Utc>,
+    ) -> OutcomeInput {
+        OutcomeInput {
+            invitation_id: invitation.then(Uuid::now_v7),
+            application_id: application.then(Uuid::now_v7),
+            stage: HiringStage::Interview,
+            reason: reason.map(str::to_owned),
+            at,
+        }
+    }
+
+    fn fields<T>(r: ApiResult<T>) -> Vec<&'static str> {
+        r.err().map(|e| e.summary().2).unwrap_or_default()
+    }
+
+    #[test]
+    fn an_outcome_names_one_subject_a_short_reason_and_a_plausible_moment() {
+        let t = now();
+        assert_eq!(
+            check_outcome(&outcome(true, false, Some("  Перенесли на четверг "), t), t).ok(),
+            Some(Some("Перенесли на четверг"))
+        );
+        assert_eq!(
+            check_outcome(&outcome(false, true, Some("   "), t), t).ok(),
+            Some(None)
+        );
+        assert_eq!(
+            fields(check_outcome(&outcome(true, true, None, t), t)),
+            ["invitation_id"]
+        );
+        assert_eq!(
+            fields(check_outcome(&outcome(false, false, None, t), t)),
+            ["invitation_id"]
+        );
+        let long = "я".repeat(501);
+        assert_eq!(
+            fields(check_outcome(&outcome(true, false, Some(&long), t), t)),
+            ["reason"]
+        );
+        assert!(
+            check_outcome(&outcome(true, false, Some(&long[..1000]), t), t).is_ok(),
+            "500 characters fit"
+        );
+        assert_eq!(
+            fields(check_outcome(
+                &outcome(true, false, None, t + Duration::minutes(6)),
+                t
+            )),
+            ["at"]
+        );
+        assert!(
+            check_outcome(&outcome(true, false, None, t + Duration::minutes(5)), t).is_ok(),
+            "clock skew"
+        );
+        assert_eq!(
+            fields(check_outcome(
+                &outcome(true, false, None, t - Duration::days(366)),
+                t
+            )),
+            ["at"]
+        );
+    }
+
+    fn import(text: &str, title: Option<&str>, salary: Option<(i64, i64)>) -> NeedImport {
+        NeedImport {
+            external_id: None,
+            title: title.map(str::to_owned),
+            text: text.to_owned(),
+            salary: salary.map(|(min, max)| SalaryRange { min, max }),
+        }
+    }
+
+    #[test]
+    fn an_imported_vacancy_becomes_a_need_with_what_was_assumed() {
+        let plan = plan_import(&import(
+            "Senior Backend-разработчик (Go)\nПлатёжный сервис, от 350 000 до 450 000 ₽.\nGo, PostgreSQL, Kafka; опыт от 5 лет.",
+            None,
+            None,
+        ))
+        .expect("a full vacancy");
+        assert_eq!(plan.specialization, Specialization::Backend);
+        assert!(plan.grades.contains(&Grade::Senior), "{:?}", plan.grades);
+        assert!(
+            plan.parsed.must_skills.iter().any(|s| s == "go"),
+            "{:?}",
+            plan.parsed.must_skills
+        );
+        assert_eq!((plan.salary.min, plan.salary.max), (350_000, 450_000));
+        assert_eq!(plan.title, "Senior Backend-разработчик (Go)");
+        assert!(plan.notes.is_empty(), "{:?}", plan.notes);
+
+        let assumed = plan_import(&import(
+            "Backend-разработчик на Go",
+            None,
+            Some((200_000, 300_000)),
+        ))
+        .expect("salary given");
+        assert_eq!(
+            assumed.grades,
+            [Grade::Junior, Grade::Middle, Grade::Senior]
+        );
+        assert_eq!(
+            assumed.notes,
+            ["Грейд не указан в тексте — подборка по всем грейдам"]
+        );
+        assert_eq!(
+            (assumed.salary.min, assumed.salary.max),
+            (200_000, 300_000),
+            "the given range wins"
+        );
+
+        let titled = plan_import(&import(
+            "Пишем платёжный шлюз на Go",
+            Some("  Go-разработчик  "),
+            Some((1, 2)),
+        ))
+        .expect("title given");
+        assert_eq!(titled.title, "Go-разработчик");
+        assert_eq!(
+            titled.specialization,
+            Specialization::Backend,
+            "the title is parsed too"
+        );
+
+        assert_eq!(
+            fields(plan_import(&import(
+                "Backend-разработчик на Go, PostgreSQL",
+                None,
+                None
+            ))),
+            ["salary"]
+        );
+        assert_eq!(
+            fields(plan_import(&import("   ", None, Some((1, 2))))),
+            ["text"]
+        );
+        assert_eq!(
+            fields(plan_import(&import(
+                &"x".repeat(20_001),
+                None,
+                Some((1, 2))
+            ))),
+            ["text"]
+        );
+        assert_eq!(
+            fields(plan_import(&import("Пеку пироги", None, Some((1, 2))))),
+            ["text"],
+            "no specialization"
+        );
+        assert_eq!(
+            fields(plan_import(&import(
+                "Backend-разработчик на Go",
+                None,
+                Some((300, 200))
+            ))),
+            ["salary.max"]
+        );
+        assert_eq!(
+            fields(plan_import(&import(
+                "Backend-разработчик на Go",
+                None,
+                Some((0, 200))
+            ))),
+            ["salary.min"]
+        );
+
+        let long_title = format!("Backend-разработчик на Go {}", "ы".repeat(300));
+        assert_eq!(
+            plan_import(&import(&long_title, None, Some((1, 2))))
+                .map(|p| p.title.chars().count())
+                .ok(),
+            Some(200)
+        );
+    }
+
+    #[test]
+    fn external_ids_are_trimmed_and_bounded() {
+        assert_eq!(external_id(None).ok(), Some(None));
+        assert_eq!(external_id(Some("   ")).ok(), Some(None));
+        assert_eq!(external_id(Some(" hh-1 ")).ok(), Some(Some("hh-1")));
+        let at_limit = "я".repeat(200);
+        assert_eq!(
+            external_id(Some(&at_limit)).ok(),
+            Some(Some(at_limit.as_str()))
+        );
+        assert_eq!(fields(external_id(Some(&"я".repeat(201)))), ["external_id"]);
+        let id = Uuid::now_v7();
+        assert_eq!(
+            shortlist_url("https://talents.example", id),
+            format!("https://talents.example/employer/needs/{id}")
+        );
+    }
+
+    #[test]
+    fn polling_resumes_after_the_cursor_and_never_moves_back() {
+        let at = now();
+        let id = Uuid::now_v7();
+        let cursor = page::encode(at, id);
+        let after = poll_after(Some(&cursor), Some(at - Duration::days(1))).unwrap();
+        assert_eq!(
+            after.map(|c| (c.at, c.id)),
+            Some((at, id)),
+            "a cursor beats since"
+        );
+        let since = poll_after(None, Some(at)).unwrap();
+        assert_eq!(
+            since.map(|c| (c.at, c.id)),
+            Some((at, Uuid::max())),
+            "since: everything at that moment is seen"
+        );
+        assert!(poll_after(None, None).unwrap().is_none());
+        assert_eq!(
+            poll_after(Some("nope"), None).err().map(|e| e.summary().1),
+            Some("invalid_query")
+        );
+
+        let later = (at + Duration::seconds(3), Uuid::now_v7());
+        assert_eq!(
+            next_cursor(Some(later), after),
+            Some(page::encode(later.0, later.1))
+        );
+        assert_eq!(
+            next_cursor(None, after),
+            Some(cursor),
+            "an empty page echoes the cursor"
+        );
+        assert_eq!(next_cursor(None, None), None);
+
+        let page = AtsInvitationPage {
+            items: Vec::new(),
+            next_cursor: None,
+            next_since: Some(at),
+        };
+        assert_eq!(
+            serde_json::to_value(&page).unwrap()["next_since"],
+            "2026-10-06T12:00:00Z"
+        );
+    }
+
+    fn snapshot(status: DbStatus) -> db::integrations::InvitationSnapshot {
+        let t = now();
+        db::integrations::InvitationSnapshot {
+            id: Uuid::now_v7(),
+            company_id: Uuid::now_v7(),
+            owner_user_id: Uuid::now_v7(),
+            candidate_id: Uuid::now_v7(),
+            public_code: "K-7Q3M2X".into(),
+            specialization: Some("backend".into()),
+            grade: Some("middle".into()),
+            need_id: None,
+            vacancy_id: None,
+            title: "Go-разработчик".into(),
+            message: "Здравствуйте".into(),
+            salary_min: 280_000,
+            salary_max: 340_000,
+            work_format: Some("remote".into()),
+            status,
+            decline_reason: None,
+            decline_comment: None,
+            created_at: t,
+            viewed_at: None,
+            responded_at: None,
+            expires_at: t + Duration::days(14),
+            updated_at: t,
+            webhook_on: true,
+        }
+    }
+
+    #[test]
+    fn the_polling_feed_names_the_candidate_only_after_acceptance() {
+        let none = OutcomeIndex::from_rows(Vec::new());
+        let sent = snapshot(DbStatus::Sent);
+        let item = serde_json::to_value(poll_item(&sent, &none)).unwrap();
+        assert_eq!(
+            item["candidate"],
+            json!({"code": "K-7Q3M2X", "category": {"specialization": "backend", "grade": "middle"}})
+        );
+        assert_eq!(item["contacts_available"], false);
+        assert_eq!(
+            item["invitation"]["salary"],
+            json!({"min": 280_000, "max": 340_000})
+        );
+        assert_eq!(item["invitation"]["work_format"], "remote");
+
+        let accepted = snapshot(DbStatus::Accepted);
+        let rows = vec![
+            db::integrations::OutcomeRow {
+                invitation_id: Some(accepted.id),
+                application_id: None,
+                stage: DbStage::Interview,
+                reason: Some("Четверг".into()),
+                occurred_at: now(),
+            },
+            db::integrations::OutcomeRow {
+                invitation_id: Some(sent.id),
+                application_id: None,
+                stage: DbStage::Rejected,
+                reason: None,
+                occurred_at: now(),
+            },
+            db::integrations::OutcomeRow {
+                invitation_id: Some(accepted.id),
+                application_id: None,
+                stage: DbStage::Hired,
+                reason: None,
+                occurred_at: now(),
+            },
+            db::integrations::OutcomeRow {
+                invitation_id: None,
+                application_id: None,
+                stage: DbStage::Offer,
+                reason: None,
+                occurred_at: now(),
+            },
+        ];
+        let item =
+            serde_json::to_value(poll_item(&accepted, &OutcomeIndex::from_rows(rows))).unwrap();
+        assert_eq!(item["candidate"]["id"], accepted.candidate_id.to_string());
+        assert!(
+            item["candidate"].get("disclosed").is_none(),
+            "contacts stay behind GET /integrations/candidates/{{id}}"
+        );
+        assert_eq!(item["contacts_available"], true);
+        let stages: Vec<&str> = item["outcomes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|o| o["stage"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            stages,
+            ["interview", "hired"],
+            "this invitation's stages, in order"
+        );
+        assert_eq!(item["outcomes"][0]["reason"], "Четверг");
+    }
 }

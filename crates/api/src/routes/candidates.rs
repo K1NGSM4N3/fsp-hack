@@ -204,7 +204,7 @@ async fn profile(
         .await?
         .pop()
         .ok_or_else(ApiError::not_found)?;
-    if !found.published && !found.related() {
+    if !found.visible_to_company() {
         return Err(ApiError::not_found());
     }
     let candidate = found.card;

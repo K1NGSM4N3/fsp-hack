@@ -111,6 +111,19 @@ pub fn closest<'a>(
         .max_by(|a, b| a.1.total_cmp(&b.1).then(b.0.cmp(&a.0)))
 }
 
+/// Every signature at or above [`DUPLICATE_THRESHOLD`]: index and similarity, most similar first,
+/// ties in their original order.
+pub fn rank_similar(sig: &Signature, others: &[Signature]) -> Vec<(usize, f32)> {
+    let mut ranked: Vec<(usize, f32)> = others
+        .iter()
+        .enumerate()
+        .map(|(i, o)| (i, sig.similarity(o)))
+        .filter(|&(_, s)| s >= DUPLICATE_THRESHOLD)
+        .collect();
+    ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+    ranked
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -183,5 +196,25 @@ mod tests {
         assert_eq!(i, 2);
         assert!(s >= 0.8);
         assert_eq!(closest(&sig(GO), &others[..1]), None);
+    }
+
+    #[test]
+    fn rank_similar_keeps_duplicates_only_best_first() {
+        let others = [sig(GO_EDITED), sig(JAVA), sig(GO), sig(GO_REORDERED)];
+        let ranked = rank_similar(&sig(GO), &others);
+        let order: Vec<usize> = ranked.iter().map(|&(i, _)| i).collect();
+        assert_eq!(order.first(), Some(&2), "the identical text leads");
+        assert_eq!(ranked[0].1, 1.0);
+        assert!(!order.contains(&1), "a different vacancy is not similar");
+        assert_eq!(order.len(), 3);
+        assert!(ranked.windows(2).all(|w| w[0].1 >= w[1].1));
+        assert!(ranked.iter().all(|&(_, s)| s >= DUPLICATE_THRESHOLD));
+        assert!(rank_similar(&sig(GO), &others[1..2]).is_empty());
+    }
+
+    #[test]
+    fn rank_similar_keeps_the_original_order_of_equal_matches() {
+        let others = [sig(GO), sig(JAVA), sig(GO)];
+        assert_eq!(rank_similar(&sig(GO), &others), [(0, 1.0), (2, 1.0)]);
     }
 }

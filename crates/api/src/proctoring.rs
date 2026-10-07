@@ -354,6 +354,12 @@ pub struct SweepReport {
     pub orphans: usize,
 }
 
+/// Recordings of sessions started before this are past retention: the mirror of
+/// `delete_after` in [`summary_view`].
+fn retention_cutoff(now: DateTime<Utc>, retention_days: i64) -> DateTime<Utc> {
+    now - chrono::Duration::days(retention_days)
+}
+
 /// Retention plus a safety net for account deletion: a candidate directory without proctoring
 /// rows belongs to a deleted account whose files were not removed right away.
 pub async fn sweep(
@@ -362,7 +368,7 @@ pub async fn sweep(
     retention_days: i64,
     now: DateTime<Utc>,
 ) -> Result<SweepReport, InternalError> {
-    let cutoff = now - chrono::Duration::days(retention_days);
+    let cutoff = retention_cutoff(now, retention_days);
     let mut purged = 0;
     loop {
         let batch = db::proctoring::expired_recordings(pool, cutoff, SWEEP_BATCH).await?;
@@ -469,5 +475,94 @@ mod tests {
             .collect();
         keys.sort_unstable();
         assert_eq!(keys, ["fullscreen_exits", "left_test", "pastes", "status"]);
+    }
+
+    const RETENTION_DAYS: i64 = 30;
+
+    fn at(s: &str) -> DateTime<Utc> {
+        s.parse().unwrap()
+    }
+
+    fn session(camera: bool, chunks: i64) -> db::proctoring::Summary {
+        db::proctoring::Summary {
+            session_id: Uuid::from_u128(1),
+            candidate_id: Uuid::from_u128(2),
+            camera,
+            mime: camera.then(|| "video/webm".to_owned()),
+            started_at: at("2026-09-01T10:00:00Z"),
+            purged_at: None,
+            chunks,
+            bytes: chunks * 125_000,
+            tab_hidden: 0,
+            window_blur: 1,
+            fullscreen_exit: 0,
+            paste: 2,
+            camera_lost: 0,
+            recording_failed: 0,
+        }
+    }
+
+    fn view(r: &db::proctoring::Summary) -> ProctoringSummary {
+        summary_view(r, &facts(r, false), RETENTION_DAYS)
+    }
+
+    #[test]
+    fn recorded_session_plays_until_retention_ends() {
+        let s = view(&session(true, 3));
+        assert_eq!(s.status, ProctoringStatus::Recorded);
+        assert!(s.playable && !s.purged);
+        assert_eq!((s.chunks, s.bytes), (3, 375_000));
+        assert_eq!(s.delete_after, Some(at("2026-10-01T10:00:00Z")));
+        assert_eq!((s.events.window_blur, s.events.paste), (1, 2));
+    }
+
+    #[test]
+    fn purged_recording_is_gone_for_good() {
+        let purged = db::proctoring::Summary {
+            purged_at: Some(at("2026-10-01T12:00:00Z")),
+            ..session(true, 3)
+        };
+        let s = view(&purged);
+        assert!(s.purged);
+        assert!(!s.playable);
+        assert_eq!(s.delete_after, None);
+        assert_eq!(s.chunks, 3, "the summary outlives the video");
+    }
+
+    #[test]
+    fn session_without_camera_has_nothing_to_delete() {
+        let s = view(&session(false, 0));
+        assert_eq!(s.status, ProctoringStatus::Declined);
+        assert!(!s.playable && !s.purged);
+        assert_eq!(s.delete_after, None);
+    }
+
+    #[test]
+    fn session_without_chunks_is_not_playable() {
+        let s = view(&session(true, 0));
+        assert_eq!(s.status, ProctoringStatus::Interrupted);
+        assert!(!s.playable);
+        assert_eq!(s.delete_after, Some(at("2026-10-01T10:00:00Z")));
+        let negative = db::proctoring::Summary {
+            bytes: -1,
+            ..session(true, 0)
+        };
+        assert_eq!(view(&negative).bytes, 0);
+    }
+
+    #[test]
+    fn sweep_cutoff_matches_the_promised_deletion_time() {
+        let now = at("2026-10-07T12:00:00Z");
+        let cutoff = retention_cutoff(now, RETENTION_DAYS);
+        assert_eq!(cutoff, at("2026-09-07T12:00:00Z"));
+        let on_the_edge = db::proctoring::Summary {
+            started_at: cutoff,
+            ..session(true, 3)
+        };
+        assert_eq!(
+            view(&on_the_edge).delete_after,
+            Some(now),
+            "the sweep takes sessions started strictly before the cutoff, so nothing goes early"
+        );
     }
 }

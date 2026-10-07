@@ -634,9 +634,10 @@ pub fn letter(items: &[Event], ctx: &LetterContext<'_>) -> Letter {
 mod tests {
     use super::*;
     use crate::notify::{
-        AcceptedNote, ComplaintNote, DeclinedNote, FspNote, InvitationNote, LiftedNote,
+        AcceptedNote, ComplaintNote, DeclinedNote, FrozenNote, FspNote, InvitationNote, LiftedNote,
+        TrustNote, UnpublishedNote,
     };
-    use catalog::WorkFormat;
+    use catalog::{Category, Grade, Specialization, WorkFormat};
     use uuid::Uuid;
 
     fn invitation(company: &str) -> Event {
@@ -873,5 +874,316 @@ mod tests {
         assert_eq!(gone.title, "Данные ФСП в профиле обновились");
         assert!(gone.body.starts_with("Реестр ФСП убрал 2 записи."));
         assert_eq!(one.link.as_deref(), Some("/candidate/settings#fsp"));
+    }
+
+    const NIL_INVITATION: &str = "/candidate/invitations/00000000-0000-0000-0000-000000000000";
+    const NIL_SESSION: &str = "/candidate/assessment/00000000-0000-0000-0000-000000000000";
+    const BACKEND_MIDDLE: Category = Category::new(Specialization::Backend, Grade::Middle);
+
+    fn with_kind(event: Event, kind: NotificationKind) -> Event {
+        let Event::InvitationReceived(note) = event else {
+            panic!("an invitation")
+        };
+        match kind {
+            NotificationKind::InvitationExpiring => Event::InvitationExpiring(note),
+            NotificationKind::InvitationWithdrawn => Event::InvitationWithdrawn(note),
+            _ => Event::InvitationReceived(note),
+        }
+    }
+
+    #[test]
+    fn expiry_reminder_names_the_company_salary_and_the_exact_deadline() {
+        let t = text(
+            &with_kind(
+                invitation("Рога и копыта"),
+                NotificationKind::InvitationExpiring,
+            ),
+            Channel::Email,
+        );
+        assert_eq!(
+            t.title,
+            "Приглашение от Рога и копыта закроется через двое суток"
+        );
+        assert_eq!(
+            t.body,
+            "«Backend-разработчик», 280\u{a0}000 – 340\u{a0}000\u{a0}₽. Если не ответить до 20 октября, 12:12 мск, приглашение закроется само."
+        );
+        assert_eq!(t.link.as_deref(), Some(NIL_INVITATION));
+    }
+
+    #[test]
+    fn withdrawn_invitation_says_it_no_longer_waits_for_an_answer() {
+        let t = text(
+            &with_kind(
+                invitation("Рога и копыта"),
+                NotificationKind::InvitationWithdrawn,
+            ),
+            Channel::InApp,
+        );
+        assert_eq!(t.title, "Компания Рога и копыта отозвала приглашение");
+        assert_eq!(t.body, "«Backend-разработчик» больше не ждёт ответа.");
+        assert_eq!(t.link.as_deref(), Some(NIL_INVITATION));
+    }
+
+    fn trust(level: TrustLevel, quota_before: i16, quota: i16) -> Text {
+        text(
+            &Event::TrustChanged(TrustNote {
+                level_before: TrustLevel::New,
+                level,
+                quota_before,
+                quota,
+            }),
+            Channel::Email,
+        )
+    }
+
+    #[test]
+    fn trust_change_leads_with_the_quota_when_it_moved() {
+        let t = trust(TrustLevel::New, 10, 15);
+        assert_eq!(t.title, "Квота приглашений: 10 → 15 за 7 дней");
+        assert_eq!(
+            t.body,
+            "Новая компания. Что влияет на квоту — в разделе «Доверие и квота»."
+        );
+        assert_eq!(t.link.as_deref(), Some("/employer/trust"));
+    }
+
+    #[test]
+    fn trust_change_names_the_level_when_the_quota_stayed() {
+        let t = trust(TrustLevel::Low, 10, 10);
+        assert_eq!(t.title, "Уровень доверия: квота временно снижена");
+        assert_eq!(
+            t.body,
+            "Квота временно снижена. Что влияет на квоту — в разделе «Доверие и квота»."
+        );
+    }
+
+    #[test]
+    fn accepted_letter_links_to_the_candidate_card_in_the_cabinet() {
+        let candidate = Uuid::from_u128(0x7f3a2c);
+        let accepted = Event::InvitationAccepted(AcceptedNote {
+            invitation_id: Uuid::nil(),
+            candidate_id: candidate,
+            candidate_code: "K-7F3A2C".into(),
+            title: "Backend".into(),
+        });
+        let l = letter(
+            &[accepted],
+            &LetterContext {
+                audience: Audience::Employer,
+                ..ctx()
+            },
+        );
+        assert_eq!(
+            l.subject,
+            "Кандидат K-7F3A2C принял приглашение — контакты в кабинете"
+        );
+        assert!(
+            l.text.contains(&format!(
+                "https://talents.example/employer/candidates/{candidate}"
+            )),
+            "{}",
+            l.text
+        );
+        assert!(l.text.contains("в письмах мы их не пересылаем"));
+        assert!(
+            l.text
+                .contains("https://talents.example/employer/company#notifications")
+        );
+    }
+
+    fn review(comment: &str, category_now: Option<Category>, badge: bool) -> ReviewNote {
+        ReviewNote {
+            session_id: Uuid::nil(),
+            category: BACKEND_MIDDLE,
+            comment: comment.into(),
+            category_now,
+            badge,
+        }
+    }
+
+    #[test]
+    fn confirmed_result_says_the_mark_is_gone_and_quotes_the_moderator() {
+        let t = text(
+            &Event::ResultConfirmed(review(
+                "Ответы совпадают с записью экрана.",
+                Some(BACKEND_MIDDLE),
+                false,
+            )),
+            Channel::Email,
+        );
+        assert_eq!(
+            t.title,
+            "Модератор подтвердил результат теста: Бэкенд-разработка · Middle"
+        );
+        assert_eq!(
+            t.body,
+            "Отметка «требует подтверждения» снята. Комментарий модератора: «Ответы совпадают с записью экрана»."
+        );
+        assert_eq!(t.link.as_deref(), Some(NIL_SESSION));
+        let badge = text(
+            &Event::ResultConfirmed(review("Всё чисто", Some(BACKEND_MIDDLE), true)),
+            Channel::InApp,
+        );
+        assert_eq!(
+            badge.body,
+            "Отметка «требует подтверждения» снята, компании видят «Результат подтверждён». Комментарий модератора: «Всё чисто»."
+        );
+    }
+
+    #[test]
+    fn annulled_result_says_what_category_is_left() {
+        let t = text(
+            &Event::ResultAnnulled(review(
+                "Ответы совпадают с утёкшим ключом",
+                Some(Category::new(Specialization::Backend, Grade::Junior)),
+                false,
+            )),
+            Channel::Email,
+        );
+        assert_eq!(
+            t.title,
+            "Результат теста аннулирован: Бэкенд-разработка · Middle"
+        );
+        assert_eq!(
+            t.body,
+            "Комментарий модератора: «Ответы совпадают с утёкшим ключом». Категория сейчас: Бэкенд-разработка · Junior. Тест на Middle снова можно пройти через 30 дней."
+        );
+        assert_eq!(t.link.as_deref(), Some(NIL_SESSION));
+        let none = text(
+            &Event::ResultAnnulled(review("Подсказки со второго экрана", None, false)),
+            Channel::Email,
+        );
+        assert_eq!(
+            none.body,
+            "Комментарий модератора: «Подсказки со второго экрана». Категории сейчас нет. Тест на Middle снова можно пройти через 30 дней."
+        );
+    }
+
+    #[test]
+    fn retest_order_allows_an_immediate_attempt_with_the_camera_on() {
+        let t = text(
+            &Event::RetestOrdered(review("Камера была выключена", None, false)),
+            Channel::Email,
+        );
+        assert_eq!(
+            t.title,
+            "Назначена пересдача с видеозаписью: Бэкенд-разработка · Middle"
+        );
+        assert_eq!(
+            t.body,
+            "Можно пройти сразу, без ожидания, но только с включённой камерой. Комментарий модератора: «Камера была выключена». Категории сейчас нет."
+        );
+        assert_eq!(t.link.as_deref(), Some(NIL_SESSION));
+    }
+
+    #[test]
+    fn dismissed_complaint_about_the_company_or_an_untitled_vacancy() {
+        let about = |about, vacancy_id| {
+            text(
+                &Event::ComplaintResolved(ComplaintNote {
+                    about,
+                    vacancy_id,
+                    vacancy_title: None,
+                    quota: 15,
+                }),
+                Channel::Email,
+            )
+        };
+        let company = about(ComplaintAbout::Company, None);
+        assert_eq!(company.title, "Жалоба на компанию не подтвердилась");
+        assert_eq!(
+            company.body,
+            "Модератор проверил жалобу: нарушений нет, квоту она больше не снижает. Квота — 15 приглашений за 7 дней."
+        );
+        assert_eq!(company.link.as_deref(), Some("/employer/trust"));
+        assert_eq!(
+            about(ComplaintAbout::Vacancy, Some(Uuid::nil())).title,
+            "Жалоба на вакансию не подтвердилась"
+        );
+        assert_eq!(
+            about(ComplaintAbout::Invitation, None).link.as_deref(),
+            Some("/employer/trust")
+        );
+    }
+
+    #[test]
+    fn unpublished_vacancy_quotes_the_moderator_and_counts_upheld_complaints() {
+        let id = Uuid::from_u128(5);
+        let unpublished = |complaints_upheld| {
+            text(
+                &Event::VacancyUnpublished(UnpublishedNote {
+                    vacancy_id: id,
+                    title: "Go-разработчик".into(),
+                    comment: "Вилка не соответствует описанию.".into(),
+                    complaints_upheld,
+                }),
+                Channel::Email,
+            )
+        };
+        let t = unpublished(2);
+        assert_eq!(t.title, "Вакансия «Go-разработчик» снята с публикации");
+        assert_eq!(
+            t.body,
+            "Комментарий модератора: «Вилка не соответствует описанию». Вернуть вакансию может только модератор. Подтверждено жалоб: 2 — они снижают квоту 90 дней."
+        );
+        assert_eq!(t.link, Some(format!("/employer/vacancies/{id}")));
+        assert_eq!(
+            unpublished(0).body,
+            "Комментарий модератора: «Вилка не соответствует описанию». Вернуть вакансию может только модератор."
+        );
+    }
+
+    #[test]
+    fn frozen_invitations_name_the_moment_they_return() {
+        let t = text(
+            &Event::InvitationsFrozen(FrozenNote {
+                until: DateTime::parse_from_rfc3339("2026-10-20T09:12:44Z")
+                    .unwrap()
+                    .to_utc(),
+                comment: "Массовые приглашения без отбора".into(),
+                complaints_upheld: 3,
+            }),
+            Channel::Email,
+        );
+        assert_eq!(t.title, "Приглашения приостановлены до 20 октября");
+        assert_eq!(
+            t.body,
+            "До 20 октября, 12:12 мск квота приглашений — 0. Комментарий модератора: «Массовые приглашения без отбора». Подтверждено жалоб: 3 — они снижают квоту 90 дней."
+        );
+        assert_eq!(t.link.as_deref(), Some("/employer/trust"));
+    }
+
+    #[test]
+    fn lifted_sanction_names_the_vacancy_or_the_returned_invitations() {
+        let id = Uuid::from_u128(5);
+        let lifted = |vacancy_id: Option<Uuid>, title: Option<&str>| {
+            text(
+                &Event::SanctionLifted(LiftedNote {
+                    vacancy_id,
+                    title: title.map(str::to_owned),
+                    comment: "Ошибка модерации".into(),
+                    quota: 20,
+                }),
+                Channel::Email,
+            )
+        };
+        let vacancy = lifted(Some(id), Some("Go-разработчик"));
+        assert_eq!(
+            vacancy.title,
+            "Вакансия «Go-разработчик» снова опубликована"
+        );
+        assert_eq!(
+            vacancy.body,
+            "Модератор отменил снятие: «Ошибка модерации»."
+        );
+        assert_eq!(vacancy.link, Some(format!("/employer/vacancies/{id}")));
+        let freeze = lifted(None, None);
+        assert_eq!(freeze.title, "Приглашения снова доступны");
+        assert_eq!(
+            freeze.body,
+            "Модератор снял приостановку досрочно: «Ошибка модерации». Квота — 20 приглашений за 7 дней."
+        );
+        assert_eq!(freeze.link.as_deref(), Some("/employer/trust"));
     }
 }

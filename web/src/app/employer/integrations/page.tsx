@@ -158,11 +158,11 @@ function TestResult({ r }: { r: TestDelivery }) {
   );
 }
 
-function WebhookCard({ data }: { data: IntegrationsOverview }) {
+/** `onSecret` lives in the page: saving the first address re-keys this card, and the one-time secret must outlive that. */
+function WebhookCard({ data, onSecret }: { data: IntegrationsOverview; onSecret: (secret: string) => void }) {
   const toast = useToast();
   const w = data.webhook;
   const [url, setUrl] = useState(w?.url ?? "");
-  const [secret, setSecret] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"rotate" | "delete" | null>(null);
   const save = useSaveWebhook();
   const rotate = useRotateWebhookSecret();
@@ -187,7 +187,7 @@ function WebhookCard({ data }: { data: IntegrationsOverview }) {
             { url: url.trim() },
             {
               onSuccess: (r) => {
-                if (r.secret) setSecret(r.secret);
+                if (r.secret) onSecret(r.secret);
                 else toast.success("Адрес сохранён", "Секрет подписи прежний");
               },
             },
@@ -260,7 +260,7 @@ function WebhookCard({ data }: { data: IntegrationsOverview }) {
                 rotate.mutate(undefined, {
                   onSuccess: (r) => {
                     setConfirm(null);
-                    setSecret(r.secret ?? null);
+                    if (r.secret) onSecret(r.secret);
                   },
                   onError: (e) => toast.error(errorTitle(e, "Не удалось сменить секрет")),
                 })
@@ -306,12 +306,6 @@ function WebhookCard({ data }: { data: IntegrationsOverview }) {
         <p className="text-sm text-ink-muted">Адрес и секрет удалятся, события из очереди не будут отправлены. Новые события перестанут формироваться — и контакты в ATS больше не уйдут.</p>
       </Dialog>
 
-      <RevealDialog secret={secret} onClose={() => setSecret(null)} title="Секрет подписи">
-        <p className="text-sm text-ink-muted">
-          Проверяйте каждое событие: <span className="font-mono text-ink">HMAC-SHA256(секрет, t + &quot;.&quot; + тело)</span> должно совпасть с <span className="font-mono text-ink">v1</span> из заголовка{" "}
-          <span className="font-mono text-ink">FSP-Signature: t=…,v1=…</span>, а метка <span className="font-mono text-ink">t</span> — отличаться от ваших часов не больше чем на 5 минут.
-        </p>
-      </RevealDialog>
     </Card>
   );
 }
@@ -446,7 +440,7 @@ function KeyRow({ k }: { k: ApiKeyView }) {
   const revoke = useRevokeApiKey();
   const [confirm, setConfirm] = useState(false);
   return (
-    <li className={cn("py-3 first:pt-0 last:pb-0", k.revoked_at && "opacity-60")}>
+    <li className="py-3 first:pt-0 last:pb-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2 text-sm font-medium text-ink">
@@ -456,7 +450,7 @@ function KeyRow({ k }: { k: ApiKeyView }) {
           <p className="mt-0.5 font-mono text-xs break-all text-ink-subtle">{k.prefix}…</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {k.scopes.map((s) => (
-              <Badge key={s} tone="primary" title={SCOPE_INFO[s].description}>
+              <Badge key={s} tone={k.revoked_at ? "muted" : "primary"} title={SCOPE_INFO[s].description}>
                 {SCOPE_INFO[s].title}
               </Badge>
             ))}
@@ -592,6 +586,7 @@ function ApiKeysCard({ data }: { data: IntegrationsOverview }) {
 
 export default function IntegrationsPage() {
   const q = useIntegrations();
+  const [webhookSecret, setWebhookSecret] = useState<string | null>(null);
   return (
     <div>
       <PageHeader
@@ -629,7 +624,7 @@ export default function IntegrationsPage() {
           <HowItWorks />
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="min-w-0 space-y-6">
-              <WebhookCard key={q.data.webhook?.url ?? "none"} data={q.data} />
+              <WebhookCard key={q.data.webhook?.url ?? "none"} data={q.data} onSecret={setWebhookSecret} />
               <VerifyCard />
             </div>
             <div className="min-w-0">
@@ -639,6 +634,12 @@ export default function IntegrationsPage() {
           <DeliveriesCard counts={q.data.deliveries} />
         </div>
       )}
+      <RevealDialog secret={webhookSecret} onClose={() => setWebhookSecret(null)} title="Секрет подписи">
+        <p className="text-sm text-ink-muted">
+          Проверяйте каждое событие: <span className="font-mono text-ink">HMAC-SHA256(секрет, t + &quot;.&quot; + тело)</span> должно совпасть с <span className="font-mono text-ink">v1</span> из заголовка{" "}
+          <span className="font-mono text-ink">FSP-Signature: t=…,v1=…</span>, а метка <span className="font-mono text-ink">t</span> — отличаться от ваших часов не больше чем на 5 минут.
+        </p>
+      </RevealDialog>
     </div>
   );
 }

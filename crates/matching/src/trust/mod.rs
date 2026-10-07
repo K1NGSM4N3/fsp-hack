@@ -165,4 +165,66 @@ mod tests {
         );
         assert!(!flag.is_salary());
     }
+
+    const BACKEND_MIDDLE: Category = Category::new(Specialization::Backend, Grade::Middle);
+
+    #[test]
+    fn bait_range_gets_both_salary_warnings_above_market_first() {
+        let band = MarketBand {
+            samples: 6,
+            median: 255_000,
+            p90: 290_000,
+        };
+        let flags = salary_flags(BACKEND_MIDDLE, 300_000, 900_000, Some(band));
+        assert_eq!(
+            flags,
+            [
+                TrustFlag::SalaryAboveMarket {
+                    category: BACKEND_MIDDLE,
+                    max: 900_000,
+                    p90: 290_000
+                },
+                TrustFlag::SalaryWideRange {
+                    min: 300_000,
+                    max: 900_000
+                },
+            ]
+        );
+        assert_eq!(
+            flags[0].employer_text(),
+            "Верх вилки 900\u{a0}000\u{a0}₽ заметно выше рынка: 90 % кандидатов категории Бэкенд-разработка · Middle ожидают не больше 290\u{a0}000\u{a0}₽. Публикации это не мешает — проверьте, нет ли опечатки."
+        );
+        assert_eq!(
+            flags[1].employer_text(),
+            "Вилка 300\u{a0}000\u{a0}₽ – 900\u{a0}000\u{a0}₽ очень широкая: верхняя граница больше нижней в 3,0 раза. Так обычно описывают сразу несколько грейдов — кандидаты доверяют такой вилке меньше."
+        );
+        assert!(flags.iter().all(TrustFlag::is_salary));
+    }
+
+    #[test]
+    fn employer_hears_about_own_duplicates_but_not_whose_text_was_copied() {
+        let own = TrustFlag::DuplicateOwn {
+            vacancy_id: "x".into(),
+            title: "Go-разработчик".into(),
+            similarity: 0.874,
+        };
+        assert_eq!(
+            own.employer_text(),
+            "Текст почти совпадает с вашей вакансией «Go-разработчик» (87 %). Возможно, удобнее обновить её."
+        );
+        assert_eq!(
+            own.moderator_text(),
+            "Почти повторяет собственную вакансию «Go-разработчик» (87 %)"
+        );
+        let copy = TrustFlag::CopyOfOther {
+            vacancy_id: "y".into(),
+            company: "Северный Код".into(),
+            title: "Go-разработчик".into(),
+            similarity: 0.95,
+        };
+        assert_eq!(
+            copy.employer_text(),
+            "Текст почти совпадает с вакансией другой компании."
+        );
+    }
 }

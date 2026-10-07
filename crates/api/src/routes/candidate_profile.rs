@@ -365,6 +365,30 @@ async fn get_privacy(
     }))
 }
 
+/// Showing the profile needs the 152-ФЗ consents first (`missing` comes ordered by kind, so
+/// processing is named before publication), then, under 18, the representative's; hiding it
+/// needs nothing.
+fn visibility_gate(
+    visible: bool,
+    missing: Vec<db::consents::MissingConsent>,
+    guardian_missing: Option<Uuid>,
+) -> ApiResult<()> {
+    if !visible {
+        return Ok(());
+    }
+    if let Some(doc) = missing.into_iter().next() {
+        return Err(ApiError::ConsentRequired {
+            document_id: doc.id,
+            kind: doc.kind,
+            title: doc.title,
+        });
+    }
+    match guardian_missing {
+        Some(document_id) => Err(ApiError::GuardianConsentRequired { document_id }),
+        None => Ok(()),
+    }
+}
+
 /// Update privacy settings. Showing the profile in search needs active consents to processing
 /// and to publication: without them the answer is 409 `consent_required` with the document to grant.
 /// Under 18 it also needs the legal representative's consent (409 `guardian_consent_required`)
@@ -380,28 +404,23 @@ async fn put_privacy(
     user: CandidateUser,
     Json(p): Json<Privacy>,
 ) -> ApiResult<Json<Privacy>> {
-    if p.visible {
+    let missing = if p.visible {
         let required = [
             db::consents::PROCESSING.to_owned(),
             db::consents::PUBLICATION.to_owned(),
         ];
-        if let Some(doc) = db::consents::missing_consents(&state.pool, user.id, &required)
+        db::consents::missing_consents(&state.pool, user.id, &required).await?
+    } else {
+        Vec::new()
+    };
+    let guardian_missing = if p.visible && missing.is_empty() {
+        db::guardians::missing_guardian_consent(&state.pool, user.id)
             .await?
-            .into_iter()
-            .next()
-        {
-            return Err(ApiError::ConsentRequired {
-                document_id: doc.id,
-                kind: doc.kind,
-                title: doc.title,
-            });
-        }
-        if let Some(doc) = db::guardians::missing_guardian_consent(&state.pool, user.id).await? {
-            return Err(ApiError::GuardianConsentRequired {
-                document_id: doc.id,
-            });
-        }
-    }
+            .map(|doc| doc.id)
+    } else {
+        None
+    };
+    visibility_gate(p.visible, missing, guardian_missing)?;
     let status: db::types::SearchStatus = p.search_status.into();
     db::candidates::update_candidate_privacy(
         &state.pool,
@@ -428,17 +447,20 @@ pub(crate) async fn access_log(
         db::contacts::candidate_access_log(pool, candidate, ACCESS_LOG_LIMIT)
             .await?
             .into_iter()
-            .filter_map(|r| {
-                Some(ContactAccessEntry {
-                    company_id: r.company_id,
-                    company_name: r.company_name,
-                    basis: ContactBasis::from_slug(&r.basis)?,
-                    channel: AccessChannel::from_slug(&r.channel)?,
-                    accessed_at: r.accessed_at,
-                })
-            })
+            .filter_map(access_entry)
             .collect(),
     )
+}
+
+/// A row with a basis or channel this build does not know is left out rather than mislabelled.
+fn access_entry(r: db::contacts::AccessRecord) -> Option<ContactAccessEntry> {
+    Some(ContactAccessEntry {
+        company_id: r.company_id,
+        company_name: r.company_name,
+        basis: ContactBasis::from_slug(&r.basis)?,
+        channel: AccessChannel::from_slug(&r.channel)?,
+        accessed_at: r.accessed_at,
+    })
 }
 
 /// Who opened your contacts: company, time and basis — an accepted invitation or your own
@@ -814,5 +836,112 @@ mod tests {
         for bad in ["@ann", "@анна_dev", "@anna dev", "@anna-dev"] {
             assert!(!valid_telegram(bad), "{bad}");
         }
+    }
+
+    fn missing(kind: &str) -> db::consents::MissingConsent {
+        db::consents::MissingConsent {
+            id: Uuid::now_v7(),
+            kind: kind.into(),
+            title: format!("Согласие {kind}"),
+        }
+    }
+
+    #[test]
+    fn hiding_the_profile_needs_no_consent() {
+        let guardian = Some(Uuid::now_v7());
+        assert!(visibility_gate(false, vec![missing(db::consents::PROCESSING)], guardian).is_ok());
+        assert!(visibility_gate(true, Vec::new(), None).is_ok());
+    }
+
+    #[test]
+    fn showing_the_profile_names_the_first_missing_consent() {
+        let processing = missing(db::consents::PROCESSING);
+        let id = processing.id;
+        let err = visibility_gate(
+            true,
+            vec![processing, missing(db::consents::PUBLICATION)],
+            Some(Uuid::now_v7()),
+        )
+        .unwrap_err();
+        let ApiError::ConsentRequired {
+            document_id, kind, ..
+        } = err
+        else {
+            panic!("expected consent_required")
+        };
+        assert_eq!((document_id, kind.as_str()), (id, db::consents::PROCESSING));
+
+        let publication = missing(db::consents::PUBLICATION);
+        let id = publication.id;
+        let err = visibility_gate(true, vec![publication], None).unwrap_err();
+        assert!(
+            matches!(err, ApiError::ConsentRequired { document_id, ref kind, .. }
+                if document_id == id && kind == db::consents::PUBLICATION)
+        );
+    }
+
+    #[test]
+    fn minor_with_both_consents_waits_for_the_representative() {
+        let doc = Uuid::now_v7();
+        let err = visibility_gate(true, Vec::new(), Some(doc)).unwrap_err();
+        assert_eq!(err.summary(), (409, "guardian_consent_required", vec![]));
+        assert!(
+            matches!(err, ApiError::GuardianConsentRequired { document_id } if document_id == doc)
+        );
+    }
+
+    fn record(
+        basis: &str,
+        channel: &str,
+        company_name: Option<&str>,
+    ) -> db::contacts::AccessRecord {
+        db::contacts::AccessRecord {
+            company_id: Uuid::now_v7(),
+            company_name: company_name.map(str::to_owned),
+            basis: basis.into(),
+            channel: channel.into(),
+            accessed_at: "2026-10-07T12:00:00Z".parse().unwrap(),
+        }
+    }
+
+    #[test]
+    fn access_log_entry_names_the_company_and_basis_only() {
+        let entry = access_entry(record("invitation", "api", Some("ООО «Северный код»"))).unwrap();
+        assert_eq!(entry.basis, ContactBasis::Invitation);
+        assert_eq!(entry.channel, AccessChannel::Api);
+        let json = serde_json::to_value(&entry).unwrap();
+        let mut keys: Vec<&str> = json
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect();
+        keys.sort_unstable();
+        assert_eq!(
+            keys,
+            [
+                "accessed_at",
+                "basis",
+                "channel",
+                "company_id",
+                "company_name"
+            ]
+        );
+        assert_eq!(json["company_name"], "ООО «Северный код»");
+    }
+
+    #[test]
+    fn access_log_keeps_entries_of_a_deleted_company() {
+        let entry = access_entry(record("application", "cabinet", None)).unwrap();
+        assert_eq!(entry.company_name, None);
+        assert_eq!(entry.basis, ContactBasis::Application);
+        assert!(serde_json::to_value(&entry).unwrap()["company_name"].is_null());
+    }
+
+    #[test]
+    fn access_log_skips_an_unknown_basis_or_channel() {
+        assert!(access_entry(record("referral", "cabinet", None)).is_none());
+        assert!(access_entry(record("application", "fax", None)).is_none());
+        assert!(access_entry(record("application", "webhook", None)).is_some());
     }
 }

@@ -210,6 +210,47 @@ async fn replay(
     Ok(Some(sent_from_row!(row)))
 }
 
+/// The category an invitation goes to. A hidden candidate is not found, as if absent; a visible
+/// one without a category or with search closed takes no invitations.
+fn invitable(c: &db::candidates::CandidateInvitable) -> ApiResult<Category> {
+    if !c.published {
+        return Err(ApiError::not_found());
+    }
+    match (c.specialization.as_deref(), c.grade.as_deref()) {
+        (Some(s), Some(g)) if c.search_status != db::types::SearchStatus::Closed => {
+            Ok(Category::new(s.parse()?, g.parse()?))
+        }
+        _ => Err(ApiError::conflict(
+            "candidate_not_available",
+            "Кандидат сейчас не принимает приглашения",
+        )),
+    }
+}
+
+fn frozen_refusal(until: DateTime<Utc>) -> ApiError {
+    ApiError::conflict(
+        "invitations_frozen",
+        format!(
+            "Модератор приостановил приглашения до {}",
+            until.format("%d.%m.%Y")
+        ),
+    )
+    .with_detail("Причина и комментарий модератора — в разделе «Доверие и квота»")
+}
+
+/// `sent`: invitations of the last 7 days; `quota`: what the trust level allows for them.
+fn quota_refusal(sent: i64, quota: i16) -> Option<ApiError> {
+    (sent >= i64::from(quota)).then(|| {
+        ApiError::conflict(
+            "invitation_quota_exceeded",
+            format!("Лимит {quota} приглашений за 7 дней исчерпан"),
+        )
+        .with_detail(
+            "Квота зависит от уровня доверия к компании — как её поднять, видно в разделе «Доверие и квота»",
+        )
+    })
+}
+
 /// Send an invitation to a candidate (salary range is mandatory, vacancy is optional)
 #[utoipa::path(post, path = "/invitations", tag = "invitations",
     request_body = SendInvitation,
@@ -241,46 +282,16 @@ async fn send(
     let candidate = db::candidates::candidate_invitable(&state.pool, req.candidate_id)
         .await?
         .ok_or_else(ApiError::not_found)?;
-    if !candidate.published {
-        return Err(ApiError::not_found());
-    }
-    let category = match (
-        candidate.specialization.as_deref(),
-        candidate.grade.as_deref(),
-    ) {
-        (Some(s), Some(g)) if candidate.search_status != db::types::SearchStatus::Closed => {
-            Category::new(s.parse()?, g.parse()?)
-        }
-        _ => {
-            return Err(ApiError::conflict(
-                "candidate_not_available",
-                "Кандидат сейчас не принимает приглашения",
-            ));
-        }
-    };
+    let category = invitable(&candidate)?;
 
     let (assessment, signals) = trust::company_assessment(&state.pool, company).await?;
     if let Some(until) = signals.frozen_until {
-        return Err(ApiError::conflict(
-            "invitations_frozen",
-            format!(
-                "Модератор приостановил приглашения до {}",
-                until.format("%d.%m.%Y")
-            ),
-        )
-        .with_detail("Причина и комментарий модератора — в разделе «Доверие и квота»"));
+        return Err(frozen_refusal(until));
     }
-    let quota = i64::from(assessment.quota);
     let since = Utc::now() - Duration::days(7);
     let sent = db::invitations::company_invitations_since(&state.pool, company, since).await?;
-    if sent >= quota {
-        return Err(ApiError::conflict(
-            "invitation_quota_exceeded",
-            format!("Лимит {quota} приглашений за 7 дней исчерпан"),
-        )
-        .with_detail(
-            "Квота зависит от уровня доверия к компании — как её поднять, видно в разделе «Доверие и квота»",
-        ));
+    if let Some(refusal) = quota_refusal(sent, assessment.quota) {
+        return Err(refusal);
     }
 
     let id = Uuid::now_v7();
@@ -932,4 +943,152 @@ async fn decline(
         state.candidates.invalidate().await;
     }
     Ok(declined)
+}
+
+#[cfg(test)]
+mod tests {
+    use db::types::{InvitationStatus as Stored, SearchStatus};
+
+    use super::*;
+
+    fn problem(e: &ApiError) -> (&str, Option<&str>) {
+        match e {
+            ApiError::Status { title, detail, .. } => (title, detail.as_deref()),
+            other => panic!("expected a problem with a title, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_status_filter_keeps_every_status() {
+        assert!(status_filter(None).unwrap().is_empty());
+        assert!(status_filter(Some("")).unwrap().is_empty());
+        assert!(status_filter(Some(",,")).unwrap().is_empty());
+        assert!(status_filter(Some(" , ")).unwrap().is_empty());
+    }
+
+    #[test]
+    fn status_filter_is_a_comma_separated_list() {
+        assert_eq!(
+            status_filter(Some("sent, viewed")).unwrap(),
+            [Stored::Sent, Stored::Viewed]
+        );
+        assert_eq!(
+            status_filter(Some("accepted,declined,expired,withdrawn")).unwrap(),
+            [
+                Stored::Accepted,
+                Stored::Declined,
+                Stored::Expired,
+                Stored::Withdrawn
+            ]
+        );
+    }
+
+    #[test]
+    fn unknown_status_is_a_bad_query_naming_it() {
+        let e = status_filter(Some("sent,lost")).unwrap_err();
+        assert_eq!(e.summary(), (400, "invalid_query", vec![]));
+        assert_eq!(
+            problem(&e),
+            (
+                "Некорректные параметры запроса",
+                Some("status: неизвестный статус «lost»")
+            )
+        );
+    }
+
+    #[test]
+    fn quota_refuses_once_the_last_7_days_reach_it() {
+        assert!(quota_refusal(0, 10).is_none());
+        assert!(quota_refusal(9, 10).is_none());
+        for sent in [10, 11] {
+            let e = quota_refusal(sent, 10).unwrap();
+            assert_eq!(e.summary(), (409, "invitation_quota_exceeded", vec![]));
+            assert_eq!(
+                problem(&e),
+                (
+                    "Лимит 10 приглашений за 7 дней исчерпан",
+                    Some(
+                        "Квота зависит от уровня доверия к компании — как её поднять, видно в разделе «Доверие и квота»"
+                    )
+                )
+            );
+        }
+        assert_eq!(
+            problem(&quota_refusal(5, 5).unwrap()).0,
+            "Лимит 5 приглашений за 7 дней исчерпан"
+        );
+    }
+
+    #[test]
+    fn frozen_invitations_are_refused_until_the_date() {
+        let until = DateTime::parse_from_rfc3339("2026-10-20T09:12:44Z")
+            .unwrap()
+            .to_utc();
+        let e = frozen_refusal(until);
+        assert_eq!(e.summary(), (409, "invitations_frozen", vec![]));
+        assert_eq!(
+            problem(&e),
+            (
+                "Модератор приостановил приглашения до 20.10.2026",
+                Some("Причина и комментарий модератора — в разделе «Доверие и квота»")
+            )
+        );
+    }
+
+    fn candidate(
+        published: bool,
+        search_status: SearchStatus,
+        category: Option<(&str, &str)>,
+    ) -> db::candidates::CandidateInvitable {
+        db::candidates::CandidateInvitable {
+            published,
+            search_status,
+            specialization: category.map(|(s, _)| s.to_owned()),
+            grade: category.map(|(_, g)| g.to_owned()),
+        }
+    }
+
+    #[test]
+    fn a_searching_candidate_is_invited_into_their_category() {
+        for status in [SearchStatus::Active, SearchStatus::Open] {
+            assert_eq!(
+                invitable(&candidate(true, status, Some(("backend", "middle")))).unwrap(),
+                Category::new(catalog::Specialization::Backend, catalog::Grade::Middle)
+            );
+        }
+    }
+
+    #[test]
+    fn a_hidden_candidate_is_not_found() {
+        let e = invitable(&candidate(
+            false,
+            SearchStatus::Active,
+            Some(("backend", "middle")),
+        ))
+        .unwrap_err();
+        assert_eq!(e.summary(), (404, "not_found", vec![]));
+    }
+
+    #[test]
+    fn no_category_or_closed_search_takes_no_invitations() {
+        for c in [
+            candidate(true, SearchStatus::Active, None),
+            candidate(true, SearchStatus::Closed, Some(("backend", "middle"))),
+        ] {
+            let e = invitable(&c).unwrap_err();
+            assert_eq!(e.summary(), (409, "candidate_not_available", vec![]));
+            assert_eq!(problem(&e).0, "Кандидат сейчас не принимает приглашения");
+        }
+    }
+
+    #[test]
+    fn a_stored_category_the_catalog_does_not_know_is_an_internal_error() {
+        let e = invitable(&candidate(
+            true,
+            SearchStatus::Active,
+            Some(("cobol", "middle")),
+        ))
+        .unwrap_err();
+        assert_eq!(e.summary(), (500, "internal", vec![]));
+    }
 }

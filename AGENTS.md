@@ -20,7 +20,7 @@
 crates/catalog     справочники: специализации, грейды, категории, отрасли
 crates/assessment  чистая логика тестирования: IRT, CAT, шаблоны заданий, политика грейда
 crates/matching    чистая логика подбора: навыки, ФСП-скор, скоринг, разбор резюме
-crates/db          доступ к PostgreSQL на sqlx: запросы с проверкой при компиляции, миграции, тесты на живой БД
+crates/db          доступ к PostgreSQL на sqlx: запросы с проверкой при компиляции, миграции
 crates/api         axum-сервер: HTTP, auth, OpenAPI, сервисы
 crates/fsp-mock    заглушка реестра ФСП
 crates/ats-mock    демо-ATS работодателя: подписанные вебхуки, этапы найма обратно
@@ -28,7 +28,8 @@ crates/validate    симуляция и отчёт валидации
 db/migrations      миграции sqlx: NNNN_name.sql
 .sqlx/             метаданные запросов для офлайн-сборки (make db-prepare)
 web/               Next.js
-deploy/            compose, Dockerfile'ы, Caddy, Keycloak, Grafana
+deploy/            compose, Dockerfile'ы, Caddy, Keycloak, Grafana; compose.blackbox.yml — стек для black-box тестов
+tests/blackbox/    black-box тесты: Playwright + TypeScript, свой package.json
 ```
 
 ## Команды
@@ -41,7 +42,9 @@ make fsp-mock    # заглушка реестра ФСП на :8090
 make ats-mock    # демо-ATS на :8082
 make gen-api     # выгрузить OpenAPI в web/openapi.json и сгенерировать TS-типы
 make web         # Next.js dev-сервер на :3000
-make test        # cargo test (тесты на живой БД — на Postgres из TEST_DATABASE_URL) + проверка типов web
+make test        # модульные тесты (cargo test --workspace, без БД и сети) + проверка типов web
+make blackbox    # чистый стек (свои тома) → Playwright по публичным портам; DOWN=1 — снести стек после, ARGS=… — аргументы playwright
+make blackbox-down # остановить стек black-box тестов и удалить его тома
 make lint        # cargo fmt --check, clippy -D warnings, eslint
 make validate    # прогнать валидацию → docs/validation/
 make docs        # docs/solution.md → docs/solution.pdf и docs/solution.docx (pandoc + typst)
@@ -72,7 +75,21 @@ make logs        # логи api
 - Единый `ApiError` → problem+json в `api`. Никаких `unwrap()`/`expect()` в путях обработки запросов.
 - Каждый хендлер описан в utoipa (`#[utoipa::path]`) с кодами ошибок — иначе его нет в Swagger.
 - Правила видимости — в типах: DTO работодателя не содержит контактов; `CandidateContacts` строится только из `ContactGrant`.
-- Перед коммитом: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `make test`.
+- Перед коммитом: `cargo fmt`, `cargo clippy --all-targets -- -D warnings`, `make test`; задел интерфейс или сценарий — `make blackbox`.
+
+### Тесты
+Тестов два вида, и только они. Интеграционных тестов «изнутри» (поднять `AppState` в процессе, писать в базу, подменять триггерами) в проекте нет.
+
+- **Модульные** — `#[cfg(test)] mod tests` рядом с кодом в `crates/*/src` и `crates/matching/tests/` (только публичный API крейта). Запуск — `make test`.
+  - Можно: чистые функции, типы, сериализация, рендер писем, axum-ответы без сети (`into_response`, `oneshot`), `Crypto::new` с фиксированными ключами.
+  - Нельзя: БД, сеть, Valkey, файлы вне временного каталога. Результат не зависит от часов и случайности: `now`, `seed`, `Rng` передаются параметром. `make test` проходит без Postgres.
+  - Логика, которую хочется проверить, но она сидит внутри хендлера рядом с запросами в БД, выносится в чистую функцию рядом (`plan`, `check_outcome`, `visibility_gate`…) и тестируется там; хендлер только собирает факты из базы и вызывает её.
+- **Black-box** — `tests/blackbox/` (Playwright Test, TypeScript strict). Запуск — `make blackbox`: поднимает отдельный compose-проект `fsp-hack-blackbox` (`deploy/compose.yml` + `deploy/compose.blackbox.yml`) на тех же портах с чистыми томами и детерминированным демо-сидом, останавливает при этом стек `make up` (его тома остаются), ждёт готовности и гоняет тесты. Отчёт — `tests/blackbox/playwright-report/`.
+  - Можно: веб-интерфейс и HTTP API через :8080, Mailpit (:8025) как почтовый ящик пользователей, демо-ATS (:8082) и админку заглушки реестра ФСП (:8091) как внешние системы, демо-данные из README, новые аккаунты через публичную регистрацию с подтверждением из письма. Настраивать стек можно только переменными окружения в `compose.blackbox.yml` (сейчас — короткие паузы писем).
+  - Нельзя: SQL, `docker exec`, логи контейнеров, внутренние бинарники, очистка Valkey, импорт Rust-крейтов, знание правильных ответов теста.
+  - Каждый spec независим и запускается параллельно с другими; общие засеянные ресурсы (очередь модерации) — в одном файле с `test.describe.configure({ mode: "serial" })`. Свой засеянный соискатель и своя компания на spec — `tests/blackbox/lib/accounts.ts`. Ожидание — условием (`expect.poll`, `toPass`, ожидание локатора), без фиксированных пауз.
+  - Вход ограничен 10 попытками за 15 минут на IP + email: сессии демо-аккаунтов хранятся в `tests/blackbox/.auth/` по одной на слот воркера (фикстура `login`), setup-проект логинит их заранее.
+- Добавил поведение — добавь модульный тест на логику и, если поведение видно снаружи, сценарий в black-box. Что не покрыто ни тем ни другим и почему — `architecture.md` §14.
 
 ### Frontend
 - Next.js App Router, TypeScript strict. Кабинеты — клиентские компоненты с TanStack Query; серверный рендеринг — только для публичных страниц.

@@ -319,3 +319,152 @@ pub async fn card_live(
     .fetch_all(db)
     .await
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn at() -> DateTime<Utc> {
+        "2026-10-07T12:00:00Z".parse().unwrap()
+    }
+
+    fn live(published: bool, search_status: SearchStatus) -> CardLive {
+        CardLive {
+            user_id: Uuid::nil(),
+            show_name: false,
+            show_fsp: false,
+            show_experience: false,
+            search_status,
+            last_activity_at: at(),
+            minor: false,
+            published,
+            invitation_status: None,
+            applied: false,
+        }
+    }
+
+    fn card(published: bool, search_status: SearchStatus) -> CandidateCard {
+        CandidateCard {
+            user_id: Uuid::from_u128(7),
+            public_code: "C-0007".into(),
+            full_name_enc: None,
+            show_name: false,
+            show_fsp: false,
+            show_experience: false,
+            city: None,
+            relocation: false,
+            work_formats: Vec::new(),
+            salary_expectation_min: None,
+            about: String::new(),
+            experience_years: None,
+            roles: Vec::new(),
+            soft_skills: Vec::new(),
+            industries: Vec::new(),
+            experience: Value::Array(Vec::new()),
+            search_status,
+            specialization: None,
+            grade: None,
+            theta: None,
+            category_assigned_at: None,
+            last_activity_at: at(),
+            achievements: None,
+            skills: Vec::new(),
+            skill_sources: Vec::new(),
+            task_rating: None,
+            tasks_done: 0,
+            minor: false,
+            published,
+            invitation_status: None,
+            applied: false,
+            result_confirmed: None,
+            proctoring_camera: None,
+            proctoring_chunks: None,
+            tab_hidden: None,
+            window_blur: None,
+            fullscreen_exit: None,
+            paste: None,
+            camera_lost: None,
+            recording_failed: None,
+        }
+    }
+
+    #[test]
+    fn searchable_means_published_and_not_closed() {
+        use SearchStatus::{Active, Closed, Open};
+        for (published, status, searchable) in [
+            (true, Active, true),
+            (true, Open, true),
+            (true, Closed, false),
+            (false, Active, false),
+            (false, Open, false),
+            (false, Closed, false),
+        ] {
+            assert_eq!(
+                live(published, status).searchable(),
+                searchable,
+                "{published} {status:?}"
+            );
+            assert_eq!(
+                card(published, status).searchable(),
+                searchable,
+                "{published} {status:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn untested_category_has_no_proctoring_badge() {
+        assert!(card(true, SearchStatus::Active).proctoring().is_none());
+    }
+
+    #[test]
+    fn proctoring_badge_counts_missing_events_as_zero() {
+        let badge = CandidateCard {
+            proctoring_camera: Some(false),
+            paste: Some(2),
+            ..card(true, SearchStatus::Active)
+        }
+        .proctoring()
+        .unwrap();
+        assert_eq!(badge.candidate_id, Uuid::from_u128(7));
+        assert!(!badge.camera);
+        assert_eq!(badge.paste, 2);
+        assert_eq!(
+            [
+                badge.chunks,
+                badge.tab_hidden,
+                badge.window_blur,
+                badge.fullscreen_exit,
+                badge.camera_lost,
+                badge.recording_failed,
+            ],
+            [0; 6]
+        );
+
+        let recorded = CandidateCard {
+            proctoring_camera: Some(true),
+            proctoring_chunks: Some(42),
+            tab_hidden: Some(1),
+            window_blur: Some(3),
+            fullscreen_exit: Some(4),
+            camera_lost: Some(5),
+            recording_failed: Some(6),
+            ..card(true, SearchStatus::Active)
+        }
+        .proctoring()
+        .unwrap();
+        assert!(recorded.camera);
+        assert_eq!(
+            [
+                recorded.chunks,
+                recorded.tab_hidden,
+                recorded.window_blur,
+                recorded.fullscreen_exit,
+                recorded.paste,
+                recorded.camera_lost,
+                recorded.recording_failed,
+            ],
+            [42, 1, 3, 4, 0, 5, 6]
+        );
+    }
+}

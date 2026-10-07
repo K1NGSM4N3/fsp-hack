@@ -968,4 +968,179 @@ mod tests {
             "no field could hold a name or contacts"
         );
     }
+
+    fn keys(event: &Event) -> Vec<String> {
+        let mut keys: Vec<String> = serde_json::to_value(event)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect();
+        keys.sort_unstable();
+        keys
+    }
+
+    const IDENTITY: [&str; 8] = [
+        "name",
+        "phone",
+        "email",
+        "telegram",
+        "contact",
+        "reporter",
+        "complainant",
+        "moderator",
+    ];
+
+    fn assert_no_identity(keys: &[String]) {
+        for key in keys {
+            assert!(
+                IDENTITY.iter().all(|id| !key.contains(id)),
+                "{key} could identify a person"
+            );
+        }
+    }
+
+    #[test]
+    fn company_payloads_hold_no_candidate_or_complainant_identity() {
+        let at = DateTime::from_timestamp(1_790_000_000, 0).unwrap();
+        let cases: [(Event, &[&str]); 8] = [
+            (
+                Event::InvitationAccepted(AcceptedNote {
+                    invitation_id: Uuid::nil(),
+                    candidate_id: Uuid::nil(),
+                    candidate_code: "K-7F3A2C".into(),
+                    title: "Backend".into(),
+                }),
+                &[
+                    "candidate_code",
+                    "candidate_id",
+                    "invitation_id",
+                    "kind",
+                    "title",
+                ],
+            ),
+            (
+                Event::InvitationDeclined(DeclinedNote {
+                    invitation_id: Uuid::nil(),
+                    candidate_code: "K-7F3A2C".into(),
+                    title: "Backend".into(),
+                    reason: Some(DeclineReason::Salary),
+                    comment: None,
+                }),
+                &[
+                    "candidate_code",
+                    "comment",
+                    "invitation_id",
+                    "kind",
+                    "reason",
+                    "title",
+                ],
+            ),
+            (
+                Event::ApplicationReceived(ApplicantNote {
+                    application_id: Uuid::nil(),
+                    vacancy_id: Uuid::nil(),
+                    vacancy_title: "Backend".into(),
+                    candidate_id: Uuid::nil(),
+                    candidate_code: "K-7F3A2C".into(),
+                }),
+                &[
+                    "application_id",
+                    "candidate_code",
+                    "candidate_id",
+                    "kind",
+                    "vacancy_id",
+                    "vacancy_title",
+                ],
+            ),
+            (
+                Event::ComplaintResolved(ComplaintNote {
+                    about: ComplaintAbout::Invitation,
+                    vacancy_id: None,
+                    vacancy_title: None,
+                    quota: 15,
+                }),
+                &["about", "kind", "quota", "vacancy_id", "vacancy_title"],
+            ),
+            (
+                Event::VacancyUnpublished(UnpublishedNote {
+                    vacancy_id: Uuid::nil(),
+                    title: "Backend".into(),
+                    comment: "Вилка не соответствует описанию".into(),
+                    complaints_upheld: 2,
+                }),
+                &[
+                    "comment",
+                    "complaints_upheld",
+                    "kind",
+                    "title",
+                    "vacancy_id",
+                ],
+            ),
+            (
+                Event::InvitationsFrozen(FrozenNote {
+                    until: at,
+                    comment: "Массовые приглашения".into(),
+                    complaints_upheld: 3,
+                }),
+                &["comment", "complaints_upheld", "kind", "until"],
+            ),
+            (
+                Event::SanctionLifted(LiftedNote {
+                    vacancy_id: None,
+                    title: None,
+                    comment: "Ошибка модерации".into(),
+                    quota: 20,
+                }),
+                &["comment", "kind", "quota", "title", "vacancy_id"],
+            ),
+            (
+                Event::TrustChanged(TrustNote {
+                    level_before: TrustLevel::New,
+                    level: TrustLevel::Standard,
+                    quota_before: 10,
+                    quota: 20,
+                }),
+                &["kind", "level", "level_before", "quota", "quota_before"],
+            ),
+        ];
+        for (event, expected) in cases {
+            assert_eq!(event.kind().audience(), Audience::Employer);
+            let keys = keys(&event);
+            assert_eq!(keys, expected, "{:?}", event.kind());
+            assert_no_identity(&keys);
+        }
+    }
+
+    #[test]
+    fn moderator_decisions_reach_the_candidate_without_the_moderator() {
+        let note = ReviewNote {
+            session_id: Uuid::nil(),
+            category: Category::new(catalog::Specialization::Backend, catalog::Grade::Middle),
+            comment: "Ответы совпадают с записью экрана".into(),
+            category_now: None,
+            badge: false,
+        };
+        for event in [
+            Event::ResultConfirmed(note.clone()),
+            Event::ResultAnnulled(note.clone()),
+            Event::RetestOrdered(note),
+        ] {
+            assert_eq!(event.kind().audience(), Audience::Candidate);
+            let keys = keys(&event);
+            assert_eq!(
+                keys,
+                [
+                    "badge",
+                    "category",
+                    "category_now",
+                    "comment",
+                    "kind",
+                    "session_id"
+                ]
+            );
+            assert_no_identity(&keys);
+        }
+    }
 }

@@ -419,6 +419,35 @@ fn check_event(e: &RegistryEvent) -> ApiResult<()> {
     Ok(())
 }
 
+/// Everything the push checks before touching the database: the secret is configured, the
+/// signature matches and is fresh (a captured request cannot be replayed later), the body parses.
+fn verify_push(
+    secret: Option<&str>,
+    header: Option<&str>,
+    body: &[u8],
+    now: i64,
+) -> ApiResult<RegistryEvent> {
+    let Some(secret) = secret else {
+        return Err(ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "fsp_webhook_disabled",
+            "Приём событий реестра ФСП не настроен",
+        ));
+    };
+    let header = header.ok_or_else(|| signature_problem(None))?;
+    signature::verify(
+        secret.as_bytes(),
+        header,
+        body,
+        now,
+        signature::TOLERANCE_SECS,
+    )
+    .map_err(|e| signature_problem(Some(e)))?;
+    let Json(event) = Json::<RegistryEvent>::from_bytes(body)?;
+    check_event(&event)?;
+    Ok(event)
+}
+
 /// The ФСП registry reports that a participant's achievements changed
 #[utoipa::path(post, path = "/registry/events", tag = "fsp",
     description = "Вебхук реестра ФСП: вместо ожидания ручной синхронизации реестр сам сообщает, что достижения участника изменились. \
@@ -453,28 +482,14 @@ async fn registry_event(
     if hit.over(PUSH_RATE_LIMIT) {
         return Err(ApiError::rate_limited("fsp_push", hit.retry_after));
     }
-    let Some(secret) = state.config.fsp.webhook_secret.as_deref() else {
-        return Err(ApiError::new(
-            StatusCode::SERVICE_UNAVAILABLE,
-            "fsp_webhook_disabled",
-            "Приём событий реестра ФСП не настроен",
-        ));
-    };
     let RawBody(body) = body?;
-    let header = headers
-        .get(SIGNATURE_HEADER)
-        .and_then(|v| v.to_str().ok())
-        .ok_or_else(|| signature_problem(None))?;
-    signature::verify(
-        secret.as_bytes(),
+    let header = headers.get(SIGNATURE_HEADER).and_then(|v| v.to_str().ok());
+    let event = verify_push(
+        state.config.fsp.webhook_secret.as_deref(),
         header,
         &body,
         Utc::now().timestamp(),
-        signature::TOLERANCE_SECS,
-    )
-    .map_err(|e| signature_problem(Some(e)))?;
-    let Json(event) = Json::<RegistryEvent>::from_bytes(&body)?;
-    check_event(&event)?;
+    )?;
     if event.kind != ACHIEVEMENTS_CHANGED {
         return Ok(StatusCode::ACCEPTED);
     }
@@ -563,5 +578,91 @@ mod tests {
             d.changed && d.added.is_empty() && d.removed == 0,
             "an edit in place"
         );
+    }
+
+    const NOW: i64 = 1_700_000_000;
+    const SECRET: &str = "whsec_registry";
+
+    fn push(body: &str, t: i64, secret: &str) -> ApiResult<RegistryEvent> {
+        let header = signature::header_value(t, &[secret.as_bytes()], body.as_bytes());
+        verify_push(Some(SECRET), Some(&header), body.as_bytes(), NOW)
+    }
+
+    fn code(r: ApiResult<RegistryEvent>) -> (u16, &'static str, Vec<&'static str>) {
+        r.err()
+            .map(|e| e.summary())
+            .unwrap_or((202, "", Vec::new()))
+    }
+
+    #[test]
+    fn a_push_is_accepted_only_signed_fresh_and_well_formed() {
+        let body = r#"{"event_id":"evt_1","type":"achievements.changed","fsp_id":"FSP-000011","occurred_at":"2026-10-06T09:30:00Z"}"#;
+        let event = push(body, NOW, SECRET).expect("a signed, fresh event");
+        assert_eq!(
+            (event.event_id.as_str(), event.fsp_id.as_str()),
+            ("evt_1", "FSP-000011")
+        );
+        assert_eq!(
+            code(push(body, NOW - 300, SECRET)).0,
+            202,
+            "5 minutes is still fresh"
+        );
+
+        assert_eq!(code(push(body, NOW, "whsec_other")).1, "signature_invalid");
+        assert_eq!(
+            code(push(body, NOW - 301, SECRET)).1,
+            "signature_expired",
+            "a replay"
+        );
+        assert_eq!(
+            code(push(body, NOW + 301, SECRET)).1,
+            "signature_expired",
+            "from the future"
+        );
+        let header = signature::header_value(NOW, &[SECRET.as_bytes()], body.as_bytes());
+        let tampered = body.replace("evt_1", "evt_2");
+        assert_eq!(
+            code(verify_push(
+                Some(SECRET),
+                Some(&header),
+                tampered.as_bytes(),
+                NOW
+            ))
+            .1,
+            "signature_invalid",
+            "the signature covers the body"
+        );
+        assert_eq!(
+            code(verify_push(Some(SECRET), None, body.as_bytes(), NOW)),
+            (401, "signature_invalid", Vec::new())
+        );
+        assert_eq!(
+            code(verify_push(None, Some(&header), body.as_bytes(), NOW)),
+            (503, "fsp_webhook_disabled", Vec::new()),
+            "without a secret the push is off"
+        );
+    }
+
+    #[test]
+    fn a_signed_body_must_still_be_a_valid_event() {
+        let invalid = |body: &str| code(push(body, NOW, SECRET));
+        assert_eq!(
+            invalid(r#"{"event_id":1}"#),
+            (422, "invalid_json", Vec::new())
+        );
+        assert_eq!(invalid("{"), (400, "invalid_json", Vec::new()));
+        let event = |id: &str, fsp: &str| {
+            json!({"event_id": id, "type": "achievements.changed", "fsp_id": fsp, "occurred_at": "2026-10-06T09:30:00Z"}).to_string()
+        };
+        for bad_id in [String::new(), "x".repeat(129), "evt 1".into()] {
+            assert_eq!(
+                invalid(&event(&bad_id, "FSP-000011")).2,
+                ["event_id"],
+                "{bad_id:?}"
+            );
+        }
+        assert_eq!(invalid(&event("evt_1", " ")).2, ["fsp_id"]);
+        assert_eq!(invalid(&event("evt_1", &"F".repeat(41))).2, ["fsp_id"]);
+        assert_eq!(invalid(&event(&"x".repeat(128), "FSP-000011")).0, 202);
     }
 }

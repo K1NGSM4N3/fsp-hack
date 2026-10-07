@@ -2,7 +2,7 @@
 
 import { BellOff, CheckCheck, Settings2 } from "lucide-react";
 import { useState } from "react";
-import { Button, ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs } from "@/components/ui";
+import { Button, ButtonLink, EmptyState, ErrorAlert, PageHeader, SkeletonCard, Tabs, tabPanelProps } from "@/components/ui";
 import { useMarkRead, useNotificationFeed, useUnreadCount } from "../hooks";
 import { NotificationRow } from "./NotificationRow";
 
@@ -40,6 +40,7 @@ export function NotificationFeed({ role }: { role: CabinetRole }) {
       />
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <Tabs<View>
+          idPrefix="notifications"
           ariaLabel="Какие уведомления показать"
           value={view}
           onChange={setView}
@@ -55,34 +56,36 @@ export function NotificationFeed({ role }: { role: CabinetRole }) {
         )}
       </div>
 
-      {feed.isPending ? (
-        <SkeletonCard lines={4} />
-      ) : feed.isError ? (
-        <ErrorAlert error={feed.error} onRetry={() => void feed.refetch()} />
-      ) : items.length === 0 ? (
-        <EmptyState
-          icon={<BellOff className="size-5" aria-hidden />}
-          title={view === "unread" ? "Всё прочитано" : "Уведомлений пока нет"}
-          description={view === "unread" ? "Новые события появятся здесь и на значке колокольчика." : "Когда что-то произойдёт с вашими приглашениями и откликами, мы напишем сюда."}
-        />
-      ) : (
-        <div className="overflow-hidden rounded-card border border-line bg-white shadow-card">
-          <ul className="divide-y divide-line" data-testid="notification-feed">
-            {items.map((n) => (
-              <li key={n.id}>
-                <NotificationRow n={n} onOpen={() => !n.read_at && markRead.mutate({ ids: [n.id] })} />
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {feed.hasNextPage && (
-        <div className="mt-4 flex justify-center">
-          <Button variant="secondary" loading={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
-            Показать ещё
-          </Button>
-        </div>
-      )}
+      <div {...tabPanelProps("notifications", view)}>
+        {feed.isPending ? (
+          <SkeletonCard lines={4} />
+        ) : feed.isError ? (
+          <ErrorAlert error={feed.error} onRetry={() => void feed.refetch()} />
+        ) : items.length === 0 ? (
+          <EmptyState
+            icon={<BellOff className="size-5" aria-hidden />}
+            title={view === "unread" ? "Всё прочитано" : "Уведомлений пока нет"}
+            description={view === "unread" ? "Новые события появятся здесь и на значке колокольчика." : "Когда что-то произойдёт с вашими приглашениями и откликами, мы напишем сюда."}
+          />
+        ) : (
+          <div className="overflow-hidden rounded-card border border-line bg-white shadow-card">
+            <ul className="divide-y divide-line" data-testid="notification-feed">
+              {items.map((n) => (
+                <li key={n.id}>
+                  <NotificationRow n={n} onOpen={() => !n.read_at && markRead.mutate({ ids: [n.id] })} />
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {feed.hasNextPage && (
+          <div className="mt-4 flex justify-center">
+            <Button variant="secondary" loading={feed.isFetchingNextPage} onClick={() => void feed.fetchNextPage()}>
+              Показать ещё
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

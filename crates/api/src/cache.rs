@@ -6,7 +6,7 @@
 //! They are invalidated by a generation. A write that changes what employers can find or see on a
 //! card calls [`CandidateCache::invalidate`] after its commit: the local epoch makes the next
 //! request on this replica reload, and with Valkey an `INCR` reaches the other replicas within
-//! [`REMOTE_TTL`]. [`HARD_TTL`] (plus at most [`RELOAD_GRACE`] while a reload runs) bounds
+//! `REMOTE_TTL`. [`HARD_TTL`] (plus at most [`RELOAD_GRACE`] while a reload runs) bounds
 //! whatever does not bump: activity timestamps in scoring, a birthday crossing 18, an `INCR` lost
 //! while Valkey is down.
 
@@ -34,7 +34,7 @@ pub const HARD_TTL: Duration = Duration::from_secs(30);
 /// How long past [`HARD_TTL`] an entry of the current generation keeps serving while one request
 /// reloads it, so the other requests don't queue behind the reload every 30 seconds.
 pub const RELOAD_GRACE: Duration = Duration::from_secs(5);
-pub const REMOTE_TTL: Duration = Duration::from_millis(250);
+const REMOTE_TTL: Duration = Duration::from_millis(250);
 const GENERATION_KEY: &str = "cache:candidates:generation";
 const NEVER: u64 = u64::MAX;
 const SPECS: usize = Specialization::ALL.len();
@@ -76,10 +76,8 @@ impl Generation {
         if self.kv.is_shared() {
             let now = self.now_ms();
             let read_at = self.remote_read_at.load(Ordering::Acquire);
-            let due =
-                read_at == NEVER || now.saturating_sub(read_at) >= REMOTE_TTL.as_millis() as u64;
             // One request refreshes the shared value; the others use the previous one meanwhile.
-            if due
+            if remote_due(read_at, now)
                 && self
                     .remote_read_at
                     .compare_exchange(read_at, now, Ordering::AcqRel, Ordering::Acquire)
@@ -112,6 +110,10 @@ impl Generation {
             ),
         }
     }
+}
+
+fn remote_due(read_at: u64, now_ms: u64) -> bool {
+    read_at == NEVER || now_ms.saturating_sub(read_at) >= REMOTE_TTL.as_millis() as u64
 }
 
 pub struct Entry<T> {
@@ -266,6 +268,14 @@ struct CompanyOf {
     born: Instant,
 }
 
+impl CompanyOf {
+    /// A slot is shared by several owners; it answers only for the one it was read for, and only
+    /// in the generation it was read in.
+    fn serves(&self, owner: Uuid, stamp: Stamp, now: Instant) -> bool {
+        self.owner == owner && self.stamp == stamp && now.duration_since(self.born) < HARD_TTL
+    }
+}
+
 pub struct CandidateCache {
     generation: Generation,
     pools: [Slot<SpecPool>; SPECS],
@@ -303,30 +313,41 @@ impl CandidateCache {
     /// The company an employer account owns. It is created with the account, never changes
     /// owner and is deleted only with the account, and account deletion invalidates the cache:
     /// an entry serves only the generation it was read in, so another replica drops it within
-    /// [`REMOTE_TTL`] (the deleted session's own token is revoked at once). A missing company is
+    /// `REMOTE_TTL` (the deleted session's own token is revoked at once). A missing company is
     /// not remembered.
     pub async fn company_of(&self, pg: &PgPool, owner: Uuid) -> ApiResult<Option<Uuid>> {
         let stamp = self.generation.stamp().await;
-        let slot = &self.companies[self.hasher.hash_one(owner) as usize & (COMPANY_SLOTS - 1)];
-        if let Some(e) = &*slot.load()
-            && e.owner == owner
-            && e.stamp == stamp
-            && e.born.elapsed() < HARD_TTL
-        {
+        if let Some(company) = self.remembered_company(owner, stamp, Instant::now()) {
             self.company_lookups.record(1, 0);
-            return Ok(Some(e.company));
+            return Ok(Some(company));
         }
         self.company_lookups.record(0, 1);
         let company = db::me::company_by_owner(pg, owner).await?.map(|c| c.id);
         if let Some(company) = company {
-            slot.store(Some(Arc::new(CompanyOf {
-                owner,
-                company,
-                stamp,
-                born: Instant::now(),
-            })));
+            self.remember_company(owner, company, stamp, Instant::now());
         }
         Ok(company)
+    }
+
+    fn company_slot(&self, owner: Uuid) -> &ArcSwapOption<CompanyOf> {
+        &self.companies[self.hasher.hash_one(owner) as usize & (COMPANY_SLOTS - 1)]
+    }
+
+    fn remembered_company(&self, owner: Uuid, stamp: Stamp, now: Instant) -> Option<Uuid> {
+        self.company_slot(owner)
+            .load()
+            .as_ref()
+            .filter(|e| e.serves(owner, stamp, now))
+            .map(|e| e.company)
+    }
+
+    fn remember_company(&self, owner: Uuid, company: Uuid, stamp: Stamp, born: Instant) {
+        self.company_slot(owner).store(Some(Arc::new(CompanyOf {
+            owner,
+            company,
+            stamp,
+            born,
+        })));
     }
 
     /// After the commit of any write to what the pool or a card is built from: profile, skills,
@@ -529,6 +550,74 @@ mod tests {
             "a value of an older generation is never served"
         );
         assert_eq!(reload.await.unwrap().unwrap(), 6);
+    }
+
+    #[test]
+    fn shared_generation_is_read_first_then_every_remote_ttl() {
+        let ttl = REMOTE_TTL.as_millis() as u64;
+        assert!(remote_due(NEVER, 0), "never read");
+        assert!(remote_due(NEVER, NEVER - 1));
+        assert!(!remote_due(1_000, 1_000));
+        assert!(!remote_due(1_000, 1_000 + ttl - 1));
+        assert!(remote_due(1_000, 1_000 + ttl));
+        assert!(
+            !remote_due(1_000, 999),
+            "a clock read before the last refresh is not due"
+        );
+    }
+
+    fn cache() -> CandidateCache {
+        CandidateCache::new(Kv::Memory(Arc::new(crate::kv::MemoryKv::new(64))))
+    }
+
+    const STAMP: Stamp = Stamp {
+        remote: 0,
+        local: 0,
+    };
+
+    #[test]
+    fn remembered_company_serves_its_owner_in_its_generation() {
+        let cache = cache();
+        let (owner, company) = (Uuid::from_u128(1), Uuid::from_u128(2));
+        let born = Instant::now();
+        assert_eq!(cache.remembered_company(owner, STAMP, born), None);
+        cache.remember_company(owner, company, STAMP, born);
+        assert_eq!(cache.remembered_company(owner, STAMP, born), Some(company));
+        let bumped = Stamp {
+            remote: 0,
+            local: 1,
+        };
+        assert_eq!(cache.remembered_company(owner, bumped, born), None);
+        let other_replica = Stamp {
+            remote: 1,
+            local: 0,
+        };
+        assert_eq!(cache.remembered_company(owner, other_replica, born), None);
+        assert_eq!(
+            cache.remembered_company(owner, STAMP, born + HARD_TTL),
+            None,
+            "aged out without a bump"
+        );
+    }
+
+    #[test]
+    fn another_owner_in_the_same_slot_misses_and_evicts() {
+        let cache = cache();
+        let slot = |owner: Uuid| cache.company_slot(owner) as *const ArcSwapOption<CompanyOf>;
+        let a = Uuid::from_u128(1);
+        let b = (2..)
+            .map(Uuid::from_u128)
+            .find(|b| slot(*b) == slot(a))
+            .unwrap();
+        let born = Instant::now();
+        cache.remember_company(a, Uuid::from_u128(10), STAMP, born);
+        assert_eq!(cache.remembered_company(b, STAMP, born), None);
+        cache.remember_company(b, Uuid::from_u128(20), STAMP, born);
+        assert_eq!(
+            cache.remembered_company(b, STAMP, born),
+            Some(Uuid::from_u128(20))
+        );
+        assert_eq!(cache.remembered_company(a, STAMP, born), None);
     }
 
     #[test]

@@ -22,7 +22,7 @@ use crate::{
     dto::AssessmentStatus,
     error::{ApiError, ApiResult, InternalError, Problem},
     extract::{Created, Json, Path, Query},
-    moderation::ReviewDecision,
+    moderation::{self, ReviewDecision},
     notify::Notifier,
     proctoring::{self, ProctoringMode, ProctoringSummary},
     skills,
@@ -128,7 +128,11 @@ fn voided(review: Option<db::types::ReviewDecision>) -> Option<Outcome> {
 }
 
 async fn history(pool: &PgPool, candidate: Uuid) -> ApiResult<History> {
-    let rows = db::assessment::candidate_sessions(pool, candidate).await?;
+    history_from(db::assessment::candidate_sessions(pool, candidate).await?)
+}
+
+/// `rows` come newest first, as `candidate_sessions` returns them.
+fn history_from(rows: Vec<db::assessment::CandidateSession>) -> ApiResult<History> {
     let upgrade_earned = rows
         .iter()
         .find(|r| r.status == db::types::AssessmentStatus::Passed && voided(r.review).is_none())
@@ -271,14 +275,13 @@ fn pick(
     Err(refusal)
 }
 
-fn offers(state: &AppState, spec: Specialization, history: &History, now: i64) -> Offers {
-    let p = policy(state);
+fn offers(p: &GradePolicy, spec: Specialization, history: &History, now: i64) -> Offers {
     let current = p.current_grade(spec, &history.attempts);
     let retest = p.ordered_retest(spec, &history.attempts);
     let mut out = Offers::default();
     for grade in Grade::ALL.iter().copied().filter(|g| Some(*g) != current) {
         let camera_required = history.camera_required(spec, grade);
-        match pick(&p, spec, history, grade, now) {
+        match pick(p, spec, history, grade, now) {
             Ok(a) => {
                 let ordered_retest = retest == Some(a);
                 out.available.push(Offer {
@@ -358,6 +361,22 @@ fn policy_problem(e: PolicyError) -> ApiError {
             "Нет соседнего грейда в этом направлении",
         ),
     }
+}
+
+fn timed_out(deadline: DateTime<Utc>, now: DateTime<Utc>) -> bool {
+    now > deadline + Duration::seconds(DEADLINE_GRACE_SECS)
+}
+
+fn camera_guard(mode: ProctoringMode, camera: bool, required: bool) -> ApiResult<()> {
+    if mode == ProctoringMode::Optional && !camera && required {
+        return Err(
+            ApiError::conflict("camera_required", "Этот тест нужно пройти с видеозаписью")
+                .with_detail(
+                    "Модератор назначил пересдачу с видеозаписью: включите камеру на шаге перед тестом",
+                ),
+        );
+    }
+    Ok(())
 }
 
 #[derive(Serialize, ToSchema)]
@@ -546,17 +565,11 @@ async fn start_session(
     .map_err(|(_, e)| policy_problem(e))?;
 
     let camera = input.proctoring.as_ref().is_some_and(|p| p.camera);
-    if state.config.proctoring.mode == ProctoringMode::Optional
-        && !camera
-        && history.camera_required(input.specialization, input.grade)
-    {
-        return Err(
-            ApiError::conflict("camera_required", "Этот тест нужно пройти с видеозаписью")
-                .with_detail(
-                    "Модератор назначил пересдачу с видеозаписью: включите камеру на шаге перед тестом",
-                ),
-        );
-    }
+    camera_guard(
+        state.config.proctoring.mode,
+        camera,
+        history.camera_required(input.specialization, input.grade),
+    )?;
     let consent_doc = match state.config.proctoring.mode {
         ProctoringMode::Optional if camera => {
             let doc = db::consents::current_document(&state.pool, proctoring::CONSENT_KIND)
@@ -662,8 +675,7 @@ async fn advance(
     answer: Option<&Answer>,
     now: DateTime<Utc>,
 ) -> ApiResult<Option<bool>> {
-    let deadline = row.current_item_deadline.unwrap_or(now);
-    let timed_out = now > deadline + Duration::seconds(DEADLINE_GRACE_SECS);
+    let timed_out = timed_out(row.current_item_deadline.unwrap_or(now), now);
     let correct = !timed_out && answer.is_some_and(|a| assessment::check(&item, a));
     let shown = row.current_item_shown_at.unwrap_or(now);
     let elapsed_ms = (now - shown)
@@ -833,13 +845,11 @@ async fn view(state: &AppState, candidate: Uuid, id: Uuid) -> ApiResult<Assessme
                 items_administered: s.administered.len() as u16,
             };
             let history = history(&state.pool, candidate).await?;
-            let next = offers(state, spec, &history, Utc::now().timestamp());
-            let flagged = match &proctoring {
-                Some((_, counts)) => {
-                    assessment::proctoring::needs_confirmation(decision.aberrant, counts)
-                }
-                None => decision.aberrant,
-            };
+            let next = offers(&policy(state), spec, &history, Utc::now().timestamp());
+            let flagged = moderation::flagged(
+                decision.aberrant,
+                proctoring.as_ref().map(|(_, counts)| counts),
+            );
             Some(AssessmentResult {
                 test_strength: Some(matching::test_strength(claimed, theta as f32)),
                 assigned_grade: r.assigned.then_some(claimed),
@@ -938,7 +948,7 @@ async fn current_item(
     let mut graded = false;
     if row.status == db::types::AssessmentStatus::InProgress
         && let (Some(item), Some(deadline)) = (&row.current_item, row.current_item_deadline)
-        && now > deadline + Duration::seconds(DEADLINE_GRACE_SECS)
+        && timed_out(deadline, now)
     {
         let mut session = load_state(row.state.clone())?;
         let item: ItemRef = serde_json::from_value(item.clone()).map_err(corrupt)?;
@@ -1094,11 +1104,11 @@ async fn category(
         .or_else(|| survey.as_ref().and_then(|s| s.specialization.parse().ok()));
     let now = Utc::now().timestamp();
     let history = history(&state.pool, user.id).await?;
+    let p = policy(&state);
     let (offers, next_change_at) = match spec {
         Some(spec) => {
-            let offers = offers(&state, spec, &history, now);
+            let offers = offers(&p, spec, &history, now);
             let next = category.and_then(|c| {
-                let p = policy(&state);
                 let mut earliest: Option<i64> = None;
                 for g in [c.grade.next(), c.grade.prev()].into_iter().flatten() {
                     let kind = if g > c.grade {
@@ -1221,4 +1231,632 @@ async fn need_test_plan(
         .cloned()
         .collect();
     Ok(Json(plan_demo(need.specialization, grade, &skills)))
+}
+
+#[cfg(test)]
+mod tests {
+    use catalog::Specialization::Backend;
+    use db::{
+        assessment::CandidateSession,
+        types::{AssessmentStatus as Status, ReviewDecision as Review},
+    };
+
+    use super::*;
+
+    const DAY: i64 = 86_400;
+    const HOUR: i64 = 3_600;
+    const T0: i64 = 1_790_000_000;
+
+    fn session(grade: Grade, kind: &str, status: Status, finished: i64) -> CandidateSession {
+        CandidateSession {
+            id: Uuid::nil(),
+            specialization: Backend.slug().into(),
+            claimed_grade: grade.slug().into(),
+            attempt_kind: kind.into(),
+            status,
+            theta: None,
+            se: None,
+            measured_grade: None,
+            confident_above_next: None,
+            person_fit_lz: None,
+            aberrant: None,
+            items_count: 12,
+            started_at: at(finished - HOUR),
+            finished_at: (status != Status::InProgress).then(|| at(finished)),
+            assigned: status == Status::Passed,
+            camera: None,
+            review: None,
+            reviewed_at: None,
+        }
+    }
+
+    fn confident(s: CandidateSession) -> CandidateSession {
+        CandidateSession {
+            confident_above_next: Some(true),
+            ..s
+        }
+    }
+
+    fn reviewed(s: CandidateSession, review: Review, decided: i64) -> CandidateSession {
+        CandidateSession {
+            assigned: s.assigned && review == Review::Confirm,
+            review: Some(review),
+            reviewed_at: Some(at(decided)),
+            ..s
+        }
+    }
+
+    /// Takes the sessions in the order they happened; the query hands them over newest first.
+    fn history_of(mut sessions: Vec<CandidateSession>) -> History {
+        sessions.reverse();
+        history_from(sessions).unwrap()
+    }
+
+    fn attempt(
+        grade: Grade,
+        kind: AttemptKind,
+        outcome: Outcome,
+        assigned: bool,
+        at: i64,
+    ) -> Attempt {
+        Attempt {
+            specialization: Backend,
+            grade,
+            kind,
+            outcome,
+            assigned,
+            at,
+        }
+    }
+
+    #[test]
+    fn finished_sessions_become_policy_outcomes_and_running_ones_are_skipped() {
+        let h = history_of(vec![
+            session(Grade::Junior, "placement", Status::Passed, T0),
+            session(Grade::Middle, "upgrade", Status::Failed, T0 + DAY),
+            session(Grade::Middle, "retry", Status::Expired, T0 + 2 * DAY),
+            session(Grade::Senior, "upgrade", Status::InProgress, T0 + 3 * DAY),
+        ]);
+        assert_eq!(
+            h.attempts,
+            [
+                attempt(
+                    Grade::Junior,
+                    AttemptKind::Placement,
+                    Outcome::Passed,
+                    true,
+                    T0
+                ),
+                attempt(
+                    Grade::Middle,
+                    AttemptKind::Upgrade,
+                    Outcome::Failed,
+                    false,
+                    T0 + DAY
+                ),
+                attempt(
+                    Grade::Middle,
+                    AttemptKind::Retry,
+                    Outcome::Abandoned,
+                    false,
+                    T0 + 2 * DAY
+                ),
+            ]
+        );
+        assert!(h.camera_orders.is_empty());
+    }
+
+    #[test]
+    fn an_abandoned_session_without_an_end_counts_from_its_start() {
+        let s = CandidateSession {
+            finished_at: None,
+            ..session(Grade::Middle, "placement", Status::Expired, T0)
+        };
+        let started = s.started_at.timestamp();
+        assert_eq!(history_of(vec![s]).attempts[0].at, started);
+    }
+
+    #[test]
+    fn a_voided_result_counts_from_the_moderators_decision() {
+        let finished = T0;
+        let decided = T0 + 40 * DAY;
+        let passed = || session(Grade::Middle, "placement", Status::Passed, finished);
+
+        let h = history_of(vec![reviewed(passed(), Review::Annul, decided)]);
+        assert_eq!(
+            h.attempts,
+            [attempt(
+                Grade::Middle,
+                AttemptKind::Placement,
+                Outcome::Annulled,
+                false,
+                decided
+            )]
+        );
+        assert!(h.camera_orders.is_empty());
+
+        let h = history_of(vec![reviewed(passed(), Review::Retest, decided)]);
+        assert_eq!(h.attempts[0].outcome, Outcome::RetestOrdered);
+        assert_eq!(h.attempts[0].at, decided);
+        assert_eq!(
+            h.camera_orders,
+            [CameraOrder {
+                specialization: Backend,
+                grade: Grade::Middle,
+                at: decided
+            }]
+        );
+
+        let h = history_of(vec![reviewed(passed(), Review::Confirm, decided)]);
+        assert_eq!(
+            h.attempts,
+            [attempt(
+                Grade::Middle,
+                AttemptKind::Placement,
+                Outcome::Passed,
+                true,
+                finished
+            )],
+            "a confirmed result stays as it was"
+        );
+        assert!(h.camera_orders.is_empty());
+    }
+
+    #[test]
+    fn the_upgrade_is_earned_by_the_latest_valid_pass_above_the_claim() {
+        let pass = |grade, at| session(grade, "placement", Status::Passed, at);
+        let measured_above = CandidateSession {
+            measured_grade: Some("senior".into()),
+            ..pass(Grade::Middle, T0)
+        };
+        assert!(history_of(vec![measured_above]).upgrade_earned);
+        assert!(history_of(vec![confident(pass(Grade::Middle, T0))]).upgrade_earned);
+        let measured_at_claim = CandidateSession {
+            measured_grade: Some("middle".into()),
+            confident_above_next: Some(false),
+            ..pass(Grade::Middle, T0)
+        };
+        assert!(!history_of(vec![measured_at_claim]).upgrade_earned);
+        assert!(
+            history_of(vec![
+                confident(pass(Grade::Junior, T0)),
+                session(
+                    Grade::Middle,
+                    "placement_upgrade",
+                    Status::Failed,
+                    T0 + HOUR
+                ),
+            ])
+            .upgrade_earned,
+            "a failure is not a pass: the confident pass before it still counts"
+        );
+        assert!(
+            !history_of(vec![
+                confident(pass(Grade::Junior, T0)),
+                pass(Grade::Middle, T0 + 100 * DAY),
+            ])
+            .upgrade_earned,
+            "only the latest pass counts"
+        );
+        assert!(
+            !history_of(vec![
+                pass(Grade::Junior, T0),
+                reviewed(
+                    confident(pass(Grade::Middle, T0 + 100 * DAY)),
+                    Review::Annul,
+                    T0 + 101 * DAY
+                ),
+            ])
+            .upgrade_earned,
+            "a voided pass earns nothing"
+        );
+    }
+
+    #[test]
+    fn every_session_is_a_camera_test_completed_only_with_a_result() {
+        let with_camera = |s: CandidateSession, camera| CandidateSession { camera, ..s };
+        let h = history_of(vec![
+            with_camera(
+                session(Grade::Junior, "placement", Status::Passed, T0),
+                Some(true),
+            ),
+            with_camera(
+                session(Grade::Middle, "upgrade", Status::Failed, T0 + DAY),
+                Some(false),
+            ),
+            with_camera(
+                session(Grade::Middle, "upgrade", Status::Expired, T0 + 2 * DAY),
+                Some(true),
+            ),
+            session(Grade::Senior, "upgrade", Status::InProgress, T0 + 3 * DAY),
+        ]);
+        let test = |grade, finished: i64, camera, completed| CameraTest {
+            specialization: Backend,
+            grade,
+            started: finished - HOUR,
+            camera,
+            completed,
+        };
+        assert_eq!(
+            h.camera_tests,
+            [
+                test(Grade::Junior, T0, true, true),
+                test(Grade::Middle, T0 + DAY, false, true),
+                test(Grade::Middle, T0 + 2 * DAY, true, false),
+                test(Grade::Senior, T0 + 3 * DAY, false, false),
+            ]
+        );
+    }
+
+    fn open(o: &Offers) -> Vec<(Grade, AttemptKind, &str, bool, bool)> {
+        o.available
+            .iter()
+            .map(|a| {
+                (
+                    a.grade,
+                    a.kind,
+                    a.label.as_str(),
+                    a.ordered_retest,
+                    a.camera_required,
+                )
+            })
+            .collect()
+    }
+
+    fn locked(o: &Offers) -> Vec<(Grade, AttemptKind, LockReason, i64, &str, bool)> {
+        o.locked
+            .iter()
+            .map(|l| {
+                (
+                    l.grade,
+                    l.kind,
+                    l.reason,
+                    l.available_at.timestamp(),
+                    l.label.as_str(),
+                    l.camera_required,
+                )
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_new_candidate_may_take_the_placement_at_any_grade() {
+        let o = offers(&GradePolicy::default(), Backend, &history_of(vec![]), T0);
+        assert_eq!(
+            open(&o),
+            [
+                (
+                    Grade::Junior,
+                    AttemptKind::Placement,
+                    "Первичный тест: Junior",
+                    false,
+                    false
+                ),
+                (
+                    Grade::Middle,
+                    AttemptKind::Placement,
+                    "Первичный тест: Middle",
+                    false,
+                    false
+                ),
+                (
+                    Grade::Senior,
+                    AttemptKind::Placement,
+                    "Первичный тест: Senior",
+                    false,
+                    false
+                ),
+            ]
+        );
+        assert!(o.locked.is_empty());
+    }
+
+    #[test]
+    fn an_abandoned_placement_leaves_only_the_step_down_open() {
+        let closed = T0;
+        let h = history_of(vec![session(
+            Grade::Middle,
+            "placement",
+            Status::Expired,
+            closed,
+        )]);
+        let o = offers(&GradePolicy::default(), Backend, &h, closed + HOUR);
+        assert_eq!(
+            open(&o),
+            [(
+                Grade::Junior,
+                AttemptKind::PlacementStepDown,
+                "Тест на грейд ниже: Junior",
+                false,
+                false
+            )]
+        );
+        let reopens = closed + 30 * DAY;
+        assert_eq!(
+            locked(&o),
+            [
+                (
+                    Grade::Middle,
+                    AttemptKind::Placement,
+                    LockReason::RetryBlocked,
+                    reopens,
+                    "Первичный тест: Middle",
+                    false
+                ),
+                (
+                    Grade::Senior,
+                    AttemptKind::Placement,
+                    LockReason::RetryBlocked,
+                    reopens,
+                    "Первичный тест: Senior",
+                    false
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn the_up_test_after_a_step_down_waits_out_the_failure_at_that_grade() {
+        let failed = T0;
+        let h = history_of(vec![
+            session(Grade::Middle, "placement", Status::Failed, failed),
+            confident(session(
+                Grade::Junior,
+                "placement_step_down",
+                Status::Passed,
+                failed + HOUR,
+            )),
+        ]);
+        let o = offers(&GradePolicy::default(), Backend, &h, failed + 2 * HOUR);
+        assert!(o.available.is_empty());
+        assert_eq!(
+            locked(&o),
+            [(
+                Grade::Middle,
+                AttemptKind::PlacementUpgrade,
+                LockReason::RetryBlocked,
+                failed + 30 * DAY,
+                "Дотест на грейд выше: Middle",
+                false
+            )]
+        );
+    }
+
+    #[test]
+    fn the_up_test_is_immediate_without_a_recent_failure_at_that_grade() {
+        let now = T0 + 40 * DAY;
+        let h = history_of(vec![
+            session(Grade::Middle, "placement", Status::Failed, T0),
+            confident(session(
+                Grade::Junior,
+                "placement",
+                Status::Passed,
+                now - HOUR,
+            )),
+        ]);
+        let o = offers(&GradePolicy::default(), Backend, &h, now);
+        assert_eq!(
+            open(&o),
+            [(
+                Grade::Middle,
+                AttemptKind::PlacementUpgrade,
+                "Дотест на грейд выше: Middle",
+                false,
+                false
+            )]
+        );
+        assert!(o.locked.is_empty());
+    }
+
+    #[test]
+    fn an_ordered_retest_opens_at_once_and_needs_the_camera() {
+        let decided = T0 + 3 * DAY;
+        let h = history_of(vec![reviewed(
+            CandidateSession {
+                camera: Some(false),
+                ..session(Grade::Middle, "placement", Status::Passed, T0)
+            },
+            Review::Retest,
+            decided,
+        )]);
+        let o = offers(&GradePolicy::default(), Backend, &h, decided + HOUR);
+        assert_eq!(
+            open(&o),
+            [
+                (
+                    Grade::Junior,
+                    AttemptKind::PlacementStepDown,
+                    "Тест на грейд ниже: Junior",
+                    false,
+                    false
+                ),
+                (
+                    Grade::Middle,
+                    AttemptKind::Placement,
+                    "Пересдача с видеозаписью: Middle",
+                    true,
+                    true
+                ),
+            ],
+            "a lower grade is a weaker claim and stays free of the camera"
+        );
+        assert_eq!(
+            locked(&o),
+            [(
+                Grade::Senior,
+                AttemptKind::Placement,
+                LockReason::RetryBlocked,
+                decided + 30 * DAY,
+                "Первичный тест: Senior",
+                true
+            )]
+        );
+    }
+
+    #[test]
+    fn an_annulled_upgrade_locks_its_grade_from_the_decision() {
+        let tested = T0 + 198 * DAY;
+        let decided = T0 + 200 * DAY;
+        let h = history_of(vec![
+            session(Grade::Junior, "placement", Status::Passed, T0),
+            reviewed(
+                session(Grade::Middle, "upgrade", Status::Passed, tested),
+                Review::Annul,
+                decided,
+            ),
+        ]);
+        let p = GradePolicy::default();
+        assert_eq!(p.current_grade(Backend, &h.attempts), Some(Grade::Junior));
+        let o = offers(&p, Backend, &h, decided + HOUR);
+        assert!(o.available.is_empty());
+        assert_eq!(
+            locked(&o),
+            [(
+                Grade::Middle,
+                AttemptKind::Upgrade,
+                LockReason::RetryBlocked,
+                decided + 30 * DAY,
+                "Повышение грейда: Middle",
+                false
+            )],
+            "30 days from the decision, not from the test"
+        );
+    }
+
+    #[test]
+    fn a_fresh_category_locks_changes_until_the_configured_cooldown_ends() {
+        let h = history_of(vec![session(
+            Grade::Middle,
+            "placement",
+            Status::Passed,
+            T0,
+        )]);
+        let o = offers(&GradePolicy::default(), Backend, &h, T0 + 10 * DAY);
+        assert!(o.available.is_empty());
+        let cooldown = T0 + 90 * DAY;
+        assert_eq!(
+            locked(&o),
+            [
+                (
+                    Grade::Junior,
+                    AttemptKind::Downgrade,
+                    LockReason::GradeChangeCooldown,
+                    cooldown,
+                    "Смена грейда на ниже: Junior",
+                    false
+                ),
+                (
+                    Grade::Senior,
+                    AttemptKind::Upgrade,
+                    LockReason::GradeChangeCooldown,
+                    cooldown,
+                    "Повышение грейда: Senior",
+                    false
+                ),
+            ]
+        );
+
+        let short = GradePolicy::new(PolicyConfig {
+            change_cooldown_days: 7,
+            ..PolicyConfig::default()
+        });
+        let o = offers(&short, Backend, &h, T0 + 10 * DAY);
+        assert!(o.locked.is_empty());
+        assert_eq!(
+            open(&o).iter().map(|o| o.2).collect::<Vec<_>>(),
+            ["Смена грейда на ниже: Junior", "Повышение грейда: Senior"]
+        );
+    }
+
+    fn problem(e: PolicyError) -> (u16, &'static str, String, Option<String>) {
+        let err = policy_problem(e);
+        let (status, code, _) = err.summary();
+        let title = err.to_string();
+        let ApiError::Status { detail, .. } = err else {
+            unreachable!("policy refusals are plain problems")
+        };
+        (status, code, title, detail)
+    }
+
+    #[test]
+    fn policy_refusals_are_conflicts_with_the_date_they_lift() {
+        let lifts = Utc
+            .with_ymd_and_hms(2026, 11, 6, 23, 30, 0)
+            .unwrap()
+            .timestamp();
+        assert_eq!(
+            problem(PolicyError::ChangeCooldown {
+                available_at: lifts
+            }),
+            (
+                409,
+                "grade_change_cooldown",
+                "Смена грейда пока недоступна".to_owned(),
+                Some("Следующая попытка — после 06.11.2026".to_owned())
+            )
+        );
+        assert_eq!(
+            problem(PolicyError::RetryBlocked {
+                available_at: lifts
+            }),
+            (
+                409,
+                "retry_blocked",
+                "Повторный тест пока недоступен".to_owned(),
+                Some("Пересдача — после 06.11.2026".to_owned())
+            )
+        );
+        assert_eq!(
+            problem(PolicyError::NotAllowed),
+            (
+                409,
+                "attempt_not_allowed",
+                "Такая попытка сейчас недоступна".to_owned(),
+                None
+            )
+        );
+        assert_eq!(
+            problem(PolicyError::NoAdjacentGrade),
+            (
+                409,
+                "attempt_not_allowed",
+                "Нет соседнего грейда в этом направлении".to_owned(),
+                None
+            )
+        );
+    }
+
+    #[test]
+    fn an_answer_counts_until_five_seconds_past_the_deadline() {
+        let deadline = at(T0);
+        assert!(!timed_out(deadline, deadline - Duration::seconds(30)));
+        assert!(!timed_out(deadline, deadline));
+        assert!(!timed_out(deadline, deadline + Duration::seconds(5)));
+        assert!(timed_out(
+            deadline,
+            deadline + Duration::milliseconds(5_001)
+        ));
+    }
+
+    #[test]
+    fn an_ordered_camera_retest_refuses_to_start_without_the_camera() {
+        let err = camera_guard(ProctoringMode::Optional, false, true).expect_err("refused");
+        assert_eq!(err.summary(), (409, "camera_required", Vec::new()));
+        assert_eq!(err.to_string(), "Этот тест нужно пройти с видеозаписью");
+        let ApiError::Status { detail, .. } = err else {
+            unreachable!()
+        };
+        assert_eq!(
+            detail.as_deref(),
+            Some(
+                "Модератор назначил пересдачу с видеозаписью: включите камеру на шаге перед тестом"
+            )
+        );
+        assert!(camera_guard(ProctoringMode::Optional, true, true).is_ok());
+        assert!(camera_guard(ProctoringMode::Optional, false, false).is_ok());
+        assert!(
+            camera_guard(ProctoringMode::Off, false, true).is_ok(),
+            "with proctoring off there is no camera to ask for"
+        );
+    }
 }
