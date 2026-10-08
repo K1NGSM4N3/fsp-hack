@@ -165,7 +165,8 @@ export function DisciplineTrack() {
           className="scrollbar-thin snap-x snap-mandatory overflow-x-auto overscroll-x-contain py-12 focus-visible:outline-offset-[-4px] sm:py-14"
         >
           <ol data-track className="flex w-max items-stretch pr-4 sm:pr-6 lg:pr-8">
-            <li data-intro className={`flex w-[88vw] max-w-[620px] shrink-0 snap-start flex-col justify-center pr-8 sm:pr-14 ${EDGE}`}>
+            {/* On desktop the gutter in EDGE grows with the viewport; content-box sizing adds it to the text column instead of eating it. */}
+            <li data-intro className={`flex w-[88vw] max-w-[620px] shrink-0 snap-start flex-col justify-center pr-8 sm:pr-14 lg:box-content lg:w-[32rem] lg:max-w-none ${EDGE}`}>
               <p className="eyebrow text-primary-300">Дисциплины</p>
               <h2 id="disciplines-title" className="display-3 mt-5 text-balance lg:text-[3.1rem]">
                 Дисциплины ФСП и&nbsp;профессии, которым они ближе
