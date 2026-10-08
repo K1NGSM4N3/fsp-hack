@@ -41,6 +41,8 @@ demo.arewehireyet.ru {
 		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
 	}
 	header {
+		# A year of HTTPS-only for this host; not includeSubDomains: other names under the domain are not ours.
+		Strict-Transport-Security "max-age=31536000"
 		-Server
 		-X-Powered-By
 	}

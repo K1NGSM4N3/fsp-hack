@@ -54,6 +54,18 @@ docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \
 Демо-ATS и админка Keycloak — через туннель: `ssh -L 8082:127.0.0.1:8082 -L 8081:127.0.0.1:8081 …`,
 затем http://localhost:8082 и http://localhost:8081/auth/admin.
 
+Обслуживание — `sudo bash deploy/ops/install.sh` один раз ставит два таймера systemd:
+
+- `fsp-backup.timer` — каждую ночь в 03:30 МСК дамп базы (`pg_dump --format=custom`) и `.env` той же ночи
+  в `/var/backups/fsp-hack`, хранятся 7 дней. Без `.env` дамп бесполезен: персональные данные в нём
+  зашифрованы `FIELD_ENC_KEY`. Вручную — `sudo deploy/ops/backup.sh`.
+- `fsp-watchdog.timer` — раз в 2 минуты перезапускает контейнеры с проваленным healthcheck: Docker сам
+  перезапускает только упавшие. Перезапуски — в `journalctl -t fsp-watchdog`.
+
+Восстановление: `docker compose -f deploy/compose.yml -f deploy/compose.demo.yml exec -T postgres sh -c
+'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' < /var/backups/fsp-hack/db-….dump`
+при том же `.env`, что в бэкапе.
+
 
 | Что | Где |
 |---|---|
