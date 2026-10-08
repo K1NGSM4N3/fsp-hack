@@ -18,7 +18,7 @@ function Resend() {
       className="mt-6 space-y-3"
       onSubmit={(e) => {
         e.preventDefault();
-        if (email.trim()) resend.mutate(email.trim(), { onSuccess: () => toast.success("Если такой аккаунт есть, письмо уже в пути") });
+        if (email.trim()) resend.mutate(email.trim(), { onSuccess: () => toast.success("Если такой аккаунт есть, письмо уже в пути", "Проверьте и папку «Спам»") });
       }}
     >
       <Field label="Email для новой ссылки">

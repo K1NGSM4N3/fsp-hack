@@ -96,7 +96,7 @@ function Sent({ email, guardian }: { email: string; guardian: string | null }) {
       </div>
       <h1 className="mt-5 text-[28px] leading-tight font-semibold tracking-[-0.03em] text-ink">Подтвердите email</h1>
       <p className="mt-2 text-ink-muted">
-        Мы отправили ссылку на <span className="font-medium text-ink">{email}</span>. Перейдите по ней, чтобы активировать аккаунт. Ссылка действует 24 часа.
+        Мы отправили ссылку на <span className="font-medium text-ink">{email}</span>. Перейдите по ней, чтобы активировать аккаунт. Ссылка действует 24 часа. Не видите письма — загляните в «Спам».
       </p>
       {guardian && (
         <p className="mt-3 text-ink-muted">
@@ -104,7 +104,7 @@ function Sent({ email, guardian }: { email: string; guardian: string | null }) {
         </p>
       )}
       <div className="mt-6 flex flex-col gap-2 sm:flex-row">
-        <Button variant="secondary" loading={resend.isPending} onClick={() => resend.mutate(email, { onSuccess: () => toast.success("Письмо отправлено повторно") })}>
+        <Button variant="secondary" loading={resend.isPending} onClick={() => resend.mutate(email, { onSuccess: () => toast.success("Письмо отправлено повторно", "Если его нет во входящих, проверьте «Спам»") })}>
           Отправить ещё раз
         </Button>
         <ButtonLink href="/login" variant="ghost">

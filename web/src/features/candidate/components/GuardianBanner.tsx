@@ -31,7 +31,7 @@ function Explanation({ s, state }: { s: GuardianStatus; state: Waiting }) {
     case "pending":
       return (
         <>
-          Письмо законному представителю — {who} — ушло {formatDate(s.sent_at)}. Пока согласия нет, компании не видят ваш профиль, но тест можно пройти уже сейчас. Ссылка в письме действует до {formatDate(s.link_expires_at)}.
+          Письмо законному представителю — {who} — ушло {formatDate(s.sent_at)}. Пока согласия нет, компании не видят ваш профиль, но тест можно пройти уже сейчас. Ссылка в письме действует до {formatDate(s.link_expires_at)}. Если представитель не нашёл письмо, пусть заглянет в «Спам».
         </>
       );
     case "expired":
@@ -70,7 +70,7 @@ function ChangeDialog({ open, onClose, current }: { open: boolean; onClose: () =
                 { full_name: name, email },
                 {
                   onSuccess: (s) => {
-                    toast.success("Письмо отправлено", `На ${s.guardian_email}`);
+                    toast.success("Письмо отправлено", `На ${s.guardian_email}. Если его нет во входящих — в «Спаме»`);
                     onClose();
                   },
                   onError: (e) => {
@@ -124,7 +124,7 @@ export function GuardianBanner() {
               loading={resend.isPending}
               onClick={() =>
                 resend.mutate(undefined, {
-                  onSuccess: (r) => toast.success("Письмо отправлено", `На ${r.guardian_email}`),
+                  onSuccess: (r) => toast.success("Письмо отправлено", `На ${r.guardian_email}. Если его нет во входящих — в «Спаме»`),
                   onError: (e) => toast.error(isApiError(e) ? e.title : "Не удалось отправить", isApiError(e) ? (e.detail ?? undefined) : undefined),
                 })
               }

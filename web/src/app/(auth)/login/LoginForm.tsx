@@ -101,13 +101,13 @@ export function LoginForm() {
               variant="secondary"
               size="sm"
               loading={resend.isPending}
-              onClick={() => resend.mutate(unverifiedEmail, { onSuccess: () => toast.success("Письмо отправлено", `Проверьте ${unverifiedEmail}`) })}
+              onClick={() => resend.mutate(unverifiedEmail, { onSuccess: () => toast.success("Письмо отправлено", `Проверьте ${unverifiedEmail} и папку «Спам»`) })}
             >
               Отправить письмо ещё раз
             </Button>
           }
         >
-          Мы отправили ссылку на {unverifiedEmail}. Перейдите по ней и войдите снова.
+          Мы отправили ссылку на {unverifiedEmail}. Перейдите по ней и войдите снова. Не видите письма — загляните в «Спам».
         </Alert>
       )}
       {formError && <Alert tone="danger" title={formError} />}
