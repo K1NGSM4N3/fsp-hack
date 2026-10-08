@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use axum::{
     extract::{MatchedPath, Request},
@@ -14,6 +14,16 @@ pub fn install() -> Result<PrometheusHandle, BuildError> {
             &[0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0],
         )?
         .install_recorder()?;
+    // `install_recorder` leaves upkeep to the caller: without it every histogram sample stays
+    // buffered until the next scrape, ~18 bytes a request, unbounded where nothing scrapes.
+    let upkeep = handle.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(5));
+        loop {
+            tick.tick().await;
+            upkeep.run_upkeep();
+        }
+    });
     zero_series();
     Ok(handle)
 }
