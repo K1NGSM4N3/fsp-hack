@@ -141,6 +141,24 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
+/* Big monitors: sizes and containers are in rem, so the whole layout grows with the root size instead
+   of sitting in a narrow strip in the middle of a 1440p or 4K screen. Media queries keep the browser's
+   rem, so breakpoints do not move. */
+@media (min-width: 1800px) {
+  html {
+    font-size: 106.25%;
+  }
+}
+@media (min-width: 2300px) {
+  html {
+    font-size: 125%;
+  }
+}
+@media (min-width: 3200px) {
+  html {
+    font-size: 150%;
+  }
+}
 
 body {
   background: var(--color-white);
@@ -211,6 +229,10 @@ html.lenis body {
 }
 
 /* Same condition as MOTION_DESKTOP in components/motion/config.ts, for layouts that only exist with the desktop choreography. */
+/* Phones held sideways: the screen is wide enough for desktop paddings and headline sizes, but
+   only ~400px tall, so the first screen would be all header and headline. */
+@custom-variant short (@media (max-height: 30rem) and (orientation: landscape));
+
 @custom-variant motion-desk {
   @media (prefers-reduced-motion: no-preference) and (pointer: fine) and (min-width: 1024px) {
     html.motion & {
@@ -309,6 +331,15 @@ html.lenis body {
     font-size: clamp(1.55rem, 1.1rem + 1.5vw, 2.5rem);
     line-height: 1.08;
     letter-spacing: -0.03em;
+  }
+  @media (max-height: 30rem) and (orientation: landscape) {
+    .display-1 {
+      font-size: clamp(2rem, 1.2rem + 2.6vw, 3.1rem);
+    }
+    .display-hero,
+    .display-2 {
+      font-size: clamp(1.85rem, 1.1rem + 2.3vw, 2.8rem);
+    }
   }
   .eyebrow {
     font-family: var(--font-mono);

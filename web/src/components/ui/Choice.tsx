@@ -97,51 +97,55 @@ interface RadioCardsProps<V extends string> {
 
 export function RadioCards<V extends string>({ name, value, onChange, options, columns = 2, className }: RadioCardsProps<V>) {
   const field = useFieldControl({});
+  // Columns follow the group's own width, not the screen's: next to the cabinet sidebar a wide screen
+  // still leaves a narrow column, and three cards there would wrap a word per line.
   return (
-    <div
-      role="radiogroup"
-      aria-describedby={field["aria-describedby"]}
-      className={cn("grid gap-3", columns === 1 ? "grid-cols-1" : columns === 2 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1 sm:grid-cols-3", className)}
-    >
-      {options.map((o) => {
-        const checked = value === o.value;
-        return (
-          <label
-            key={o.value}
-            className={cn(
-              "relative flex cursor-pointer gap-3 rounded-card border bg-white p-4 transition-colors",
-              checked ? "border-primary bg-primary-50/60 ring-1 ring-primary" : "border-line hover:border-line-strong",
-              o.disabled && "cursor-not-allowed opacity-60",
-            )}
-          >
-            <input
-              type="radio"
-              name={name}
-              value={o.value}
-              checked={checked}
-              disabled={o.disabled}
-              onChange={() => onChange(o.value)}
-              className="peer sr-only"
-            />
-            {o.icon && <span className={cn("mt-0.5 shrink-0", checked ? "text-primary" : "text-ink-subtle")}>{o.icon}</span>}
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-ink">{o.title}</span>
-              {o.description && <span className="mt-1 block text-sm text-ink-muted">{o.description}</span>}
-              {o.aside}
-            </span>
-            <span
-              aria-hidden
+    <div className={cn("@container", className)}>
+      <div
+        role="radiogroup"
+        aria-describedby={field["aria-describedby"]}
+        className={cn("grid gap-3", columns === 1 ? "grid-cols-1" : columns === 2 ? "grid-cols-1 @md:grid-cols-2" : "grid-cols-1 @md:grid-cols-2 @2xl:grid-cols-3")}
+      >
+        {options.map((o) => {
+          const checked = value === o.value;
+          return (
+            <label
+              key={o.value}
               className={cn(
-                "mt-0.5 flex size-4.5 shrink-0 items-center justify-center rounded-full border",
-                checked ? "border-primary bg-primary" : "border-line-strong bg-white",
+                "relative flex cursor-pointer gap-3 rounded-card border bg-white p-4 transition-colors",
+                checked ? "border-primary bg-primary-50/60 ring-1 ring-primary" : "border-line hover:border-line-strong",
+                o.disabled && "cursor-not-allowed opacity-60",
               )}
             >
-              {checked && <span className="size-1.5 rounded-full bg-white" />}
-            </span>
-            <span className="pointer-events-none absolute inset-0 rounded-card peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary" />
-          </label>
-        );
-      })}
+              <input
+                type="radio"
+                name={name}
+                value={o.value}
+                checked={checked}
+                disabled={o.disabled}
+                onChange={() => onChange(o.value)}
+                className="peer sr-only"
+              />
+              {o.icon && <span className={cn("mt-0.5 shrink-0", checked ? "text-primary" : "text-ink-subtle")}>{o.icon}</span>}
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-ink">{o.title}</span>
+                {o.description && <span className="mt-1 block text-sm text-ink-muted">{o.description}</span>}
+                {o.aside}
+              </span>
+              <span
+                aria-hidden
+                className={cn(
+                  "mt-0.5 flex size-4.5 shrink-0 items-center justify-center rounded-full border",
+                  checked ? "border-primary bg-primary" : "border-line-strong bg-white",
+                )}
+              >
+                {checked && <span className="size-1.5 rounded-full bg-white" />}
+              </span>
+              <span className="pointer-events-none absolute inset-0 rounded-card peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-primary" />
+            </label>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -7,7 +7,7 @@
 export default function SiteError({ error, retry }: { error: Error & { digest?: string }; retry: () => void }) {
   return (
     <div className="relative isolate flex min-h-dvh flex-1 flex-col overflow-hidden bg-night bg-[radial-gradient(46rem_46rem_at_100%_-10rem,rgb(64_47_255/0.5),transparent_62%)] text-white">
-      <main id="main" className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col justify-center px-4 py-16 sm:px-6 lg:px-8">
+      <main id="main" className="mx-auto flex w-full max-w-[77.5rem] flex-1 flex-col justify-center px-4 py-16 sm:px-6 lg:px-8">
         <p aria-hidden className="font-display text-[clamp(5.5rem,22vw,13rem)] leading-[0.85] font-semibold tracking-[-0.06em] text-transparent [-webkit-text-stroke:1.5px_rgb(169_163_255/0.8)]">
           500
         </p>

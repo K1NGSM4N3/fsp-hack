@@ -51,7 +51,7 @@ function InvitationCard() {
         <p className="mt-1 text-sm text-night-muted">Финтех · гибрид, Москва</p>
         <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4">
           <p className="text-xs text-night-muted">Зарплата</p>
-          <p className="tabular mt-1 font-mono text-2xl font-semibold tracking-tight">280 000 – 350 000 ₽</p>
+          <p className="tabular mt-1 font-mono text-[clamp(1.05rem,5.6vw,1.5rem)] font-semibold tracking-tight whitespace-nowrap">280 000 – 350 000 ₽</p>
         </div>
         <ul className="mt-5 space-y-2 text-sm text-night-muted">
           <li className="flex items-start gap-2.5">
@@ -87,7 +87,7 @@ function Hero() {
       </div>
       <HeroGraphLazy />
 
-      <Container className="relative flex flex-1 flex-col justify-center pt-32 pb-24 sm:pt-36 lg:pt-40 lg:pb-28">
+      <Container className="relative flex flex-1 flex-col justify-center pt-32 pb-24 sm:pt-36 lg:pt-40 lg:pb-28 short:pt-24 short:pb-16">
         <div className="grid grid-cols-1 items-center gap-16 lg:grid-cols-[1.25fr_0.75fr] lg:gap-14">
           <div>
             <p data-hero className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/5 py-1.5 pr-4 pl-1.5 text-sm text-night-muted backdrop-blur">

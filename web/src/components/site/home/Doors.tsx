@@ -58,7 +58,8 @@ function PeopleList() {
           <span className="relative min-w-0 flex-1">
             <span className="relative block h-5 text-sm font-semibold">
               <span data-person-code className={cn("absolute inset-0 truncate", i === 0 && "opacity-0")}>
-                Кандидат {p.code}
+                <span className="hidden min-[360px]:inline">Кандидат </span>
+                {p.code}
               </span>
               <span data-person-name className={cn("absolute inset-0 truncate text-primary-strong", i !== 0 && "opacity-0")}>
                 {p.name}
@@ -66,7 +67,7 @@ function PeopleList() {
             </span>
             <span className="block text-xs text-ink-subtle">{p.cat}</span>
           </span>
-          <span className="relative h-8 w-[7.5rem] shrink-0 text-xs font-medium">
+          <span className="relative h-8 w-[6.5rem] shrink-0 text-xs font-medium min-[360px]:w-[7.5rem]">
             <span data-pill="invite" className={cn("absolute inset-0 flex items-center justify-center rounded-full bg-primary text-white", i !== 2 && "opacity-0")}>
               Пригласить
             </span>

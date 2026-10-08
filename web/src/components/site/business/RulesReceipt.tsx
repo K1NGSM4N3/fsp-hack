@@ -97,7 +97,7 @@ export function RulesReceipt() {
                     <span className="text-ink-faint">0{i + 1}</span>
                     <span className="min-w-0">{r.label}</span>
                     <span aria-hidden className="mb-1 min-w-4 flex-1 border-b border-dotted border-ink-faint" />
-                    <span className="font-semibold whitespace-nowrap">{r.value}</span>
+                    <span className="max-w-[45%] text-right font-semibold sm:max-w-none sm:whitespace-nowrap">{r.value}</span>
                   </div>
                   <p className="mt-0.5 pl-6 text-xs leading-snug text-ink-subtle">{r.hint}</p>
                 </li>

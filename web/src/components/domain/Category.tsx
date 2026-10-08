@@ -21,7 +21,8 @@ export function CategoryBadge({ category, size = "md", long = false, className }
 }
 
 export function SalaryRange({ salary, size = "md", className, label }: { salary: Salary; size?: "sm" | "md" | "lg" | "xl"; className?: string; label?: string }) {
-  const sizes = { sm: "text-sm", md: "text-base", lg: "text-xl", xl: "text-2xl sm:text-3xl" };
+  // `xl` is the headline amount of a card marked `@container`: it never wraps, so it scales with the card.
+  const sizes = { sm: "text-sm", md: "text-base", lg: "text-xl", xl: "text-[clamp(1.25rem,8.5cqi,1.875rem)]" };
   return (
     <span className={cn("tabular font-mono font-semibold tracking-tight whitespace-nowrap text-ink", sizes[size], className)}>
       {label && <span className="sr-only">{label}: </span>}

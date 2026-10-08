@@ -53,7 +53,7 @@ export function FspHero() {
   );
 
   return (
-    <section ref={root} className="relative isolate overflow-hidden bg-night pt-28 pb-16 text-white sm:pt-36 sm:pb-20 lg:pb-28">
+    <section ref={root} className="relative isolate overflow-hidden bg-night pt-28 pb-16 text-white sm:pt-36 sm:pb-20 lg:pb-28 short:pt-24">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-48 right-[-10%] size-[46rem] rounded-full bg-primary/35 blur-[160px]" />
         <svg data-lanes viewBox="0 0 1200 640" fill="none" preserveAspectRatio="xMidYMid slice" className="absolute inset-0 size-full text-primary-300/25">

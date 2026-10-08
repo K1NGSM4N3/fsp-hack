@@ -34,7 +34,7 @@ export default function AdminOverviewPage() {
   return (
     <div>
       <PageHeader title="Обзор" description="Что ждёт решения и что модераторы сделали за последние 7 дней. Каждое действие и каждый просмотр записи теста попадают в журнал." />
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         <Section icon={<Video className="size-5" aria-hidden />} title="Прокторинг" description="Тесты, в которых ответы и поведение расходятся" href="/admin/proctoring" action="Очередь тестов">
           <Stat label="Требуют подтверждения" value={p.needs_review} tone={p.needs_review ? "primary" : "default"} />
           <Stat label="С замечаниями" value={p.remarks} />

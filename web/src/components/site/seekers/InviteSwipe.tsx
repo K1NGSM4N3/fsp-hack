@@ -102,7 +102,7 @@ function Card({ invite, top }: { invite: Invite; top: boolean }) {
           Зарплата, от и до
           <Pin n={3} />
         </p>
-        <p className="tabular mt-1 font-mono text-[20px] font-semibold tracking-tight text-ink sm:text-[22px]">{invite.salary}</p>
+        <p className="tabular mt-1 font-mono text-[clamp(1rem,5.2vw,1.25rem)] font-semibold tracking-tight whitespace-nowrap text-ink sm:text-[22px]">{invite.salary}</p>
       </div>
       <p className="mt-3.5 flex items-center gap-1.5 text-xs text-ink-subtle">
         <Clock className="size-3.5" aria-hidden />
@@ -228,7 +228,7 @@ export function InviteSwipe() {
   const last = queue.length === 0;
 
   return (
-    <div ref={root} className="mx-auto w-full max-w-[400px]">
+    <div ref={root} className="mx-auto w-full max-w-[25rem]">
       <div className="relative h-[468px] sm:h-[452px]">
         {queue
           .slice(0, 3)

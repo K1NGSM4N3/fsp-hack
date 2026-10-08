@@ -18,13 +18,13 @@ export const stateButton = "inline-flex h-12 items-center justify-center gap-2 r
 export function SiteState({ code, title, text, actions }: { code: string; title: string; text: ReactNode; actions: ReactNode }) {
   return (
     <div className="relative isolate flex min-h-dvh flex-1 flex-col overflow-hidden bg-night bg-[radial-gradient(46rem_46rem_at_100%_-10rem,rgb(64_47_255/0.5),transparent_62%)] text-white">
-      <header className="mx-auto flex w-full max-w-[1240px] items-center justify-between px-4 pt-5 sm:px-6 lg:px-8">
+      <header className="mx-auto flex w-full max-w-[77.5rem] items-center justify-between px-4 pt-5 sm:px-6 lg:px-8">
         <Logo tone="dark" />
         <Link href="/login" className="inline-flex min-h-10 items-center px-2 text-sm text-night-muted hover:text-white">
           Войти в кабинет
         </Link>
       </header>
-      <main id="main" className="mx-auto flex w-full max-w-[1240px] flex-1 flex-col justify-center px-4 py-16 sm:px-6 lg:px-8">
+      <main id="main" className="mx-auto flex w-full max-w-[77.5rem] flex-1 flex-col justify-center px-4 py-16 sm:px-6 lg:px-8">
         <p aria-hidden className="font-display text-[clamp(5.5rem,22vw,13rem)] leading-[0.85] font-semibold tracking-[-0.06em] text-transparent [-webkit-text-stroke:1.5px_rgb(169_163_255/0.8)]">
           {code}
         </p>

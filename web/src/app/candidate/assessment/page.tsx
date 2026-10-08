@@ -311,7 +311,7 @@ export default function AssessmentPage() {
       <OnboardingStrip />
       <ActiveSessionBanner />
       <CurrentCategory />
-      <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <div className="min-w-0 space-y-6">
           <Suspense fallback={<PageSkeleton cards={1} />}>
             <StartCard />

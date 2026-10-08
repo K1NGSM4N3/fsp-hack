@@ -187,7 +187,7 @@ export function FlapBoard() {
     <div
       ref={root}
       data-hero
-      className="relative rounded-[22px] border border-night-line bg-night-raised p-3 shadow-[0_40px_80px_-40px_rgb(0_0_0/0.8)] [--cf:17px] [--ch:30px] [--cw:19px] sm:p-6 sm:[--cf:28px] sm:[--ch:48px] sm:[--cw:32px] lg:p-8 lg:[--cf:22px] lg:[--ch:38px] lg:[--cw:25px] xl:p-10 xl:[--cf:25px] xl:[--ch:44px] xl:[--cw:29px]"
+      className="relative rounded-[22px] border border-night-line bg-night-raised p-3 shadow-[0_40px_80px_-40px_rgb(0_0_0/0.8)] [--cf:15px] [--ch:27px] [--cw:17px] min-[360px]:[--cf:17px] min-[360px]:[--ch:30px] min-[360px]:[--cw:19px] sm:p-6 sm:[--cf:28px] sm:[--ch:48px] sm:[--cw:32px] lg:p-8 lg:[--cf:22px] lg:[--ch:38px] lg:[--cw:25px] xl:p-10 xl:[--cf:25px] xl:[--ch:44px] xl:[--cw:29px]"
     >
       {[
         "top-2.5 left-2.5",

@@ -181,7 +181,7 @@ export function InvitationDetail({ id }: { id: string }) {
 
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="min-w-0 space-y-6">
-          <Card padding="lg">
+          <Card padding="lg" className="@container">
             <p className="text-sm text-ink-subtle">Зарплата</p>
             <SalaryRange salary={inv.salary} size="xl" className="mt-1 block" label="Зарплата" />
             <dl className="mt-6 grid gap-4 text-sm sm:grid-cols-2">

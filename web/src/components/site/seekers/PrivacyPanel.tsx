@@ -217,7 +217,7 @@ export function PrivacyPanel() {
                 aria-checked={status === s.value}
                 onClick={() => setStatus(s.value)}
                 className={cn(
-                  "relative min-h-12 rounded-xl px-1 py-2 text-[12px] leading-tight font-medium transition-colors duration-300 sm:px-2 sm:text-[13px]",
+                  "relative min-h-12 rounded-xl px-1 py-2 text-[12px] leading-tight font-medium hyphens-auto transition-colors duration-300 sm:px-2 sm:text-[13px]",
                   status === s.value ? "text-ink" : "text-night-muted hover:text-white",
                 )}
               >

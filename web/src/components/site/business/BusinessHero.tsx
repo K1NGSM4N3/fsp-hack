@@ -11,7 +11,7 @@ export function BusinessHero() {
         <div className="absolute bottom-[-26rem] left-[-18rem] size-[44rem] rounded-full bg-[radial-gradient(circle,rgb(123_111_255/0.2),transparent_64%)]" />
       </div>
 
-      <Container className="pt-28 pb-20 sm:pt-36 sm:pb-24 lg:pt-36 lg:pb-28">
+      <Container className="pt-28 pb-20 sm:pt-36 sm:pb-24 lg:pt-36 lg:pb-28 short:pt-24">
         <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1fr_minmax(0,32rem)] lg:items-center lg:gap-12 xl:grid-cols-[1fr_minmax(0,35rem)]">
           <div>
             <p data-hero className="mb-7 inline-flex items-center gap-3 rounded-full border border-white/15 bg-white/5 py-1.5 pr-4 pl-1.5 text-sm text-night-muted">

@@ -27,7 +27,7 @@ const INVITE_PARTS: [string, string][] = [
 
 function Hero() {
   return (
-    <section className="relative isolate overflow-hidden bg-white pt-28 pb-20 sm:pt-36 lg:pt-40 lg:pb-28">
+    <section className="relative isolate overflow-hidden bg-white pt-28 pb-20 sm:pt-36 lg:pt-40 lg:pb-28 short:pt-24">
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="bg-grid mask-radial absolute inset-0 opacity-70" />
         <div className="absolute top-[-14rem] right-[-10rem] size-[44rem] rounded-full bg-[radial-gradient(circle,rgb(64_47_255/0.16),transparent_64%)]" />

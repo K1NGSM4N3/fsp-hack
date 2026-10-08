@@ -56,7 +56,7 @@ function InvitationRow({ inv }: { inv: ReceivedInvitation }) {
             </p>
           </div>
           <div className="shrink-0 sm:text-right">
-            <SalaryRange salary={inv.salary} size="lg" label="Зарплата" />
+            <SalaryRange salary={inv.salary} size="lg" className="block" label="Зарплата" />
             {active && (
               <p className="mt-1 inline-flex items-center gap-1 text-xs text-ink-subtle">
                 <Clock className="size-3.5" aria-hidden />

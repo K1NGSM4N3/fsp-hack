@@ -137,7 +137,7 @@ export function VacancyDetail({ id, backHref, backLabel, seed }: { id: string; b
       />
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         <div className="min-w-0 space-y-6">
-          <Card>
+          <Card className="@container">
             <p className="text-xs text-ink-subtle">Зарплата</p>
             <SalaryRange salary={v.salary} size="xl" className="mt-1 block" label="Зарплата" />
             <dl className="mt-5 grid gap-4 text-sm sm:grid-cols-3">

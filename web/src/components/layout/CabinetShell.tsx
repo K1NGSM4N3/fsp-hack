@@ -249,7 +249,7 @@ export function CabinetShell({ role, nav, children }: CabinetShellProps) {
           )}
         </dialog>
 
-        <main id="main" className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 print:max-w-none print:p-0">
+        <main id="main" className="mx-auto w-full max-w-[75rem] flex-1 px-4 py-6 sm:px-6 sm:py-8 lg:px-10 lg:py-10 print:max-w-none print:p-0">
           {me.isPending || unauthorized || wrongRole ? (
             <PageSkeleton />
           ) : me.isError ? (

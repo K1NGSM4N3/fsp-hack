@@ -166,7 +166,7 @@ export function DisciplineTrack() {
         >
           <ol data-track className="flex w-max items-stretch pr-4 sm:pr-6 lg:pr-8">
             {/* On desktop the gutter in EDGE grows with the viewport; content-box sizing adds it to the text column instead of eating it. */}
-            <li data-intro className={`flex w-[88vw] max-w-[620px] shrink-0 snap-start flex-col justify-center pr-8 sm:pr-14 lg:box-content lg:w-[32rem] lg:max-w-none ${EDGE}`}>
+            <li data-intro className={`flex w-[88vw] max-w-[38.75rem] shrink-0 snap-start flex-col justify-center pr-8 sm:pr-14 lg:box-content lg:w-[32rem] lg:max-w-none ${EDGE}`}>
               <p className="eyebrow text-primary-300">Дисциплины</p>
               <h2 id="disciplines-title" className="display-3 mt-5 text-balance lg:text-[3.1rem]">
                 Дисциплины ФСП и&nbsp;профессии, которым они ближе
@@ -180,7 +180,7 @@ export function DisciplineTrack() {
               </p>
             </li>
             {DISCIPLINES.map((d) => (
-              <li key={d.key} data-panel className="flex w-[82vw] max-w-[420px] shrink-0 snap-start flex-col border-l border-night-line px-6 sm:px-9 lg:max-w-[400px] xl:max-w-[430px]">
+              <li key={d.key} data-panel className="flex w-[82vw] max-w-[26.25rem] shrink-0 snap-start flex-col border-l border-night-line px-6 sm:px-9 lg:max-w-[25rem] xl:max-w-[26.875rem]">
                 <div className="relative self-start">
                   <span aria-hidden className="absolute inset-[-30%] rounded-full bg-primary/25 blur-3xl" />
                   <Emblem kind={d.key} className="relative size-24 text-white sm:size-32 lg:size-40" />

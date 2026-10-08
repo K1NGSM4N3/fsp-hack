@@ -27,7 +27,7 @@ function CategoryCards({ need }: { need: HiringNeed }) {
   const q = useNeedCategories(need.id);
   if (q.isPending) {
     return (
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {[0, 1, 2].map((i) => (
           <SkeletonCard key={i} lines={3} />
         ))}
@@ -36,7 +36,7 @@ function CategoryCards({ need }: { need: HiringNeed }) {
   }
   if (q.isError) return <ErrorAlert error={q.error} onRetry={() => void q.refetch()} />;
   return (
-    <div className="grid gap-4 md:grid-cols-3">
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
       {q.data.map((c) => {
         const overFork = Boolean(c.median_salary && c.median_salary > need.salary.max);
         return (

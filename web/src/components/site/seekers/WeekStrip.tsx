@@ -17,7 +17,7 @@ const RING = 2 * Math.PI * 14;
 const loadDraggable = () => import("@/components/motion/extras/draggable");
 
 function Shell({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cn("w-full max-w-[290px] rounded-[18px] bg-white p-4 shadow-pop", className)}>{children}</div>;
+  return <div className={cn("w-full max-w-[18.125rem] rounded-[18px] bg-white p-4 shadow-pop", className)}>{children}</div>;
 }
 
 function ProfileScene() {
@@ -416,7 +416,7 @@ export function WeekStrip() {
 
   return (
     <div ref={root}>
-      <div className="mx-auto flex w-full max-w-[1240px] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
+      <div className="mx-auto flex w-full max-w-[77.5rem] items-center justify-between gap-6 px-4 sm:px-6 lg:px-8">
         <div className="flex min-w-0 flex-1 items-center gap-4">
           <span className="tabular shrink-0 font-mono text-sm text-ink">
             <span className="text-primary">{String(active + 1).padStart(2, "0")}</span>

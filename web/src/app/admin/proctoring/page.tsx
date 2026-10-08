@@ -106,7 +106,7 @@ function Queue({ filter }: { filter: QueueFilter }) {
   if (!items.length) return <EmptyState title="Очередь пуста" description={EMPTY[filter]} />;
   return (
     <Card padding="none">
-      <div className="hidden md:block">
+      <div className="hidden overflow-x-auto xl:block">
         <table className="w-full text-left">
           <caption className="sr-only">{QUEUE_FILTER_LABEL[filter]}, сначала самые старые</caption>
           <thead>
@@ -141,7 +141,7 @@ function Queue({ filter }: { filter: QueueFilter }) {
           </tbody>
         </table>
       </div>
-      <ul className="md:hidden">
+      <ul className="xl:hidden">
         {items.map((s) => (
           <MobileItem key={s.session_id} s={s} />
         ))}

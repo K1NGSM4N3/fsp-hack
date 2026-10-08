@@ -43,9 +43,9 @@ export default function ProfilePrintPage() {
         </Button>
       </div>
       <article className="space-y-6 rounded-card border border-line bg-white p-8 print:border-0 print:p-0">
-        <header className="flex items-start justify-between gap-6">
-          <div>
-            <h1 className="font-mono text-3xl font-semibold tracking-tight text-ink">{p.full_name || "Без имени"}</h1>
+        <header className="flex flex-col-reverse items-start justify-between gap-4 sm:flex-row sm:gap-6 print:flex-row">
+          <div className="min-w-0">
+            <h1 className="font-mono text-2xl font-semibold tracking-tight break-words text-ink sm:text-3xl print:text-3xl">{p.full_name || "Без имени"}</h1>
             <p className="mt-1 text-ink-muted">
               {[roles.join(", "), p.city, typeof p.experience_years === "number" ? `опыт ${pluralize(Math.round(p.experience_years), ["год", "года", "лет"])}` : null].filter(Boolean).join(" · ")}
             </p>

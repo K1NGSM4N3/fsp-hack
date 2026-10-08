@@ -26,7 +26,7 @@ export default async function VacanciesPage() {
     <MotionRoot variant="wipe" className="flex flex-1 flex-col bg-canvas">
       <JsonLd data={breadcrumbs([PUBLIC_PAGES.vacancies])} />
       {seed && seed.data.items.length > 0 && <JsonLd data={vacancyList(seed.data.items)} />}
-      <section className="relative isolate overflow-hidden border-b border-line bg-white pt-32 pb-12 sm:pt-40 sm:pb-16">
+      <section className="relative isolate overflow-hidden border-b border-line bg-white pt-32 pb-12 sm:pt-40 sm:pb-16 short:pt-24">
         <div aria-hidden className="bg-grid mask-radial pointer-events-none absolute inset-0 -z-10 opacity-70" />
         <div aria-hidden className="pointer-events-none absolute -top-56 right-[-10rem] -z-10 size-[40rem] rounded-full bg-[radial-gradient(circle,rgb(64_47_255/0.18),transparent_64%)]" />
         <Container>

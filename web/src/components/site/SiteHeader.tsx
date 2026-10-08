@@ -153,10 +153,10 @@ export function SiteHeader() {
   const close = () => setOpen(false);
 
   return (
-    <header ref={shell} className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4 print:hidden">
+    <header ref={shell} className="pointer-events-none fixed inset-x-0 top-0 z-50 px-3 pt-3 sm:px-5 sm:pt-4 short:pt-2 print:hidden">
       <div
         ref={bar}
-        className="group/bar pointer-events-auto mx-auto flex h-14 max-w-[1240px] items-center justify-between gap-3 rounded-full border border-white/60 bg-white/75 pr-2 pl-4 shadow-[0_10px_40px_-18px_rgb(11_11_18/0.35)] backdrop-blur-xl backdrop-saturate-150 transition-[background-color,box-shadow] duration-300 data-[scrolled]:bg-white/90 data-[scrolled]:shadow-[0_14px_44px_-16px_rgb(11_11_18/0.4)] sm:h-16 sm:pl-5"
+        className="group/bar pointer-events-auto mx-auto flex h-14 max-w-[77.5rem] items-center justify-between gap-3 rounded-full border border-white/60 bg-white/75 pr-2 pl-4 shadow-[0_10px_40px_-18px_rgb(11_11_18/0.35)] backdrop-blur-xl backdrop-saturate-150 transition-[background-color,box-shadow] duration-300 data-[scrolled]:bg-white/90 data-[scrolled]:shadow-[0_14px_44px_-16px_rgb(11_11_18/0.4)] sm:h-16 sm:pl-5 short:h-12"
       >
         <Logo />
         <nav

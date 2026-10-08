@@ -190,7 +190,7 @@ function Timeline({ r }: { r: SessionReview }) {
           ))}
         </div>
       )}
-      <div className="hidden md:block">
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full text-left text-sm">
           <caption className="sr-only">Задания теста по порядку с событиями браузера</caption>
           <thead>
