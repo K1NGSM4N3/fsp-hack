@@ -436,25 +436,29 @@ export function SessionReviewView({ id }: { id: string }) {
         <div className="min-w-0 lg:col-span-2 lg:row-start-2">
           <Timeline r={r} />
         </div>
-        <aside className="space-y-4 lg:sticky lg:top-20 lg:col-start-2 lg:row-start-1">
-          <Decision r={r} />
-          <p className="flex gap-2 px-1 text-xs leading-relaxed text-ink-subtle">
-            <EyeOff className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-            Имени и контактов кандидата здесь нет: чтобы решить, сам ли он проходил тест, хватает ответов, событий и записи. Это и есть минимум данных для разбора спора.
-          </p>
-          {r.proctoring && (
+        {/* A sticky grid item is bounded by the whole grid, not its row, so it would slide over the full-width
+            timeline; this cell stretches to row 1 and keeps the sticky aside inside it. */}
+        <div className="lg:col-start-2 lg:row-start-1 lg:self-stretch">
+          <aside className="space-y-4 lg:sticky lg:top-20">
+            <Decision r={r} />
             <p className="flex gap-2 px-1 text-xs leading-relaxed text-ink-subtle">
-              <Clock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              Событий за тест: {r.events.length}. Время событий — по часам браузера кандидата, сервер прижимает его к интервалу теста.
+              <EyeOff className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              Имени и контактов кандидата здесь нет: чтобы решить, сам ли он проходил тест, хватает ответов, событий и записи. Это и есть минимум данных для разбора спора.
             </p>
-          )}
-          {r.answers.some((a) => a.timed_out) && (
-            <p className="flex gap-2 px-1 text-xs leading-relaxed text-ink-subtle">
-              <Timer className="mt-0.5 size-3.5 shrink-0" aria-hidden />
-              «Время вышло» засчитывается как неверный ответ.
-            </p>
-          )}
-        </aside>
+            {r.proctoring && (
+              <p className="flex gap-2 px-1 text-xs leading-relaxed text-ink-subtle">
+                <Clock className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                Событий за тест: {r.events.length}. Время событий — по часам браузера кандидата, сервер прижимает его к интервалу теста.
+              </p>
+            )}
+            {r.answers.some((a) => a.timed_out) && (
+              <p className="flex gap-2 px-1 text-xs leading-relaxed text-ink-subtle">
+                <Timer className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+                «Время вышло» засчитывается как неверный ответ.
+              </p>
+            )}
+          </aside>
+        </div>
       </div>
     </div>
   );
