@@ -49,7 +49,7 @@ docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \
 | `/` | Сайт и кабинеты |
 | `/api/docs` | Swagger UI |
 | `/auth/…` | ФСП ID (Keycloak): «Привязать ФСП ID» в настройках соискателя, вход `fsp-000001` … `fsp-000010` / `demo12345`; админка Keycloak наружу не отдаётся |
-| `/mail/` | Демо-почта (Mailpit): писем наружу демо не шлёт, подтверждение регистрации и согласие представителя — здесь. Логин и пароль — `MAILPIT_UI_AUTH` в `deploy/.env` |
+| `/mail/` | Демо-почта (Mailpit): ловит письма, пока в `.env` не задан настоящий SMTP (`SMTP_URL=smtps://…`, `MAIL_FROM` — тот же ящик). Логин и пароль — `MAILPIT_UI_AUTH` в `deploy/.env` |
 
 Остальные порты (Keycloak 8081, Mailpit 8025, демо-ATS 8082, реестр 8091) слушают только
 127.0.0.1: опубликованные Docker порты идут в обход ufw, поэтому закрыты в самом оверлее.
