@@ -3,6 +3,7 @@
 # The dump alone is not enough: personal data in it is encrypted with FIELD_ENC_KEY and looked up
 # by BIDX_KEY, so the .env of the same night is kept next to it.
 set -euo pipefail
+umask 077
 
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 dir=${BACKUP_DIR:-/var/backups/fsp-hack}
