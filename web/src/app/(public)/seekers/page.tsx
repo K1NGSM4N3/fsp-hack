@@ -38,7 +38,7 @@ function Hero() {
             <Eyebrow>Соискателям</Eyebrow>
           </div>
           <h1 data-hero data-split="hero" className="display-hero mt-7 text-balance text-ink">
-            Один тест, и&nbsp;приглашения <span className="text-gradient">приходят к&nbsp;вам сами</span>
+            Один тест, и&nbsp;приглашения <span className="text-gradient">приходят к&nbsp;вам&nbsp;сами</span>
           </h1>
           <p data-hero="lead" className="mt-7 max-w-xl text-lg leading-relaxed text-pretty text-ink-muted sm:text-xl">
             Заполните короткий профиль и пройдите один тест на 10–25 минут. По его итогам вы получите категорию, например «Бэкенд · Middle». Компании ищут людей по
