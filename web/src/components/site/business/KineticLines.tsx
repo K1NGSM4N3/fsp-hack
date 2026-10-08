@@ -60,6 +60,21 @@ function readableCopy(el: HTMLElement): HTMLElement {
 }
 
 /**
+ * Letters split into inline blocks lose kerning and break lines differently from whole text, so an outline drawn from
+ * the plain sentence drifts off the split fill and can wrap on other words. The outline takes a copy of the split
+ * nodes instead: same boxes, same lines. Returns the undo.
+ */
+function outlineFromSplit(outline: HTMLElement, fill: HTMLElement): () => void {
+  const sentence = outline.dataset.outline ?? "";
+  delete outline.dataset.outline;
+  outline.replaceChildren(...Array.from(fill.childNodes, (n) => n.cloneNode(true)));
+  return () => {
+    outline.replaceChildren();
+    outline.dataset.outline = sentence;
+  };
+}
+
+/**
  * Each benefit is one sentence drawn as an outline. Desktop: scrolling fills it in letter by letter.
  * Phones: no letter split; the filled copy fades in over the outline once, then the note rises.
  */
@@ -78,14 +93,17 @@ export function KineticLines() {
         }
       });
       mm.add(MOTION_DESKTOP, () => {
-        const copies: HTMLElement[] = [];
+        const undo: (() => void)[] = [];
         gsap.utils.toArray<HTMLElement>("[data-line]", root.current).forEach((line, i) => {
           const fill = line.querySelector<HTMLElement>("[data-fill-text]");
+          const outline = line.querySelector<HTMLElement>("[data-outline]");
           const sentence = line.querySelector<HTMLElement>("[data-sentence]");
           const note = line.querySelector<HTMLElement>("[data-note]");
           if (!fill || !sentence) return;
-          copies.push(readableCopy(fill));
+          const copy = readableCopy(fill);
+          undo.push(() => copy.remove());
           const split = SplitText.create(fill, { type: "words,chars", aria: "hidden" });
+          if (outline) undo.push(outlineFromSplit(outline, fill));
           gsap.fromTo(
             split.chars,
             { opacity: 0 },
@@ -104,7 +122,7 @@ export function KineticLines() {
             );
           }
         });
-        return () => copies.forEach((c) => c.remove());
+        return () => undo.forEach((u) => u());
       });
     },
     { scope: root },
@@ -126,7 +144,7 @@ export function KineticLines() {
                   <p
                     aria-hidden
                     data-outline={`${l.before}${l.key}${l.after}`}
-                    className={`${SIZE} text-transparent [-webkit-text-stroke:1px_rgb(169_163_255/0.55)] before:content-[attr(data-outline)]`}
+                    className={`${SIZE} text-transparent [-webkit-text-stroke:1px_rgb(169_163_255/0.55)] **:text-transparent before:content-[attr(data-outline)]`}
                   />
                   <p data-fill-text className={`${SIZE} text-white`}>
                     {l.before}
