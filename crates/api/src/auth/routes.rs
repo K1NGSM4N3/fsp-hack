@@ -65,6 +65,9 @@ pub struct RegisterResponse {
     pub verification_required: bool,
 }
 
+pub(crate) const MIN_PASSWORD_CHARS: usize = 8;
+pub(crate) const MAX_PASSWORD_BYTES: usize = 128;
+
 pub(crate) fn valid_email(email: &str) -> bool {
     let Some((local, domain)) = email.split_once('@') else {
         return false;
@@ -143,12 +146,12 @@ async fn register(
     let mut v = Validator::default();
     v.check(valid_email(&email), "email", "Некорректный email")
         .check(
-            req.password.chars().count() >= 8,
+            req.password.chars().count() >= MIN_PASSWORD_CHARS,
             "password",
             "Минимум 8 символов",
         )
         .check(
-            req.password.len() <= 128,
+            req.password.len() <= MAX_PASSWORD_BYTES,
             "password",
             "Слишком длинный пароль",
         )

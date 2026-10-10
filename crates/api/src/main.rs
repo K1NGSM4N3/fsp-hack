@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use api::{
-    auth::jwt::JwtKeys,
+    auth::{jwt::JwtKeys, moderator},
     cache::CandidateCache,
     config::{Config, ConfigError},
     crypto::{Crypto, CryptoError},
@@ -14,7 +14,7 @@ use api::{
     proctoring::{ProctoringMode, RecordingStore},
     state::{AppState, Services},
 };
-use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use tracing_subscriber::{EnvFilter, fmt, fmt::writer::BoxMakeWriter, prelude::*};
 
 #[derive(Debug, thiserror::Error)]
 enum StartupError {
@@ -48,13 +48,35 @@ async fn main() -> Result<(), StartupError> {
         return Ok(());
     }
 
-    init_tracing(std::env::var("LOG_FORMAT").is_ok_and(|v| v == "json"));
+    let moderator = if command == "create-moderator" {
+        match moderator::from_cli(std::env::args().skip(2)) {
+            Ok(m) => Some(m),
+            Err(e) => fail(&command, e),
+        }
+    } else {
+        None
+    };
+
+    init_tracing(
+        std::env::var("LOG_FORMAT").is_ok_and(|v| v == "json"),
+        moderator.is_some(),
+    );
     let config = Config::from_env()?;
 
     let pool = api::db::pool(&config.database_url, config.database_pool_size)?;
     api::db::migrate(&pool).await?;
     if command == "migrate" {
         return Ok(());
+    }
+    if let Some(m) = moderator {
+        let crypto = Crypto::new(&config.field_key, &config.bidx_key);
+        match moderator::create(&pool, &crypto, &m).await {
+            Ok(id) => {
+                println!("{id}");
+                return Ok(());
+            }
+            Err(e) => fail(&command, e),
+        }
     }
     if command == "seed" || config.seed_demo {
         let crypto = Crypto::new(&config.field_key, &config.bidx_key);
@@ -182,14 +204,29 @@ async fn main() -> Result<(), StartupError> {
     Ok(())
 }
 
-fn init_tracing(json: bool) {
+/// Exits with code 1, printing the error's message rather than the `Debug` form `main` would.
+fn fail(command: &str, e: impl std::fmt::Display) -> ! {
+    eprintln!("{command}: {e}");
+    std::process::exit(1)
+}
+
+/// `to_stderr` keeps stdout for the command's own output, such as the id `create-moderator` prints
+/// for a script to capture.
+fn init_tracing(json: bool, to_stderr: bool) {
     let filter =
         EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,api=debug"));
+    let writer = if to_stderr {
+        BoxMakeWriter::new(std::io::stderr)
+    } else {
+        BoxMakeWriter::new(std::io::stdout)
+    };
     let registry = tracing_subscriber::registry().with(filter);
     if json {
-        registry.with(fmt::layer().json()).init();
+        registry
+            .with(fmt::layer().json().with_writer(writer))
+            .init();
     } else {
-        registry.with(fmt::layer()).init();
+        registry.with(fmt::layer().with_writer(writer)).init();
     }
 }
 

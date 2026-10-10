@@ -1,4 +1,5 @@
 pub mod jwt;
+pub mod moderator;
 pub mod routes;
 
 use axum::{
