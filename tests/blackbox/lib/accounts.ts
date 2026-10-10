@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { TestInfo } from "@playwright/test";
 
-/** Demo accounts the seed creates on an empty database (README.md, «Демо-аккаунты»). */
+/** Demo accounts the seed creates on an empty database (docs/guide.md, section 2.2). */
 export const DEMO = {
   employer: "employer@demo.fsp",
   moderator: "moderator@demo.fsp",

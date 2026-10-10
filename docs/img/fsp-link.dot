@@ -1,4 +1,4 @@
-// Linking FSP ID for docs/solution.md section 7.1; `make docs` renders every docs/img/*.dot to SVG.
+// Linking FSP ID for README.md section 7.1; `make docs` renders every docs/img/*.dot to SVG.
 // Colours are the brand tokens of web/src/app/globals.css.
 digraph fsp_link {
   graph [rankdir=TB, bgcolor="#ffffff", fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=9,

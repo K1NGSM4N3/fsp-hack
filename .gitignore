@@ -32,3 +32,6 @@ next-env.d.ts
 /tests/blackbox/.auth/
 test-results/
 playwright-report/
+
+# Combined PDF for the submission form: built before upload, not kept in git
+/docs/documentation.pdf

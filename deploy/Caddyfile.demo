@@ -18,7 +18,7 @@ demo.arewehireyet.ru {
 	@app not path /auth /auth/* /mail /mail/*
 
 	# API JSON is compressed anew for every response: the default zstd level spends half the
-	# CPU of `better` on it for 1-11 % more bytes (docs/solution.md section 12.4). Pages and assets
+	# CPU of `better` on it for 1-11 % more bytes (README.md section 12.4). Pages and assets
 	# keep `better`.
 	encode @api {
 		zstd

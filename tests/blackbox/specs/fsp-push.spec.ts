@@ -43,7 +43,7 @@ test.describe("реестр ФСП сам сообщает о новом рез�
   test("новое достижение в реестре появляется в профиле без ручной синхронизации, с уведомлением и подтверждёнными навыками", async ({ login }) => {
     const { api, page } = await login(DEMO.candidate);
     const before = await api.get<Achievements>("/fsp/achievements");
-    expect(before.linked, "candidate@demo.fsp is linked to a registry participant (README)").toBe(true);
+    expect(before.linked, "candidate@demo.fsp is linked to a registry participant (docs/guide.md, section 2.6)").toBe(true);
 
     const added = await registry("POST", `${before.fsp_id}/achievements`);
     expect(added.status).toBe(201);

@@ -78,7 +78,7 @@
                 make blackbox    fresh docker stack + Playwright black-box suite
                 make lint        fmt, clippy, eslint
                 make validate    validation report -> docs/validation/
-                make docs        docs/solution.md -> PDF and DOCX
+                make docs        README.md -> PDF and DOCX
                 make up          docker compose (profile full); on macOS run `colima start` first
               EOF
             '';

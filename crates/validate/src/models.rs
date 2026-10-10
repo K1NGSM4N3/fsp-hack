@@ -1,6 +1,6 @@
 //! `validate models`: the embedding models side by side on the same synthetic matching set and
 //! the same paraphrase set (docs/validation/embeddings.md). Speed is measured in this process on
-//! this machine; the memory of the service is measured separately (solution.md, ML section).
+//! this machine; the memory of the service is measured separately (README.md, ML section).
 
 use std::fmt::Write;
 
@@ -82,7 +82,7 @@ pub fn markdown(r: &ModelsReport) -> String {
         "Одна и та же синтетика подбора (`matching.md`) и один и тот же набор пересказов (`paraphrase.md`). \
          Каждая модель — как в её карточке: rubert-tiny2 — вектор `[CLS]`, multilingual-e5-small — среднее по \
          токенам с префиксами `query: ` / `passage: `; оба нормированы. Скорость — в этом процессе на этой машине, \
-         все ядра; память сервиса измеряется отдельно (solution.md, раздел об ML).\n"
+         все ядра; память сервиса измеряется отдельно (README.md, раздел об ML).\n"
     );
     let f = |v: Option<f64>, d: usize| v.map_or_else(|| "—".to_owned(), |v| format!("{v:.d$}"));
     let t = |v: Option<[f64; 3]>| {

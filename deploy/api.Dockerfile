@@ -22,7 +22,7 @@ RUN cargo build --release --bin api --bin fsp-mock --bin ats-mock --bin embedder
 
 # The embedding model's weights at a pinned Hugging Face revision, each file checked against its
 # sha256. EMBEDDER_FETCH=0 builds without network: the image then expects the weights mounted at
-# EMBEDDER_MODEL_DIR (README, «Эмбеддер без сети»).
+# EMBEDDER_MODEL_DIR (docs/guide.md, section 2.5).
 FROM debian:bookworm-slim AS model
 ARG EMBEDDER_MODEL=multilingual-e5-small
 ARG EMBEDDER_FETCH=1

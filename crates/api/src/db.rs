@@ -16,7 +16,7 @@ pub enum DbSetupError {
 
 /// Default connections per replica (`DATABASE_POOL_SIZE`): about as many queries as the
 /// database host's cores run at once. A larger pool only moves the queue into Postgres, where it
-/// stretches tail latency instead of throughput (docs/solution.md section 12.4).
+/// stretches tail latency instead of throughput (README.md section 12.4).
 pub const POOL_SIZE: u32 = 16;
 /// A connection idle at least this long is pinged before use.
 const PING_AFTER_IDLE: Duration = Duration::from_secs(1);

@@ -6,7 +6,7 @@ import { PUBLIC_PAGES, SITE_NAME, absoluteUrl, type PublicPage } from "@/lib/sit
 /**
  * Text for language models and AI search (llmstxt.org): `/llms.txt` is the map, `/llms-full.txt` the full text.
  * Page names, descriptions and URLs come from `PUBLIC_PAGES`; the page bodies in `llms-full.txt` are read from the
- * rendered pages themselves. Only the product facts below are written here, condensed from `docs/solution.md`.
+ * rendered pages themselves. Only the product facts below are written here, condensed from `README.md`.
  */
 
 export const SUMMARY =

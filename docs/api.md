@@ -212,7 +212,7 @@ RFC 9457 `application/problem+json`:
 
 ### ФСП
 
-Привязка и синхронизация - `docs/solution.md`, раздел 7.
+Привязка и синхронизация - `README.md`, раздел 7.
 
 - `state` привязки - одноразовый, живёт 10 минут; `state`, PKCE S256 и `nonce` хранятся в `oidc_states`. Callback делает 303 на `/candidate/settings?fsp=linked` или `?fsp=error&reason=...` (`cancelled`, `expired`, `no_fsp_id`, `verification_failed`, `already_linked`, ...).
 - `POST /fsp/link/dev` - привязка без Keycloak, только при `FSP_DEV_LINK=true` (иначе 404).
@@ -281,7 +281,7 @@ RFC 9457 `application/problem+json`:
 
 ### Валидация
 
-Проверка подбора на своём наборе "вакансия - кандидат" (`docs/solution.md`, раздел 6.4) - та же логика, что у `validate pairs` (`matching::pairs`); базу не трогает и ничего не сохраняет. Пределы: 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты до 20 000 символов, `k` - 1-20. Близость описаний - по смыслу (эмбеддинги локальной модели), если в наборе не больше 300 текстов и эмбеддер отвечает не дольше 60 с, иначе по ключевым словам; `text: {by_meaning, model, fallback}` в отчёте говорит, как посчитано и почему.
+Проверка подбора на своём наборе "вакансия - кандидат" (`README.md`, раздел 6.4) - та же логика, что у `validate pairs` (`matching::pairs`); базу не трогает и ничего не сохраняет. Пределы: 200 вакансий, 5 000 кандидатов, 100 000 оценок, тексты до 20 000 символов, `k` - 1-20. Близость описаний - по смыслу (эмбеддинги локальной модели), если в наборе не больше 300 текстов и эмбеддер отвечает не дольше 60 с, иначе по ключевым словам; `text: {by_meaning, model, fallback}` в отчёте говорит, как посчитано и почему.
 
 ## Вебхуки (исходящие)
 
@@ -332,7 +332,7 @@ RFC 9457 `application/problem+json`:
 | POST | `/admin/participants/{fsp_id}/achievements` | Демо: добавить достижение (тело - запись реестра, `id` можно не указывать; пустое тело - второе место на всероссийском чемпионате по алгоритмическому программированию сегодняшним числом) -> 201 `{fsp_id, added, push}`; `push` - `{event_id, status, attempts, error}`: что платформа ответила на событие `achievements.changed`, или `null`, если вебхук не настроен. 404 `participant_not_found`, 409 `achievement_exists`, 422 `invalid_achievement` |
 | DELETE | `/admin/participants/{fsp_id}/achievements/{id}` | Демо: убрать достижение и так же отправить событие -> 200 `{fsp_id, removed, push}`; 404 `achievement_not_found` |
 
-Доступ ко всем путям, кроме `/healthz`, - `Authorization: Bearer` со статическим токеном `FSP_REGISTRY_TOKEN` (одинаковым у API и заглушки). С настоящим реестром - токен client credentials realm `fsp` (`docs/solution.md`, раздел 7.1). Событие уходит на `FSP_REGISTRY_WEBHOOK_URL` (в compose - `http://api:8000/api/v1/fsp/registry/events`) с подписью секретом `FSP_REGISTRY_WEBHOOK_SECRET`; до трёх попыток с тем же `event_id`, пока платформа отвечает 5xx или 429. Правка живёт в памяти процесса: после перезапуска заглушка снова отдаёт `data/participants.json`.
+Доступ ко всем путям, кроме `/healthz`, - `Authorization: Bearer` со статическим токеном `FSP_REGISTRY_TOKEN` (одинаковым у API и заглушки). Настоящему реестру API отправляет такой же статический токен; получения токена по client credentials нет (`docs/guide.md`, раздел 4.12). Событие уходит на `FSP_REGISTRY_WEBHOOK_URL` (в compose - `http://api:8000/api/v1/fsp/registry/events`) с подписью секретом `FSP_REGISTRY_WEBHOOK_SECRET`; до трёх попыток с тем же `event_id`, пока платформа отвечает 5xx или 429. Правка живёт в памяти процесса: после перезапуска заглушка снова отдаёт `data/participants.json`.
 
 ### Демо-ATS (`ats-mock`)
 

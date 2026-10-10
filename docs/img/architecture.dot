@@ -1,4 +1,4 @@
-// Component diagram for docs/solution.md section 2; `make docs` renders every docs/img/*.dot to SVG.
+// Component diagram for README.md section 2; `make docs` renders every docs/img/*.dot to SVG.
 // Colours are the brand tokens of web/src/app/globals.css.
 digraph architecture {
   graph [rankdir=TB, bgcolor="#ffffff", fontname="PT Sans,DejaVu Sans,sans-serif",
