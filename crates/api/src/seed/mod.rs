@@ -667,11 +667,7 @@ pub async fn seed_sized(
         .into_iter()
         .filter(|p| p.fsp_id.as_str() >= "FSP-000011")
         .map(|p| {
-            let typed: Vec<Achievement> = p
-                .achievements
-                .iter()
-                .filter_map(|a| serde_json::from_value(a.clone()).ok())
-                .collect();
+            let typed = crate::pool::achievement_records(&p.achievements);
             (p.fsp_id, typed, serde_json::Value::Array(p.achievements))
         })
         .collect();

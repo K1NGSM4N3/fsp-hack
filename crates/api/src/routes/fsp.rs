@@ -256,10 +256,8 @@ async fn apply_snapshot(
 }
 
 fn fsp_note(d: &SnapshotDiff) -> FspNote {
-    let latest = d
-        .added
-        .iter()
-        .filter_map(|v| serde_json::from_value::<Achievement>(v.clone()).ok())
+    let latest = crate::pool::achievement_records(&d.added)
+        .into_iter()
         .max_by(|a, b| a.date.cmp(&b.date))
         .map(|a| a.describe_ru());
     FspNote {

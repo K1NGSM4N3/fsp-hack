@@ -14,6 +14,7 @@ use matching::{
     Achievement, CandidatePool, CandidateSkill, CandidateSnapshot, FspSummary, SkillId,
     SkillSource, TextCloseness, semantic::Embeddings,
 };
+use serde::Deserialize as _;
 use sqlx::PgPool;
 use uuid::Uuid;
 
@@ -345,9 +346,32 @@ pub fn source(s: &str) -> SkillSource {
     }
 }
 
+/// The records of a stored FSP snapshot this build understands, see [`achievement_records`].
 pub fn achievements(json: Option<&serde_json::Value>) -> Vec<Achievement> {
-    json.and_then(|v| serde_json::from_value(v.clone()).ok())
+    json.and_then(serde_json::Value::as_array)
+        .map(achievement_records)
         .unwrap_or_default()
+}
+
+/// Parses registry records one by one: the registry may add a discipline or level before this
+/// build knows it, and such a record must not take the candidate's other achievements with it.
+pub fn achievement_records<'a>(
+    records: impl IntoIterator<Item = &'a serde_json::Value>,
+) -> Vec<Achievement> {
+    records
+        .into_iter()
+        .filter_map(|v| match Achievement::deserialize(v) {
+            Ok(a) => Some(a),
+            Err(e) => {
+                tracing::warn!(
+                    record = %v.get("id").unwrap_or(&serde_json::Value::Null),
+                    error = %e,
+                    "FSP achievement skipped: record not understood"
+                );
+                None
+            }
+        })
+        .collect()
 }
 
 pub fn fsp_summary(achievements: &[Achievement], spec: Specialization, now: i64) -> FspSummary {
@@ -431,6 +455,49 @@ mod tests {
             query: "go".into(),
             ranks: ranks.into(),
         }
+    }
+
+    fn registry_snapshot() -> serde_json::Value {
+        serde_json::json!([
+            {"id": "a1", "kind": "competition", "discipline": "product", "event_name": "Кубок России",
+             "event_level": "national", "place": 2, "date": "2025-11-20"},
+            {"id": "a2", "kind": "rank", "discipline": "algorithmic", "rank": "cms", "date": "2024-03-01"},
+            {"id": "a3", "kind": "competition", "discipline": "ai", "event_level": "regional",
+             "place": "finalist", "date": "2025-05-10"}
+        ])
+    }
+
+    #[test]
+    fn valid_snapshot_parses_whole() {
+        let snapshot = registry_snapshot();
+        let list = achievements(Some(&snapshot));
+        assert_eq!(
+            list,
+            serde_json::from_value::<Vec<Achievement>>(snapshot).unwrap()
+        );
+        assert_eq!(list.len(), 3);
+    }
+
+    #[test]
+    fn unknown_enum_value_skips_only_its_record() {
+        let mut snapshot = registry_snapshot();
+        snapshot.as_array_mut().unwrap().insert(
+            1,
+            serde_json::json!({"id": "new", "kind": "competition", "discipline": "quantum",
+                               "event_level": "national", "place": 1, "date": "2026-01-15"}),
+        );
+        let list = achievements(Some(&snapshot));
+        assert_eq!(list, achievements(Some(&registry_snapshot())));
+        let fsp = fsp_summary(&list, Specialization::Backend, NOW);
+        assert!(fsp.score > 0.0);
+        assert!(!matching::confirmed_skills(&list).is_empty());
+    }
+
+    #[test]
+    fn missing_or_malformed_snapshot_has_no_achievements() {
+        assert!(achievements(None).is_empty());
+        assert!(achievements(Some(&serde_json::json!({"achievements": []}))).is_empty());
+        assert!(achievements(Some(&serde_json::json!([42, "x", null]))).is_empty());
     }
 
     #[test]
