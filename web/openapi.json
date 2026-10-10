@@ -11261,7 +11261,7 @@
       },
       "Achievement": {
         "type": "object",
-        "description": "One record of the FSP registry snapshot (architecture section 7.2).",
+        "description": "One record of the FSP registry snapshot (README.md section 7.2).",
         "required": [
           "kind",
           "discipline",
@@ -14991,7 +14991,7 @@
             "items": {
               "$ref": "#/components/schemas/AchievementView"
             },
-            "description": "Snapshot from the registry (docs/architecture.md section 7.2). An empty list is a valid state."
+            "description": "Snapshot from the registry (README.md section 7.2). An empty list is a valid state."
           },
           "score": {
             "oneOf": [

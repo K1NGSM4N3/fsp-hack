@@ -1,4 +1,4 @@
-//! Grade-change policy (architecture section 5.4, requirements T-5 / T-6).
+//! Grade-change policy (README.md section 4.5, requirements T-5 / T-6).
 //!
 //! All timing is in unix seconds passed in as `now`; the crate never reads the clock. The
 //! policy is a pure function of the candidate's assignment/attempt history and the current
@@ -13,7 +13,7 @@ const DAY: i64 = 86_400;
 /// it closes as `expired` and counts as an unsuccessful attempt at its grade.
 pub const ABANDON_AFTER_SECS: i64 = 30 * 60;
 
-/// Configurable intervals. Defaults follow architecture section 5.4.
+/// Configurable intervals. Defaults follow README.md section 4.5.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct PolicyConfig {
     /// Minimum gap between grade changes after a category is assigned.

@@ -5,7 +5,7 @@
 # Same images and public ports as the demo stack, its own project and volumes, so every run starts
 # from the deterministic demo seed. Only deployment settings change, never the code paths:
 # notification letters are held for seconds instead of minutes, so a test sees its letter without
-# waiting out the production pacing (docs/architecture.md section 13). Keycloak and observability are not
+# waiting out the production pacing (README.md section 1.4). Keycloak and observability are not
 # started: no test goes through them.
 
 name: fsp-hack-blackbox

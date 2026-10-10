@@ -1,4 +1,4 @@
-//! Computerized adaptive testing (architecture section 5.3).
+//! Computerized adaptive testing (README.md section 4.3).
 //!
 //! Each step re-estimates ability θ with the EAP posterior, then picks the next item that is
 //! both informative at the current θ and needed for content balance, with randomesque
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use crate::irt::{self, ItemParams, Posterior};
 use crate::items::{self, Bank, ItemRef, ItemView, Slot, Topic, bank};
 
-/// Tunables for the adaptive algorithm. Defaults follow architecture section 5.3.
+/// Tunables for the adaptive algorithm. Defaults follow README.md section 4.3.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct CatConfig {
     pub min_items: u16,
@@ -287,7 +287,7 @@ pub enum RecordError {
 }
 
 /// Records an outcome and advances the posterior. The caller passes `correct = false` for
-/// timeouts (architecture section 5.2). Idempotent per `ItemRef` is *not* assumed; the server should
+/// timeouts (README.md section 4.4). Idempotent per `ItemRef` is *not* assumed; the server should
 /// only record the item it issued via `next_item`.
 pub fn record(
     state: &mut SessionState,

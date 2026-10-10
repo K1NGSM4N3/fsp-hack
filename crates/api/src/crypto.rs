@@ -1,6 +1,6 @@
 //! Algorithms sit behind traits and stored values are self-describing (PHC strings,
 //! versioned ciphertexts), so a ГОСТ implementation or a certified СКЗИ can replace them
-//! without a schema change (docs/architecture.md section 9.4).
+//! without a schema change (README.md section 8.4).
 
 use std::sync::LazyLock;
 

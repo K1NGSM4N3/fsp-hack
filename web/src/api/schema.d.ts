@@ -2051,7 +2051,7 @@ export interface components {
             /** Format: date-time */
             last_login_at?: string | null;
         };
-        /** @description One record of the FSP registry snapshot (architecture section 7.2). */
+        /** @description One record of the FSP registry snapshot (README.md section 7.2). */
         Achievement: {
             kind: components["schemas"]["AchievementKind"];
             discipline: components["schemas"]["Discipline"];
@@ -3111,7 +3111,7 @@ export interface components {
             linked_at?: string | null;
             /** Format: date-time */
             last_sync_at?: string | null;
-            /** @description Snapshot from the registry (docs/architecture.md section 7.2). An empty list is a valid state. */
+            /** @description Snapshot from the registry (README.md section 7.2). An empty list is a valid state. */
             achievements: components["schemas"]["AchievementView"][];
             score?: components["schemas"]["FspScore"] | null;
         };

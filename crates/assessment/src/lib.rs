@@ -2,7 +2,7 @@
 //!
 //! Pure logic only — no IO, no clock, no ambient randomness. Time arrives as unix seconds
 //! (`i64`) and randomness as explicit `seed: u64`, so every function is deterministic and the
-//! `validate` crate can exercise the exact code that runs in production (architecture section 1.4).
+//! `validate` crate can exercise the exact code that runs in production.
 
 pub mod cat;
 pub mod irt;

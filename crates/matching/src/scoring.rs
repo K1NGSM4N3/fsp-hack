@@ -1,4 +1,4 @@
-//! Hard filters, weighted feature scoring with explanations, and ranking (architecture section 6.3).
+//! Hard filters, weighted feature scoring with explanations, and ranking (README.md section 5.3).
 //!
 //! The ranking loop works on [`CandidatePool`] hot records only and allocates nothing per
 //! candidate; texts are produced by [`explain`] for the final top-N.

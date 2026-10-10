@@ -1,4 +1,4 @@
-//! FSP ID linking (docs/architecture.md section 7.1): OIDC Authorization Code + PKCE against the FSP
+//! FSP ID linking (README.md section 7.1): OIDC Authorization Code + PKCE against the FSP
 //! Keycloak realm, then a snapshot of achievements from the registry — pulled on link and on
 //! request, pushed by the registry's signed webhook when a participant's achievements change.
 
@@ -55,7 +55,7 @@ pub struct FspStatus {
     pub fsp_id: Option<String>,
     pub linked_at: Option<DateTime<Utc>>,
     pub last_sync_at: Option<DateTime<Utc>>,
-    /// Snapshot from the registry (docs/architecture.md section 7.2). An empty list is a valid state.
+    /// Snapshot from the registry (README.md section 7.2). An empty list is a valid state.
     pub achievements: Vec<AchievementView>,
     /// Score for the candidate's specialization; "Нет данных ФСП" without history.
     pub score: Option<FspScore>,
@@ -240,7 +240,7 @@ fn diff(old: &Value, new: &Value) -> SnapshotDiff {
     }
 }
 
-/// Writes the snapshot and the skills it confirms (docs/architecture.md section 7.4) under the lock of the
+/// Writes the snapshot and the skills it confirms (README.md section 7.4) under the lock of the
 /// stored one.
 async fn apply_snapshot(
     tx: &mut PgConnection,
@@ -501,6 +501,9 @@ async fn registry_event(
     }
     let snapshot = fetch_snapshot(&state, event.fsp_id.trim()).await?;
     let mut tx = state.pool.begin().await?;
+    // The event row is the first write: a duplicate delivered concurrently waits on its primary
+    // key until this transaction commits, then finds it and changes nothing. Unlike a sync the
+    // candidate starts, the event is not the candidate's activity and leaves recency alone.
     if !db::fsp::insert_registry_event(&mut *tx, &event.event_id, candidate, event.occurred_at)
         .await?
     {

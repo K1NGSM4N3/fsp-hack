@@ -20,7 +20,7 @@ const RELEVANCE: Record<FspDiscipline, Record<Specialization, number>> = {
 
 const HALF_LIFE_YEARS = 2;
 
-/** architecture section 7.3: level × place (or rank) × relevance to the specialization × 2-year half-life decay. */
+/** README.md section 7.3: level × place (or rank) × relevance to the specialization × 2-year half-life decay. */
 export function achievementWeight(a: RawAchievement, spec: Specialization, now: Date): number {
   const years = Math.max(0, (now.getTime() - new Date(a.date).getTime()) / (365.25 * 86400000));
   const decay = Math.pow(0.5, years / HALF_LIFE_YEARS);

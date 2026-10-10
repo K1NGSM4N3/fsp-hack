@@ -1,4 +1,4 @@
-//! Proctoring endpoints (docs/architecture.md section 5.6): the options for the proctoring step, video chunk
+//! Proctoring endpoints (README.md section 4.7): the options for the proctoring step, video chunk
 //! upload, integrity events and playback of the candidate's own recording. The moderator's view
 //! of any session lives in `routes::moderation`; nothing here is routed to employers.
 

@@ -1,4 +1,4 @@
-//! Integration with employers' ATS (docs/architecture.md section 11, README.md section 10): a transactional
+//! Integration with employers' ATS (README.md section 10): a transactional
 //! outbox of integration events delivered as signed webhooks, company API keys for the inbound
 //! API, and the demo provisioning that connects the demo company to the ATS mock.
 

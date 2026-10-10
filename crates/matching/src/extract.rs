@@ -55,7 +55,7 @@ pub(crate) fn guess_specialization(
     })
 }
 
-/// Typical market mapping of total experience to grade (architecture section 4: junior ≈ up to 2 years).
+/// Typical market mapping of total experience to grade (junior ≈ up to 2 years).
 pub(crate) fn grade_for_experience(years: f32) -> Grade {
     if years < 2.0 {
         Grade::Junior

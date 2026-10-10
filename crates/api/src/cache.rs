@@ -1,6 +1,6 @@
 //! In-process caches of data derived from the candidate tables: the search pool of every
 //! specialization with the employer cards of its candidates, the category cards and the demand
-//! stats of each category (docs/architecture.md section 12.2), plus the company of each employer account,
+//! stats of each category (README.md section 12.4), plus the company of each employer account,
 //! read by every employer request.
 //!
 //! The stored vector of each need (embeddings) is remembered the same way.
@@ -11,6 +11,13 @@
 //! `REMOTE_TTL`. [`HARD_TTL`] (plus at most [`RELOAD_GRACE`] while a reload runs) bounds
 //! whatever does not bump: activity timestamps in scoring, a birthday crossing 18, an `INCR` lost
 //! while Valkey is down.
+//!
+//! A new write path must bump when it changes the pool or a card: profile, declared, resume or
+//! test skills, survey, category, privacy and search status, consents and the guardian's answer,
+//! FSP link, sync and unlink, a stored or removed profile or need vector, account deletion, and
+//! for cards a task answer or its rating and proctoring uploads after the test ends. Visibility
+//! does not depend on the bump: every shown card re-reads publication, search status and privacy
+//! flags (`card_live`), so a stale snapshot never shows what a candidate has just hidden.
 
 use std::{
     future::Future,

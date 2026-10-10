@@ -1,4 +1,4 @@
-//! The moderator's cabinet (docs/architecture.md sections 5.7, 11.1, 9.3): counters, the proctoring queue
+//! The moderator's cabinet (README.md sections 4.7, 10.1, 8.3): counters, the proctoring queue
 //! with session review and decisions, the merged anti-fake queue with actions, and the audit log.
 //! Admin role only; every list is keyset-paginated with an opaque `cursor`.
 //!

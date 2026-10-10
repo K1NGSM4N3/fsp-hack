@@ -1,4 +1,4 @@
-//! Proctoring storage, summaries and retention (docs/architecture.md sections 5.6, 9.2).
+//! Proctoring storage, summaries and retention (README.md sections 4.7, 8.2).
 //!
 //! Video chunks are files `PROCTORING_DIR/<candidate>/<session>/<seq>.bin`, each sealed with the
 //! field cipher and bound to its session and position; Postgres keeps only metadata

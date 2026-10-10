@@ -1,5 +1,5 @@
 //! The notification feed, the unread badge, email settings and the public unsubscribe link
-//! (docs/architecture.md section 13).
+//! (README.md section 1.4).
 
 use axum::{
     extract::State,

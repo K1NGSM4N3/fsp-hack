@@ -108,7 +108,7 @@ fn every_template_level_generates_valid_items() {
     }
 }
 
-/// Leak resistance (architecture section 5.2) needs a leaked instance to practically never recur:
+/// Leak resistance (README.md section 4.4) needs a leaked instance to practically never recur:
 /// with N equally likely variants, 500 seeds collide about 500² / 2N times, so ≥ 490 distinct
 /// means N in the tens of thousands. Pools are capped by their hand-written combinations.
 #[test]
