@@ -195,7 +195,7 @@ Docker; браузер Chromium ставит сам Playwright. Тесты хо�
 - `docs/solution.md` — описание решения для жюри: архитектура, механики, валидация, 152-ФЗ, API, запуск; `make docs` собирает из него `docs/solution.pdf` и `docs/solution.docx`
 - `docs/presentation.pdf`, `docs/presentation.pptx` — презентация
 - `docs/architecture.md` — зафиксированные решения: стек, механики тестирования и подбора, ФСП, безопасность, модель данных, развёртывание
-- `docs/api.md` — соглашения API и список эндпоинтов; актуальная спецификация — `/api/v1/openapi.json`
+- `docs/api.md` — соглашения API, вебхуки, статусы и правила, которых нет в спецификации; сами методы — в OpenAPI: `/api/v1/openapi.json`, Swagger UI — `/api/docs`
 - `docs/ТЗ.pdf` — техническое задание организаторов; покрытие требований — `docs/solution.md` §1.2
 - `web/README.md` — фронтенд: страницы, устройство, анимации, переменные окружения
 - `docs/validation/` — отчёты валидации тестирования (`assessment.md`), подбора (`matching.md`) и пересказов вакансий (`paraphrase.md`), `make validate`; сравнение моделей эмбеддингов (`embeddings.md`) — `cargo run -p validate --release -- models` (нужны обе модели: `make model MODEL=rubert-tiny2`)
