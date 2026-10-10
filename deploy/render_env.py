@@ -3,10 +3,12 @@
 
 Fills the domain, generates fresh secrets, refuses to overwrite an existing
 .env unless --force (rotating FIELD_ENC_KEY/BIDX_KEY makes existing data
-unreadable and drops all sessions). Also writes deploy/.env with SITE_URL and
-the demo inbox password — docker compose reads that file for ${...}
-interpolation (the web image bakes SITE_URL in). Stdlib only; run on the box
-or locally:
+unreadable; a new JWT_ED25519_SEED_B64 only invalidates outstanding 15-minute
+access tokens: refresh tokens live hashed in the database, the web client
+refreshes on 401, and Bearer API clients log in again). Also writes
+deploy/.env with SITE_URL and the demo inbox password — docker compose reads
+that file for ${...} interpolation (the web image bakes SITE_URL in). Stdlib
+only; run on the box or locally:
 
     python3 deploy/render_env.py --domain demo.arewehireyet.ru
 """
@@ -46,7 +48,8 @@ def main() -> None:
     if os.path.exists(args.output) and not args.force:
         sys.exit(
             f"{args.output} already exists; pass --force to regenerate "
-            "(all secrets rotate: sessions die, encrypted data becomes unreadable)"
+            "(all secrets rotate: encrypted data and the email index become unreadable; "
+            "outstanding access tokens expire, refresh sessions survive)"
         )
 
     values = {"DOMAIN": args.domain, "POSTGRES_PASSWORD": gen_token()}
@@ -78,8 +81,9 @@ def main() -> None:
     print(f"rendered {args.output} (0600) for {site}")
     print(f"wrote {args.compose_env} (SITE_URL for the web build, password of {site}/mail/)")
     print(
-        "save JWT_ED25519_SEED_B64 / FIELD_ENC_KEY / BIDX_KEY now: "
-        "they cannot be recovered or rotated without losing data"
+        "save FIELD_ENC_KEY / BIDX_KEY now: they cannot be recovered or rotated "
+        "without losing data (JWT_ED25519_SEED_B64 can be: a new one only expires "
+        "outstanding access tokens)"
     )
 
 
