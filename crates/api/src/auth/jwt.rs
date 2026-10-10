@@ -56,7 +56,8 @@ pub struct JwtKeys {
 }
 
 impl JwtKeys {
-    /// Without a configured seed the key is ephemeral and every restart logs users out.
+    /// Without a configured seed the key is ephemeral: a restart voids outstanding access tokens,
+    /// while refresh tokens live in the database and keep working.
     pub fn new(seed: Option<[u8; 32]>) -> Result<Self, CryptoError> {
         let seed = seed.unwrap_or_else(|| {
             tracing::warn!("JWT_ED25519_SEED_B64 not set: using an ephemeral signing key");

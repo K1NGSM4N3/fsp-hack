@@ -132,7 +132,7 @@ impl Default for NotifyConfig {
 /// Sentence embeddings (README.md section 5.6): where the embedder listens and how the worker paces.
 #[derive(Clone, Debug)]
 pub struct EmbeddingsConfig {
-    /// `EMBEDDER_URL`, e.g. `http://embedder:8090`.
+    /// `EMBEDDER_URL`, e.g. `http://embedder:8093`.
     pub url: String,
     /// Per request to the embedder (`EMBEDDER_TIMEOUT_MS`).
     pub timeout: std::time::Duration,
