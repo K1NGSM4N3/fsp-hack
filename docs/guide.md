@@ -248,7 +248,7 @@ systemctl list-timers 'fsp-*'
 
 Скрипт ставит два таймера systemd:
 
-- `fsp-backup.timer` - каждую ночь в 03:30 МСК `pg_dump --format=custom` и копия `.env` той же ночи в `/var/backups/fsp-hack` (`db-<время UTC>.dump`, `env-<время UTC>`), хранятся 7 дней (`BACKUP_DIR`, `BACKUP_KEEP_DAYS`). Без `.env` дамп бесполезен: персональные данные в нём зашифрованы `FIELD_ENC_KEY`. Видеофрагменты (том `proctoring-data`) в бэкап не входят. Вручную - `sudo deploy/ops/backup.sh`.
+- `fsp-backup.timer` - каждую ночь в 03:30 МСК пишет в `/var/backups/fsp-hack` три файла с временем UTC в имени: дамп базы `pg_dump --format=custom` (`db-<время>.dump`), копию `.env` той же ночи (`env-<время>`) и архив видеозаписей тестов из тома `proctoring-data` (`video-<время>.tar.gz`). Хранятся 7 дней (`BACKUP_DIR`, `BACKUP_KEEP_DAYS`, раздел 3.15). Без `.env` дамп и видео бесполезны: персональные данные и фрагменты видео зашифрованы `FIELD_ENC_KEY`, поэтому архив отдельно не шифруется. Архив видео каждую ночь полный: под бэкапы нужно примерно `BACKUP_KEEP_DAYS` объёмов тома. API при этом не останавливается. Вручную - `sudo deploy/ops/backup.sh`.
 - `fsp-watchdog.timer` - раз в 2 минуты перезапускает контейнеры с проваленным healthcheck: Docker сам перезапускает только упавшие. Журнал - `journalctl -t fsp-watchdog`.
 
 **Восстановление** - с тем же `.env`, что в бэкапе (если ключи менялись, сначала `cp /var/backups/fsp-hack/env-<время> .env`):
@@ -260,8 +260,14 @@ docker compose -f deploy/compose.yml -f deploy/compose.demo.yml exec -T postgres
   sh -c 'pg_restore -U "$POSTGRES_USER" -d "$POSTGRES_DB" --clean --if-exists' \
   < /var/backups/fsp-hack/db-<время>.dump
 docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \
+  run --rm --no-deps -T --entrypoint sh api \
+  -c 'find "$PROCTORING_DIR" -mindepth 1 -delete && tar -xzf - -C "$PROCTORING_DIR"' \
+  < /var/backups/fsp-hack/video-<время>.tar.gz
+docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \
   --profile fsp --profile ats up -d
 ```
+
+Дамп и архив видео берут из одной ночи: метаданные фрагментов лежат в базе, а файлы - в томе. Команда `run` очищает том `proctoring-data` и распаковывает в него архив одноразовым контейнером из образа API; сам API в это время остановлен.
 
 ### 2.5. Эмбеддер без сети
 
@@ -492,8 +498,9 @@ Black-box стек (`deploy/compose.blackbox.yml`) ставит `NOTIFY_EMAIL_HO
 | `DATABASE_URL` (make) | `postgres://$USER@localhost:5432/fsp_hack` | База для `make api` и `make db-prepare`. |
 | `PG_ADMIN_URL` | `postgres://postgres@localhost:5432` | Под кем `make db` создаёт базу. |
 | `MODEL` | `multilingual-e5-small` | Модель для `make model`, `make embedder`, `make validate`. |
-| `BACKUP_DIR` | `/var/backups/fsp-hack` | Куда `deploy/ops/backup.sh` пишет дамп и `.env` той же ночи. Таймер systemd переменных не задаёт: менять через `Environment=` в `fsp-backup.service`. |
-| `BACKUP_KEEP_DAYS` | `7` | Сколько дней хранить дампы. |
+| `BACKUP_DIR` | `/var/backups/fsp-hack` | Куда `deploy/ops/backup.sh` пишет дамп, `.env` той же ночи и архив видео. Таймер systemd переменных не задаёт: их пишут строками `Environment=` в секцию `[Service]` через `systemctl edit fsp-backup`. Сам `fsp-backup.service` при повторном запуске `install.sh` перезаписывается, а такое дополнение остаётся. |
+| `BACKUP_KEEP_DAYS` | `7` | Сколько дней хранить дампы, копии `.env` и архивы видео. |
+| `BACKUP_COMPOSE_FILES` | `deploy/compose.yml deploy/compose.demo.yml` | Файлы compose для `deploy/ops/backup.sh` через пробел, пути от корня репозитория. Вне демо-сервера задают свой набор, например `deploy/compose.yml deploy/compose.prod.yml`: демо-оверлей требует `SITE_URL` и `MAILPIT_UI_AUTH` в `deploy/.env`, и без них бэкап не создаётся. |
 
 ## 4. От демо к боевым системам
 
@@ -795,7 +802,7 @@ MAIL_FROM=ФСП Таланты <no-reply@example.ru>
 9. Реестр: `FSP_REGISTRY_URL` и токен заданы, "Обновить из реестра" загружает достижения; подписанное тестовое событие получает 202 (раздел 4.4).
 10. `https://example.ru/readyz` отвечает 200; в логе API нет предупреждений `FIELD_ENC_KEY/BIDX_KEY not set` и `JWT_ED25519_SEED_B64 not set`.
 11. Создан аккаунт модератора (раздел 5.8).
-12. Резервные копии: дамп базы и `.env` по расписанию (`deploy/ops/install.sh`, оговорка о `deploy/ops/backup.sh` - в разделе 4.12); видеозаписи тестов лежат в томе `proctoring-data` и в дамп базы не входят.
+12. Резервные копии по расписанию: `sudo bash deploy/ops/install.sh`, затем `sudo systemctl edit fsp-backup` и в секции `[Service]` строка `Environment="BACKUP_COMPOSE_FILES=deploy/compose.yml deploy/compose.prod.yml"` (раздел 3.15). После `sudo systemctl start fsp-backup` в `/var/backups/fsp-hack` появились `db-*.dump`, `env-*` и `video-*.tar.gz`.
 
 ### 4.12. Что потребует доработки кода
 
@@ -808,7 +815,6 @@ MAIL_FROM=ФСП Таланты <no-reply@example.ru>
 - **Модератора не создать без демо-сида.** Роль `admin` выдаёт только сид (`moderator@demo.fsp`), регистрация её отклоняет, отдельной команды нет. Обходной путь - роль записью в базе, раздел 5.8.
 
 - **Нет удаления демо-данных.** Сид однократный, обратной команды нет: переход с демо-базы на боевую - только новой базой (раздел 4.9).
-- **`deploy/ops/backup.sh` привязан к демо-оверлею.** Скрипт вызывает compose с `deploy/compose.demo.yml`, а тот требует `SITE_URL` и `MAILPIT_UI_AUTH` в `deploy/.env`; без `MAILPIT_UI_AUTH` резервная копия не создаётся. Для прода - заменить в скрипте оверлей на `deploy/compose.prod.yml` или оставить в `deploy/.env` любое значение `MAILPIT_UI_AUTH`.
 
 ## 5. Эксплуатация
 
@@ -862,14 +868,23 @@ Grafana - http://localhost:3001, домашний дашборд "API: запр�
 
 ### 5.4. Резервные копии
 
-Ночные дампы и восстановление на демо-сервере - раздел 2.4. На любом другом стенде - тот же `pg_dump`:
+Ночные бэкапы и восстановление на демо-сервере - раздел 2.4. Тот же `deploy/ops/backup.sh` работает с любым набором файлов compose, его задаёт `BACKUP_COMPOSE_FILES` (раздел 3.15):
+
+```sh
+sudo env BACKUP_COMPOSE_FILES="deploy/compose.yml deploy/compose.prod.yml" \
+  deploy/ops/backup.sh
+```
+
+Без скрипта - две команды при работающих postgres и API:
 
 ```sh
 docker compose -f deploy/compose.yml exec -T postgres \
   sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" --format=custom' > fsp.dump
+docker compose -f deploy/compose.yml exec -T api \
+  sh -c 'tar -czf - --exclude="*.tmp" -C "$PROCTORING_DIR" .' > video.tar.gz
 ```
 
-Рядом с дампом храните `.env`: без `FIELD_ENC_KEY` и `BIDX_KEY` персональные данные из дампа не расшифровать и по email не войти. Видеозаписи лежат файлами в томе `proctoring-data` и зашифрованы тем же ключом.
+Рядом с дампом храните `.env`: без `FIELD_ENC_KEY` и `BIDX_KEY` персональные данные из дампа не расшифровать и по email не войти. Видеозаписи лежат файлами в томе `proctoring-data`, в дамп базы не входят и зашифрованы тем же ключом; восстанавливают их вместе с дампом той же ночи (раздел 2.4).
 
 ### 5.5. Обновление
 

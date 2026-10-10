@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Installs the demo-server timers: nightly database backup and the unhealthy-container watchdog.
+# Installs the demo-server timers: nightly backup and the unhealthy-container watchdog.
 # Idempotent; run as root from the repo checkout: sudo bash deploy/ops/install.sh
 set -euo pipefail
 
@@ -8,18 +8,20 @@ repo=$(cd "$(dirname "$0")/../.." && pwd)
 
 cat > /etc/systemd/system/fsp-backup.service <<UNIT
 [Unit]
-Description=fsp-hack database backup
+Description=fsp-hack backup: database, .env, test videos
 Requires=docker.service
 After=docker.service
 
 [Service]
 Type=oneshot
 ExecStart=${repo}/deploy/ops/backup.sh
+# install.sh rewrites this file; BACKUP_* settings go in a drop-in (systemctl edit fsp-backup),
+# e.g. Environment="BACKUP_COMPOSE_FILES=deploy/compose.yml deploy/compose.prod.yml"
 UNIT
 
 cat > /etc/systemd/system/fsp-backup.timer <<UNIT
 [Unit]
-Description=Nightly fsp-hack database backup
+Description=Nightly fsp-hack backup
 
 [Timer]
 OnCalendar=*-*-* 03:30:00 Europe/Moscow
