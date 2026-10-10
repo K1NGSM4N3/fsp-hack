@@ -31,6 +31,8 @@ pub enum FspError {
     NotFound,
     #[error("registry answered {0}")]
     Registry(u16),
+    #[error("FSP_REGISTRY_URL is not a base URL")]
+    RegistryUrl,
 }
 
 #[derive(Deserialize)]
@@ -163,6 +165,21 @@ struct RegistryAchievements {
     achievements: Vec<serde_json::Value>,
 }
 
+/// `{base}/participants/{fsp_id}/achievements` with the id percent-encoded as one path segment.
+/// `.` and `..` cannot be encoded that way (`%2E` is the same dot to a server), and no
+/// participant has such an id.
+fn achievements_url(base: &str, fsp_id: &str) -> Result<reqwest::Url, FspError> {
+    if matches!(fsp_id, "" | "." | "..") {
+        return Err(FspError::NotFound);
+    }
+    let mut url = reqwest::Url::parse(base).map_err(|_| FspError::RegistryUrl)?;
+    url.path_segments_mut()
+        .map_err(|()| FspError::RegistryUrl)?
+        .pop_if_empty()
+        .extend(["participants", fsp_id, "achievements"]);
+    Ok(url)
+}
+
 pub async fn fetch_achievements(
     http: &reqwest::Client,
     cfg: &FspConfig,
@@ -173,10 +190,7 @@ pub async fn fetch_achievements(
         .as_deref()
         .ok_or(FspError::RegistryDisabled)?;
     let response = http
-        .get(format!(
-            "{}/participants/{fsp_id}/achievements",
-            base.trim_end_matches('/')
-        ))
+        .get(achievements_url(base, fsp_id)?)
         .bearer_auth(&cfg.registry_token)
         .send()
         .await?;
@@ -184,5 +198,53 @@ pub async fn fetch_achievements(
         200 => Ok(response.json::<RegistryAchievements>().await?.achievements),
         404 => Err(FspError::NotFound),
         other => Err(FspError::Registry(other)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn url(base: &str, fsp_id: &str) -> String {
+        achievements_url(base, fsp_id).unwrap().to_string()
+    }
+
+    #[test]
+    fn plain_id_keeps_the_registry_path() {
+        let want = "http://fsp-mock:8090/participants/FSP-000011/achievements";
+        assert_eq!(url("http://fsp-mock:8090", "FSP-000011"), want);
+        assert_eq!(url("http://fsp-mock:8090/", "FSP-000011"), want);
+        assert_eq!(
+            url("https://registry.example.ru/api/v2/", "FSP-000011"),
+            "https://registry.example.ru/api/v2/participants/FSP-000011/achievements"
+        );
+    }
+
+    #[test]
+    fn id_is_encoded_as_one_path_segment() {
+        assert_eq!(
+            url("https://r.example.ru/api", "a/../b?x=1#f %41\\"),
+            "https://r.example.ru/api/participants/a%2F..%2Fb%3Fx=1%23f%20%2541%5C/achievements"
+        );
+        assert_eq!(
+            url("https://r.example.ru", "ФСП-1"),
+            "https://r.example.ru/participants/%D0%A4%D0%A1%D0%9F-1/achievements"
+        );
+    }
+
+    #[test]
+    fn dot_segments_and_bad_bases_are_refused() {
+        for id in ["", ".", ".."] {
+            assert!(matches!(
+                achievements_url("https://r.example.ru", id),
+                Err(FspError::NotFound)
+            ));
+        }
+        for base in ["not a url", "mailto:registry@example.ru"] {
+            assert!(matches!(
+                achievements_url(base, "FSP-000011"),
+                Err(FspError::RegistryUrl)
+            ));
+        }
     }
 }
