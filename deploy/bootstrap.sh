@@ -2,8 +2,9 @@
 # Bootstrap for the fsp-hack demo box (fresh Ubuntu LTS, root ssh, 2c/4G/40G).
 # Idempotent: safe to re-run. Brings the server to the state deploy/ expects:
 # firewall (22/80/443), 2G swap, docker + compose, registry images pre-pulled.
-# Does NOT deploy the app (rsync + compose up is separate), does not touch sshd
-# (demo box; key auth already verified).
+# Does NOT deploy the app: that is a git clone over the deploy key generated below,
+# deploy/render_env.py, then compose with the demo overlay (the hints at the end).
+# Does not touch sshd (demo box; key auth already verified).
 set -euo pipefail
 
 log() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
@@ -53,7 +54,7 @@ mkdir -p /opt/fsp-hack
 
 ### 5. pre-pull third-party images used by deploy/compose.yml so the deploy
 ### step is network-independent. Locally built images (api/web/embedder/fsp-mock/
-### ats-mock) are not here — they arrive with the rsync+build step.
+### ats-mock) are not here — `compose up --build` builds them from the clone.
 for image in \
     caddy:2.11-alpine \
     pgvector/pgvector:pg17 \
@@ -92,5 +93,7 @@ fi
 log "bootstrap done:"
 log "  $(nproc) cpu, $(free -h | awk '/Mem:/ {print $2}') ram, $(df -h / | awk 'NR==2 {print $4}') disk free"
 log "  next: git clone git@github.com:K1NGSM4N3/fsp-hack.git /opt/fsp-hack"
-log "  next: python3 deploy/render_env.py --domain demo.arewehireyet.ru"
-log "  next: docker compose -f deploy/compose.yml --profile fsp --profile ats up -d --build"
+log "  next: cd /opt/fsp-hack && python3 deploy/render_env.py --domain demo.arewehireyet.ru"
+# Without compose.demo.yml the base file publishes 8080/8081/8025/8082 on all interfaces over
+# plain HTTP, and Docker-published ports skip ufw.
+log "  next: docker compose -f deploy/compose.yml -f deploy/compose.demo.yml --profile fsp --profile ats up -d --build"
