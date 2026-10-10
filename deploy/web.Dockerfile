@@ -9,15 +9,19 @@ RUN npm ci --no-audit --no-fund
 
 FROM node:24-alpine AS builder
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
+COPY --from=deps /app/node_modules ./node_modules
+COPY web/ ./
+# Build-time values come last, so changing one re-runs only the build, not the copies above.
 # next.config rewrites are resolved at build time, so the API address is needed here too.
 ARG API_PROXY_URL=http://api:8000
 # Public pages are prerendered, so canonical links, sitemap and OG image URLs take the site address at build time.
 ARG SITE_URL=http://localhost:8080
+# NEXT_PUBLIC_* is inlined into the browser bundle: 0 hides the demo-account buttons on /login.
+ARG NEXT_PUBLIC_DEMO_LOGIN=1
 ENV API_PROXY_URL=${API_PROXY_URL} \
     SITE_URL=${SITE_URL} \
-    NEXT_TELEMETRY_DISABLED=1
-COPY --from=deps /app/node_modules ./node_modules
-COPY web/ ./
+    NEXT_PUBLIC_DEMO_LOGIN=${NEXT_PUBLIC_DEMO_LOGIN}
 RUN mkdir -p public && npm run build
 
 FROM node:24-alpine AS runner

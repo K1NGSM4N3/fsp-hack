@@ -39,6 +39,9 @@ services:
       dockerfile: deploy/web.Dockerfile
       args:
         SITE_URL: ${SITE_URL:-http://localhost:8080}
+        API_PROXY_URL: ${API_PROXY_URL:-http://api:8000}
+        # 0 hides the demo-account buttons on /login; a production deploy sets it in deploy/.env.
+        NEXT_PUBLIC_DEMO_LOGIN: ${NEXT_PUBLIC_DEMO_LOGIN:-1}
     image: fsp-hack/web:local
     restart: unless-stopped
     init: true

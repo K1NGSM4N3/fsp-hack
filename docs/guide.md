@@ -96,7 +96,7 @@ make up
 
 ### 2.2. Демо-аккаунты
 
-При первом запуске на пустой базе API заполняет демо-данные (`SEED_DEMO=true` в `.env` или команда `api seed`, раздел 5.12). Пароль у всех аккаунтов платформы - `demo12345`. На странице входа есть кнопки быстрого входа "Соискатель", "Компания" и "Модератор" (`NEXT_PUBLIC_DEMO_LOGIN=0` при сборке web их скрывает).
+При первом запуске на пустой базе API заполняет демо-данные (`SEED_DEMO=true` в `.env` или команда `api seed`, раздел 5.12). Пароль у всех аккаунтов платформы - `demo12345`. На странице входа есть кнопки быстрого входа "Соискатель", "Компания" и "Модератор" (`NEXT_PUBLIC_DEMO_LOGIN=0` в shell или `deploy/.env` при сборке web их скрывает, раздел 3.11).
 
 | Логин | Роль и назначение |
 |:--|:--|
@@ -312,7 +312,7 @@ curl -X DELETE -H 'Authorization: Bearer dev-registry-token' \
 
 ## 3. Конфигурация
 
-Все настройки задаются переменными окружения. Корневой `.env` (копия `.env.example`, на демо-сервере - результат `deploy/render_env.py` из `deploy/.env.template`) compose передаёт через `env_file` сервисам api, postgres, keycloak, fsp-mock и ats-mock; блок `environment:` в compose перекрывает его значения, а web, embedder, mailpit и grafana этот файл не получают. Подстановки `${...}` в файлах compose (`SITE_URL`, `API_PROXY_URL`, `KC_HOSTNAME`, `GRAFANA_ADMIN_*`, `MAILPIT_UI_AUTH`, `EMBEDDER_FETCH`) compose берёт из окружения shell или из `deploy/.env`, а не из корневого `.env`; цели Makefile (`make api`, `make web` и другие) `.env` не читают вовсе. Значения в `.env.example` - публичные демо-значения для локального запуска: для любого общего развёртывания помеченные ниже переменные нужно заменить; сводный чек-лист - раздел 4.11.
+Все настройки задаются переменными окружения. Корневой `.env` (копия `.env.example`, на демо-сервере - результат `deploy/render_env.py` из `deploy/.env.template`) compose передаёт через `env_file` сервисам api, postgres, keycloak, fsp-mock и ats-mock; блок `environment:` в compose перекрывает его значения, а web, embedder, mailpit и grafana этот файл не получают. Подстановки `${...}` в файлах compose (`SITE_URL`, `API_PROXY_URL`, `NEXT_PUBLIC_DEMO_LOGIN`, `KC_HOSTNAME`, `GRAFANA_ADMIN_*`, `MAILPIT_UI_AUTH`, `EMBEDDER_FETCH`) compose берёт из окружения shell или из `deploy/.env`, а не из корневого `.env`; `SITE_URL`, `API_PROXY_URL` и `NEXT_PUBLIC_DEMO_LOGIN` к тому же аргументы сборки web, и новое значение попадает в образ только после `--build`; цели Makefile (`make api`, `make web` и другие) `.env` не читают вовсе. Значения в `.env.example` - публичные демо-значения для локального запуска: для любого общего развёртывания помеченные ниже переменные нужно заменить; сводный чек-лист - раздел 4.11.
 
 Ниже "по умолчанию" - что делает код, если переменная не задана или пуста; демо-значение из `.env.example` указано, когда оно отличается. Флаги принимают `1`, `true`, `yes`, `on`; любое другое значение означает "выключено".
 
@@ -440,9 +440,9 @@ Black-box стек (`deploy/compose.blackbox.yml`) ставит `NOTIFY_EMAIL_HO
 | Переменная | По умолчанию | Что делает и когда менять |
 |:--|:--|:--|
 | `SITE_URL` | `http://localhost:8080` | Публичный адрес для canonical-ссылок, sitemap, OG-картинок и `llms.txt`. Compose берёт его из shell или `deploy/.env` и встраивает в образ web при сборке: после смены пересобрать web. **Обязательно в проде**: `https://домен`. |
-| `API_PROXY_URL` | `http://localhost:8000` (в образе web: `http://api:8000`) | Куда сервер Next.js ходит за API: серверный рендер публичных вакансий, тексты согласий на `/privacy` и rewrite `/api/*`. В compose `/api/*` маршрутизирует Caddy, rewrite запасной. Для `make web` задаётся в `web/.env.development`; корневой `.env` её никому не передаёт. |
+| `API_PROXY_URL` | `http://localhost:8000` (в образе web: `http://api:8000`) | Куда сервер Next.js ходит за API: серверный рендер публичных вакансий, тексты согласий на `/privacy` и rewrite `/api/*`. В compose `/api/*` маршрутизирует Caddy, rewrite запасной. Compose берёт её из shell или `deploy/.env` и передаёт и контейнеру web, и аргументом сборки: адрес rewrite запекается при `next build`, после смены пересобрать web. Для `make web` задаётся в `web/.env.development`; корневой `.env` её никому не передаёт. |
 | `NEXT_PUBLIC_USE_MOCKS` | `0` | `1` - данные из `web/src/mocks` в браузере вместо API, для вёрстки без бэкенда. Встраивается при сборке; образ web собирается с `0`. |
-| `NEXT_PUBLIC_DEMO_LOGIN` | не задана: кнопки демо-входа на `/login` показаны | `0` - скрыть кнопки демо-аккаунтов. Встраивается при сборке; `web.Dockerfile` её не передаёт, поэтому образ всегда собирается с кнопками. |
+| `NEXT_PUBLIC_DEMO_LOGIN` | не задана: кнопки демо-входа на `/login` показаны (compose: `1`) | `0` - скрыть кнопки демо-аккаунтов (в мок-режиме они показаны всегда). Встраивается в код страницы при сборке: compose берёт её из shell или `deploy/.env` и передаёт аргументом сборки web, после смены пересобрать web. Демо-сервер её не задаёт, кнопки там есть. **Обязательно в проде**: `0`. |
 | `PORT`, `HOSTNAME` | `3000`, `0.0.0.0` | Адрес сервера Next.js в образе web; `llms-full.txt` собирается запросом к самому себе на `PORT`. |
 
 Локально переменные web читаются из `web/.env.development` (в git) и `web/.env.local` (шаблон - `web/.env.example`).
@@ -482,7 +482,8 @@ Black-box стек (`deploy/compose.blackbox.yml`) ставит `NOTIFY_EMAIL_HO
 | `EMBEDDER_FETCH` | `1` | Аргумент сборки образа эмбеддера: `1` - скачать веса с Hugging Face по закреплённой ревизии и проверить sha256. `0` - собрать без сети, веса монтируются в `EMBEDDER_MODEL_DIR` (`EMBEDDER_FETCH=0 make up`). Подстановка compose. |
 | `EMBEDDER_MODEL` | `multilingual-e5-small` | Аргумент сборки: какие веса класть в образ. Compose его не передаёт. |
 | `SITE_URL` | `http://localhost:8080` | Аргумент сборки web (раздел 3.11). |
-| `API_PROXY_URL` | `http://api:8000` | Аргумент сборки web: адрес rewrite `/api/*`, вычисляется при `next build`. Compose его не передаёт, поэтому в образе всегда `http://api:8000`; значение из shell меняет только серверные запросы web во время работы. |
+| `API_PROXY_URL` | `http://api:8000` | Аргумент сборки web: адрес rewrite `/api/*`, вычисляется при `next build`. Подстановка compose; то же значение получает и контейнер web для серверных запросов (раздел 3.11). |
+| `NEXT_PUBLIC_DEMO_LOGIN` | `1` | Аргумент сборки web: `0` убирает из образа кнопки демо-входа на `/login` (раздел 3.11). Подстановка compose. |
 
 ### 3.15. Makefile и обслуживание
 
@@ -555,7 +556,14 @@ Black-box стек (`deploy/compose.blackbox.yml`) ставит `NOTIFY_EMAIL_HO
          - "127.0.0.1:3001:3000"
    ```
 
-4. Адреса. В `.env`: `PUBLIC_URL=https://example.ru` (без слеша в конце) и `COOKIE_SECURE=true`. `PUBLIC_URL` - это и проверка `Origin`: если он не совпадает с адресом в браузере, все изменяющие запросы кабинетов получают 403 `csrf`. В `deploy/.env` (его compose читает для подстановки `${...}`, корневой `.env` - нет): `SITE_URL=https://example.ru`. `SITE_URL` запекается в образ web при сборке, после смены нужен `--build`.
+4. Адреса. В `.env`: `PUBLIC_URL=https://example.ru` (без слеша в конце) и `COOKIE_SECURE=true`. `PUBLIC_URL` - это и проверка `Origin`: если он не совпадает с адресом в браузере, все изменяющие запросы кабинетов получают 403 `csrf`. В `deploy/.env` (его compose читает для подстановки `${...}`, корневой `.env` - нет):
+
+   ```sh
+   SITE_URL=https://example.ru
+   NEXT_PUBLIC_DEMO_LOGIN=0
+   ```
+
+   Второе значение убирает со страницы входа кнопки демо-аккаунтов. Оба запекаются в образ web при сборке, после смены нужен `--build`.
 5. Запуск:
 
    ```sh
@@ -780,13 +788,14 @@ MAIL_FROM=ФСП Таланты <no-reply@example.ru>
 2. `.env` создан с новыми ключами (раздел 4.10), ключи сохранены вне сервера.
 3. `PUBLIC_URL` и `SITE_URL` (в `deploy/.env`) - `https://` адрес домена, `COOKIE_SECURE=true`.
 4. `SEED_DEMO=false`, `FSP_DEV_LINK=false`, `WEBHOOK_DEV_HOSTS` пустой, `ATS_DEMO_*` удалены.
-5. `deploy/Caddyfile.prod` и `deploy/compose.prod.yml` созданы (раздел 4.2), Mailpit и заглушки не запущены: `docker compose -f deploy/compose.yml -f deploy/compose.prod.yml ps`.
-6. SMTP настроен, SPF, DKIM и DMARC опубликованы, письмо подтверждения регистрации дошло.
-7. ФСП ID: redirect URI зарегистрирован у провайдера, привязка настоящей учётной записью заканчивается `?fsp=linked`.
-8. Реестр: `FSP_REGISTRY_URL` и токен заданы, "Обновить из реестра" загружает достижения; подписанное тестовое событие получает 202 (раздел 4.4).
-9. `https://example.ru/readyz` отвечает 200; в логе API нет предупреждений `FIELD_ENC_KEY/BIDX_KEY not set` и `JWT_ED25519_SEED_B64 not set`.
-10. Создан аккаунт модератора (раздел 5.8).
-11. Резервные копии: дамп базы и `.env` по расписанию (`deploy/ops/install.sh`, оговорка о `deploy/ops/backup.sh` - в разделе 4.12); видеозаписи тестов лежат в томе `proctoring-data` и в дамп базы не входят.
+5. `NEXT_PUBLIC_DEMO_LOGIN=0` в `deploy/.env`, web пересобран (`--build`): на `/login` нет кнопок демо-аккаунтов.
+6. `deploy/Caddyfile.prod` и `deploy/compose.prod.yml` созданы (раздел 4.2), Mailpit и заглушки не запущены: `docker compose -f deploy/compose.yml -f deploy/compose.prod.yml ps`.
+7. SMTP настроен, SPF, DKIM и DMARC опубликованы, письмо подтверждения регистрации дошло.
+8. ФСП ID: redirect URI зарегистрирован у провайдера, привязка настоящей учётной записью заканчивается `?fsp=linked`.
+9. Реестр: `FSP_REGISTRY_URL` и токен заданы, "Обновить из реестра" загружает достижения; подписанное тестовое событие получает 202 (раздел 4.4).
+10. `https://example.ru/readyz` отвечает 200; в логе API нет предупреждений `FIELD_ENC_KEY/BIDX_KEY not set` и `JWT_ED25519_SEED_B64 not set`.
+11. Создан аккаунт модератора (раздел 5.8).
+12. Резервные копии: дамп базы и `.env` по расписанию (`deploy/ops/install.sh`, оговорка о `deploy/ops/backup.sh` - в разделе 4.12); видеозаписи тестов лежат в томе `proctoring-data` и в дамп базы не входят.
 
 ### 4.12. Что потребует доработки кода
 
