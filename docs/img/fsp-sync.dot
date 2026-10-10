@@ -1,0 +1,62 @@
+// Pull and push updates from the FSP registry for docs/solution.md §7.5; `make docs` renders every
+// docs/img/*.dot to SVG. Colours are the brand tokens of web/src/app/globals.css.
+digraph fsp_sync {
+  graph [rankdir=TB, bgcolor="#ffffff", fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=9,
+         fontcolor="#5a5c66", nodesep=0.2, ranksep=0.28, pad=0.1, size="6.8,9", labeljust=l, newrank=true];
+  node  [shape=box, style="rounded,filled", fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=10,
+         fontcolor="#1b1c21", color="#c8c9ce", fillcolor="#ffffff", penwidth=1, margin="0.12,0.05"];
+  edge  [fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=8, fontcolor="#5a5c66",
+         color="#7b6fff", arrowsize=0.6, penwidth=1];
+
+  subgraph cluster_pull {
+    label="PULL — привязка,\l«Обновить из реестра»\l"; style="rounded,filled"; fillcolor="#f5f4ff"; color="#d6d1ff";
+
+    seeker [label=<<b>Соискатель</b>>, fillcolor="#1b1c21", fontcolor="#ffffff", color="#1b1c21"];
+    sync [label=<<b>API</b> · POST /fsp/sync>, fillcolor="#402fff", fontcolor="#ffffff", color="#402fff"];
+    pull_tx [shape=plain, style="", label=<
+      <table border="1" cellborder="0" cellspacing="0" cellpadding="6" style="rounded" color="#c8c9ce" bgcolor="#ffffff">
+        <tr><td align="left" balign="left"><b>Транзакция</b><br/><font point-size="8" color="#5a5c66">снимок + навыки,<br/>подтверждённые ФСП;<br/>после — сброс кеша подбора</font></td></tr>
+      </table>>];
+    seeker_back [label=<<b>Соискатель</b><br/><font point-size="8" color="#c8c9ce">обновлённый список</font>>,
+                 fillcolor="#1b1c21", fontcolor="#ffffff", color="#1b1c21"];
+  }
+
+  subgraph cluster_push {
+    label="PUSH — новый результат в реестре"; labeljust=r; style="rounded,filled"; fillcolor="#fdecee"; color="#fbd5da";
+
+    registry_out [label=<<b>Реестр ФСП</b>>];
+    events [shape=plain, style="", label=<
+      <table border="0" cellborder="0" cellspacing="0" cellpadding="7" style="rounded" bgcolor="#402fff">
+        <tr><td align="left" balign="left"><font color="#ffffff"><b>API</b> · POST /fsp/registry/events</font><br/><font point-size="8" color="#d6d1ff">{event_id, type: achievements.changed,<br/> fsp_id, occurred_at}<br/>FSP-Signature: t=…,v1=HMAC-SHA256(<br/> общий секрет, t + "." + тело)</font></td></tr>
+      </table>>];
+    checks [shape=plain, style="", label=<
+      <table border="1" cellborder="0" cellspacing="0" cellpadding="6" style="rounded" color="#c8c9ce" bgcolor="#ffffff">
+        <tr><td align="left" balign="left"><b>Проверки по порядку</b><br/><font point-size="8" color="#5a5c66">1. лимит запросов<br/>2. подпись и метка времени (±5 минут)<br/>3. fsp_id привязан?<br/>4. event_id новый?</font></td></tr>
+      </table>>];
+    push_tx [shape=plain, style="", label=<
+      <table border="1" cellborder="0" cellspacing="0" cellpadding="6" style="rounded" color="#c8c9ce" bgcolor="#ffffff">
+        <tr><td align="left" balign="left"><b>Транзакция</b><br/><font point-size="8" color="#5a5c66">событие, снимок, навыки;<br/>если изменилось — уведомление<br/>«Новые достижения ФСП в профиле»;<br/>после коммита — сброс кеша<br/>подбора, если что-то изменилось</font></td></tr>
+      </table>>];
+    registry_back [label=<<b>Реестр ФСП</b><br/><font point-size="8" color="#5a5c66">202 без тела</font>>];
+  }
+
+  fetch [shape=plain, style="", label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" style="rounded" color="#fbd5da" bgcolor="#ffffff">
+      <tr><td align="left" balign="left"><b>Реестр ФСП</b><br/><font point-size="8" color="#5a5c66">GET /participants/{fsp_id}/achievements<br/>(Bearer) — одна синхронизация для обоих путей</font></td></tr>
+    </table>>];
+
+  { rank=same; seeker; registry_out; }
+  { rank=same; sync; events; }
+
+  seeker -> sync;
+  sync -> fetch;
+  fetch -> pull_tx [label=" pull"];
+  pull_tx -> seeker_back;
+
+  registry_out -> events;
+  events -> checks;
+  checks -> fetch [label=" всё да"];
+  checks -> registry_back [label=" не привязан\l или повтор\l", style=dashed, color="#c8c9ce"];
+  fetch -> push_tx [label=" push"];
+  push_tx -> registry_back;
+}

@@ -79,8 +79,11 @@ validate: model
 	cargo run --release -p validate -- --out docs/validation
 
 docs:
-	pandoc docs/solution.md -o docs/solution.pdf --pdf-engine=typst --pdf-engine-opt=--font-path=crates/api/assets/fonts --metadata-file=docs/pdf-meta.yaml --toc --toc-depth=2
-	pandoc docs/solution.md -o docs/solution.docx --metadata-file=docs/pdf-meta.yaml --toc --toc-depth=2
+	# Text as outlines: a viewer without PT Sans would substitute a wider font and spill text
+	# out of the boxes. Cairo writes unitless sizes, which are pix21els to a viewer, not points.
+	for f in docs/img/*.dot; do dot -Tsvg:cairo "$$f" | sed -E '2s/(width|height)="([0-9.]+)"/\1="\2pt"/g' > "$${f%.dot}.svg" || exit 1; done
+	pandoc docs/solution.md -o docs/solution.pdf --resource-path=docs --pdf-engine=typst --pdf-engine-opt=--font-path=crates/api/assets/fonts --metadata-file=docs/pdf-meta.yaml --toc --toc-depth=2
+	pandoc docs/solution.md -o docs/solution.docx --resource-path=docs --metadata-file=docs/pdf-meta.yaml --toc --toc-depth=2
 
 up:
 	$(COMPOSE) --profile full up -d --build

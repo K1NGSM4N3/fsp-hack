@@ -1,0 +1,44 @@
+// ATS integration for docs/solution.md §10.2; `make docs` renders every docs/img/*.dot to SVG.
+// Colours are the brand tokens of web/src/app/globals.css.
+digraph ats {
+  graph [rankdir=TB, bgcolor="#ffffff", fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=9,
+         fontcolor="#5a5c66", nodesep=0.3, ranksep=0.3, pad=0.1, size="6.8,9", newrank=true];
+  node  [shape=box, style="rounded,filled", fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=10,
+         fontcolor="#1b1c21", color="#c8c9ce", fillcolor="#ffffff", penwidth=1, margin="0.12,0.05"];
+  edge  [fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=8, fontcolor="#5a5c66",
+         color="#7b6fff", arrowsize=0.6, penwidth=1];
+
+  accepted [label=<<b>Кандидат принял приглашение</b>>, fillcolor="#1b1c21", fontcolor="#ffffff", color="#1b1c21"];
+
+  tx [shape=plain, style="", label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="6" style="rounded" color="#d6d1ff" bgcolor="#f5f4ff">
+      <tr><td align="left" balign="left"><b>Одна транзакция PostgreSQL</b><br/><font point-size="8" color="#5a5c66">invitations.status = accepted<br/>+ invitation_events + contact_access_log (канал webhook)<br/>+ integration_events: invitation.accepted (тело зашифровано)</font></td></tr>
+    </table>>];
+
+  dispatcher [shape=plain, style="", label=<
+    <table border="0" cellborder="0" cellspacing="0" cellpadding="7" style="rounded" bgcolor="#402fff">
+      <tr><td align="left" balign="left"><font color="#ffffff"><b>Диспетчер</b> в каждой реплике API</font><br/><font point-size="8" color="#d6d1ff">FOR UPDATE SKIP LOCKED, аренда 60 с<br/>подпись HMAC, DNS только в публичные адреса</font></td></tr>
+    </table>>];
+
+  ats [label=<<b>ATS работодателя</b>>, fillcolor="#fdecee", color="#fbd5da"];
+
+  integrations [shape=plain, style="", label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="4" style="rounded" color="#c8c9ce" bgcolor="#ffffff">
+      <tr><td colspan="2" align="left" balign="left"><b>/api/v1/integrations</b><br/><font point-size="8" color="#5a5c66">API-ключ fsp_live_…, скоупы</font></td></tr>
+      <tr><td align="left" valign="top"><font point-size="9">GET /invitations</font></td>
+          <td align="left" balign="left"><font point-size="8" color="#5a5c66">опрос вместо вебхука<br/>invitations:read</font></td></tr>
+      <tr><td align="left" valign="top"><font point-size="9">GET /candidates/{id}</font></td>
+          <td align="left" balign="left"><font point-size="8" color="#5a5c66">профиль и PDF после согласия<br/>(ContactGrant, журнал) · candidates:read</font></td></tr>
+      <tr><td align="left" valign="top"><font point-size="9">POST /outcomes</font></td>
+          <td align="left" balign="left"><font point-size="8" color="#5a5c66">собеседование, оффер, найм, отказ;<br/>этап видит кандидат · outcomes:write</font></td></tr>
+      <tr><td align="left" valign="top"><font point-size="9">POST /needs</font></td>
+          <td align="left" balign="left"><font point-size="8" color="#5a5c66">из текста вакансии — потребность<br/>и подборка · needs:write</font></td></tr>
+    </table>>];
+
+  { rank=same; ats; integrations; }
+
+  accepted -> tx;
+  tx -> dispatcher [label=" очередь integration_events"];
+  dispatcher -> ats [label=" вебхук invitation.accepted"];
+  ats -> integrations [label="запросы"];
+}
