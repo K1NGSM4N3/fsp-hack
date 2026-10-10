@@ -1,4 +1,4 @@
-//! FSP (Federation of Sport Programming) achievements and the FSP score (architecture §7).
+//! FSP (Federation of Sport Programming) achievements and the FSP score (architecture section 7).
 
 use catalog::Specialization;
 use serde::{Deserialize, Deserializer, Serialize};
@@ -108,7 +108,7 @@ impl Discipline {
 }
 
 impl Discipline {
-    /// Dictionary skills a result in this discipline confirms (source `fsp`, architecture §7.4).
+    /// Dictionary skills a result in this discipline confirms (source `fsp`, architecture section 7.4).
     /// Deliberately narrow: the registry records the discipline and the result, not the team's
     /// stack or the person's role, so only what every contest of the discipline exercises
     /// counts. Algorithmic contests are solved with algorithms and data structures; a security
@@ -143,7 +143,7 @@ pub enum Rank {
 }
 
 impl Rank {
-    /// Weights from architecture §7.3; a rank stands in for level × place.
+    /// Weights from architecture section 7.3; a rank stands in for level × place.
     pub const fn weight(self) -> f32 {
         match self {
             Rank::Ms => 1.0,
@@ -261,7 +261,7 @@ impl<'de> Deserialize<'de> for Place {
     }
 }
 
-/// One record of the FSP registry snapshot (architecture §7.2).
+/// One record of the FSP registry snapshot (architecture section 7.2).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(feature = "openapi", derive(utoipa::ToSchema))]
 pub struct Achievement {

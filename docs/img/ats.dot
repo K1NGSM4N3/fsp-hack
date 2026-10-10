@@ -1,4 +1,4 @@
-// ATS integration for docs/solution.md §10.2; `make docs` renders every docs/img/*.dot to SVG.
+// ATS integration for docs/solution.md section 10.2; `make docs` renders every docs/img/*.dot to SVG.
 // Colours are the brand tokens of web/src/app/globals.css.
 digraph ats {
   graph [rankdir=TB, bgcolor="#ffffff", fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=9,

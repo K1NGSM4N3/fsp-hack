@@ -1,4 +1,4 @@
-//! Consent of a minor candidate's legal representative (docs/architecture.md §9.5). After the minor
+//! Consent of a minor candidate's legal representative (docs/architecture.md section 9.5). After the minor
 //! confirms their own email, the representative gets a letter with two links of one family: a
 //! one-time answer link (7 days) and a revocation link. Both open the public page
 //! `/guardian/confirm`. Data of the representative is erased 30 days after the 18th birthday.

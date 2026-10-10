@@ -1480,7 +1480,7 @@ export interface paths {
         put?: never;
         /**
          * Evaluate the matching on your own vacancies, candidates and labels
-         * @description Прогоняет ваш набор «вакансия – кандидат» через тот же разбор текстов и тот же скоринг, что работают в подборе, и через базовую линию «ключевые слова резюме + заявленный стаж». Структурные поля необязательны: специализация, грейд, навыки, вилка, формат и город распознаются из текстов. Категория, распознанная из резюме, помечается «не подтверждена тестом»; без результата теста берётся нейтральное значение — середина диапазона грейда, об этом сказано в объяснении. С разметкой (`labels`, релевантность 0–3, релевантен ≥ 2) считаются Precision@5, Precision@k, nDCG@k, MAP и MRR по каждой вакансии и в среднем — для нашего ранжирования и для базовой линии. Близость описаний — по смыслу (эмбеддинги, посчитанные локальной моделью), если набор не больше 300 текстов и эмбеддер доступен; иначе по ключевым словам, и поле `text` отчёта говорит почему. Лимиты: тело до 8 МиБ, до 200 вакансий, 5 000 кандидатов и 100 000 оценок, тексты до 20 000 символов, 10 запросов за 10 минут с одного IP. Данные не сохраняются. Большие наборы — CLI `validate pairs` (см. docs/solution.md §6.4).
+         * @description Прогоняет ваш набор «вакансия – кандидат» через тот же разбор текстов и тот же скоринг, что работают в подборе, и через базовую линию «ключевые слова резюме + заявленный стаж». Структурные поля необязательны: специализация, грейд, навыки, вилка, формат и город распознаются из текстов. Категория, распознанная из резюме, помечается «не подтверждена тестом»; без результата теста берётся нейтральное значение — середина диапазона грейда, об этом сказано в объяснении. С разметкой (`labels`, релевантность 0–3, релевантен ≥ 2) считаются Precision@5, Precision@k, nDCG@k, MAP и MRR по каждой вакансии и в среднем — для нашего ранжирования и для базовой линии. Близость описаний — по смыслу (эмбеддинги, посчитанные локальной моделью), если набор не больше 300 текстов и эмбеддер доступен; иначе по ключевым словам, и поле `text` отчёта говорит почему. Лимиты: тело до 8 МиБ, до 200 вакансий, 5 000 кандидатов и 100 000 оценок, тексты до 20 000 символов, 10 запросов за 10 минут с одного IP. Данные не сохраняются. Большие наборы — CLI `validate pairs` (см. docs/solution.md, раздел 6.4).
          */
         post: operations["eval_pairs"];
         delete?: never;
@@ -2051,7 +2051,7 @@ export interface components {
             /** Format: date-time */
             last_login_at?: string | null;
         };
-        /** @description One record of the FSP registry snapshot (architecture §7.2). */
+        /** @description One record of the FSP registry snapshot (architecture section 7.2). */
         Achievement: {
             kind: components["schemas"]["AchievementKind"];
             discipline: components["schemas"]["Discipline"];
@@ -3111,7 +3111,7 @@ export interface components {
             linked_at?: string | null;
             /** Format: date-time */
             last_sync_at?: string | null;
-            /** @description Snapshot from the registry (docs/architecture.md §7.2). An empty list is a valid state. */
+            /** @description Snapshot from the registry (docs/architecture.md section 7.2). An empty list is a valid state. */
             achievements: components["schemas"]["AchievementView"][];
             score?: components["schemas"]["FspScore"] | null;
         };

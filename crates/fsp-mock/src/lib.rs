@@ -1,5 +1,5 @@
 //! Mock of the FSP participant registry. The API calls it after an FSP ID is linked
-//! (docs/architecture.md §7.1) to fetch the participant card and the achievements snapshot. For demos
+//! (docs/architecture.md section 7.1) to fetch the participant card and the achievements snapshot. For demos
 //! an admin endpoint changes a participant's achievements and pushes `achievements.changed` to the
 //! platform, signed the way the platform signs its own webhooks (see [`push`]).
 

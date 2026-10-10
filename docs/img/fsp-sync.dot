@@ -1,4 +1,4 @@
-// Pull and push updates from the FSP registry for docs/solution.md §7.5; `make docs` renders every
+// Pull and push updates from the FSP registry for docs/solution.md section 7.5; `make docs` renders every
 // docs/img/*.dot to SVG. Colours are the brand tokens of web/src/app/globals.css.
 digraph fsp_sync {
   graph [rankdir=TB, bgcolor="#ffffff", fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=9,

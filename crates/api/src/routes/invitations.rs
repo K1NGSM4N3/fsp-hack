@@ -1,4 +1,4 @@
-//! The core contact mechanic (docs/architecture.md §6): the employer invites, the candidate sees the
+//! The core contact mechanic (docs/architecture.md section 6): the employer invites, the candidate sees the
 //! salary range before any conversation, contacts open only after acceptance.
 
 use axum::{

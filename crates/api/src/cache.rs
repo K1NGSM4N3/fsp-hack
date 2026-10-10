@@ -1,6 +1,6 @@
 //! In-process caches of data derived from the candidate tables: the search pool of every
 //! specialization with the employer cards of its candidates, the category cards and the demand
-//! stats of each category (docs/architecture.md §12.2), plus the company of each employer account,
+//! stats of each category (docs/architecture.md section 12.2), plus the company of each employer account,
 //! read by every employer request.
 //!
 //! The stored vector of each need (embeddings) is remembered the same way.

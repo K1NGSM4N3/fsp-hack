@@ -1,4 +1,4 @@
-//! Assessment validation (docs/architecture.md §8.1) on the production engine: the same `assessment`
+//! Assessment validation (docs/architecture.md section 8.1) on the production engine: the same `assessment`
 //! crate drives every simulated session; only the responses are synthetic (3PL at a true θ).
 
 use std::{

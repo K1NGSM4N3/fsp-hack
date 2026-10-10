@@ -1,4 +1,4 @@
-//! Adaptive grade test (docs/architecture.md §5): the candidate claims a grade, the CAT engine picks
+//! Adaptive grade test (docs/architecture.md section 5): the candidate claims a grade, the CAT engine picks
 //! parametric items, answers are checked by regenerating the instance from its `ItemRef`, and the
 //! grade policy (T-5, T-6) decides which attempts are allowed. Only `ItemRef`s are stored.
 

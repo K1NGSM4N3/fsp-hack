@@ -1,4 +1,4 @@
-//! Variant-pool templates for conceptual questions (architecture §5.1b). Each level is a
+//! Variant-pool templates for conceptual questions (architecture section 5.1b). Each level is a
 //! table of entries; an instance draws one stem, one correct answer and three distractors,
 //! so a leaked instance reveals only a fraction of an entry's combinations.
 

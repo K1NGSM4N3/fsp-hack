@@ -37,7 +37,7 @@ pub fn unknown_message(unknown: &[String]) -> Cow<'static, str> {
 }
 
 /// Rewrites the candidate's `fsp` skills to what the stored FSP snapshot confirms
-/// (`matching::confirmed_skills`, docs/architecture.md §7.4). Runs in the transaction that writes the
+/// (`matching::confirmed_skills`, docs/architecture.md section 7.4). Runs in the transaction that writes the
 /// snapshot, so the two never disagree; `None` — no link, no such skills. Rows of other sources
 /// are separate and untouched: a skill the test confirmed stays confirmed by the test.
 pub async fn replace_fsp_skills(

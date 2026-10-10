@@ -1,4 +1,4 @@
-//! Notifications (docs/architecture.md §13). A domain change writes its in-app item in the same
+//! Notifications (docs/architecture.md section 13). A domain change writes its in-app item in the same
 //! transaction ([`Notifier`]); the email dispatcher folds queued items into letters under a
 //! per-recipient rate cap ([`email`]); a sweeper adds expiry reminders and trust-level changes
 //! ([`sweep`]).

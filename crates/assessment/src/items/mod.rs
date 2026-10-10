@@ -1,4 +1,4 @@
-//! Item bank of parametric templates (architecture §5.1).
+//! Item bank of parametric templates (architecture section 5.1).
 //!
 //! A template is an *item model*: given `(level, seed)` it deterministically renders a
 //! concrete item and computes its answer. The level ("radicals") sets difficulty and has its

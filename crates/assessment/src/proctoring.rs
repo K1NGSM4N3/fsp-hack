@@ -1,4 +1,4 @@
-//! Proctoring of a test session (architecture §5.6): the summary shown to the candidate and as
+//! Proctoring of a test session (architecture section 5.6): the summary shown to the candidate and as
 //! a badge to employers, the "needs confirmation" rule, and admission of video chunks.
 //!
 //! Pure logic like the rest of the crate: time arrives as unix seconds, storage and HTTP live

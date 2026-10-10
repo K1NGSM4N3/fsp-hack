@@ -105,7 +105,7 @@ impl Default for IntegrationsConfig {
     }
 }
 
-/// Email side of notifications (docs/architecture.md §13); the defaults are the production rule.
+/// Email side of notifications (docs/architecture.md section 13); the defaults are the production rule.
 #[derive(Clone, Debug)]
 pub struct NotifyConfig {
     /// An item waits this long for others to join its letter (`NOTIFY_EMAIL_HOLD_SECS`).
@@ -129,7 +129,7 @@ impl Default for NotifyConfig {
     }
 }
 
-/// Sentence embeddings (docs/architecture.md §6.4): where the embedder listens and how the worker paces.
+/// Sentence embeddings (docs/architecture.md section 6.4): where the embedder listens and how the worker paces.
 #[derive(Clone, Debug)]
 pub struct EmbeddingsConfig {
     /// `EMBEDDER_URL`, e.g. `http://embedder:8090`.

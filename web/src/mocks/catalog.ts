@@ -42,7 +42,7 @@ export function skillGroup(slug: string): { group: SkillView["group"]; group_nam
   return g ? { group: g[0], group_name: g[1] } : { group: "backend", group_name: "Бэкенд" };
 }
 
-/** Skill proximity graph (architecture §4): partial credit for a close substitute. */
+/** Skill proximity graph (architecture section 4): partial credit for a close substitute. */
 const PROXIMITY: Array<[string, string, number]> = [
   ["postgresql", "mysql", 0.5],
   ["postgresql", "sql", 0.6],

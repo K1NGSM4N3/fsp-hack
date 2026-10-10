@@ -1,4 +1,4 @@
-//! Two-sided market transparency (docs/architecture.md §6.2): employers see supply per category,
+//! Two-sided market transparency (docs/architecture.md section 6.2): employers see supply per category,
 //! candidates see anonymous demand for theirs.
 
 use axum::extract::State;

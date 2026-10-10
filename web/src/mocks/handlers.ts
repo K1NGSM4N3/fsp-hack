@@ -607,7 +607,7 @@ const KIND_RU: Record<T.AttemptKind, string> = {
   retry: "Повторный тест",
 };
 
-/** Grade policy (architecture §5.4): which attempts are allowed right now. */
+/** Grade policy (architecture section 5.4): which attempts are allowed right now. */
 function attemptFor(c: MockCandidate, g: T.Grade, t: Date): T.AttemptKind | null {
   const current = currentAssignment(c);
   if (!current) {

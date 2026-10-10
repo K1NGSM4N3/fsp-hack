@@ -1,4 +1,4 @@
-//! `Cache-Control` of API responses (docs/architecture.md §12.1). The default is `private, no-store`:
+//! `Cache-Control` of API responses (docs/architecture.md section 12.1). The default is `private, no-store`:
 //! every response that is not explicitly public carries it, which covers everything behind a
 //! cookie, a bearer token or an API key, and anything with personal data (152-ФЗ: no shared or
 //! intermediary cache may keep it). A router group opts into public caching with
@@ -90,7 +90,7 @@ pub async fn public(State(policy): State<Policy>, req: Request, next: Next) -> R
     parts.headers.insert(ETAG, etag.clone());
     if if_none_match.is_some_and(|v| matches_etag(&v, &etag)) {
         // Without an explicit length the router would add `Content-Length: 0`, which a 304 may
-        // carry only if the full response were empty (RFC 9110 §8.6).
+        // carry only if the full response were empty (RFC 9110, section 8.6).
         let length = HttpBody::size_hint(&body).exact();
         let mut headers = HeaderMap::with_capacity(3);
         for name in [CACHE_CONTROL, ETAG] {
@@ -118,7 +118,7 @@ pub fn etag_of(body: &Bytes) -> HeaderValue {
         .unwrap_or(HeaderValue::from_static("\"\""))
 }
 
-/// `If-None-Match` uses the weak comparison (RFC 9110 §13.1.2): `W/` is ignored on both sides,
+/// `If-None-Match` uses the weak comparison (RFC 9110, section 13.1.2): `W/` is ignored on both sides,
 /// so a tag a compressing proxy weakened still matches.
 fn matches_etag(if_none_match: &HeaderValue, etag: &HeaderValue) -> bool {
     let Ok(list) = if_none_match.to_str() else {

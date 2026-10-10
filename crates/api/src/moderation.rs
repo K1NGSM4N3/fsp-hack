@@ -1,4 +1,4 @@
-//! Moderation (docs/architecture.md §5.7, §11.1, §9.3): decisions on disputed test results and what
+//! Moderation (docs/architecture.md sections 5.7, 11.1, 9.3): decisions on disputed test results and what
 //! they do to the grade, anti-fake actions, and the audit log every action and every view of a
 //! test recording lands in. Each write goes into the same transaction as its log row: an action
 //! that was not logged did not happen.
