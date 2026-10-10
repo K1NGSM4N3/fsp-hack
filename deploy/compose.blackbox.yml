@@ -21,8 +21,11 @@ services:
       NOTIFY_EMAIL_HOLD_SECS: "3"
       NOTIFY_EMAIL_GAP_SECS: "3"
       NOTIFY_INTERVAL_MS: "1000"
-      # Pinned so tests/blackbox signs registry events with the same secret whatever the local .env says.
+      # Pinned so tests/blackbox signs registry events and calls the registry admin API with the
+      # same secrets whatever the local .env says.
       FSP_REGISTRY_WEBHOOK_SECRET: whsec_demo_fsp_registry_do_not_use_in_production
+      FSP_REGISTRY_TOKEN: dev-registry-token
   fsp-mock:
     environment:
       FSP_REGISTRY_WEBHOOK_SECRET: whsec_demo_fsp_registry_do_not_use_in_production
+      FSP_REGISTRY_TOKEN: dev-registry-token
