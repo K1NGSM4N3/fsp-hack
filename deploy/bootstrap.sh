@@ -11,7 +11,7 @@ log() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 
 [[ ${EUID} -eq 0 ]] || { echo "run as root" >&2; exit 1; }
 
-### 1. firewall: exactly what the demo needs — ssh, caddy http (ACME) + https.
+### 1. firewall: exactly what the demo needs - ssh, caddy http (ACME) + https.
 if ! ufw status | grep -q 'Status: active'; then
     ufw allow 22/tcp comment 'ssh'
     ufw allow 80/tcp comment 'http: caddy ACME http-01 + redirect'
@@ -54,7 +54,7 @@ mkdir -p /opt/fsp-hack
 
 ### 5. pre-pull third-party images used by deploy/compose.yml so the deploy
 ### step is network-independent. Locally built images (api/web/embedder/fsp-mock/
-### ats-mock) are not here — `compose up --build` builds them from the clone.
+### ats-mock) are not here - `compose up --build` builds them from the clone.
 for image in \
     caddy:2.11-alpine \
     pgvector/pgvector:pg17 \
@@ -72,7 +72,7 @@ done
 
 ### 6. read-only GitHub deploy key, so the box can clone/pull the private repo.
 ### Generates the keypair and wires ~/.ssh/config; adding the public key in
-### GitHub (repo → Settings → Deploy keys, leave read-only) is manual.
+### GitHub (repo -> Settings -> Deploy keys, leave read-only) is manual.
 if [[ ! -f /root/.ssh/id_ed25519_github ]]; then
     mkdir -p /root/.ssh && chmod 700 /root/.ssh
     ssh-keygen -t ed25519 -C fsp-hack-deploy -f /root/.ssh/id_ed25519_github -N ""

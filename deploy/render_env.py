@@ -6,7 +6,7 @@ Fills the domain, generates fresh secrets, refuses to overwrite an existing
 unreadable; a new JWT_ED25519_SEED_B64 only invalidates outstanding 15-minute
 access tokens: refresh tokens live hashed in the database, the web client
 refreshes on 401, and Bearer API clients log in again). Also writes
-deploy/.env with SITE_URL and the demo inbox password — docker compose reads
+deploy/.env with SITE_URL and the demo inbox password - docker compose reads
 that file for ${...} interpolation (the web image bakes SITE_URL in). Stdlib
 only; run on the box or locally:
 
@@ -72,7 +72,7 @@ def main() -> None:
     mail_auth = f"demo:{gen_token()}"
     with open(args.compose_env, "w", encoding="utf-8") as f:
         f.write(
-            "# written by deploy/render_env.py — compose ${...} interpolation only\n"
+            "# written by deploy/render_env.py - compose ${...} interpolation only\n"
             f"SITE_URL={site}\n"
             f"MAILPIT_UI_AUTH={mail_auth}\n"
         )

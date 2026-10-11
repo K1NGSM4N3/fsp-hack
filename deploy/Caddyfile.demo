@@ -1,7 +1,7 @@
 # Demo-server entrypoint (fsphack box, grey-cloud DNS demo.arewehireyet.ru -> the box):
 # caddy terminates TLS with its own Let's Encrypt certificate (auto HTTPS on :443,
 # http-01 on :80) and proxies exactly like the local stack. The base Caddyfile
-# (:8080, plain HTTP) stays untouched — local dev and `make blackbox` keep using it.
+# (:8080, plain HTTP) stays untouched - local dev and `make blackbox` keep using it.
 #
 # Run from the repo root on the demo box:
 #   docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \

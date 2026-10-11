@@ -1,6 +1,6 @@
 # Demo-server overlay on top of compose.yml: caddy becomes the public entrypoint on
 # 80/443 with Let's Encrypt TLS for demo.arewehireyet.ru (deploy/Caddyfile.demo).
-# Everything else — services, healthchecks, profiles, volumes — is the base file.
+# Everything else - services, healthchecks, profiles, volumes - is the base file.
 #
 # Render .env first (deploy/render_env.py), then from the repo root:
 #   docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \
