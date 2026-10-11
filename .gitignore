@@ -26,7 +26,6 @@ next-env.d.ts
 # Editors
 .idea/
 .vscode/
-.claude/worktrees/
 
 # Black-box suite (tests/blackbox): saved logins and Playwright output
 /tests/blackbox/.auth/
