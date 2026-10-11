@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT status AS \"status: InvitationStatus\", at\n           FROM invitation_events\n           WHERE invitation_id = $1\n           ORDER BY at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "status: InvitationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "invitation_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "declined",
+                "expired",
+                "withdrawn"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "3f1d528697bc22bfed017b04d1060983a57661ca5c2ead6b2e3ee0ff07aaf18a"
+}

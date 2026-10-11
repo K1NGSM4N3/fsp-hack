@@ -1,0 +1,50 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.specialization AS \"specialization!\", c.grade AS \"grade!\",\n                  count(*) AS \"candidates!\",\n                  count(*) FILTER (WHERE f.has_achievements AND c.show_fsp) AS \"with_fsp!\",\n                  count(*) FILTER (WHERE c.search_status = 'active') AS \"actively_looking!\",\n                  (percentile_cont(0.5) WITHIN GROUP (ORDER BY c.salary_expectation_min))::bigint\n                      AS median_expectation\n           FROM published_candidates c\n           LEFT JOIN fsp_links f ON f.candidate_id = c.user_id\n           WHERE c.search_status <> 'closed'\n             AND c.specialization IS NOT NULL AND c.grade IS NOT NULL\n           GROUP BY c.specialization, c.grade",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "specialization!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "grade!",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "candidates!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "with_fsp!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "actively_looking!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "median_expectation",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      true,
+      true,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8e4cbc67aecc27d153ce3fab58c9a739eb50b07d4a334e9406d05bb1f57909d0"
+}

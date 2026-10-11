@@ -1,0 +1,468 @@
+{
+  "scenarios": [
+    {
+      "name": "честная заявка, точная калибровка",
+      "decision_accuracy": 0.8770620581304006,
+      "final_grade_accuracy": 0.87,
+      "within_one_grade": 0.9995833333333334,
+      "retest_agreement": 0.81125,
+      "retest_kappa": 0.7379879829219835,
+      "theta_rmse": 0.34587390915551847,
+      "theta_bias": -0.019685920328806217,
+      "mean_items": 13.633542812254516,
+      "confusion": [
+        [
+          332,
+          55,
+          0,
+          0
+        ],
+        [
+          111,
+          719,
+          0,
+          0
+        ],
+        [
+          1,
+          99,
+          666,
+          0
+        ],
+        [
+          0,
+          0,
+          46,
+          371
+        ]
+      ]
+    },
+    {
+      "name": "заявка с ошибками (20 % завышают, 10 % занижают)",
+      "decision_accuracy": 0.879889235029422,
+      "final_grade_accuracy": 0.8116666666666666,
+      "within_one_grade": 1.0,
+      "retest_agreement": 0.8025,
+      "retest_kappa": 0.7251416392778782,
+      "theta_rmse": 0.34809003295266255,
+      "theta_bias": -0.01822637363359985,
+      "mean_items": 13.467289719626168,
+      "confusion": [
+        [
+          380,
+          56,
+          0,
+          0
+        ],
+        [
+          121,
+          667,
+          19,
+          0
+        ],
+        [
+          0,
+          171,
+          598,
+          26
+        ],
+        [
+          0,
+          0,
+          59,
+          303
+        ]
+      ]
+    },
+    {
+      "name": "ошибка калибровки заданий (a ×0.8…1.2, b ±0.3)",
+      "decision_accuracy": 0.8713063763608087,
+      "final_grade_accuracy": 0.8620833333333333,
+      "within_one_grade": 1.0,
+      "retest_agreement": 0.8016666666666666,
+      "retest_kappa": 0.7176116032363926,
+      "theta_rmse": 0.35014347652524797,
+      "theta_bias": -0.006367141884869124,
+      "mean_items": 13.64696734059098,
+      "confusion": [
+        [
+          318,
+          71,
+          0,
+          0
+        ],
+        [
+          88,
+          743,
+          0,
+          0
+        ],
+        [
+          0,
+          127,
+          704,
+          0
+        ],
+        [
+          0,
+          0,
+          45,
+          304
+        ]
+      ]
+    }
+  ],
+  "items": {
+    "templates": [
+      {
+        "template_id": "go.defer_order",
+        "shown": 549,
+        "point_biserial": 0.15841668546606968
+      },
+      {
+        "template_id": "ds.stack_queue_heap",
+        "shown": 779,
+        "point_biserial": 0.17632078076895485
+      },
+      {
+        "template_id": "py.aliasing",
+        "shown": 839,
+        "point_biserial": 0.1897485351973638
+      },
+      {
+        "template_id": "cron.next_run",
+        "shown": 263,
+        "point_biserial": 0.19904867889488692
+      },
+      {
+        "template_id": "ml.gradient_step",
+        "shown": 340,
+        "point_biserial": 0.20660578390544548
+      },
+      {
+        "template_id": "css.specificity",
+        "shown": 336,
+        "point_biserial": 0.21796003046107307
+      },
+      {
+        "template_id": "prom.counter_increase",
+        "shown": 365,
+        "point_biserial": 0.21802395420115447
+      },
+      {
+        "template_id": "http.status_codes",
+        "shown": 1463,
+        "point_biserial": 0.22204612380108807
+      },
+      {
+        "template_id": "bash.log_pipeline",
+        "shown": 1349,
+        "point_biserial": 0.22813071975017943
+      },
+      {
+        "template_id": "algo.binary_search_trace",
+        "shown": 1413,
+        "point_biserial": 0.23075957915384854
+      },
+      {
+        "template_id": "docker.layer_cache",
+        "shown": 520,
+        "point_biserial": 0.23544562332529462
+      },
+      {
+        "template_id": "sec.service_ports",
+        "shown": 567,
+        "point_biserial": 0.2393743160794909
+      },
+      {
+        "template_id": "algo.loop_complexity",
+        "shown": 1160,
+        "point_biserial": 0.2448328407807358
+      },
+      {
+        "template_id": "db.index_choice",
+        "shown": 129,
+        "point_biserial": 0.24828216167461034
+      },
+      {
+        "template_id": "stats.descriptive",
+        "shown": 339,
+        "point_biserial": 0.2490934866743902
+      },
+      {
+        "template_id": "sec.vulnerability_class",
+        "shown": 661,
+        "point_biserial": 0.2525113377445825
+      },
+      {
+        "template_id": "js.event_loop_order",
+        "shown": 334,
+        "point_biserial": 0.253069710675624
+      },
+      {
+        "template_id": "net.cidr",
+        "shown": 748,
+        "point_biserial": 0.25726475745347016
+      },
+      {
+        "template_id": "sec.jwt_pitfalls",
+        "shown": 452,
+        "point_biserial": 0.25851593248927435
+      },
+      {
+        "template_id": "qa.api_assertions",
+        "shown": 461,
+        "point_biserial": 0.26117457007667755
+      },
+      {
+        "template_id": "js.closure_loop",
+        "shown": 331,
+        "point_biserial": 0.2616000749651669
+      },
+      {
+        "template_id": "qa.pairwise",
+        "shown": 332,
+        "point_biserial": 0.26787787825912124
+      },
+      {
+        "template_id": "js.type_coercion",
+        "shown": 331,
+        "point_biserial": 0.26938370042375226
+      },
+      {
+        "template_id": "sec.xor_cipher",
+        "shown": 308,
+        "point_biserial": 0.2722824631442459
+      },
+      {
+        "template_id": "qa.severity_priority",
+        "shown": 244,
+        "point_biserial": 0.27709563121188535
+      },
+      {
+        "template_id": "db.isolation_anomaly",
+        "shown": 103,
+        "point_biserial": 0.2775196677876732
+      },
+      {
+        "template_id": "web.cors",
+        "shown": 416,
+        "point_biserial": 0.289455529673988
+      },
+      {
+        "template_id": "py.mutable_default",
+        "shown": 525,
+        "point_biserial": 0.300338507496389
+      },
+      {
+        "template_id": "sec.hash_vs_encrypt",
+        "shown": 516,
+        "point_biserial": 0.30399195036498006
+      },
+      {
+        "template_id": "nginx.location_match",
+        "shown": 269,
+        "point_biserial": 0.3064774721577501
+      },
+      {
+        "template_id": "qa.equivalence_classes",
+        "shown": 363,
+        "point_biserial": 0.311064640684763
+      },
+      {
+        "template_id": "sql.group_by_having",
+        "shown": 1092,
+        "point_biserial": 0.31179728112014565
+      },
+      {
+        "template_id": "qa.decision_table",
+        "shown": 303,
+        "point_biserial": 0.31502063338219294
+      },
+      {
+        "template_id": "react.state_batching",
+        "shown": 389,
+        "point_biserial": 0.31756420825862225
+      },
+      {
+        "template_id": "ml.kmeans_step",
+        "shown": 371,
+        "point_biserial": 0.3189813094449609
+      },
+      {
+        "template_id": "ml.data_leakage",
+        "shown": 237,
+        "point_biserial": 0.3203639566359788
+      },
+      {
+        "template_id": "qa.boundary_values",
+        "shown": 227,
+        "point_biserial": 0.3209128264808924
+      },
+      {
+        "template_id": "http.method_semantics",
+        "shown": 1076,
+        "point_biserial": 0.3231195586031
+      },
+      {
+        "template_id": "sec.firewall_rules",
+        "shown": 646,
+        "point_biserial": 0.32725509930594554
+      },
+      {
+        "template_id": "ml.numpy_shapes",
+        "shown": 258,
+        "point_biserial": 0.3278366869208671
+      },
+      {
+        "template_id": "ml.pandas_groupby",
+        "shown": 379,
+        "point_biserial": 0.33046534530406785
+      },
+      {
+        "template_id": "sys.cap_tradeoffs",
+        "shown": 282,
+        "point_biserial": 0.33369181946041754
+      },
+      {
+        "template_id": "arch.token_bucket",
+        "shown": 738,
+        "point_biserial": 0.33586749743923555
+      },
+      {
+        "template_id": "git.history_count",
+        "shown": 2298,
+        "point_biserial": 0.34299734109723196
+      },
+      {
+        "template_id": "react.rerender",
+        "shown": 296,
+        "point_biserial": 0.34776032892504144
+      },
+      {
+        "template_id": "sre.error_budget",
+        "shown": 368,
+        "point_biserial": 0.348648546564395
+      },
+      {
+        "template_id": "k8s.resource_fit",
+        "shown": 386,
+        "point_biserial": 0.35004611644953626
+      },
+      {
+        "template_id": "ml.metric_choice",
+        "shown": 243,
+        "point_biserial": 0.350950234777476
+      },
+      {
+        "template_id": "sec.base64",
+        "shown": 310,
+        "point_biserial": 0.35460048576779923
+      },
+      {
+        "template_id": "sql.left_join_rows",
+        "shown": 1139,
+        "point_biserial": 0.3567924300187652
+      },
+      {
+        "template_id": "ml.confusion_metrics",
+        "shown": 378,
+        "point_biserial": 0.3578211187476203
+      },
+      {
+        "template_id": "qa.test_levels",
+        "shown": 248,
+        "point_biserial": 0.3625307717011645
+      },
+      {
+        "template_id": "sec.password_entropy",
+        "shown": 389,
+        "point_biserial": 0.3696119871568522
+      },
+      {
+        "template_id": "sec.filter_bypass",
+        "shown": 312,
+        "point_biserial": 0.3701097251667431
+      },
+      {
+        "template_id": "css.box_model",
+        "shown": 391,
+        "point_biserial": 0.3845519634373273
+      },
+      {
+        "template_id": "ml.learning_curves",
+        "shown": 239,
+        "point_biserial": 0.39341894148608375
+      },
+      {
+        "template_id": "linux.permissions",
+        "shown": 724,
+        "point_biserial": 0.3947451033013912
+      },
+      {
+        "template_id": "arch.lru_cache",
+        "shown": 636,
+        "point_biserial": 0.3969555815123012
+      },
+      {
+        "template_id": "qa.state_transition",
+        "shown": 303,
+        "point_biserial": 0.408738668076052
+      },
+      {
+        "template_id": "perf.littles_law",
+        "shown": 1094,
+        "point_biserial": 0.40968462555614044
+      },
+      {
+        "template_id": "stats.bayes_base_rate",
+        "shown": 722,
+        "point_biserial": 0.4385043347241795
+      },
+      {
+        "template_id": "js.array_methods",
+        "shown": 357,
+        "point_biserial": 0.46661607759009605
+      }
+    ],
+    "mean_point_biserial": 0.3027689311154283,
+    "share_above_02": 0.9354838709677419,
+    "max_exposure": 0.985,
+    "median_exposure": 0.8275
+  },
+  "leak": {
+    "rows": [
+      {
+        "leak_share": 0.0,
+        "fixed_form_pass_rate": 0.09444444444444444,
+        "fixed_form_flagged": 0.009444444444444445,
+        "cat_pass_rate": 0.09666666666666666,
+        "cat_collision_rate": 0.0
+      },
+      {
+        "leak_share": 0.25,
+        "fixed_form_pass_rate": 0.6522222222222223,
+        "fixed_form_flagged": 0.11777777777777777,
+        "cat_pass_rate": 0.09555555555555556,
+        "cat_collision_rate": 0.00037037037037037035
+      },
+      {
+        "leak_share": 0.5,
+        "fixed_form_pass_rate": 0.9994444444444445,
+        "fixed_form_flagged": 0.10611111111111111,
+        "cat_pass_rate": 0.09333333333333334,
+        "cat_collision_rate": 0.0005149911816578483
+      },
+      {
+        "leak_share": 1.0,
+        "fixed_form_pass_rate": 1.0,
+        "fixed_form_flagged": 0.0,
+        "cat_pass_rate": 0.10444444444444445,
+        "cat_collision_rate": 0.00020326278659611992
+      }
+    ],
+    "honest_flagged_fixed": 0.009444444444444445,
+    "leak_db_instances": 44306
+  },
+  "templates_total": 62
+}

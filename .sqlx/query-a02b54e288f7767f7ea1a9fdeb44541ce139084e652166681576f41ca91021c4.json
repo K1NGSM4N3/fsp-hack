@@ -1,0 +1,83 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.camera,\n                  p.purged_at IS NOT NULL AS \"purged!\",\n                  EXISTS (SELECT 1 FROM user_consents uc\n                           WHERE uc.id = p.consent_id AND uc.revoked_at IS NULL) AS \"consent_active!\",\n                  s.status AS \"status: AssessmentStatus\", s.started_at, s.finished_at,\n                  (SELECT count(*) FROM proctoring_chunks c WHERE c.session_id = p.session_id) AS \"chunks!\",\n                  (SELECT coalesce(sum(c.size), 0)::bigint FROM proctoring_chunks c\n                    WHERE c.session_id = p.session_id) AS \"bytes!\",\n                  (SELECT count(*) FROM proctoring_events e WHERE e.session_id = p.session_id) AS \"events!\"\n           FROM proctoring_sessions p\n           JOIN assessment_sessions s ON s.id = p.session_id\n           WHERE p.session_id = $1 AND p.candidate_id = $2\n           FOR UPDATE OF p",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "camera",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "purged!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "consent_active!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "status: AssessmentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "assessment_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "passed",
+                "failed",
+                "expired"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "finished_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "chunks!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "bytes!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "events!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      false,
+      false,
+      true,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "a02b54e288f7767f7ea1a9fdeb44541ce139084e652166681576f41ca91021c4"
+}

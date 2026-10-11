@@ -1,0 +1,68 @@
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	@api path /api/* /healthz /readyz
+	@site not path /api/* /healthz /readyz
+
+	# API JSON is compressed anew for every response: the default zstd level spends half the
+	# CPU of `better` on it for 1-11 % more bytes (README.md section 12.4). Pages and assets
+	# keep `better`.
+	encode @api {
+		zstd
+		gzip 6
+	}
+	encode @site {
+		zstd better
+		gzip 6
+	}
+
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Camera for the optional proctoring of the test; never the microphone.
+		Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		# 'unsafe-inline' scripts: Next.js App Router inlines its RSC payload scripts (no nonce
+		# middleware); Swagger UI at /api/docs also needs inline styles and data: images.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'"
+		-Server
+		-X-Powered-By
+	}
+
+	log {
+		output stdout
+		format json
+	}
+
+	@metrics path /metrics /metrics/*
+	handle @metrics {
+		respond 404
+	}
+
+	# The API sets Cache-Control itself: private, no-store unless a route is public reference data.
+	handle @api {
+		reverse_proxy api:8000
+	}
+
+	# Files from web/public keep their names across builds, so they are not immutable: a day
+	# fresh, a week served stale while revalidating. Hashed /_next/static/* stays immutable (Next).
+	@public_assets path /brand/* /icon.svg /favicon.ico
+	handle @public_assets {
+		reverse_proxy web:3000 {
+			header_down Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+		}
+	}
+
+	# Prerendered pages come with a year-long s-maxage: behind a CDN that keeps serving HTML that
+	# points at chunks of the previous build. Browsers revalidate every visit (ETag, 304), a shared
+	# cache keeps a page for a minute. Dynamic pages keep Next's private, no-store.
+	handle {
+		reverse_proxy web:3000 {
+			header_down Cache-Control "^s-maxage=[0-9]+(, stale-while-revalidate(=[0-9]+)?)?$" "public, max-age=0, must-revalidate, s-maxage=60, stale-while-revalidate=300"
+		}
+	}
+}

@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.id, v.company_id, v.title, v.description,\n                  (v.status = 'published') AS \"published!\",\n                  e.model AS \"model?\", e.text_hash AS \"text_hash?\"\n           FROM vacancies v\n           LEFT JOIN vacancy_embeddings e ON e.vacancy_id = v.id\n           WHERE v.id = ANY($1)",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "published!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 5,
+        "name": "model?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "text_hash?",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "UuidArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      null,
+      true,
+      true
+    ]
+  },
+  "hash": "4e9b3023b8567b0f19928897d4e4ae82a3f2cec9b9ba7f8e238449600917be28"
+}

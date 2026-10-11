@@ -1,0 +1,88 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, name, description, industry, website, city, size, contact_email, contact_phone,\n                contact_telegram, verified_domain, updated_at\n         FROM companies\n         WHERE owner_user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "industry",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "website",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "size",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "contact_email",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "contact_phone",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "contact_telegram",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "verified_domain",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "47b738380705c313cdc1a66a32266a8b3c410bc9fe99c52c982240c38721d069"
+}

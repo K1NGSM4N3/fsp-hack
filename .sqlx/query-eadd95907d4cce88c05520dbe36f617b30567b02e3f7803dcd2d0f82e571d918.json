@@ -1,0 +1,147 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT s.id, s.specialization, s.claimed_grade, s.attempt_kind,\n                  s.status AS \"status: AssessmentStatus\", s.theta, s.se, s.measured_grade,\n                  s.confident_above_next, s.person_fit_lz, s.aberrant, s.items_count, s.started_at,\n                  s.finished_at,\n                  EXISTS (SELECT 1 FROM grade_assignments g\n                           WHERE g.session_id = s.id AND g.annulled_at IS NULL) AS \"assigned!\",\n                  p.camera AS \"camera?\", r.decision AS \"review?: ReviewDecision\",\n                  r.decided_at AS \"reviewed_at?\"\n           FROM assessment_sessions s\n           LEFT JOIN proctoring_sessions p ON p.session_id = s.id\n           LEFT JOIN session_reviews r ON r.session_id = s.id\n           WHERE s.candidate_id = $1\n           ORDER BY s.started_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "claimed_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "attempt_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "status: AssessmentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "assessment_status",
+            "kind": {
+              "Enum": [
+                "in_progress",
+                "passed",
+                "failed",
+                "expired"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 6,
+        "name": "se",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 7,
+        "name": "measured_grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 8,
+        "name": "confident_above_next",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 9,
+        "name": "person_fit_lz",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 10,
+        "name": "aberrant",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "items_count",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 13,
+        "name": "finished_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 14,
+        "name": "assigned!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 15,
+        "name": "camera?",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 16,
+        "name": "review?: ReviewDecision",
+        "type_info": {
+          "Custom": {
+            "name": "review_decision",
+            "kind": {
+              "Enum": [
+                "confirm",
+                "annul",
+                "retest"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "reviewed_at?",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      null,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "eadd95907d4cce88c05520dbe36f617b30567b02e3f7803dcd2d0f82e571d918"
+}

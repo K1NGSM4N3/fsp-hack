@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT r.target_kind, r.target_id, r.resolved_at IS NOT NULL AS \"resolved!\",\n                  CASE r.target_kind\n                      WHEN 'vacancy' THEN (SELECT v.company_id FROM vacancies v WHERE v.id = r.target_id)\n                      WHEN 'invitation' THEN (SELECT i.company_id FROM invitations i WHERE i.id = r.target_id)\n                      ELSE (SELECT co.id FROM companies co WHERE co.id = r.target_id)\n                  END AS company_id\n           FROM reports r WHERE r.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "target_kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "target_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "resolved!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "company_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "e74fca2f0fabc1c7fb35da5eb5b0b9fde14125894e5bc31844a0e551e3924e34"
+}

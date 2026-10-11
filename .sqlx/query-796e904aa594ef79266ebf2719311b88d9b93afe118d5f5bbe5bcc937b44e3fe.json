@@ -1,0 +1,58 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT candidate_id, fsp_id, linked_via, linked_at, last_sync_at, achievements,\n                  has_achievements AS \"has_achievements!\"\n           FROM fsp_links\n           WHERE candidate_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "fsp_id",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "linked_via",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "linked_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 4,
+        "name": "last_sync_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "achievements",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 6,
+        "name": "has_achievements!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "796e904aa594ef79266ebf2719311b88d9b93afe118d5f5bbe5bcc937b44e3fe"
+}

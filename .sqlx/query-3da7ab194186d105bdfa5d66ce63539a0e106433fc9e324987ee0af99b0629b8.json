@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO candidates (user_id, public_code) VALUES ($1, $2)\n         ON CONFLICT (public_code) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3da7ab194186d105bdfa5d66ce63539a0e106433fc9e324987ee0af99b0629b8"
+}

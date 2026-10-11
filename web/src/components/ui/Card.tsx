@@ -1,0 +1,62 @@
+import type { ComponentProps, ReactNode } from "react";
+import { cn } from "@/lib/cn";
+
+interface CardProps extends ComponentProps<"section"> {
+  padding?: "none" | "sm" | "md" | "lg";
+  interactive?: boolean;
+}
+
+const PADDING = { none: "", sm: "p-4", md: "p-5 sm:p-6", lg: "p-6 sm:p-8" };
+
+export function Card({ padding = "md", interactive = false, className, ...props }: CardProps) {
+  return (
+    <section
+      className={cn(
+        "min-w-0 rounded-card border border-line bg-white shadow-card",
+        PADDING[padding],
+        interactive && "transition-[border-color,box-shadow] hover:border-primary-200 hover:shadow-pop",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+interface CardHeaderProps {
+  title: ReactNode;
+  description?: ReactNode;
+  action?: ReactNode;
+  eyebrow?: ReactNode;
+  /** Section number of a long form, drawn as a node before the title. */
+  step?: number;
+  className?: string;
+  as?: "h2" | "h3";
+}
+
+export function CardHeader({ title, description, action, eyebrow, step, className, as: Heading = "h2" }: CardHeaderProps) {
+  return (
+    <div className={cn("mb-4 flex flex-wrap items-start justify-between gap-3", className)}>
+      <div className={cn("min-w-0", step !== undefined && "flex items-start gap-3")}>
+        {step !== undefined && (
+          <span aria-hidden className="tabular mt-px flex size-6 shrink-0 items-center justify-center rounded-full bg-primary-50 font-mono text-xs font-semibold text-primary-strong ring-1 ring-primary-100">
+            {step}
+          </span>
+        )}
+        <div className="min-w-0">
+          {eyebrow && <div className="mb-1">{eyebrow}</div>}
+          <Heading className="text-[17px] leading-snug font-semibold tracking-[-0.015em] text-ink">{title}</Heading>
+          {description && <p className="mt-1 text-sm text-ink-muted">{description}</p>}
+        </div>
+      </div>
+      {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
+    </div>
+  );
+}
+
+export function Eyebrow({ children, className }: { children: ReactNode; className?: string }) {
+  return <span className={cn("font-mono text-xs font-medium tracking-[0.08em] text-ink-subtle uppercase", className)}>{children}</span>;
+}
+
+export function Divider({ className }: { className?: string }) {
+  return <hr className={cn("border-line", className)} />;
+}

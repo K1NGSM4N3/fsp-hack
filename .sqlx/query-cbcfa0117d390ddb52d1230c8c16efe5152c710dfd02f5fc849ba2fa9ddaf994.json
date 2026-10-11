@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE guardian_requests g\n         SET full_name_enc = NULL, email_enc = NULL, email_bidx = NULL,\n             confirm_hash = NULL, revoke_hash = NULL, erased_at = now()\n         FROM candidates c\n         WHERE c.user_id = g.candidate_id AND g.erased_at IS NULL\n           AND c.birth_date + interval '18 years' + make_interval(days => $1) <= current_date",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "cbcfa0117d390ddb52d1230c8c16efe5152c710dfd02f5fc849ba2fa9ddaf994"
+}

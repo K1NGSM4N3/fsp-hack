@@ -1,0 +1,684 @@
+{
+  "now": "2026-10-01",
+  "vacancies": [
+    {
+      "id": "v-go",
+      "text": "Go-разработчик (Middle) в платёжный сервис\nФинтех-команда: процессинг платежей и выплаты продавцам, 3 000 запросов в секунду.\nТребования:\n- коммерческая разработка на Go от 2 лет;\n- PostgreSQL: схемы, индексы, транзакции;\n- Kafka: продюсеры, консьюмеры, идемпотентность.\nБудет плюсом: Kubernetes, Redis, gRPC.\nУдалённо или гибрид в Москве. Зарплата 250–330 тыс. ₽."
+    },
+    {
+      "id": "v-react",
+      "text": "Senior Frontend-разработчик (React)\nДелаем личный кабинет онлайн-школы: 2 млн учеников, сложные формы и видеоплеер.\nНужно: React, TypeScript, Redux или аналог, опыт от 5 лет, оптимизация производительности.\nЖелательно: Next.js, Jest, опыт наставничества.\nТолько удалённо. Вилка 330 000 – 420 000 ₽."
+    },
+    {
+      "id": "v-devops",
+      "text": "DevOps-инженер (Middle)\nОбслуживаем инфраструктуру маркетплейса: 40 сервисов в собственном облаке.\nСтек: Kubernetes, Helm, Terraform, GitLab CI, Prometheus, Grafana, Linux.\nОпыт от 3 лет. Будет плюсом Ansible и знание Python.\nОфис или гибрид в Санкт-Петербурге, зарплата до 300 000 ₽."
+    },
+    {
+      "id": "v-qa",
+      "text": "QA-инженер по автоматизации (Junior+/Middle)\nТестируем API банковского приложения.\nОбязательно: Python, pytest, тестирование API (Postman), SQL.\nБудет плюсом: Playwright или Selenium, нагрузочное тестирование.\nУдалённо, зарплата 140–200 тыс. ₽."
+    },
+    {
+      "id": "v-ml",
+      "text": "ML-инженер NLP (Middle)\nПоиск и классификация обращений клиентов телеком-оператора.\nТребуется: Python, PyTorch, transformers, метрики качества моделей, SQL.\nБудет плюсом: LLM и RAG, Docker.\nГибрид, Москва. 280–380 тыс. ₽."
+    }
+  ],
+  "candidates": [
+    {
+      "id": "c01",
+      "resume_text": "Go-разработчик\nМосква. Готов к гибридному формату или удалённой работе.\nЖелаемая зарплата: 300 000 ₽\n\nОпыт работы — 4 года 7 месяцев\n\nФевраль 2023 — по настоящее время\nООО «ПэйКор», процессинг платежей\nGo-разработчик\nСервис авторизации платежей на Go: PostgreSQL (партиционирование, индексы), Kafka (exactly-once через outbox), Redis для лимитов. Деплой в Kubernetes.\nСнизил p99 авторизации с 250 до 90 мс.\n\nМарт 2022 — январь 2023\nООО «Логистик Тех»\nМладший backend-разработчик\nGo, PostgreSQL, REST API, Docker.\n\nНавыки: Go, PostgreSQL, Kafka, Redis, Kubernetes, Docker, gRPC, Git"
+    },
+    {
+      "id": "c02",
+      "resume_text": "Backend-разработчик (Go)\nСанкт-Петербург, удалённо\nОжидания по зарплате — от 280 000 руб.\n\nОпыт работы: 4 года\n\nООО «Маркет Плюс», 2022 — по настоящее время, разработчик на Go\nСервисы каталога и заказов: Go, PostgreSQL, RabbitMQ, gRPC, Docker. Перевёл обработку заказов на очереди.\n\nООО «Веб Студия», 2021 — 2022, PHP-разработчик\nLaravel, MySQL.\n\nКлючевые навыки: Go, PostgreSQL, RabbitMQ, gRPC, Docker, Linux"
+    },
+    {
+      "id": "c03",
+      "resume_text": "Senior Go Developer / Team Lead\nМосква, офис или гибрид\nЗарплата: 450 000 ₽ на руки\n\nОпыт работы — 8 лет 3 месяца\n\nООО «Банк Цифра», 2019 — по настоящее время\nТехлид команды платежей: Go, Kafka, PostgreSQL, Kubernetes, проектирование систем, команда из 6 разработчиков.\n\nООО «Софт Системс», 2018 — 2019\nРазработчик C++ и Go.\n\nДостижения: КМС по спортивному программированию.",
+      "fsp_achievements": [
+        {
+          "kind": "rank",
+          "discipline": "algorithmic",
+          "rank": "cms",
+          "date": "2017-04-01"
+        }
+      ]
+    },
+    {
+      "id": "c04",
+      "resume_text": "Junior Go-разработчик\nКазань, рассматриваю удалённую работу\nот 120 000 ₽\n\nОпыт работы — 1 год 2 месяца\n\nСтартап «ДоставкаЕды», август 2025 — по настоящее время\nСтажёр, затем младший разработчик: REST API на Go, PostgreSQL, Docker.\n\nКурсы: Яндекс Практикум «Go-разработчик», 2024\nНавыки: Go, PostgreSQL, Docker, Git, SQL"
+    },
+    {
+      "id": "c05",
+      "resume_text": "Python-разработчик (Middle)\nНовосибирск, удалённо\nЗарплата от 260 000 ₽\n\nОпыт работы 4 года 5 месяцев\n\nООО «Финтех Лаб», май 2022 — настоящее время\nМикросервисы на FastAPI, PostgreSQL, Kafka, Redis. Начал переписывать сервис выплат на Go: внутренний прототип.\n\nООО «Софтлайн-Регион», май 2021 — апрель 2022\nDjango, Celery, MySQL.\n\nНавыки: Python, FastAPI, Django, PostgreSQL, Kafka, Redis, Docker, Go (начальный уровень)"
+    },
+    {
+      "id": "c06",
+      "resume_text": "Java-разработчик\nМосква, гибрид\nЖелаемая зарплата 320 000 ₽\n\nОпыт работы — 5 лет 1 месяц\n\nБанк «Северный», 2021 — по настоящее время\nJava 17, Spring Boot, Kafka, PostgreSQL, микросервисы, Kubernetes.\n\nИнтегратор «ИТ-Сервис», 2020 — 2021\nJava, Oracle."
+    },
+    {
+      "id": "c07",
+      "resume_text": "QA-инженер (автоматизация)\nМосква, удалённо, 220 000 ₽\n\nОпыт работы: 3 года 3 месяца\n\nООО «ПэйТех», 2023 — по настоящее время\nТестирую платёжные микросервисы на Go: автотесты API на Go (testify), проверки сообщений в Kafka, запросы в PostgreSQL, Postman, тест-дизайн.\n\nООО «Мобайл Тест», 2022 — 2023\nРучное тестирование мобильных приложений, баг-репорты, чек-листы.\n\nНавыки: тестирование API, Go, Kafka, PostgreSQL, SQL, Postman, Git"
+    },
+    {
+      "id": "c08",
+      "resume_text": "Golang developer\nRemote · Yekaterinburg\nExpected salary: 260 000 RUB\n\nExperience: 3 years 9 months\n\nJan 2024 – present — fintech startup \"Copay\", Go developer\nPayment gateway in Go, PostgreSQL, Kafka, gRPC, Prometheus metrics.\n\nJan 2023 – Dec 2023 — \"IT Outsource\", junior backend developer\nGo, MySQL, Docker.\n\nSkills: Go, PostgreSQL, Kafka, gRPC, Docker, Kubernetes basics, Git"
+    },
+    {
+      "id": "c09",
+      "resume_text": "Бэкенд-разработчик\nМосква\n\nОпыт работы — 3 года\n\nООО «Груз Онлайн», 2023 — н.в.\nПишу на голанге сервисы расчёта тарифов: постгрес, кафка, редис, деплой в кубер.\n\nООО «Т-Сервис», 2022 — 2023\nРазработчик: Go, MySQL.",
+      "specialization": "backend",
+      "grade": "middle",
+      "test_result": 82,
+      "salary_expectation": 290000,
+      "work_formats": [
+        "remote",
+        "hybrid"
+      ]
+    },
+    {
+      "id": "c10",
+      "resume_text": "Разработчик Go\nТула, удалённо, 240 000 ₽\n\nОпыт работы — 3 года 6 месяцев\n\nООО «Умный Дом», апрель 2024 — по настоящее время\nGo, PostgreSQL, Kafka, Docker, gRPC.\n\nООО «Веб-Фабрика», апрель 2023 — март 2024\nPHP, MySQL.",
+      "specialization": "backend",
+      "grade": "middle",
+      "test_result": 35
+    },
+    {
+      "id": "c11",
+      "resume_text": "PHP-разработчик (Senior)\nВоронеж, удалённо, от 250 000 ₽\n\nОпыт работы — 6 лет\n\nИнтернет-магазин «Мебель+», 2020 — по настоящее время\nLaravel, MySQL, Redis, RabbitMQ, Docker. Немного Go — написал пару утилит.\n\nВеб-студия «Пиксель», 2018 — 2020\nPHP, Yii, MySQL, jQuery."
+    },
+    {
+      "id": "c12",
+      "resume_text": "Fullstack-разработчик (Node.js + React)\nМосква, удалённо, 300 000 ₽\n\nОпыт работы — 5 лет\n\nООО «Медиа Групп», 2021 — по настоящее время\nNestJS, TypeScript, PostgreSQL, Kafka для событий аналитики; фронтенд на React и Redux.\n\nООО «Старт», 2020 — 2021\nJavaScript, Express.js, MongoDB, Vue."
+    },
+    {
+      "id": "c13",
+      "resume_text": "Go-разработчик (Middle+)\nМосква, гибрид\n\nОпыт работы — 4 года 10 месяцев\n\nООО «Билеты Онлайн», 2022 — н.в.\nВысоконагруженный сервис бронирования на Go: PostgreSQL, Kafka, Redis, ClickHouse.\n\nООО «Транспорт Софт», 2021 — 2022\nGo, PostgreSQL.\n\nНавыки: Go, PostgreSQL, Kafka, Redis, ClickHouse, Kubernetes, gRPC",
+      "salary_expectation": 400000
+    },
+    {
+      "id": "c14",
+      "resume_text": "Senior Frontend Developer\nУдалённо (Калининград)\nЖелаемая зарплата: 380 000 ₽\n\nОпыт работы — 7 лет 4 месяца\n\nООО «Учи-Онлайн», 2021 — по настоящее время, ведущий фронтенд-разработчик\nЛичный кабинет на React, TypeScript, Redux Toolkit, Next.js; ускорил загрузку страниц в 2 раза; наставник трёх разработчиков.\n\nООО «Агентство Интерфейс», 2019 — 2021\nReact, JavaScript, Jest.\n\nНавыки: React, TypeScript, Redux, Next.js, Jest, HTML, CSS, Webpack"
+    },
+    {
+      "id": "c15",
+      "resume_text": "Frontend-разработчик (Senior)\nУдалённая работа, Самара\n400 000 ₽\n\nОпыт работы — 6 лет\n\nОнлайн-кинотеатр «Кадр», 2022 — н.в.\nReact, TypeScript, MobX, оптимизация производительности (Web Vitals), видеоплеер.\n\nООО «Ритейл Диджитал», 2020 — 2022\nReact, JavaScript, Storybook."
+    },
+    {
+      "id": "c16",
+      "resume_text": "Frontend-разработчик\nУдалённо, Пермь, 250 000 ₽\n\nОпыт работы — 3 года 2 месяца\n\nООО «Шоп Лайн», 2023 — по настоящее время\nReact, TypeScript, Redux, REST API, вёрстка.\n\nНавыки: React, TypeScript, Redux, HTML, CSS, Git"
+    },
+    {
+      "id": "c17",
+      "resume_text": "Senior Vue.js разработчик\nМосква, удалённо, 360 000 ₽\n\nОпыт работы — 6 лет 6 месяцев\n\nООО «Финансы Онлайн», 2021 — н.в.\nVue 3, Nuxt, TypeScript, Pinia, Vitest.\n\nООО «Студия Веб», 2020 — 2021\nVue, JavaScript, SCSS."
+    },
+    {
+      "id": "c18",
+      "resume_text": "Ведущий frontend-разработчик (Senior)\nМосква, только офис\nЖелаемая зарплата — 390 000 ₽\n\nОпыт работы — 8 лет\n\nООО «Ритейл Групп», 2019 — н.в.\nReact, TypeScript, Redux, Next.js, Jest; руководил переездом с jQuery на React."
+    },
+    {
+      "id": "c19",
+      "resume_text": "Junior Frontend-разработчик\nЕкатеринбург, удалённо, 90 000 ₽\n\nОпыт работы — 1 год\n\nСтудия «Лендинг», 2025 — н.в.\nВёрстка, JavaScript, React (учебные и рабочие проекты)."
+    },
+    {
+      "id": "c20",
+      "resume_text": "Angular-разработчик (Senior)\nНижний Новгород, удалённо, 350 000 ₽\n\nОпыт работы — 8 лет\n\nООО «Банк Технологии», 2019 — н.в.\nAngular, TypeScript, RxJS, NgRx, микрофронтенды."
+    },
+    {
+      "id": "c21",
+      "resume_text": "Фронтенд-разработчик\n\nОпыт работы — 5 лет 6 месяцев\n\nООО «Образование Плюс», 2022 — н.в.\nReact, TypeScript, Redux, Next.js; сложные формы, видеоплеер.\n\nООО «Т-Медиа», 2021 — 2022\nReact, Jest.\n\nДостижения: призёр всероссийских соревнований ФСП по продуктовому программированию, 2025.",
+      "specialization": "frontend",
+      "grade": "senior",
+      "test_result": 90,
+      "salary_expectation": 360000,
+      "work_formats": [
+        "remote"
+      ],
+      "fsp_achievements": [
+        {
+          "kind": "competition",
+          "discipline": "product",
+          "event_level": "national",
+          "place": 2,
+          "event_name": "Всероссийские соревнования по продуктовому программированию",
+          "date": "2025-05-20"
+        }
+      ]
+    },
+    {
+      "id": "c22",
+      "resume_text": "Верстальщик / HTML-кодер\nРостов-на-Дону, удалённо, 80 000 ₽\n\nОпыт работы — 4 года\n\nФриланс\nАдаптивная вёрстка лендингов: HTML, CSS, SCSS, Figma, базовый React."
+    },
+    {
+      "id": "c23",
+      "resume_text": "Node.js-разработчик\nМосква, удалённо, 280 000 ₽\n\nОпыт работы — 5 лет\n\nООО «Платформа Ивент», 2021 — н.в.\nNestJS, TypeScript, PostgreSQL, Redis; иногда правлю фронтенд на React."
+    },
+    {
+      "id": "c24",
+      "resume_text": "Senior React Developer\nRemote, Moscow\nExpected salary: 450 000 RUB\n\nExperience: 5 years 3 months\n\n2021 – present — online education platform, frontend lead\nReact, TypeScript, Redux Toolkit, Next.js, Jest, performance optimization."
+    },
+    {
+      "id": "c25",
+      "resume_text": "DevOps-инженер\nСанкт-Петербург, гибрид\nЖелаемая зарплата: 270 000 ₽\n\nОпыт работы — 4 года 3 месяца\n\nООО «Маркетплейс Север», 2022 — н.в.\nKubernetes (3 кластера), Helm, Terraform, GitLab CI, Prometheus, Grafana, Linux. Перевёл деплой 30 сервисов на GitOps.\n\nООО «Хостинг-Про», 2021 — 2022\nLinux, Ansible, Nginx, Bash."
+    },
+    {
+      "id": "c26",
+      "resume_text": "DevOps Engineer\nМосква, только удалённо, 260 000 ₽\n\nОпыт работы — 3 года 4 месяца\n\nООО «Ритейл Тех», 2023 — н.в.\nDocker, Kubernetes, Ansible, Jenkins, Zabbix, Linux."
+    },
+    {
+      "id": "c27",
+      "resume_text": "Senior SRE\nСанкт-Петербург, офис\nЗарплата: 420 000 ₽\n\nОпыт работы — 9 лет\n\nООО «Облако Плюс», 2018 — н.в.\nKubernetes, Terraform, Prometheus, Grafana, Go, Python, дежурства и разбор инцидентов."
+    },
+    {
+      "id": "c28",
+      "resume_text": "Системный администратор Linux\nСанкт-Петербург, офис, 150 000 ₽\n\nОпыт работы — 5 лет\n\nООО «Завод Технологий», 2021 — н.в.\nLinux (Debian, CentOS), Bash, Nginx, сети (TCP/IP, VLAN), Zabbix, резервное копирование; пробовал Docker и Kubernetes на тестовом стенде."
+    },
+    {
+      "id": "c29",
+      "resume_text": "Junior DevOps-инженер\nСанкт-Петербург, гибрид, 120 000 ₽\n\nОпыт работы — 1 год\n\nООО «Веб Сервис», 2025 — н.в.\nDocker, GitLab CI, Linux; изучаю Kubernetes и Terraform."
+    },
+    {
+      "id": "c30",
+      "resume_text": "Инженер инфраструктуры\n\nОпыт работы — 3 года 9 месяцев\n\nООО «Город Сервис», 2023 — н.в.\nKubernetes, Helm, Terraform, GitLab CI, VictoriaMetrics, Grafana, Linux.\n\nООО «Сеть Плюс», 2022 — 2023\nLinux, Ansible, Bash.",
+      "specialization": "devops",
+      "grade": "middle",
+      "test_result": 70,
+      "city": "Санкт-Петербург",
+      "work_formats": [
+        "hybrid",
+        "office"
+      ],
+      "salary_expectation": 280000
+    },
+    {
+      "id": "c31",
+      "resume_text": "Go-разработчик\nМосква, гибрид, 290 000 ₽\n\nОпыт работы — 3 года 5 месяцев\n\nООО «Сервис Доставки», 2023 — н.в.\nСервисы на Go, PostgreSQL, Redis; настроил GitLab CI и деплой в Kubernetes через Helm.\n\nООО «Код Студия», 2022 — 2023\nGo, MySQL."
+    },
+    {
+      "id": "c32",
+      "resume_text": "DevOps / SRE инженер\nПетрозаводск, готов к переезду в Санкт-Петербург\nЖелаемая зарплата 280 000 ₽\n\nОпыт работы — 3 года 6 месяцев\n\nООО «Северный Облачный», 2023 — н.в.\nKubernetes, Helm, Argo CD, Terraform, VictoriaMetrics, Grafana, Linux."
+    },
+    {
+      "id": "c33",
+      "resume_text": "Data Engineer\nМосква, удалённо, 300 000 ₽\n\nОпыт работы — 4 года\n\nООО «Ритейл Аналитика», 2022 — н.в.\nAirflow, Spark, Kafka, ClickHouse, Kubernetes для запуска джобов, Python, SQL."
+    },
+    {
+      "id": "c34",
+      "resume_text": "DevOps-инженер\nМосква, готов к переезду в Санкт-Петербург, гибрид\n290 000 ₽\n\nОпыт работы — 3 года\n\nООО «Финтех Инфра», 2023 — н.в.\nTerraform, Ansible, GitLab CI, Docker, Prometheus, Grafana, Linux, немного Kubernetes."
+    },
+    {
+      "id": "c35",
+      "resume_text": "QA Automation Engineer\nУдалённо, Ижевск\nЖелаемая зарплата: 180 000 ₽\n\nОпыт работы — 3 года 1 месяц\n\nООО «Банк Онлайн», 2024 — н.в.\nАвтотесты API на Python (pytest, requests), Postman, SQL (PostgreSQL), Playwright для UI, Allure, GitLab CI.\n\nООО «Тест Лаб», 2023 — 2024\nРучное тестирование, тест-дизайн, баг-репорты.",
+      "fsp_achievements": [
+        {
+          "kind": "competition",
+          "discipline": "product",
+          "event_level": "national",
+          "place": "finalist",
+          "date": "2025-06-10"
+        }
+      ]
+    },
+    {
+      "id": "c36",
+      "resume_text": "Тестировщик ПО\nКазань, удалённо, 150 000 ₽\n\nОпыт работы — 4 года\n\nООО «Мобильные Решения», 2022 — н.в.\nРучное тестирование веб и мобильных приложений, тест-дизайн, тест-кейсы, чек-листы, SQL, Postman, Jira, Charles."
+    },
+    {
+      "id": "c37",
+      "resume_text": "QA Automation (Java)\nМосква, удалённо, 190 000 ₽\n\nОпыт работы — 3 года\n\nООО «Страхование Тех», 2023 — н.в.\nJava, Selenide, JUnit 5, Rest Assured, Allure, SQL, Jenkins."
+    },
+    {
+      "id": "c38",
+      "resume_text": "Junior QA Automation Engineer\nЧелябинск, удалённо, 130 000 ₽\n\nОпыт работы — 1 год 6 месяцев\n\nООО «Платёжный Шлюз», 2025 — н.в.\nАвтотесты на Python + pytest для REST API, Postman, SQL-запросы, тест-дизайн."
+    },
+    {
+      "id": "c39",
+      "resume_text": "Руководитель группы тестирования (QA Lead)\nМосква, гибрид, 300 000 ₽\n\nОпыт работы — 9 лет\n\nООО «Большой Банк», 2018 — н.в.\nPython, pytest, Selenium, нагрузочное тестирование (JMeter), построение процессов QA, команда 8 человек."
+    },
+    {
+      "id": "c40",
+      "resume_text": "Python-разработчик\nМосква, удалённо, 230 000 ₽\n\nОпыт работы — 3 года\n\nООО «Сервис Записи», 2023 — н.в.\nDjango, DRF, PostgreSQL, Celery, pytest, Postman, Docker."
+    },
+    {
+      "id": "c41",
+      "resume_text": "Инженер по тестированию\n\nОпыт работы — 3 года 4 месяца\n\nООО «Страхование Онлайн», 2023 — н.в.\nPython, pytest, Playwright, тестирование API, нагрузочное тестирование (Locust), SQL.",
+      "specialization": "qa",
+      "grade": "middle",
+      "test_result": 76,
+      "salary_expectation": 190000,
+      "work_formats": [
+        "remote"
+      ]
+    },
+    {
+      "id": "c42",
+      "resume_text": "Начинающий тестировщик\nМосква, удалённо, 70 000 ₽\n\nБез опыта работы. Прошёл курсы «Тестировщик ПО» (2026).\n\nНавыки: Python, pytest, Selenium, Playwright, SQL, Postman, JMeter, Jira, Git, Docker, тест-дизайн, тестирование API"
+    },
+    {
+      "id": "c43",
+      "resume_text": "QA Automation Engineer (JavaScript)\nСанкт-Петербург, удалённо, 200 000 ₽\n\nОпыт работы — 4 года\n\nООО «Маркет Тест», 2022 — н.в.\nCypress, Jest, TypeScript, Postman, SQL, GitHub Actions."
+    },
+    {
+      "id": "c44",
+      "resume_text": "QA-инженер (API)\nНовосибирск, удалённо\nЖелаемая зарплата: 210 000 ₽\n\nОпыт работы — 2 года 7 месяцев\n\nООО «Финтех Тест», 2024 — н.в.\nPython, pytest, requests, Postman, SQL, Docker; тест-дизайн; Kafka для проверки событий."
+    },
+    {
+      "id": "c45",
+      "resume_text": "ML Engineer (NLP)\nМосква, гибрид\nЖелаемая зарплата: 330 000 ₽\n\nОпыт работы — 3 года 4 месяца\n\nООО «Телеком Данные», 2023 — н.в.\nКлассификация обращений клиентов: BERT и другие transformers на PyTorch, ROC-AUC, F1, SQL, Docker.\n\nООО «Аналитика Плюс», 2022 — 2023\npandas, scikit-learn."
+    },
+    {
+      "id": "c46",
+      "resume_text": "Data Scientist\nМосква, гибрид, 300 000 ₽\n\nОпыт работы — 4 года\n\nООО «Кредит Скоринг», 2022 — н.в.\nСкоринг и отток: pandas, scikit-learn, CatBoost, SQL, A/B-тесты, статистика."
+    },
+    {
+      "id": "c47",
+      "resume_text": "Computer Vision Engineer\nМосква, гибрид, 320 000 ₽\n\nОпыт работы — 3 года\n\nООО «Видео Аналитика», 2023 — н.в.\nPyTorch, OpenCV, YOLO, сегментация изображений, Docker."
+    },
+    {
+      "id": "c48",
+      "resume_text": "ML-инженер (LLM)\nМосква, гибрид\n340 000 ₽\n\nОпыт работы — 2 года 8 месяцев\n\nООО «Ассистент», 2024 — н.в.\nRAG-поиск по базе знаний (LangChain), дообучение моделей transformers на PyTorch, оценка качества (precision, recall), Python, Docker.",
+      "fsp_achievements": [
+        {
+          "kind": "competition",
+          "discipline": "ai",
+          "event_level": "interregional",
+          "place": "participant",
+          "date": "2025-03-01"
+        }
+      ]
+    },
+    {
+      "id": "c49",
+      "resume_text": "Junior Data Scientist\nМосква, гибрид, 150 000 ₽\n\nОпыт работы — 1 год\n\nООО «Ритейл Данные», 2025 — н.в.\nPython, pandas, scikit-learn; курс по NLP (классификация текстов)."
+    },
+    {
+      "id": "c50",
+      "resume_text": "Lead NLP Engineer\nМосква, гибрид\nЗарплата: 500 000 ₽\n\nОпыт работы — 8 лет\n\nООО «Поиск Тех», 2018 — н.в.\nPyTorch, transformers, LLM, руководство командой из 6 человек."
+    },
+    {
+      "id": "c51",
+      "resume_text": "Data Scientist / NLP\n\nОпыт работы — 3 года 1 месяц\n\nООО «Сибирь Данные», 2023 — н.в.\nPyTorch, transformers, классификация текстов, F1, SQL.\n\nДостижения: призёр всероссийских соревнований ФСП по программированию систем ИИ, 2025.",
+      "specialization": "ml",
+      "grade": "middle",
+      "test_result": 85,
+      "city": "Новосибирск",
+      "relocation": true,
+      "work_formats": [
+        "hybrid",
+        "office"
+      ],
+      "salary_expectation": 300000,
+      "fsp_achievements": [
+        {
+          "kind": "competition",
+          "discipline": "ai",
+          "event_level": "national",
+          "place": 3,
+          "date": "2025-04-15"
+        }
+      ]
+    },
+    {
+      "id": "c52",
+      "resume_text": "Аналитик данных\nМосква, гибрид, 200 000 ₽\n\nОпыт работы — 3 года\n\nООО «Ритейл Отчёты», 2023 — н.в.\nSQL, Python (pandas), Tableau, A/B-тесты, отчётность."
+    },
+    {
+      "id": "c53",
+      "resume_text": "Python backend-разработчик\nМосква, гибрид, 260 000 ₽\n\nОпыт работы — 4 года\n\nООО «Умные Сервисы», 2022 — н.в.\nFastAPI, PostgreSQL, Redis, интеграция с ML-моделями через REST API, Docker."
+    },
+    {
+      "id": "c54",
+      "resume_text": "NLP-инженер\nКазань, только удалённая работа\n310 000 ₽\n\nОпыт работы — 3 года\n\nООО «Текст Тех», 2023 — н.в.\nPyTorch, transformers, классификация и NER, метрики качества моделей, SQL."
+    },
+    {
+      "id": "c55",
+      "resume_text": "Программист 1С\nСамара, офис, 180 000 ₽\n\nОпыт работы — 7 лет\n\nООО «Учёт Сервис», 2019 — н.в.\n1С:Предприятие 8.3, УТ, ERP, обмены данными, SQL-запросы."
+    },
+    {
+      "id": "c56",
+      "resume_text": "Руководитель IT-проектов\nМосква, офис, 350 000 ₽\n\nОпыт работы — 10 лет\n\nООО «Продукт Лаб», 2016 — н.в.\nЗапуск продуктов: команды бэкенда на Go и фронтенда на React, инфраструктура в Kubernetes; Agile, Jira, бюджетирование."
+    },
+    {
+      "id": "c57",
+      "resume_text": "Специалист по тестированию на проникновение\nМосква, удалённо, 280 000 ₽\n\nОпыт работы — 4 года\n\nООО «Безопасность Плюс», 2022 — н.в.\nПентест веб-приложений, OWASP Top 10, Burp Suite, Kali Linux, Python-скрипты, отчёты."
+    },
+    {
+      "id": "c58",
+      "resume_text": "Android-разработчик\nСанкт-Петербург, гибрид, 270 000 ₽\n\nОпыт работы — 4 года\n\nООО «Мобильный Банк», 2022 — н.в.\nKotlin, Java, Jetpack Compose, Coroutines, REST API."
+    },
+    {
+      "id": "c59",
+      "resume_text": "Продуктовый аналитик\nМосква, гибрид, 220 000 ₽\n\nОпыт работы — 3 года\n\nООО «Маркет Продукт», 2023 — н.в.\nSQL, Python, A/B-тестирование, статистика, Amplitude."
+    },
+    {
+      "id": "c60",
+      "resume_text": "Системный аналитик\nМосква, удалённо, 250 000 ₽\n\nОпыт работы — 5 лет\n\nООО «Банк Интеграции», 2021 — н.в.\nBPMN, UML, SQL, REST API, Kafka, Swagger, постановка задач разработке."
+    }
+  ],
+  "labels": [
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c01",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c02",
+      "relevance": 2
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c03",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c04",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c05",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c06",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c07",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c08",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c09",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c10",
+      "relevance": 2
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c11",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c12",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c13",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c23",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c31",
+      "relevance": 2
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c40",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c53",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c56",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-go",
+      "candidate_id": "c60",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c14",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c15",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c16",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c17",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c18",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c19",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c20",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c21",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c22",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c23",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c24",
+      "relevance": 2
+    },
+    {
+      "vacancy_id": "v-react",
+      "candidate_id": "c12",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c25",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c26",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c27",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c28",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c29",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c30",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c31",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c32",
+      "relevance": 2
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c33",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c34",
+      "relevance": 2
+    },
+    {
+      "vacancy_id": "v-devops",
+      "candidate_id": "c56",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c35",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c36",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c37",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c38",
+      "relevance": 2
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c39",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c40",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c41",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c42",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c43",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c44",
+      "relevance": 2
+    },
+    {
+      "vacancy_id": "v-qa",
+      "candidate_id": "c07",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c45",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c46",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c47",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c48",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c49",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c50",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c51",
+      "relevance": 3
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c52",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c53",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c54",
+      "relevance": 1
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c33",
+      "relevance": 0
+    },
+    {
+      "vacancy_id": "v-ml",
+      "candidate_id": "c59",
+      "relevance": 0
+    }
+  ]
+}

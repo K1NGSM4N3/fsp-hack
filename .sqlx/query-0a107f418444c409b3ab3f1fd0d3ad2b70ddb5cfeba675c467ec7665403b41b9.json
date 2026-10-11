@@ -1,0 +1,18 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE task_assignments a\n         SET status = 'reviewed', rating = $1, review_comment = $2, reviewed_at = now()\n         FROM tasks t\n         WHERE a.id = $3 AND a.task_id = t.id AND t.id = $4 AND t.company_id = $5\n           AND a.status IN ('submitted', 'reviewed')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Int2",
+        "Text",
+        "Uuid",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0a107f418444c409b3ab3f1fd0d3ad2b70ddb5cfeba675c467ec7665403b41b9"
+}

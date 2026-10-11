@@ -1,0 +1,51 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT EXISTS (SELECT 1 FROM published_candidates p WHERE p.user_id = c.user_id) AS \"published!\",\n                  c.search_status AS \"search_status: SearchStatus\", c.specialization, c.grade\n           FROM candidates c\n           WHERE c.user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "published!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 1,
+        "name": "search_status: SearchStatus",
+        "type_info": {
+          "Custom": {
+            "name": "search_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "open",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "grade",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "8d13d7fc192341d754bb4fa5ceb3fd55ef83ad4de83fb2ae60b60ecaae69494e"
+}

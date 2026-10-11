@@ -1,0 +1,30 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE candidates\n         SET visible = $1, show_name = $2, show_fsp = $3, show_experience = $4,\n             search_status = $5, updated_at = now()\n         WHERE user_id = $6",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Bool",
+        "Bool",
+        "Bool",
+        "Bool",
+        {
+          "Custom": {
+            "name": "search_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "open",
+                "closed"
+              ]
+            }
+          }
+        },
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0b9252c10b225ff8bf3b2dba76bb7919b469fb36da7d3fd8c1d4492ad72e5040"
+}

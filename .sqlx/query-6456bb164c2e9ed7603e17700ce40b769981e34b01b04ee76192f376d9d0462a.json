@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO candidates (user_id, public_code, full_name_enc, contacts_enc, city, relocation,\n                                 work_formats, salary_expectation_min, about, experience_years, roles,\n                                 soft_skills, industries, experience, search_status, show_name,\n                                 last_activity_at, created_at)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)\n         ON CONFLICT (public_code) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Bytea",
+        "Bytea",
+        "Text",
+        "Bool",
+        "TextArray",
+        "Int8",
+        "Text",
+        "Float4",
+        "TextArray",
+        "TextArray",
+        "TextArray",
+        "Jsonb",
+        {
+          "Custom": {
+            "name": "search_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "open",
+                "closed"
+              ]
+            }
+          }
+        },
+        "Bool",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "6456bb164c2e9ed7603e17700ce40b769981e34b01b04ee76192f376d9d0462a"
+}

@@ -1,0 +1,101 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT p.session_id, p.candidate_id, p.camera, p.mime, p.started_at, p.purged_at,\n                  (SELECT count(*) FROM proctoring_chunks c WHERE c.session_id = p.session_id) AS \"chunks!\",\n                  (SELECT coalesce(sum(c.size), 0)::bigint FROM proctoring_chunks c\n                    WHERE c.session_id = p.session_id) AS \"bytes!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'tab_hidden') AS \"tab_hidden!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'window_blur') AS \"window_blur!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'fullscreen_exit') AS \"fullscreen_exit!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'paste') AS \"paste!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'camera_lost') AS \"camera_lost!\",\n                  count(e.kind) FILTER (WHERE e.kind = 'recording_failed') AS \"recording_failed!\"\n           FROM proctoring_sessions p\n           LEFT JOIN proctoring_events e ON e.session_id = p.session_id\n           WHERE p.session_id = $1 AND ($2::uuid IS NULL OR p.candidate_id = $2)\n           GROUP BY p.session_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "camera",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "mime",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "started_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "purged_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "chunks!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "bytes!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "tab_hidden!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "window_blur!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "fullscreen_exit!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 11,
+        "name": "paste!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "camera_lost!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 13,
+        "name": "recording_failed!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "95a6ce1f62b2f8d2f761236b75c7c4679fd2e83f4ff12894b5554a39f48764b3"
+}

@@ -1,0 +1,25 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO guardian_requests (id, candidate_id, full_name_enc, email_enc, email_bidx,\n                                        confirm_hash, revoke_hash, confirm_expires_at, sent_at,\n                                        decision, answered_at, consent_id, created_at)\n         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,\n                 CASE WHEN $10::uuid IS NOT NULL THEN 'granted'::guardian_decision END, $11, $10, $12)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Bytea",
+        "Timestamptz",
+        "Timestamptz",
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ab42c4b319fcc215e601cf63a308ef1acfd04b2db894df990ec58aa56af20720"
+}

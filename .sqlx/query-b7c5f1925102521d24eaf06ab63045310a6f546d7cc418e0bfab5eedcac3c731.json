@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id\n         FROM tasks t, candidates c\n         WHERE c.user_id = $1\n           AND t.active\n           AND t.specialization = c.specialization\n           AND c.grade = ANY (t.grades)\n           AND NOT EXISTS (SELECT 1 FROM task_assignments a WHERE a.task_id = t.id AND a.candidate_id = c.user_id)\n         ORDER BY (SELECT count(DISTINCT s.skill) FROM candidate_skills s\n                    WHERE s.candidate_id = c.user_id AND s.skill = ANY (t.skills)\n                      AND (s.source <> 'fsp' OR c.show_fsp)) DESC,\n                  t.created_at\n         LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b7c5f1925102521d24eaf06ab63045310a6f546d7cc418e0bfab5eedcac3c731"
+}

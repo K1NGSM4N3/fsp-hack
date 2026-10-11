@@ -1,0 +1,12 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM fsp_registry_events WHERE received_at < now() - interval '30 days'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": []
+  },
+  "hash": "61e9af8954b9f9866cc8a8ec8e431374bf1096000ebfb7d2eb26071537984fc2"
+}

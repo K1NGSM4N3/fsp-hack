@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT at FROM moderation_actions\n         WHERE target_id = $1 AND target_kind = 'session' AND action = 'view_recording'\n         ORDER BY at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "21ddef92d652bda6f301d4bee1ab637fb3babe62d8fb586fcea58c9d76a07ec2"
+}

@@ -1,0 +1,19 @@
+# Overrides the root .dockerignore for api.Dockerfile: web/ changes must not invalidate the
+# Rust layers.
+.git
+.DS_Store
+**/.DS_Store
+.env
+.env.*
+.direnv
+result
+target/
+**/target/
+**/node_modules
+*.zip
+*.rar
+ФСП/
+web/
+deploy/
+# Local model weights (`make model`): the image fetches its own.
+models/

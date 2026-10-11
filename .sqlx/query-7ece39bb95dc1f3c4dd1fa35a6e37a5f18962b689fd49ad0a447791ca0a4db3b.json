@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.user_id, ts_rank_cd(c.about_tsv, q)::real AS \"rank!\"\n           FROM candidates c, to_tsquery('russian', $2) q\n           WHERE c.specialization = $1 AND c.grade IS NOT NULL\n             AND c.visible AND c.search_status <> 'closed'\n             AND c.about_tsv @@ q\n           ORDER BY c.user_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "rank!",
+        "type_info": "Float4"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      null
+    ]
+  },
+  "hash": "7ece39bb95dc1f3c4dd1fa35a6e37a5f18962b689fd49ad0a447791ca0a4db3b"
+}

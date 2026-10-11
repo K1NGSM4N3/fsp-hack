@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE guardian_requests\n         SET full_name_enc = $2, email_enc = $3, email_bidx = $4,\n             confirm_hash = NULL, revoke_hash = NULL, confirm_expires_at = NULL, sent_at = NULL\n         WHERE id = $1 AND decision IS NULL AND erased_at IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Bytea",
+        "Bytea",
+        "Bytea"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "882f23bd66c8e7aab66feb3fa67077f23e6c0b50120e16d4c383ca6e0f38d18d"
+}

@@ -1,0 +1,90 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, event_type, status AS \"status: IntegrationEventStatus\", attempts, created_at,\n                  next_attempt_at, delivered_at, last_error\n           FROM integration_events\n           WHERE company_id = $1\n             AND ($2::integration_event_status IS NULL OR status = $2)\n             AND ($3::timestamptz IS NULL OR (created_at, id) < ($3, $4::uuid))\n           ORDER BY created_at DESC, id DESC\n           LIMIT $5",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "event_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "status: IntegrationEventStatus",
+        "type_info": {
+          "Custom": {
+            "name": "integration_event_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "delivered",
+                "failed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "attempts",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 4,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 5,
+        "name": "next_attempt_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "delivered_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "last_error",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "integration_event_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "delivered",
+                "failed"
+              ]
+            }
+          }
+        },
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "63f2e6806b6a4ae2bf67dae280742cefd934320bcf116ff80f31201c7eed7e98"
+}

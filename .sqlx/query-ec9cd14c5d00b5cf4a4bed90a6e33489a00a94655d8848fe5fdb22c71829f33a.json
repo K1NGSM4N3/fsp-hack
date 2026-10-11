@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE vacancies v\n         SET trust_flags = coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f\n                                     WHERE f->>'kind' <> 'paraphrase_of_other'), '[]') || $2,\n             flagged_at = CASE\n                 WHEN coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f\n                                WHERE f->>'kind' <> 'paraphrase_of_other'), '[]') || $2 = '[]'::jsonb\n                 THEN NULL ELSE coalesce(v.flagged_at, now()) END,\n             trust_review = CASE\n                 WHEN v.trust_flags = coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f\n                                                WHERE f->>'kind' <> 'paraphrase_of_other'), '[]') || $2\n                 THEN v.trust_review END,\n             trust_reviewed_at = CASE\n                 WHEN v.trust_flags = coalesce((SELECT jsonb_agg(f) FROM jsonb_array_elements(v.trust_flags) f\n                                                WHERE f->>'kind' <> 'paraphrase_of_other'), '[]') || $2\n                 THEN v.trust_reviewed_at END\n         WHERE v.id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Jsonb"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ec9cd14c5d00b5cf4a4bed90a6e33489a00a94655d8848fe5fdb22c71829f33a"
+}

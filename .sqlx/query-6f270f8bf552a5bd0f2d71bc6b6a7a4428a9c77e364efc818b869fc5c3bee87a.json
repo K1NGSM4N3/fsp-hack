@@ -1,0 +1,177 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT user_id, public_code, full_name_enc, contacts_enc, city, relocation, work_formats,\n                  salary_expectation_min, about, experience_years, roles, soft_skills, industries,\n                  experience, search_status AS \"search_status: SearchStatus\", visible, show_name,\n                  show_fsp, show_experience, specialization, grade, theta, category_assigned_at,\n                  last_activity_at, updated_at\n           FROM candidates\n           WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "full_name_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 3,
+        "name": "contacts_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "relocation",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "work_formats",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 7,
+        "name": "salary_expectation_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "about",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "experience_years",
+        "type_info": "Float4"
+      },
+      {
+        "ordinal": 10,
+        "name": "roles",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 11,
+        "name": "soft_skills",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 12,
+        "name": "industries",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 13,
+        "name": "experience",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 14,
+        "name": "search_status: SearchStatus",
+        "type_info": {
+          "Custom": {
+            "name": "search_status",
+            "kind": {
+              "Enum": [
+                "active",
+                "open",
+                "closed"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "visible",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 16,
+        "name": "show_name",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 17,
+        "name": "show_fsp",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 18,
+        "name": "show_experience",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 19,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 20,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 21,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 22,
+        "name": "category_assigned_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 23,
+        "name": "last_activity_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 24,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      false,
+      true,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "6f270f8bf552a5bd0f2d71bc6b6a7a4428a9c77e364efc818b869fc5c3bee87a"
+}

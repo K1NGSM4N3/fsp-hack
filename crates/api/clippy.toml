@@ -1,0 +1,8 @@
+# Handlers take `crate::extract::{Json, Path, Query, Multipart}`: their rejections are
+# problem+json with a stable `code`; axum's own answer with plain text.
+disallowed-types = [
+    { path = "axum::Json", reason = "use crate::extract::Json" },
+    { path = "axum::extract::Path", reason = "use crate::extract::Path" },
+    { path = "axum::extract::Query", reason = "use crate::extract::Query" },
+    { path = "axum::extract::Multipart", reason = "use crate::extract::Multipart" },
+]

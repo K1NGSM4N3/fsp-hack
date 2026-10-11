@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE task_assignments SET status = 'skipped'\n         WHERE id = $1 AND candidate_id = $2 AND status = 'assigned'",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "0fa71506648a893a8ce0d958e8e9a60eacca96ee4929c2824f582eab6744b36c"
+}

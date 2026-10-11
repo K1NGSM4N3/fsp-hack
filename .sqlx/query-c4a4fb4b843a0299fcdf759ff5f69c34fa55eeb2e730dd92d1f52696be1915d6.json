@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_consents uc\n         SET revoked_at = now()\n         FROM consent_documents d\n         WHERE (uc.id = $1 OR uc.document_id = $1) AND uc.user_id = $2 AND uc.revoked_at IS NULL\n           AND d.id = uc.document_id AND d.kind <> 'guardian_consent'\n         RETURNING d.kind",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "c4a4fb4b843a0299fcdf759ff5f69c34fa55eeb2e730dd92d1f52696be1915d6"
+}

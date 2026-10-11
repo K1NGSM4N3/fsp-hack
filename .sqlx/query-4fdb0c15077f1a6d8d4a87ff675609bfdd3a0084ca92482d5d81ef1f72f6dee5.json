@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO applications (id, vacancy_id, candidate_id, cover_letter) VALUES ($1, $2, $3, $4)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4fdb0c15077f1a6d8d4a87ff675609bfdd3a0084ca92482d5d81ef1f72f6dee5"
+}

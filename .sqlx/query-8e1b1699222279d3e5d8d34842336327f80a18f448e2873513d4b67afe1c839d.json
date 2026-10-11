@@ -1,0 +1,19 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO proctoring_sessions (session_id, candidate_id, camera, consent_id, mime,\n                                          started_at, purged_at)\n         VALUES ($1, $2, $3, $4, CASE WHEN $3 THEN 'video/webm;codecs=vp8' END, $5, $6)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Bool",
+        "Uuid",
+        "Timestamptz",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8e1b1699222279d3e5d8d34842336327f80a18f448e2873513d4b67afe1c839d"
+}

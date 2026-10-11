@@ -1,0 +1,385 @@
+# Run from the repo root:
+#   cp .env.example .env
+#   docker compose -f deploy/compose.yml --profile full up -d --build
+#
+# Compose looks for an interpolation .env next to this file (deploy/), not in the repo root,
+# so settings reach containers through `env_file: ../.env`; `${VAR:-default}` is used only
+# for values that do not have to match between services.
+
+name: fsp-hack
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  caddy:
+    image: caddy:2.11-alpine
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    # 50 compressed pages in flight peak at ~150 MB; at 64 MB Caddy was OOM-killed in a loop.
+    # GOMEMLIMIT makes Go collect garbage before the container limit, not after.
+    environment:
+      GOMEMLIMIT: 200MiB
+    depends_on:
+      - api
+      - web
+    mem_limit: 256m
+    logging: *logging
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+      args:
+        SITE_URL: ${SITE_URL:-http://localhost:8080}
+        API_PROXY_URL: ${API_PROXY_URL:-http://api:8000}
+        # 0 hides the demo-account buttons on /login; a production deploy sets it in deploy/.env.
+        NEXT_PUBLIC_DEMO_LOGIN: ${NEXT_PUBLIC_DEMO_LOGIN:-1}
+    image: fsp-hack/web:local
+    restart: unless-stopped
+    init: true
+    environment:
+      API_PROXY_URL: ${API_PROXY_URL:-http://api:8000}
+      SITE_URL: ${SITE_URL:-http://localhost:8080}
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:3000/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    mem_limit: 256m
+    logging: *logging
+
+  api:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+      target: api
+    image: fsp-hack/api:local
+    restart: unless-stopped
+    env_file: ../.env
+    environment:
+      API_BIND: 0.0.0.0:8000
+      # Encrypted proctoring video chunks; Postgres keeps only their metadata.
+      PROCTORING_DIR: /var/lib/fsp/proctoring
+      # Sentence embeddings. EMBEDDINGS=off in .env (or the embedder stopped) falls back to
+      # keyword closeness and similar vacancies by skills; nothing else changes.
+      EMBEDDER_URL: http://embedder:8093
+    volumes:
+      - proctoring-data:/var/lib/fsp/proctoring
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8000 &&
+          printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          IFS= read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 20s
+    mem_limit: 384m
+    logging: *logging
+
+  # Sentence embeddings (multilingual-e5-small) on the CPU, weights baked in at build time. Only the
+  # api calls it, inside the compose network: texts never leave the host.
+  embedder:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+      target: embedder
+      args:
+        EMBEDDER_FETCH: ${EMBEDDER_FETCH:-1}
+    image: fsp-hack/embedder:local
+    restart: unless-stopped
+    environment:
+      LOG_FORMAT: json
+      # One forward pass at a time over two threads: a cheap VPS has few cores, and the api's
+      # worker sends batches, so more parallelism only adds memory.
+      EMBEDDER_CONCURRENCY: "1"
+      RAYON_NUM_THREADS: "2"
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8093 &&
+          printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          IFS= read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    # Up to ~250 MB resident under load, ~180 MB of it its own: encoder layers, the compact vocabulary
+    # and the passes. The token embedding matrix stays
+    # in the mapped weights file, and its pages are clean cache the kernel drops under this limit.
+    mem_limit: 384m
+    logging: *logging
+
+  postgres:
+    image: pgvector/pgvector:pg17
+    restart: unless-stopped
+    env_file: ../.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    shm_size: 128m
+    mem_limit: 512m
+    logging: *logging
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    # Rate-limit counters and revoked-token entries must not be evicted silently:
+    # a full instance should fail writes instead (noeviction). Nothing needs to survive a restart.
+    command:
+      - valkey-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 64mb
+      - --maxmemory-policy
+      - noeviction
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    mem_limit: 128m
+    logging: *logging
+
+  mailpit:
+    image: axllent/mailpit:v1.31
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+    environment:
+      MP_MAX_MESSAGES: "500"
+      MP_SMTP_AUTH_ACCEPT_ANY: "1"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "1"
+    mem_limit: 64m
+    logging: *logging
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7
+    profiles: [fsp, full]
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm"]
+    # Supplies KC_BOOTSTRAP_ADMIN_*, plus FSP_OIDC_CLIENT_SECRET, FSP_OIDC_REDIRECT_URL and
+    # PUBLIC_URL, which the realm file references as ${...} placeholders.
+    env_file: ../.env
+    environment:
+      # Browser-facing URL; it becomes the token issuer.
+      KC_HOSTNAME: ${KC_HOSTNAME:-http://localhost:8081}
+      # The API reaches Keycloak as http://keycloak:8080; with this flag discovery returns
+      # token/userinfo/jwks URLs on that host while `issuer` stays KC_HOSTNAME.
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
+      # Default heap is 70% of the container limit; leave room for metaspace within 768m.
+      JAVA_OPTS_KC_HEAP: "-XX:MaxRAMPercentage=55 -XX:InitialRAMPercentage=20 -XX:MinHeapFreeRatio=10 -XX:MaxHeapFreeRatio=30"
+    volumes:
+      - ./keycloak/fsp-realm.json:/opt/keycloak/data/import/fsp-realm.json:ro
+    ports:
+      - "8081:8080"
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          IFS= read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 60s
+    mem_limit: 768m
+    logging: *logging
+
+  fsp-mock:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+      target: fsp-mock
+    image: fsp-hack/fsp-mock:local
+    profiles: [fsp, full]
+    restart: unless-stopped
+    # Shares FSP_REGISTRY_TOKEN and FSP_REGISTRY_WEBHOOK_SECRET with the api. Its admin endpoints
+    # (achievements for demos) are reachable from this host only, on 8091: 8090 is where
+    # `make fsp-mock` listens during local development.
+    env_file: ../.env
+    environment:
+      FSP_MOCK_BIND: 0.0.0.0:8090
+      FSP_REGISTRY_WEBHOOK_URL: http://api:8000/api/v1/fsp/registry/events
+    ports:
+      - "127.0.0.1:8091:8090"
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8090 &&
+          printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          IFS= read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    mem_limit: 32m
+    logging: *logging
+
+  # Demo ATS of the employer: receives signed webhooks, sends hiring stages back (http://localhost:8082).
+  ats-mock:
+    build:
+      context: ..
+      dockerfile: deploy/api.Dockerfile
+      target: ats-mock
+    image: fsp-hack/ats-mock:local
+    profiles: [ats, full]
+    restart: unless-stopped
+    # Shares ATS_DEMO_API_KEY and ATS_DEMO_WEBHOOK_SECRET with the api, which provisions them
+    # for the demo company at startup.
+    env_file: ../.env
+    environment:
+      ATS_MOCK_BIND: 0.0.0.0:8082
+      ATS_API_URL: http://api:8000
+    ports:
+      - "8082:8082"
+    depends_on:
+      - api
+    healthcheck:
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/8082 &&
+          printf 'GET /healthz HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 &&
+          IFS= read -r status <&3 && [[ $$status == *" 200 "* ]]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+      start_period: 5s
+    mem_limit: 32m
+    logging: *logging
+
+  prometheus:
+    image: prom/prometheus:v3.5.5
+    profiles: [obs, full]
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.size=512MB
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:9090/-/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    mem_limit: 256m
+    logging: *logging
+
+  loki:
+    image: grafana/loki:3.7.8
+    profiles: [obs, full]
+    restart: unless-stopped
+    command: ["-config.file=/etc/loki/config.yml"]
+    environment:
+      # The Go heap target below the container limit: GC works harder instead of the OOM killer.
+      GOMEMLIMIT: 200MiB
+    volumes:
+      - ./loki/config.yml:/etc/loki/config.yml:ro
+      - loki-data:/loki
+    mem_limit: 256m
+    logging: *logging
+
+  alloy:
+    image: grafana/alloy:v1.20.1
+    profiles: [obs, full]
+    restart: unless-stopped
+    # Root is needed to read the Docker socket (owned by root:docker on the host).
+    user: "0:0"
+    command:
+      - run
+      - --server.http.listen-addr=0.0.0.0:12345
+      - --storage.path=/var/lib/alloy/data
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    mem_limit: 192m
+    logging: *logging
+
+  grafana:
+    image: grafana/grafana:12.4.12
+    profiles: [obs, full]
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_NEWS_NEWS_FEED_ENABLED: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/api.json
+    volumes:
+      - ./grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+      - ./grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+    mem_limit: 256m
+    logging: *logging
+
+volumes:
+  pgdata:
+  proctoring-data:
+  caddy-data:
+  prometheus-data:
+  loki-data:
+  alloy-data:
+  grafana-data:

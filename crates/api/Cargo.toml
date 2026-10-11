@@ -1,0 +1,53 @@
+[package]
+name = "api"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+catalog = { workspace = true, features = ["openapi"] }
+matching = { workspace = true, features = ["openapi"] }
+assessment = { workspace = true, features = ["openapi"] }
+db.workspace = true
+embedder.workspace = true
+
+thiserror.workspace = true
+time.workspace = true
+serde.workspace = true
+serde_json = { workspace = true, features = ["raw_value"] }
+tokio = { workspace = true, features = ["fs"] }
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+axum.workspace = true
+arc-swap = "1"
+futures-util = { version = "0.3", default-features = false, features = ["std"] }
+axum-extra = { version = "0.12", features = ["cookie"] }
+utoipa = { workspace = true, features = ["chrono"] }
+utoipa-axum = "0.3"
+utoipa-swagger-ui = { version = "10", features = ["axum", "vendored"] }
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["trace", "request-id", "util", "limit", "timeout", "catch-panic", "sensitive-headers"] }
+
+chrono.workspace = true
+sqlx.workspace = true
+
+argon2 = { version = "0.5", features = ["std"] }
+chacha20poly1305 = "0.10"
+hmac = "0.12"
+sha2 = "0.10"
+base64 = "0.22"
+ed25519-dalek = { version = "2", features = ["pkcs8"] }
+jsonwebtoken = { version = "11", default-features = false, features = ["rust_crypto", "use_pem"] }
+
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "tokio1", "tokio1-rustls", "aws-lc-rs", "rustls-platform-verifier", "hostname"] }
+redis = { version = "1", default-features = false, features = ["aio", "tokio-comp", "connection-manager"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "form", "rustls"] }
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
+krilla = "0.8"
+pdf-extract = "0.12"

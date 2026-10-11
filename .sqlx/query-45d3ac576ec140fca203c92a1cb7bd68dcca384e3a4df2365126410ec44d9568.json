@@ -1,0 +1,76 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT ie.id, ie.company_id, ie.event_type, ie.payload_enc, ie.attempts, ie.deadline_at,\n                  w.url AS \"url?\", w.secret_enc AS \"secret_enc?\",\n                  w.prev_secret_enc AS \"prev_secret_enc?\", w.prev_expires_at AS \"prev_expires_at?\"\n           FROM integration_events ie\n           LEFT JOIN company_webhooks w ON w.company_id = ie.company_id\n           WHERE ie.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "event_type",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "payload_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "attempts",
+        "type_info": "Int2"
+      },
+      {
+        "ordinal": 5,
+        "name": "deadline_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "url?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "secret_enc?",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 8,
+        "name": "prev_secret_enc?",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 9,
+        "name": "prev_expires_at?",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "45d3ac576ec140fca203c92a1cb7bd68dcca384e3a4df2365126410ec44d9568"
+}

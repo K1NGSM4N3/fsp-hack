@@ -1,0 +1,37 @@
+.DS_Store
+.env
+.env.local
+deploy/.env
+
+# Rust
+/target/
+
+# Embedding model weights (`make model`; the embedder image fetches its own)
+/models/
+
+# Local proctoring chunks (PROCTORING_DIR default for `make api`)
+/data/
+
+# Node / Next.js
+node_modules/
+/web/.next/
+/web/out/
+*.tsbuildinfo
+next-env.d.ts
+
+# Nix
+/result
+/.direnv/
+
+# Editors
+.idea/
+.vscode/
+.claude/worktrees/
+
+# Black-box suite (tests/blackbox): saved logins and Playwright output
+/tests/blackbox/.auth/
+test-results/
+playwright-report/
+
+# Combined PDF for the submission form: built before upload, not kept in git
+/docs/documentation.pdf

@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT DISTINCT ON (d.kind) d.id, d.kind, d.title\n         FROM consent_documents d\n         WHERE d.kind = ANY ($2)\n           AND NOT EXISTS (SELECT 1 FROM user_consents uc\n                            JOIN consent_documents g ON g.id = uc.document_id\n                            WHERE uc.user_id = $1 AND uc.revoked_at IS NULL AND g.kind = d.kind)\n         ORDER BY d.kind, d.version DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "title",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "1950ff6d0c1e2131aade29f1bbc43c860658c1978122ba27da2c9baba6751af5"
+}

@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT a.id FROM applications a\n         JOIN vacancies v ON v.id = a.vacancy_id\n         WHERE v.company_id = $1 AND a.candidate_id = $2 AND a.status <> 'withdrawn'\n         ORDER BY a.created_at DESC\n         LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "b4f7749c7a51868927f4652159421aefcdd855fb321439c9cb56e7afed2c72c8"
+}

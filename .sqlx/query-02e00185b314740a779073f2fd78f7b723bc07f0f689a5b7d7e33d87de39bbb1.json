@@ -1,0 +1,80 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "WITH finished AS (\n               SELECT s.aberrant, p.session_id IS NOT NULL AS proctored,\n                      coalesce(p.camera, false) AS camera, r.session_id IS NOT NULL AS decided,\n                      (SELECT count(*) FROM proctoring_events e\n                        WHERE e.session_id = s.id\n                          AND e.kind IN ('tab_hidden', 'window_blur', 'fullscreen_exit', 'paste')) AS behavioral\n               FROM assessment_sessions s\n               LEFT JOIN proctoring_sessions p ON p.session_id = s.id\n               LEFT JOIN session_reviews r ON r.session_id = s.id\n               WHERE s.status IN ('passed', 'failed') AND s.finished_at IS NOT NULL\n           )\n           SELECT\n               (SELECT count(*) FROM finished\n                 WHERE NOT decided AND coalesce(aberrant, false)\n                   AND (NOT proctored OR behavioral > 0)) AS \"needs_review!\",\n               (SELECT count(*) FROM finished WHERE NOT decided AND behavioral > 0) AS \"remarks!\",\n               (SELECT count(*) FROM finished WHERE camera) AS \"with_video!\",\n               (SELECT count(*) FROM session_reviews\n                 WHERE decided_at > now() - interval '7 days') AS \"decided_week!\",\n               (SELECT count(*) FROM reports WHERE resolved_at IS NULL) AS \"open_complaints!\",\n               (SELECT count(*) FROM vacancies\n                 WHERE flagged_at IS NOT NULL AND trust_reviewed_at IS NULL) AS \"flagged_vacancies!\",\n               (SELECT count(*) FROM invitations\n                 WHERE trust_flags <> '[]' AND trust_reviewed_at IS NULL) AS \"flagged_invitations!\",\n               (SELECT count(*) FROM vacancies WHERE unpublished_at IS NOT NULL) AS \"unpublished_vacancies!\",\n               (SELECT count(*) FROM companies\n                 WHERE invitations_frozen_until > now()) AS \"frozen_companies!\",\n               (SELECT count(*) FROM moderation_actions\n                 WHERE at > now() - interval '7 days' AND action <> 'view_recording') AS \"actions_week!\",\n               (SELECT count(*) FROM moderation_actions\n                 WHERE at > now() - interval '7 days' AND action = 'view_recording') AS \"recording_views_week!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "needs_review!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "remarks!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "with_video!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "decided_week!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "open_complaints!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "flagged_vacancies!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "flagged_invitations!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "unpublished_vacancies!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "frozen_companies!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "actions_week!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "recording_views_week!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "02e00185b314740a779073f2fd78f7b723bc07f0f689a5b7d7e33d87de39bbb1"
+}

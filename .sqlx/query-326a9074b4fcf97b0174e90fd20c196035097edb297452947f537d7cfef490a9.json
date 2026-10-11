@@ -1,0 +1,82 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT t.id, t.specialization, t.grades, t.skills, t.title, t.body, t.kind, t.active,\n                  t.created_at,\n                  count(a.id) FILTER (WHERE a.status IN ('submitted', 'reviewed')) AS \"submissions!\",\n                  count(a.id) FILTER (WHERE a.status = 'reviewed') AS \"reviewed!\"\n           FROM tasks t\n           LEFT JOIN task_assignments a ON a.task_id = t.id\n           WHERE t.company_id = $1\n           GROUP BY t.id\n           ORDER BY t.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "grades",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 3,
+        "name": "skills",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 4,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "body",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "kind",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 8,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "submissions!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "reviewed!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "326a9074b4fcf97b0174e90fd20c196035097edb297452947f537d7cfef490a9"
+}

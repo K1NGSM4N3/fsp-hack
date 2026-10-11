@@ -1,0 +1,24 @@
+title: "ФСП Таланты"
+subtitle: "Платформа подбора ИТ-специалистов с подтверждённой категорией. Сопроводительная документация"
+lang: ru
+codefont: "JetBrains Mono"
+fontsize: 10pt
+papersize: a4
+margin:
+  x: 1.8cm
+  y: 2cm
+toc-title: "Содержание"
+# Raw typst: a plain string here is read as Markdown and escaped into a stray first page.
+# The body font is set here rather than via `mainfont`, which takes a single family: PT Sans
+# has no Greek, arrows or superscript digits: θ, →, ⁻⁷ come from New Computer Modern and
+# Libertinus Serif, both embedded in typst. PT Sans itself must be installed: without it the
+# body silently falls back to New Computer Modern. Newer pandoc centres every table in a figure,
+# and cells inherit that alignment: they are set back to the left here.
+header-includes: |
+  ```{=typst}
+  #set text(font: ("PT Sans", "New Computer Modern", "Libertinus Serif"))
+  #show table.cell: set par(justify: false)
+  #show table.cell: set text(size: 9pt, hyphenate: false)
+  #show table.cell: set align(left)
+  #show heading: set text(hyphenate: false)
+  ```

@@ -1,0 +1,168 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id, i.company_id, co.owner_user_id, i.candidate_id, c.public_code,\n                  c.specialization, c.grade, i.need_id, i.vacancy_id, i.title, i.message,\n                  i.salary_min, i.salary_max, i.work_format, i.status AS \"status: InvitationStatus\",\n                  i.decline_reason, i.decline_comment, i.created_at, i.viewed_at, i.responded_at,\n                  i.expires_at,\n                  greatest(i.created_at, i.viewed_at, i.responded_at,\n                           CASE WHEN i.status = 'expired' THEN i.expires_at END) AS \"updated_at!\",\n                  EXISTS (SELECT 1 FROM company_webhooks w WHERE w.company_id = i.company_id)\n                      AS \"webhook_on!\"\n           FROM invitations i\n           JOIN candidates c ON c.user_id = i.candidate_id\n           JOIN companies co ON co.id = i.company_id\n           WHERE i.id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "owner_user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 4,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "need_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 8,
+        "name": "vacancy_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 9,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 10,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "salary_max",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 13,
+        "name": "work_format",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 14,
+        "name": "status: InvitationStatus",
+        "type_info": {
+          "Custom": {
+            "name": "invitation_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "declined",
+                "expired",
+                "withdrawn"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "decline_reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 16,
+        "name": "decline_comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 17,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 18,
+        "name": "viewed_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 19,
+        "name": "responded_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 20,
+        "name": "expires_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 21,
+        "name": "updated_at!",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 22,
+        "name": "webhook_on!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "26f5d4ac2548fbf57ce5da6015f31824d31ec0d598105e657051612c560b20e9"
+}

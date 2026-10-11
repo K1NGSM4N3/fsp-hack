@@ -1,0 +1,31 @@
+# Stack for the black-box suite (tests/blackbox, `make blackbox`), on top of compose.yml:
+#   docker compose -p fsp-hack-blackbox -f deploy/compose.yml -f deploy/compose.blackbox.yml \
+#     up -d --build --wait caddy web api postgres valkey mailpit fsp-mock ats-mock
+#
+# Same images and public ports as the demo stack, its own project and volumes, so every run starts
+# from the deterministic demo seed. Only deployment settings change, never the code paths:
+# notification letters are held for seconds instead of minutes, so a test sees its letter without
+# waiting out the production pacing (README.md section 1.4). Keycloak and observability are not
+# started: no test goes through them.
+
+name: fsp-hack-blackbox
+
+services:
+  api:
+    environment:
+      SEED_DEMO: "true"
+      PROCTORING: optional
+      MAIL_MODE: smtp
+      SMTP_URL: smtp://mailpit:1025
+      PUBLIC_URL: http://localhost:8080
+      NOTIFY_EMAIL_HOLD_SECS: "3"
+      NOTIFY_EMAIL_GAP_SECS: "3"
+      NOTIFY_INTERVAL_MS: "1000"
+      # Pinned so tests/blackbox signs registry events and calls the registry admin API with the
+      # same secrets whatever the local .env says.
+      FSP_REGISTRY_WEBHOOK_SECRET: whsec_demo_fsp_registry_do_not_use_in_production
+      FSP_REGISTRY_TOKEN: dev-registry-token
+  fsp-mock:
+    environment:
+      FSP_REGISTRY_WEBHOOK_SECRET: whsec_demo_fsp_registry_do_not_use_in_production
+      FSP_REGISTRY_TOKEN: dev-registry-token

@@ -1,0 +1,55 @@
+// Component diagram for README.md section 2; `make docs` renders every docs/img/*.dot to SVG.
+// Colours are the brand tokens of web/src/app/globals.css.
+digraph architecture {
+  graph [rankdir=TB, bgcolor="#ffffff", fontname="PT Sans,DejaVu Sans,sans-serif",
+         nodesep=0.35, ranksep=0.35, pad=0.1, size="6.8,9"];
+  node  [shape=box, style="rounded,filled", fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=10,
+         fontcolor="#1b1c21", color="#c8c9ce", fillcolor="#ffffff", penwidth=1, margin="0.12,0.05"];
+  edge  [fontname="PT Sans,DejaVu Sans,sans-serif", fontsize=8, fontcolor="#5a5c66",
+         color="#7b6fff", arrowsize=0.6, penwidth=1];
+
+  browser [label=<<b>Браузер</b><br/><font point-size="8" color="#c8c9ce">соискатель, работодатель, модератор</font>>,
+           fillcolor="#1b1c21", fontcolor="#ffffff", color="#1b1c21"];
+  caddy   [label=<<b>Caddy</b> :8080<br/><font point-size="8" color="#5a5c66">заголовки безопасности, сжатие</font>>];
+  web     [label=<<b>Web</b><br/><font point-size="8" color="#5a5c66">Next.js 16</font>>];
+  api     [label=<<b>API</b><br/><font point-size="8" color="#d6d1ff">Rust, axum<br/>модульный монолит</font>>,
+           fillcolor="#402fff", fontcolor="#ffffff", color="#402fff"];
+
+  data [shape=plain, style="", label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded" color="#d6d1ff" bgcolor="#f5f4ff">
+      <tr><td align="left" balign="left"><font point-size="8" color="#5a5c66">ядро: данные и сервисы</font></td></tr>
+      <tr><td align="left" balign="left"><b>PostgreSQL 17</b><br/><font point-size="8" color="#5a5c66">pgvector, ПДн зашифрованы</font></td></tr>
+      <tr><td align="left" balign="left"><b>Valkey</b><br/><font point-size="8" color="#5a5c66">лимиты, deny-list, кеш</font></td></tr>
+      <tr><td align="left" balign="left"><b>Эмбеддер</b><br/><font point-size="8" color="#5a5c66">multilingual-e5-small, CPU</font></td></tr>
+      <tr><td align="left" balign="left"><b>SMTP</b><br/><font point-size="8" color="#5a5c66">в демо — Mailpit</font></td></tr>
+    </table>>];
+
+  external [shape=plain, style="", label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded" color="#fbd5da" bgcolor="#fdecee">
+      <tr><td align="left" balign="left"><font point-size="8" color="#5a5c66">внешние системы · профили fsp, ats</font></td></tr>
+      <tr><td align="left" balign="left"><b>Keycloak</b> :8081<br/><font point-size="8" color="#5a5c66">ФСП ID: OIDC + PKCE</font></td></tr>
+      <tr><td align="left" balign="left"><b>Реестр ФСП</b><br/><font point-size="8" color="#5a5c66">достижения; события с подписью</font></td></tr>
+      <tr><td align="left" balign="left"><b>ATS работодателя</b> :8082<br/><font point-size="8" color="#5a5c66">вебхуки, API-ключ</font></td></tr>
+      <tr><td align="left" balign="left"><font point-size="8" color="#5a5c66">в демо — fsp-mock и ats-mock</font></td></tr>
+    </table>>];
+
+  obs [shape=plain, style="", label=<
+    <table border="1" cellborder="0" cellspacing="0" cellpadding="3" style="rounded" color="#e4e4e8" bgcolor="#f6f6f7">
+      <tr><td align="left" balign="left"><font point-size="8" color="#5a5c66">наблюдаемость · профиль obs</font></td></tr>
+      <tr><td align="left" balign="left"><b>Prometheus</b><br/><font point-size="8" color="#5a5c66">метрики</font></td></tr>
+      <tr><td align="left" balign="left"><b>Alloy, Loki</b><br/><font point-size="8" color="#5a5c66">логи</font></td></tr>
+      <tr><td align="left" balign="left"><b>Grafana</b> :3001</td></tr>
+    </table>>];
+
+  { rank=same; web; api; }
+  { rank=same; data; external; obs; }
+
+  browser -> caddy [label=" HTTPS"];
+  caddy -> web [label=" страницы"];
+  caddy -> api [label=" /api/*"];
+  web -> api [label="SSR", style=dashed];
+
+  api -> data;
+  api -> external [dir=both];
+  api -> obs [label=" /metrics", color="#c8c9ce", style=dashed, dir=back];
+}

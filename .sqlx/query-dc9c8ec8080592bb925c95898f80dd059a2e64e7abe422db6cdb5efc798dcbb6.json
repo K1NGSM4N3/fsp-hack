@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM fsp_links WHERE candidate_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dc9c8ec8080592bb925c95898f80dd059a2e64e7abe422db6cdb5efc798dcbb6"
+}

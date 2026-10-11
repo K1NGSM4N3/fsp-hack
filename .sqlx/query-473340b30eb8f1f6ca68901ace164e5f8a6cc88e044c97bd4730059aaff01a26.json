@@ -1,0 +1,27 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "DELETE FROM embedding_jobs j\n         USING UNNEST($2::uuid[], $3::timestamptz[]) AS d(entity_id, enqueued_at)\n         WHERE j.kind = $1 AND j.entity_id = d.entity_id AND j.enqueued_at = d.enqueued_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "embedding_kind",
+            "kind": {
+              "Enum": [
+                "candidate",
+                "need",
+                "vacancy"
+              ]
+            }
+          }
+        },
+        "UuidArray",
+        "TimestamptzArray"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "473340b30eb8f1f6ca68901ace164e5f8a6cc88e044c97bd4730059aaff01a26"
+}

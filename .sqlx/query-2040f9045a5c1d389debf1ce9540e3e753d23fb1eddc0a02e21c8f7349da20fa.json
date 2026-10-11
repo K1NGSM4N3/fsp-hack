@@ -1,0 +1,16 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO fsp_links (candidate_id, fsp_id, linked_via)\n         VALUES ($1, $2, $3)\n         ON CONFLICT (candidate_id) DO UPDATE\n         SET fsp_id = EXCLUDED.fsp_id, linked_via = EXCLUDED.linked_via, linked_at = now(),\n             achievements = '[]', last_sync_at = NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "2040f9045a5c1d389debf1ce9540e3e753d23fb1eddc0a02e21c8f7349da20fa"
+}

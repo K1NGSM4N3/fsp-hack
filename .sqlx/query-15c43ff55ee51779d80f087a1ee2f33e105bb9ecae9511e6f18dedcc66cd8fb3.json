@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE proctoring_sessions SET mime = $2 WHERE session_id = $1 AND mime IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "15c43ff55ee51779d80f087a1ee2f33e105bb9ecae9511e6f18dedcc66cd8fb3"
+}

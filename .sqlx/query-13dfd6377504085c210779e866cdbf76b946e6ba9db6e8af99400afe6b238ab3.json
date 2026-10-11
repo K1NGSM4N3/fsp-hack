@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT public_code, specialization, grade FROM candidates WHERE user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "grade",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "13dfd6377504085c210779e866cdbf76b946e6ba9db6e8af99400afe6b238ab3"
+}

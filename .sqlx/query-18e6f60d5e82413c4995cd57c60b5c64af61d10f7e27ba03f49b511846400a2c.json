@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT company_id, title, trust_flags <> '[]' AS \"flagged!\",\n                  trust_reviewed_at IS NOT NULL AS \"reviewed!\"\n           FROM invitations WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "flagged!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "reviewed!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "18e6f60d5e82413c4995cd57c60b5c64af61d10f7e27ba03f49b511846400a2c"
+}

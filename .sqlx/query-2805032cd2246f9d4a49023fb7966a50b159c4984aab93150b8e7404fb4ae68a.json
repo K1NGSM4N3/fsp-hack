@@ -1,0 +1,89 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT i.id, i.company_id, i.candidate_id, c.public_code, co.name AS company_name,\n                i.title, i.salary_min, i.salary_max, i.work_format, i.expires_at,\n                i.decline_reason, i.decline_comment\n         FROM invitations i\n         JOIN candidates c ON c.user_id = i.candidate_id\n         JOIN companies co ON co.id = i.company_id\n         WHERE i.status IN ('sent', 'viewed')\n           AND i.expires_at > now()\n           AND i.expires_at <= now() + make_interval(secs => $1)\n           AND NOT EXISTS (\n               SELECT 1 FROM notifications n\n               WHERE n.user_id = i.candidate_id AND n.dedup_key = 'expiring:' || i.id::text)\n         ORDER BY i.expires_at\n         LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "company_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "salary_max",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "work_format",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 9,
+        "name": "expires_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 10,
+        "name": "decline_reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 11,
+        "name": "decline_comment",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      true,
+      true
+    ]
+  },
+  "hash": "2805032cd2246f9d4a49023fb7966a50b159c4984aab93150b8e7404fb4ae68a"
+}

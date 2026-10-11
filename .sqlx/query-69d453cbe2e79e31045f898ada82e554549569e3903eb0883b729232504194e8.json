@@ -1,0 +1,47 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT l.company_id, co.name AS \"company_name?\", l.basis, l.channel, l.accessed_at\n           FROM contact_access_log l\n           LEFT JOIN companies co ON co.id = l.company_id\n           WHERE l.candidate_id = $1\n           ORDER BY l.accessed_at DESC\n           LIMIT $2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_name?",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "basis",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "channel",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "accessed_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "69d453cbe2e79e31045f898ada82e554549569e3903eb0883b729232504194e8"
+}

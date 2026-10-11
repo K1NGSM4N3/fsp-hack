@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE assessment_sessions\n         SET status = 'expired',\n             finished_at = coalesce(current_item_deadline, started_at) + make_interval(secs => $2)\n         WHERE candidate_id = $1 AND status = 'in_progress'\n           AND coalesce(current_item_deadline, started_at) + make_interval(secs => $2) < now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Float8"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ca4e0ed3cd3b3238dd91de754e6faa51c0069eaa71f58e50a7b65e90d8a0290b"
+}

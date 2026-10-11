@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.id FROM companies c JOIN users u ON u.id = c.owner_user_id WHERE u.email_bidx = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "5b584af2ba1422ab9e8240393067755588033847dc52511ad353ba92c229c5e2"
+}

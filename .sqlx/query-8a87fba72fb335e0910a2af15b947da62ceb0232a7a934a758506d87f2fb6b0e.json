@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO proctoring_chunks (session_id, seq, size, received_at)\n         SELECT $1, g, $3, $4::timestamptz + make_interval(secs => (g + 1) * 10)\n         FROM generate_series(0, $2 - 1) g",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4",
+        "Int4",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8a87fba72fb335e0910a2af15b947da62ceb0232a7a934a758506d87f2fb6b0e"
+}

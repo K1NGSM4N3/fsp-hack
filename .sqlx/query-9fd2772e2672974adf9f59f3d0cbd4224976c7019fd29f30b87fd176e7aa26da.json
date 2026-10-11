@@ -1,0 +1,70 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT id, specialization, grade, theta, se, session_id, reason, assigned_at, annulled_at\n         FROM grade_assignments\n         WHERE candidate_id = $1\n         ORDER BY assigned_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "theta",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 4,
+        "name": "se",
+        "type_info": "Float8"
+      },
+      {
+        "ordinal": 5,
+        "name": "session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "reason",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 7,
+        "name": "assigned_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 8,
+        "name": "annulled_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "9fd2772e2672974adf9f59f3d0cbd4224976c7019fd29f30b87fd176e7aa26da"
+}

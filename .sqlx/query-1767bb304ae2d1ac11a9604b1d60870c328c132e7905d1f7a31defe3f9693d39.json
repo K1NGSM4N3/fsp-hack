@@ -1,0 +1,136 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT n.id, n.title, n.description, n.specialization, n.grades, n.allow_adjacent_grades,\n                  n.must_skills, n.nice_skills, n.salary_min, n.salary_max, n.work_formats, n.city,\n                  n.industries, n.filters, n.status, n.created_at, n.updated_at,\n                  n.shortlist_generated_at,\n                  (SELECT count(*) FROM shortlist_items s\n                    WHERE s.need_id = n.id AND s.in_current AND NOT s.dismissed) AS \"shortlisted!\",\n                  (SELECT count(*) FROM invitations i WHERE i.need_id = n.id) AS \"invited!\"\n           FROM hiring_needs n\n           WHERE n.company_id = $1\n           ORDER BY n.created_at DESC",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "grades",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 5,
+        "name": "allow_adjacent_grades",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 6,
+        "name": "must_skills",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 7,
+        "name": "nice_skills",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 8,
+        "name": "salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "salary_max",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "work_formats",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 11,
+        "name": "city",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 12,
+        "name": "industries",
+        "type_info": "TextArray"
+      },
+      {
+        "ordinal": 13,
+        "name": "filters",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 14,
+        "name": "status",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 15,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 16,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 17,
+        "name": "shortlist_generated_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 18,
+        "name": "shortlisted!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 19,
+        "name": "invited!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      null,
+      null
+    ]
+  },
+  "hash": "1767bb304ae2d1ac11a9604b1d60870c328c132e7905d1f7a31defe3f9693d39"
+}

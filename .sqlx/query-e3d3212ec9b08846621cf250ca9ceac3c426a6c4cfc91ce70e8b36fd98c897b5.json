@@ -1,0 +1,66 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT v.id, v.company_id, co.name AS company_name, v.title, v.salary_min, v.salary_max,\n                  v.trust_flags, v.unpublished_at AS \"at!\"\n           FROM vacancies v\n           JOIN companies co ON co.id = v.company_id\n           WHERE v.unpublished_at IS NOT NULL\n             AND ($1::timestamptz IS NULL OR (v.unpublished_at, v.id) > ($1, $2))\n           ORDER BY v.unpublished_at, v.id\n           LIMIT $3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "company_name",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "title",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "salary_min",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "salary_max",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "trust_flags",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 7,
+        "name": "at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Timestamptz",
+        "Uuid",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "e3d3212ec9b08846621cf250ca9ceac3c426a6c4cfc91ce70e8b36fd98c897b5"
+}

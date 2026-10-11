@@ -1,0 +1,104 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT g.id AS request_id, g.candidate_id,\n                  (g.confirm_hash IS NOT DISTINCT FROM $1) AS \"confirm_link!\",\n                  g.full_name_enc, u.email_enc AS account_email_enc, g.sent_at, g.confirm_expires_at,\n                  g.decision AS \"decision: GuardianDecision\", g.answered_at, g.consent_id,\n                  uc.granted_at AS \"granted_at?\", uc.revoked_at AS \"revoked_at?\",\n                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS \"minor!\"\n           FROM guardian_requests g\n           JOIN candidates c ON c.user_id = g.candidate_id\n           JOIN users u ON u.id = g.candidate_id\n           LEFT JOIN user_consents uc ON uc.id = g.consent_id\n           WHERE g.confirm_hash = $1 OR g.revoke_hash = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "candidate_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "confirm_link!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "full_name_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 4,
+        "name": "account_email_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 5,
+        "name": "sent_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 6,
+        "name": "confirm_expires_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "decision: GuardianDecision",
+        "type_info": {
+          "Custom": {
+            "name": "guardian_decision",
+            "kind": {
+              "Enum": [
+                "granted",
+                "declined"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "answered_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 9,
+        "name": "consent_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "granted_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 11,
+        "name": "revoked_at?",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "minor!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Bytea"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      null,
+      true,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      null
+    ]
+  },
+  "hash": "01bb190a52c5a6c8f95fc885d7348d3f0b9d849f5fb46c46505e7aeb44b160ad"
+}

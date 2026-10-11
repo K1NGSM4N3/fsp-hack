@@ -1,0 +1,253 @@
+"use client";
+
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as api from "@/api/endpoints";
+import type { AnswerInput, DeclineRequest, GuardianAction, GuardianContact, GuardianStatus, InvitationStatus, Privacy, ProfileInput, StartInput, SurveyInput } from "@/api/types";
+import { fresh, qk } from "../keys";
+
+export function useProfile() {
+  return useQuery({ queryKey: qk.profile, queryFn: api.getProfile, ...fresh.account });
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: ProfileInput) => api.updateProfile(body),
+    onSuccess: (data) => {
+      qc.setQueryData(qk.profile, data);
+      void qc.invalidateQueries({ queryKey: qk.me });
+    },
+  });
+}
+
+export function useUploadResume() {
+  return useMutation({ mutationFn: (file: File) => api.uploadResume(file) });
+}
+
+export function usePrivacy() {
+  return useQuery({ queryKey: qk.privacy, queryFn: api.getPrivacy, ...fresh.account });
+}
+
+export function useContactAccess() {
+  return useQuery({ queryKey: qk.contactAccess, queryFn: api.getContactAccess, ...fresh.detail });
+}
+
+export function useUpdatePrivacy() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: Privacy) => api.updatePrivacy(body),
+    onSuccess: (data) => qc.setQueryData(qk.privacy, data),
+  });
+}
+
+/** Only minors have anything here; adults skip the request. */
+export function useGuardianStatus(enabled: boolean) {
+  return useQuery({ queryKey: qk.guardian, queryFn: api.getGuardianStatus, enabled, ...fresh.detail });
+}
+
+function useGuardianMutation<V>(fn: (v: V) => Promise<GuardianStatus>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: (data) => {
+      qc.setQueryData(qk.guardian, data);
+      void qc.invalidateQueries({ queryKey: qk.me });
+    },
+  });
+}
+
+export function useResendGuardianLetter() {
+  return useGuardianMutation<void>(() => api.resendGuardianLetter());
+}
+
+export function useChangeGuardian() {
+  return useGuardianMutation<GuardianContact>((body) => api.changeGuardian(body));
+}
+
+export function useGuardianConsent(token: string | null) {
+  return useQuery({ queryKey: qk.guardianConsent(token ?? ""), queryFn: () => api.getGuardianConsent(token ?? ""), enabled: Boolean(token), ...fresh.detail });
+}
+
+export function useAnswerGuardianConsent(token: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (action: GuardianAction) => api.answerGuardianConsent(token, action),
+    onSuccess: (data) => qc.setQueryData(qk.guardianConsent(token), data),
+  });
+}
+
+export function useSurveyHistory() {
+  return useQuery({ queryKey: qk.surveys, queryFn: api.getSurveyHistory, ...fresh.account });
+}
+
+export function useSubmitSurvey() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SurveyInput) => api.submitSurvey(body),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.surveys });
+      void qc.invalidateQueries({ queryKey: qk.me });
+      void qc.invalidateQueries({ queryKey: qk.category });
+      void qc.invalidateQueries({ queryKey: qk.profile });
+    },
+  });
+}
+
+export function useCategory() {
+  return useQuery({ queryKey: qk.category, queryFn: api.getCandidateCategory, ...fresh.account });
+}
+
+export function useAssessments() {
+  return useQuery({ queryKey: qk.assessments, queryFn: api.listAssessments, ...fresh.detail });
+}
+
+/** Reads through `current-item`, which also advances a timed-out item. */
+export function useAssessment(id: string) {
+  return useQuery({ queryKey: qk.assessment(id), queryFn: () => api.getCurrentItem(id), staleTime: Infinity, retry: false });
+}
+
+export function useStartAssessment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: StartInput) => api.startAssessment(body),
+    onSuccess: (session) => {
+      qc.setQueryData(qk.assessment(session.id), session);
+      void qc.invalidateQueries({ queryKey: qk.assessments });
+      void qc.invalidateQueries({ queryKey: qk.me });
+    },
+  });
+}
+
+export function useAnswerItem(sessionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: AnswerInput) => api.answerItem(sessionId, body),
+    onSuccess: (session) => {
+      qc.setQueryData(qk.assessment(sessionId), session);
+      if (session.status !== "in_progress") {
+        void qc.invalidateQueries({ queryKey: qk.category });
+        void qc.invalidateQueries({ queryKey: qk.assessments });
+        void qc.invalidateQueries({ queryKey: qk.me });
+        void qc.invalidateQueries({ queryKey: qk.profile });
+      }
+    },
+  });
+}
+
+const INVITATION_PAGE = 20;
+
+/** The three newest and the counts by status: the menu badge and the home card share one request. */
+export function useInvitationSummary() {
+  return useQuery({ queryKey: qk.receivedSummary, queryFn: () => api.listReceivedInvitations({ limit: 3 }), ...fresh.live });
+}
+
+/** One tab of the inbox, a page at a time; the counts by status come with every page. */
+export function useReceivedInvitationPages(status: InvitationStatus[]) {
+  return useInfiniteQuery({
+    queryKey: qk.receivedPages(status.join(",")),
+    queryFn: ({ pageParam }) => api.listReceivedInvitations({ status, cursor: pageParam, limit: INVITATION_PAGE }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.next_cursor ?? null,
+    placeholderData: keepPreviousData,
+    ...fresh.live,
+  });
+}
+
+export function useReceivedInvitation(id: string) {
+  const qc = useQueryClient();
+  return useQuery({
+    queryKey: qk.receivedOne(id),
+    queryFn: async () => {
+      const inv = await api.getReceivedInvitation(id);
+      void qc.invalidateQueries({ queryKey: qk.receivedLists });
+      return inv;
+    },
+    ...fresh.live,
+  });
+}
+
+export function useAcceptInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.acceptInvitation(id),
+    onSuccess: (inv) => {
+      qc.setQueryData(qk.receivedOne(inv.id), inv);
+      void qc.invalidateQueries({ queryKey: qk.received });
+    },
+  });
+}
+
+export function useDeclineInvitation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, body }: { id: string; body: DeclineRequest }) => api.declineInvitation(id, body),
+    onSuccess: (inv) => {
+      qc.setQueryData(qk.receivedOne(inv.id), inv);
+      void qc.invalidateQueries({ queryKey: qk.received });
+      void qc.invalidateQueries({ queryKey: qk.privacy });
+    },
+  });
+}
+
+export function useMarket(enabled = true) {
+  return useQuery({ queryKey: qk.market, queryFn: api.getCandidateMarket, enabled, ...fresh.account });
+}
+
+export function useMyApplications(enabled = true) {
+  return useQuery({ queryKey: qk.myApplications, queryFn: api.listMyApplications, enabled, ...fresh.live });
+}
+
+export function useWithdrawApplication() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.withdrawApplication(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.myApplications }),
+  });
+}
+
+export function useMyTasks() {
+  return useQuery({ queryKey: qk.myTasks, queryFn: api.listMyTasks, ...fresh.detail });
+}
+
+export function useSubmitTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, answer }: { id: string; answer: string }) => api.submitTask(id, { answer }),
+    onSuccess: (tasks) => qc.setQueryData(qk.myTasks, tasks),
+  });
+}
+
+export function useSkipTask() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.skipTask(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: qk.myTasks }),
+  });
+}
+
+export function useFspStatus() {
+  return useQuery({ queryKey: qk.fsp, queryFn: api.getFspStatus, ...fresh.account });
+}
+
+function useFspMutation<A, R>(fn: (arg: A) => Promise<R>) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: qk.fsp });
+      void qc.invalidateQueries({ queryKey: qk.profile });
+    },
+  });
+}
+
+export function useFspLinkDev() {
+  return useFspMutation((fspId: string) => api.fspLinkDev(fspId));
+}
+
+export function useFspSync() {
+  return useFspMutation(() => api.syncFsp());
+}
+
+export function useFspUnlink() {
+  return useFspMutation(() => api.unlinkFsp());
+}

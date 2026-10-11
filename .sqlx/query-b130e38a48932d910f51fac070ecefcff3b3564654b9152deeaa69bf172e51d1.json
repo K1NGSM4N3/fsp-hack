@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE applications a SET status = $1, updated_at = now()\n         FROM vacancies v\n         WHERE a.id = $2 AND v.id = a.vacancy_id AND v.company_id = $3 AND a.status NOT IN ('withdrawn')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "application_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "rejected",
+                "withdrawn"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "b130e38a48932d910f51fac070ecefcff3b3564654b9152deeaa69bf172e51d1"
+}

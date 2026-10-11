@@ -1,0 +1,49 @@
+# Demo-server overlay on top of compose.yml: caddy becomes the public entrypoint on
+# 80/443 with Let's Encrypt TLS for demo.arewehireyet.ru (deploy/Caddyfile.demo).
+# Everything else - services, healthchecks, profiles, volumes - is the base file.
+#
+# Render .env first (deploy/render_env.py), then from the repo root:
+#   docker compose -f deploy/compose.yml -f deploy/compose.demo.yml \
+#     --profile fsp --profile ats up -d --build
+#
+# !override replaces the merged lists instead of appending: without it the demo
+# caddy would also publish 8080:8080 from the base file.
+#
+# Ports Docker publishes bypass ufw (they go through Docker's own iptables chain), so every
+# service except caddy is bound to 127.0.0.1 here: ssh -L reaches them, the internet does not.
+services:
+  caddy:
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes: !override
+      - ./Caddyfile.demo:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+  # ФСП ID on the site's own origin under /auth: no extra DNS name or port. The admin console is
+  # not proxied; it is served on the tunnel address only.
+  keycloak:
+    environment:
+      KC_HOSTNAME: ${SITE_URL:?set SITE_URL in deploy/.env}/auth
+      KC_HOSTNAME_ADMIN: http://127.0.0.1:8081/auth
+      KC_HTTP_RELATIVE_PATH: /auth
+      # Keeps health on :9000/health/ready, where the base healthcheck looks.
+      KC_HTTP_MANAGEMENT_RELATIVE_PATH: /
+      KC_PROXY_HEADERS: xforwarded
+    ports: !override
+      - "127.0.0.1:8081:8080"
+
+  # The demo has no outgoing mail: letters land here and the inbox is served under /mail behind a
+  # password, so a visitor can register and open the confirmation link. Only this one value is
+  # passed in: the root .env also holds the encryption keys.
+  mailpit:
+    environment:
+      MP_WEBROOT: /mail/
+      MP_UI_AUTH: ${MAILPIT_UI_AUTH:?set MAILPIT_UI_AUTH=user:password in deploy/.env}
+    ports: !override
+      - "127.0.0.1:8025:8025"
+      - "127.0.0.1:1025:1025"
+
+  ats-mock:
+    ports: !override
+      - "127.0.0.1:8082:8082"

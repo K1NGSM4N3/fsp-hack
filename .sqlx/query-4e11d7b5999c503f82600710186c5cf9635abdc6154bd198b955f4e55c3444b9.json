@@ -1,0 +1,17 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE notifications\n         SET email_due_at = CASE WHEN kind = ANY($3) THEN greatest(email_due_at, $4) ELSE $2 END\n         WHERE user_id = $1 AND email_due_at IS NOT NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Timestamptz",
+        "TextArray",
+        "Timestamptz"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "4e11d7b5999c503f82600710186c5cf9635abdc6154bd198b955f4e55c3444b9"
+}

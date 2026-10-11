@@ -1,0 +1,64 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT c.public_code,\n                  c.full_name_enc IS NOT NULL AS \"has_profile!\",\n                  EXISTS (SELECT 1 FROM survey_responses s WHERE s.candidate_id = c.user_id) AS \"has_survey!\",\n                  c.specialization,\n                  c.grade,\n                  (SELECT a.id FROM assessment_sessions a\n                    WHERE a.candidate_id = c.user_id AND a.status = 'in_progress') AS active_session_id,\n                  c.birth_date,\n                  (c.birth_date IS NOT NULL AND c.birth_date + interval '18 years' > current_date) AS \"minor!\"\n           FROM candidates c\n           WHERE c.user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "public_code",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "has_profile!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 2,
+        "name": "has_survey!",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 3,
+        "name": "specialization",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "grade",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 5,
+        "name": "active_session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 6,
+        "name": "birth_date",
+        "type_info": "Date"
+      },
+      {
+        "ordinal": 7,
+        "name": "minor!",
+        "type_info": "Bool"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      null,
+      null,
+      true,
+      true,
+      null,
+      true,
+      null
+    ]
+  },
+  "hash": "3b9c4c72a2da2edcdc39d854c0edbcff60ec38067b18f47da78190d443326f88"
+}

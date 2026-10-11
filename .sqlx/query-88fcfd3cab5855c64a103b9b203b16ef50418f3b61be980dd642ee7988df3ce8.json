@@ -1,0 +1,46 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT co.id AS company_id, u.email_enc, u.email_verified_at, co.website, co.verified_domain\n         FROM companies co\n         JOIN users u ON u.id = co.owner_user_id\n         WHERE co.owner_user_id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "company_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "email_enc",
+        "type_info": "Bytea"
+      },
+      {
+        "ordinal": 2,
+        "name": "email_verified_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 3,
+        "name": "website",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 4,
+        "name": "verified_domain",
+        "type_info": "Text"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "88fcfd3cab5855c64a103b9b203b16ef50418f3b61be980dd642ee7988df3ce8"
+}

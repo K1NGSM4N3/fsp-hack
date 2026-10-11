@@ -1,0 +1,24 @@
+Smirnov Alexey
+QA Engineer (Middle)
+Kazan, Russia · alexey.smirnov@gmail.com · +7-987-654-32-10 · Telegram @asmirnov_qa
+
+Summary
+QA engineer with 4+ years of experience in manual and automated testing of web and mobile applications in e-commerce.
+
+Experience
+QA Engineer — Marketplace "Kupi-Prodai", Kazan
+Jun 2023 – Present
+- API testing with Postman, autotests in Python + pytest, Selenium
+- Test design: test cases, checklists, regression testing
+- Load testing with JMeter
+
+Junior QA Engineer — Outsourcing company "SoftLab"
+Feb 2022 – May 2023
+- Manual testing, bug reports in Jira, SQL queries
+
+Education
+Kazan Federal University, 2017 – 2021
+
+Skills
+Postman, pytest, Selenium, SQL, Git, Docker, Charles, Jira
+Soft skills: teamwork, attention to detail, communication

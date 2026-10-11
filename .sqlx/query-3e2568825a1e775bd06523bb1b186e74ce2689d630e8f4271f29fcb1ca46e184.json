@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE candidates\n         SET specialization = NULL, grade = NULL, theta = NULL, category_assigned_at = NULL,\n             updated_at = now()\n         WHERE user_id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3e2568825a1e775bd06523bb1b186e74ce2689d630e8f4271f29fcb1ca46e184"
+}

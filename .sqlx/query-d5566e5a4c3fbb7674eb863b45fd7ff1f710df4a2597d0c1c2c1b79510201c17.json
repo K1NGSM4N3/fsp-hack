@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE user_consents uc SET ip = NULL, user_agent = NULL\n         FROM consent_documents d\n         WHERE uc.user_id = $1 AND d.id = uc.document_id AND d.kind = 'guardian_consent'\n           AND (uc.ip IS NOT NULL OR uc.user_agent IS NOT NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d5566e5a4c3fbb7674eb863b45fd7ff1f710df4a2597d0c1c2c1b79510201c17"
+}

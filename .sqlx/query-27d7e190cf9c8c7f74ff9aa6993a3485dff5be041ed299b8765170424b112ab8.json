@@ -1,0 +1,29 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE hiring_needs n\n           SET filters = $1, shortlist_generated_at = now()\n           FROM (SELECT shortlist_generated_at AS previous FROM hiring_needs WHERE id = $2 FOR UPDATE) prev\n           WHERE n.id = $2\n           RETURNING prev.previous, n.shortlist_generated_at AS \"generated_at!\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "previous",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 1,
+        "name": "generated_at!",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true
+    ]
+  },
+  "hash": "27d7e190cf9c8c7f74ff9aa6993a3485dff5be041ed299b8765170424b112ab8"
+}

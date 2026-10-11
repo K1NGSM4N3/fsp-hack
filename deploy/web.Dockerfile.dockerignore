@@ -1,0 +1,8 @@
+# Overrides the root .dockerignore for web.Dockerfile: only web/ is needed.
+*
+!web/
+web/node_modules
+web/.next
+web/out
+web/.env*
+**/.DS_Store

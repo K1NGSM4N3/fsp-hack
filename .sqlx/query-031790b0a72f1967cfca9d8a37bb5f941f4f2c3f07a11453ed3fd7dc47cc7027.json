@@ -1,0 +1,35 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT count(*) AS \"samples!\",\n                  (percentile_cont(0.5) WITHIN GROUP (ORDER BY c.salary_expectation_min))::bigint AS median,\n                  (percentile_cont(0.9) WITHIN GROUP (ORDER BY c.salary_expectation_min))::bigint AS p90\n           FROM published_candidates c\n           WHERE c.specialization = $1 AND c.grade = $2 AND c.salary_expectation_min IS NOT NULL\n             AND c.search_status <> 'closed'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "samples!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "median",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "p90",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Text",
+        "Text"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "031790b0a72f1967cfca9d8a37bb5f941f4f2c3f07a11453ed3fd7dc47cc7027"
+}

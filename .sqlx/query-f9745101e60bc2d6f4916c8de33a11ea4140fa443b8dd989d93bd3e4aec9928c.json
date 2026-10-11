@@ -1,0 +1,32 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE invitations\n         SET status = $1, responded_at = now(), decline_reason = $2, decline_comment = $3\n         WHERE id = $4 AND candidate_id = $5 AND status IN ('sent', 'viewed') AND expires_at >= now()",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "invitation_status",
+            "kind": {
+              "Enum": [
+                "sent",
+                "viewed",
+                "accepted",
+                "declined",
+                "expired",
+                "withdrawn"
+              ]
+            }
+          }
+        },
+        "Text",
+        "Text",
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f9745101e60bc2d6f4916c8de33a11ea4140fa443b8dd989d93bd3e4aec9928c"
+}

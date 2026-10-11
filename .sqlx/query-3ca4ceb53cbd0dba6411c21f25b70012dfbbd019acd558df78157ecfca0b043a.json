@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE integration_events\n         SET status = 'delivered', delivered_at = now(), last_error = NULL\n         WHERE id = $1",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "3ca4ceb53cbd0dba6411c21f25b70012dfbbd019acd558df78157ecfca0b043a"
+}

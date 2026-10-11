@@ -1,0 +1,51 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT session_id, decision AS \"decision: ReviewDecision\", comment, decided_at\n           FROM session_reviews WHERE candidate_id = $1 ORDER BY decided_at",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "decision: ReviewDecision",
+        "type_info": {
+          "Custom": {
+            "name": "review_decision",
+            "kind": {
+              "Enum": [
+                "confirm",
+                "annul",
+                "retest"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "comment",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "decided_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "7803aebc828c2de6188d29cd7e5b48cd194364a57c698ce2046b24c3a85bdfc9"
+}
