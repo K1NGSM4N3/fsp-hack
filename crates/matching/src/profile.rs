@@ -23,7 +23,7 @@ pub enum SkillSource {
 }
 
 impl SkillSource {
-    /// Verified by our test or the FSP registry > parsed from a resume > only declared (section 6.3).
+    /// Verified by our test or the FSP registry > parsed from a resume > only declared (README.md section 5.3).
     pub const fn confidence(self) -> f32 {
         match self {
             SkillSource::Test | SkillSource::Fsp => 1.0,

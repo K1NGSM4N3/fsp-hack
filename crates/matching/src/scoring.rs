@@ -101,7 +101,7 @@ pub struct Weights {
     pub salary: f32,
     pub fresh: f32,
     pub text: f32,
-    /// Partial credit through the skill similarity graph; off for the ablation in section 8.2.
+    /// Partial credit through the skill similarity graph; off for the ablation in README.md section 6.3.
     pub use_skill_graph: bool,
 }
 
@@ -501,7 +501,7 @@ impl<'a> CompiledNeed<'a> {
             FeatureKey::Fresh,
             Some(freshness(c.last_activity_unix, now_unix)),
         );
-        // Industry is a soft signal (section 4), so it shares the text slot instead of adding a weight.
+        // Industry is a soft signal (README.md section 5.3), so it shares the text slot instead of adding a weight.
         let overlap = if c.industries.and(self.industries).is_empty() {
             0.0
         } else {

@@ -841,7 +841,7 @@ make logs                                        # API, в реальном вр
 docker compose -f deploy/compose.yml logs -f caddy embedder
 ```
 
-API пишет JSON (`LOG_FORMAT=json`, `pretty` - для чтения глазами), уровень задаёт `RUST_LOG` (в `.env.example` - `info,api=debug`). Docker хранит у каждого контейнера три файла логов по 10 МБ.
+API пишет JSON при `LOG_FORMAT=json` (так в `.env.example`), при любом другом значении - обычный текст; уровень задаёт `RUST_LOG` (в `.env.example` - `info,api=debug`). Docker хранит у каждого контейнера три файла логов по 10 МБ.
 
 У каждого ответа API есть заголовок `x-request-id`: UUID, который API создаёт сам или берёт из запроса клиента. В логе API идентификатора нет; найти запрос по нему можно в журнале доступа Caddy, где записаны заголовки ответа:
 
@@ -945,7 +945,7 @@ docker compose -f deploy/compose.yml --profile full up -d --build --scale embedd
 В Docker - через `run` с `-T`, чтобы пароль дошёл через stdin; на сервере - с теми же файлами `-f`, что у `up`:
 
 ```sh
-read -rs PASS   # пароль вводится без эха
+IFS= read -rs PASS   # без эха; IFS= сохраняет пробелы по краям пароля
 printf '%s\n' "$PASS" | docker compose -f deploy/compose.yml \
   run --rm -T api create-moderator moderator@example.ru
 unset PASS
@@ -1025,7 +1025,7 @@ Swagger UI - http://localhost:8080/api/docs (на демо-сервере - http
 Скорее всего, `COOKIE_SECURE=true`, а сайт открыт по http не на localhost: браузер не сохраняет Secure-cookie. По http оставьте `COOKIE_SECURE=false`.
 
 **После перезапуска всех выкинуло из кабинетов.**
-Обычный перезапуск сессии не рвёт: refresh-токены хранятся в базе, и кабинет сам получает новый access-токен, даже если `JWT_ED25519_SEED_B64` не задан и ключ подписи сменился. Сессии пропадают, если удалён том базы (`down -v`) или сменились `FIELD_ENC_KEY` и `BIDX_KEY` - тогда и вход по email невозможен (раздел 5.11).
+Обычный перезапуск сессии не рвёт: refresh-токены хранятся в базе, и кабинет сам получает новый access-токен, даже если `JWT_ED25519_SEED_B64` не задан и ключ подписи сменился. Сессии пропадают, только если удалён том базы (`down -v`). Смена `FIELD_ENC_KEY` и `BIDX_KEY` сессии не рвёт, но ломает данные: вошедшие пользователи получают ошибку 500 там, где нужны персональные данные, а новый вход по email невозможен (раздел 5.11).
 
 **429 во время показа.**
 Лимиты считаются в Valkey (полная таблица - `docs/api.md`, "Лимиты запросов"):

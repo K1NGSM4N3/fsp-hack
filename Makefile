@@ -81,7 +81,7 @@ validate: model
 docs:
 	# Text as outlines: a viewer without PT Sans would substitute a wider font and spill text
 	# out of the boxes. Cairo writes unitless sizes, which are pixels to a viewer, not points.
-	for f in docs/img/*.dot; do dot -Tsvg:cairo "$$f" | sed -E '2s/(width|height)="([0-9.]+)"/\1="\2pt"/g' > "$${f%.dot}.svg" || exit 1; done
+	set -o pipefail; for f in docs/img/*.dot; do s="$${f%.dot}.svg"; dot -Tsvg:cairo "$$f" | sed -E '2s/(width|height)="([0-9.]+)"/\1="\2pt"/g' > "$$s.tmp" && mv "$$s.tmp" "$$s" || { rm -f "$$s.tmp"; exit 1; }; done
 	pandoc README.md -o docs/solution.pdf --resource-path=. --pdf-engine=typst --pdf-engine-opt=--font-path=crates/api/assets/fonts --metadata-file=docs/pdf-meta.yaml --toc --toc-depth=2
 	pandoc README.md -o docs/solution.docx --resource-path=. --metadata-file=docs/pdf-meta.yaml --toc --toc-depth=2
 

@@ -1,4 +1,4 @@
-//! Employer needs → recommended categories → persisted shortlist with explanations (section 6.1).
+//! Employer needs → recommended categories → persisted shortlist with explanations (README.md sections 5.2, 5.4).
 //! Refining filters re-ranks but keeps pinned and dismissed candidates (M-4).
 
 use std::cmp::Reverse;
